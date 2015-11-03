@@ -32,6 +32,7 @@ infer_type <- function(x) {
                  numeric = "double",
                  raw = "binary",
                  list = "array",
+                 struct = "struct",
                  environment = "map",
                  Date = "date",
                  POSIXlt = "timestamp",
@@ -44,17 +45,18 @@ infer_type <- function(x) {
     paste0("map<string,", infer_type(get(key, x)), ">")
   } else if (type == "array") {
     stopifnot(length(x) > 0)
+
+    paste0("array<", infer_type(x[[1]]), ">")
+  } else if (type == "struct") {
+    stopifnot(length(x) > 0)
     names <- names(x)
-    if (is.null(names)) {
-      paste0("array<", infer_type(x[[1]]), ">")
-    } else {
-      # StructType
-      types <- lapply(x, infer_type)
-      fields <- lapply(1:length(x), function(i) {
-        structField(names[[i]], types[[i]], TRUE)
-      })
-      do.call(structType, fields)
-    }
+    stopifnot(!is.null(names))
+
+    type <- lapply(seq_along(x), function(i) {
+      paste0(names[[i]], ":", infer_type(x[[i]]), ",")
+    })
+    type <- Reduce(paste0, type)
+    type <- paste0("struct<", substr(type, 1, nchar(type) - 1), ">")
   } else if (length(x) > 1) {
     paste0("array<", infer_type(x[[1]]), ">")
   } else {
@@ -62,21 +64,23 @@ infer_type <- function(x) {
   }
 }
 
-#' Create a DataFrame from an RDD
+#' Create a DataFrame
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts R data.frame or list into DataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return an DataFrame
+#' @rdname createDataFrame
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-#' df <- createDataFrame(sqlContext, rdd)
+#' df1 <- as.DataFrame(sqlContext, iris)
+#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
+#' df3 <- createDataFrame(sqlContext, iris)
 #' }
 
 # TODO(davies): support sampling and infer type from NA
@@ -147,6 +151,13 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "createDF",
                      srdd, schema$jobj, sqlContext)
   dataFrame(sdf)
+}
+
+#' @rdname createDataFrame
+#' @aliases createDataFrame
+#' @export
+as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
+  createDataFrame(sqlContext, data, schema, samplingRatio)
 }
 
 # toDF
@@ -441,14 +452,21 @@ dropTempTable <- function(sqlContext, tableName) {
 #'
 #' @param sqlContext SQLContext to use
 #' @param path The path of files to load
-#' @param source the name of external data source
+#' @param source The name of external data source
+#' @param schema The data schema defined in structType
 #' @return DataFrame
+#' @rdname read.df
+#' @name read.df
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' df1 <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' schema <- structType(structField("name", "string"),
+#'                      structField("info", "map<string,double>"))
+#' df2 <- read.df(sqlContext, mapTypeJsonPath, "json", schema)
+#' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
 #' }
 
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
@@ -471,9 +489,8 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
   dataFrame(sdf)
 }
 
-#' @aliases loadDF
-#' @export
-
+#' @rdname read.df
+#' @name loadDF
 loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   read.df(sqlContext, path, source, schema, ...)
 }

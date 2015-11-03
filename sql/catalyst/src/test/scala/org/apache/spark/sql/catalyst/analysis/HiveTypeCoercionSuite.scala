@@ -470,7 +470,8 @@ class HiveTypeCoercionSuite extends PlanTest {
     )
     ruleTest(inConversion,
       In(Literal("a"), Seq(Literal(1), Literal("b"))),
-      In(Literal("a"), Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
+      In(Cast(Literal("a"), StringType),
+        Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
   }
 }

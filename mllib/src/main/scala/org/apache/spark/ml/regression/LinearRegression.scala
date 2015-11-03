@@ -19,11 +19,13 @@ package org.apache.spark.ml.regression
 
 import scala.collection.mutable
 
-import breeze.linalg.{DenseVector => BDV, norm => brzNorm}
+import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -42,18 +44,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
-    with HasFitIntercept with HasStandardization with HasWeightCol
-
-/**
- * Class that represents an instance of weighted data point with label and features.
- *
- * TODO: Refactor this class to proper place.
- *
- * @param label Label for this data point.
- * @param weight The weight of this instance.
- * @param features The vector of features for this data point.
- */
-private[regression] case class Instance(label: Double, weight: Double, features: Vector)
+    with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
 
 /**
  * :: Experimental ::
@@ -61,7 +52,7 @@ private[regression] case class Instance(label: Double, weight: Double, features:
  *
  * The learning objective is to minimize the squared error, with regularization.
  * The specific squared error loss function used is:
- *   L = 1/2n ||A weights - y||^2^
+ *   L = 1/2n ||A coefficients - y||^2^
  *
  * This support multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
@@ -140,9 +131,53 @@ class LinearRegression(override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
+  /**
+   * Set the solver algorithm used for optimization.
+   * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
+   * The default value is "auto" which means that the solver algorithm is
+   * selected automatically.
+   * @group setParam
+   */
+  def setSolver(value: String): this.type = set(solver, value)
+  setDefault(solver -> "auto")
+
   override protected def train(dataset: DataFrame): LinearRegressionModel = {
-    // Extract columns from data.  If dataset is persisted, do not persist instances.
+    // Extract the number of features before deciding optimization solver.
+    val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
+      case Row(features: Vector) => features.size
+    }.first()
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+
+    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
+      $(solver) == "normal") {
+      require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
+        "solver is used.'")
+      // For low dimensional data, WeightedLeastSquares is more efficiently since the
+      // training algorithm only requires one pass through the data. (SPARK-10668)
+      val instances: RDD[Instance] = dataset.select(
+        col($(labelCol)), w, col($(featuresCol))).map {
+          case Row(label: Double, weight: Double, features: Vector) =>
+            Instance(label, weight, features)
+      }
+
+      val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
+        $(standardization), true)
+      val model = optimizer.fit(instances)
+      // When it is trained by WeightedLeastSquares, training summary does not
+      // attached returned model.
+      val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
+      // WeightedLeastSquares does not run through iterations. So it does not generate
+      // an objective history.
+      val (summaryModel, predictionColName) = lrModel.findSummaryModelAndPredictionCol()
+      val trainingSummary = new LinearRegressionTrainingSummary(
+        summaryModel.transform(dataset),
+        predictionColName,
+        $(labelCol),
+        $(featuresCol),
+        Array(0D))
+      return lrModel.setSummary(trainingSummary)
+    }
+
     val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
@@ -165,23 +200,26 @@ class LinearRegression(override val uid: String)
         new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)(seqOp, combOp)
     }
 
-    val numFeatures = featuresSummarizer.mean.size
     val yMean = ySummarizer.mean(0)
     val yStd = math.sqrt(ySummarizer.variance(0))
 
     // If the yStd is zero, then the intercept is yMean with zero weights;
     // as a result, training is not needed.
     if (yStd == 0.0) {
-      logWarning(s"The standard deviation of the label is zero, so the weights will be zeros " +
-        s"and the intercept will be the mean of the label; as a result, training is not needed.")
+      logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+        s"zeros and the intercept will be the mean of the label; as a result, " +
+        s"training is not needed.")
       if (handlePersistence) instances.unpersist()
-      val weights = Vectors.sparse(numFeatures, Seq())
+      val coefficients = Vectors.sparse(numFeatures, Seq())
       val intercept = yMean
 
-      val model = new LinearRegressionModel(uid, weights, intercept)
+      val model = new LinearRegressionModel(uid, coefficients, intercept)
+      // Handle possible missing or invalid prediction columns
+      val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+
       val trainingSummary = new LinearRegressionTrainingSummary(
-        model.transform(dataset),
-        $(predictionCol),
+        summaryModel.transform(dataset),
+        predictionColName,
         $(labelCol),
         $(featuresCol),
         Array(0D))
@@ -218,11 +256,11 @@ class LinearRegression(override val uid: String)
       new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, effectiveL1RegFun, $(tol))
     }
 
-    val initialWeights = Vectors.zeros(numFeatures)
+    val initialCoefficients = Vectors.zeros(numFeatures)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeights.toBreeze.toDenseVector)
+      initialCoefficients.toBreeze.toDenseVector)
 
-    val (weights, objectiveHistory) = {
+    val (coefficients, objectiveHistory) = {
       /*
          Note that in Linear Regression, the objective history (loss + regularization) returned
          from optimizer is computed in the scaled space given by the following formula.
@@ -243,18 +281,18 @@ class LinearRegression(override val uid: String)
       }
 
       /*
-         The weights are trained in the scaled space; we're converting them back to
+         The coefficients are trained in the scaled space; we're converting them back to
          the original space.
        */
-      val rawWeights = state.x.toArray.clone()
+      val rawCoefficients = state.x.toArray.clone()
       var i = 0
-      val len = rawWeights.length
+      val len = rawCoefficients.length
       while (i < len) {
-        rawWeights(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
+        rawCoefficients(i) *= { if (featuresStd(i) != 0.0) yStd / featuresStd(i) else 0.0 }
         i += 1
       }
 
-      (Vectors.dense(rawWeights).compressed, arrayBuilder.result())
+      (Vectors.dense(rawCoefficients).compressed, arrayBuilder.result())
     }
 
     /*
@@ -262,14 +300,21 @@ class LinearRegression(override val uid: String)
        converged. See the following discussion for detail.
        http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
      */
-    val intercept = if ($(fitIntercept)) yMean - dot(weights, Vectors.dense(featuresMean)) else 0.0
+    val intercept = if ($(fitIntercept)) {
+      yMean - dot(coefficients, Vectors.dense(featuresMean))
+    } else {
+      0.0
+    }
 
     if (handlePersistence) instances.unpersist()
 
-    val model = copyValues(new LinearRegressionModel(uid, weights, intercept))
+    val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
+
     val trainingSummary = new LinearRegressionTrainingSummary(
-      model.transform(dataset),
-      $(predictionCol),
+      summaryModel.transform(dataset),
+      predictionColName,
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
@@ -321,12 +366,25 @@ class LinearRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
-    val t = udf { features: Vector => predict(features) }
-    val predictionAndObservations = dataset
-      .select(col($(labelCol)), t(col($(featuresCol))).as($(predictionCol)))
-
-    new LinearRegressionSummary(predictionAndObservations, $(predictionCol), $(labelCol))
+    // Handle possible missing or invalid prediction columns
+    val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
+    new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName, $(labelCol))
   }
+
+  /**
+   * If the prediction column is set returns the current model and prediction column,
+   * otherwise generates a new column and sets it as the prediction column on a new copy
+   * of the current model.
+   */
+  private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
+    $(predictionCol) match {
+      case "" =>
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
+      case p => (this, p)
+    }
+  }
+
 
   override protected def predict(features: Vector): Double = {
     dot(features, weights) + intercept
@@ -425,7 +483,7 @@ class LinearRegressionSummary private[regression] (
  * For improving the convergence rate during the optimization process, and also preventing against
  * features with very large variances exerting an overly large influence during model training,
  * package like R's GLMNET performs the scaling to unit variance and removing the mean to reduce
- * the condition number, and then trains the model in scaled space but returns the weights in
+ * the condition number, and then trains the model in scaled space but returns the coefficients in
  * the original scale. See page 9 in http://cran.r-project.org/web/packages/glmnet/glmnet.pdf
  *
  * However, we don't want to apply the `StandardScaler` on the training dataset, and then cache
@@ -456,7 +514,7 @@ class LinearRegressionSummary private[regression] (
  *     + \bar{y} / \hat{y}||^2
  *   = 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
  * }}}
- * where w_i^\prime^ is the effective weights defined by w_i/\hat{x_i}, offset is
+ * where w_i^\prime^ is the effective coefficients defined by w_i/\hat{x_i}, offset is
  * {{{
  * - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
  * }}}, and diff is
@@ -465,7 +523,7 @@ class LinearRegressionSummary private[regression] (
  * }}}
  *
  *
- * Note that the effective weights and offset don't depend on training dataset,
+ * Note that the effective coefficients and offset don't depend on training dataset,
  * so they can be precomputed.
  *
  * Now, the first derivative of the objective function in scaled space is
@@ -543,13 +601,13 @@ private class LeastSquaresAggregator(
   private val gradientSumArray = Array.ofDim[Double](dim)
 
   /**
-   * Add a new training data to this LeastSquaresAggregator, and update the loss and gradient
+   * Add a new training instance to this LeastSquaresAggregator, and update the loss and gradient
    * of the objective function.
    *
-   * @param instance  The data point instance to be added.
+   * @param instance The instance of data point to be added.
    * @return This LeastSquaresAggregator object.
    */
-  def add(instance: Instance): this.type =
+  def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new sample." +
         s" Expecting $dim but got ${features.size}.")
@@ -573,6 +631,7 @@ private class LeastSquaresAggregator(
       weightSum += weight
       this
     }
+  }
 
   /**
    * Merge another LeastSquaresAggregator, and update the loss and gradient
@@ -621,11 +680,11 @@ private class LeastSquaresAggregator(
 
 /**
  * LeastSquaresCostFun implements Breeze's DiffFunction[T] for Least Squares cost.
- * It returns the loss and gradient with L2 regularization at a particular point (weights).
+ * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
  * It's used in Breeze's convex optimization routines.
  */
 private class LeastSquaresCostFun(
-    data: RDD[Instance],
+    instances: RDD[Instance],
     labelStd: Double,
     labelMean: Double,
     fitIntercept: Boolean,
@@ -635,12 +694,16 @@ private class LeastSquaresCostFun(
     effectiveL2regParam: Double) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val coeff = Vectors.fromBreeze(coefficients)
+    val coeffs = Vectors.fromBreeze(coefficients)
 
-    val leastSquaresAggregator = data.treeAggregate(new LeastSquaresAggregator(coeff, labelStd,
-      labelMean, fitIntercept, featuresStd, featuresMean))(
-        seqOp = (aggregator, instance) => aggregator.add(instance),
-        combOp = (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
+    val leastSquaresAggregator = {
+      val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
+      val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
+
+      instances.treeAggregate(
+        new LeastSquaresAggregator(coeffs, labelStd, labelMean, fitIntercept, featuresStd,
+          featuresMean))(seqOp, combOp)
+    }
 
     val totalGradientArray = leastSquaresAggregator.gradient.toArray
 
@@ -648,7 +711,7 @@ private class LeastSquaresCostFun(
       0.0
     } else {
       var sum = 0.0
-      coeff.foreachActive { (index, value) =>
+      coeffs.foreachActive { (index, value) =>
         // The following code will compute the loss of the regularization; also
         // the gradient of the regularization, and add back to totalGradientArray.
         sum += {

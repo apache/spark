@@ -48,11 +48,32 @@ private[spark] class ShuffleMapStage(
   /** Running map-stage jobs that were submitted to execute this stage independently (if any) */
   var mapStageJobs: List[ActiveJob] = Nil
 
+  /**
+   * Number of partitions that have shuffle outputs.
+   * When this reaches [[numPartitions]], this map stage is ready.
+   * This should be kept consistent as `outputLocs.filter(!_.isEmpty).size`.
+   */
   var numAvailableOutputs: Int = 0
 
+  /**
+   * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
+   * This should be the same as `outputLocs.contains(Nil)`.
+   */
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
+  /**
+   * List of [[MapStatus]] for each partition. The index of the array is the map partition id,
+   * and each value in the array is the list of possible [[MapStatus]] for a partition
+   * (a single task might run multiple times).
+   */
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+
+  override def findMissingPartitions(): Seq[Int] = {
+    val missing = (0 until numPartitions).filter(id => outputLocs(id).isEmpty)
+    assert(missing.size == numPartitions - numAvailableOutputs,
+      s"${missing.size} missing, expected ${numPartitions - numAvailableOutputs}")
+    missing
+  }
 
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)

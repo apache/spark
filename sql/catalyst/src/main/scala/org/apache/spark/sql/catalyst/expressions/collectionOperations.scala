@@ -20,6 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, CodegenFallback, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -35,7 +36,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, c => s"${ev.primitive} = ($c).numElements();")
+    nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).numElements();")
   }
 }
 
@@ -67,6 +68,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val lt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -88,6 +90,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val gt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -108,7 +111,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def nullSafeEval(array: Any, ascending: Any): Any = {
     val elementType = base.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
@@ -173,7 +178,7 @@ case class ArrayContains(left: Expression, right: Expression)
           ${ev.isNull} = true;
         } else if (${ctx.genEqual(right.dataType, value, getValue)}) {
           ${ev.isNull} = false;
-          ${ev.primitive} = true;
+          ${ev.value} = true;
           break;
         }
       }

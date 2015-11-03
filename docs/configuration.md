@@ -437,23 +437,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.manager</code></td>
   <td>sort</td>
   <td>
-    Implementation to use for shuffling data. There are three implementations available:
-    <code>sort</code>, <code>hash</code> and the new (1.5+) <code>tungsten-sort</code>.
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>.
     Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
-    Tungsten-sort is similar to the sort based shuffle, with a direct binary cache-friendly
-    implementation with a fall back to regular sort based shuffle if its requirements are not
-    met.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.2</td>
-  <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles.
-    At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
   </td>
 </tr>
 <tr>
@@ -563,6 +549,20 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many finished drivers the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.ui.retainedExecutions</code></td>
+  <td>1000</td>
+  <td>
+    How many finished executions the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.ui.retainedBatches</code></td>
+  <td>1000</td>
+  <td>
+    How many finished batches the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>
@@ -712,6 +712,76 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Memory Management
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.memory.fraction</code></td>
+  <td>0.75</td>
+  <td>
+    Fraction of the heap space used for execution and storage. The lower this is, the more
+    frequently spills and cached data eviction occur. The purpose of this config is to set
+    aside memory for internal metadata, user data structures, and imprecise size estimation
+    in the case of sparse, unusually large records.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.storageFraction</code></td>
+  <td>0.5</td>
+  <td>
+    T​he size of the storage region within the space set aside by
+    <code>s​park.memory.fraction</code>. This region is not statically reserved, but dynamically
+    allocated as cache requests come in. ​Cached data may be evicted only if total storage exceeds
+    this region.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.useLegacyMode</code></td>
+  <td>false</td>
+  <td>
+    ​Whether to enable the legacy memory management mode used in Spark 1.5 and before.
+    The legacy mode rigidly partitions the heap space into fixed-size regions,
+    potentially leading to excessive spilling if the application was not tuned.
+    The following deprecated memory fraction configurations are not read unless this is enabled:
+    <code>spark.shuffle.memoryFraction</code><br>
+    <code>spark.storage.memoryFraction</code><br>
+    <code>spark.storage.unrollFraction</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.memoryFraction</code></td>
+  <td>0.2</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of Java heap to use for aggregation and cogroups during shuffles.
+    At any given time, the collective size of
+    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
+    begin to spill to disk. If spills are often, consider increasing this value at the expense of
+    <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.memoryFraction</code></td>
+  <td>0.6</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
+    increase it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.unrollFraction</code></td>
+  <td>0.2</td>
+  <td>
+    (deprecated) This is read only if <code>spark.memory.useLegacyMode</code> is enabled.
+    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
+    This is dynamically allocated by dropping existing blocks when there is not enough free
+    storage space to unroll the new block in its entirety.
+  </td>
+</tr>
+</table>
+
 #### Execution Behavior
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -825,30 +895,12 @@ Apart from these, the following properties are also available, and may be useful
     data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
 </tr>
 <tr>
-  <td><code>spark.storage.memoryFraction</code></td>
-  <td>0.6</td>
-  <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
-    increase it if you configure your own old generation size.
-  </td>
-</tr>
-<tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
   <td>2m</td>
   <td>
     Size of a block above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
     mapping has high overhead for blocks close to or below the page size of the operating system.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.unrollFraction</code></td>
-  <td>0.2</td>
-  <td>
-    Fraction of <code>spark.storage.memoryFraction</code> to use for unrolling blocks in memory.
-    This is dynamically allocated by dropping existing blocks when there is not enough free
-    storage space to unroll the new block in its entirety.
   </td>
 </tr>
 <tr>
@@ -884,7 +936,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.akka.frameSize</code></td>
   <td>128</td>
   <td>
-    Maximum message size to allow in "control plane" communication; generally only applies to map
+    Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
     jobs with many thousands of map and reduce tasks and see messages about the frame size.
   </td>
@@ -1537,6 +1589,20 @@ Apart from these, the following properties are also available, and may be useful
     Number of threads used by RBackend to handle RPC calls from SparkR package.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.command</code></td>
+  <td>Rscript</td>
+  <td>
+    Executable for executing R scripts in cluster modes for both driver and workers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.r.driver.command</code></td>
+  <td>spark.r.command</td>
+  <td>
+    Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
+  </td>
+</tr>
 </table>
 
 #### Cluster Managers
@@ -1577,6 +1643,10 @@ The following variables can be set in `spark-env.sh`:
     <td>Python binary executable to use for PySpark in driver only (default is <code>PYSPARK_PYTHON</code>).</td>
   </tr>
   <tr>
+    <td><code>SPARKR_DRIVER_R</code></td>
+    <td>R binary executable to use for SparkR shell (default is <code>R</code>).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_LOCAL_IP</code></td>
     <td>IP address of the machine to bind to.</td>
   </tr>
@@ -1604,3 +1674,18 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
 you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
+
+# Inheriting Hadoop Cluster Configuration
+
+If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
+should be included on Spark's classpath:
+
+* `hdfs-site.xml`, which provides default behaviors for the HDFS client.
+* `core-site.xml`, which sets the default filesystem name.
+
+The location of these configuration files varies across CDH and HDP versions, but
+a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
+configurations on-the-fly, but offer a mechanisms to download copies of them.
+
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
+to a location containing the configuration files.

@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.execution;
 
-import java.io.IOException;
-
 import javax.annotation.Nullable;
+import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
@@ -34,7 +33,6 @@ import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
 import org.apache.spark.util.collection.unsafe.sort.*;
 
 /**
@@ -50,14 +48,19 @@ public final class UnsafeKVExternalSorter {
   private final UnsafeExternalRowSorter.PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
-  public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
-      BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes)
-    throws IOException {
-    this(keySchema, valueSchema, blockManager, shuffleMemoryManager, pageSizeBytes, null);
+  public UnsafeKVExternalSorter(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      long pageSizeBytes) throws IOException {
+    this(keySchema, valueSchema, blockManager, pageSizeBytes, null);
   }
 
-  public UnsafeKVExternalSorter(StructType keySchema, StructType valueSchema,
-      BlockManager blockManager, ShuffleMemoryManager shuffleMemoryManager, long pageSizeBytes,
+  public UnsafeKVExternalSorter(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      long pageSizeBytes,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -73,7 +76,6 @@ public final class UnsafeKVExternalSorter {
     if (map == null) {
       sorter = UnsafeExternalSorter.create(
         taskMemoryManager,
-        shuffleMemoryManager,
         blockManager,
         taskContext,
         recordComparator,
@@ -81,18 +83,16 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes);
     } else {
-      // Insert the records into the in-memory sorter.
-      // We will use the number of elements in the map as the initialSize of the
-      // UnsafeInMemorySorter. Because UnsafeInMemorySorter does not accept 0 as the initialSize,
-      // we will use 1 as its initial size if the map is empty.
-      // TODO: track pointer array memory used by this in-memory sorter! (SPARK-10474)
+      // The memory needed for UnsafeInMemorySorter should be less than longArray in map.
+      map.freeArray();
+      // The memory used by UnsafeInMemorySorter will be counted later (end of this block)
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
       // The only new memory we are allocating is the pointer/prefix array.
-      BytesToBytesMap.BytesToBytesMapIterator iter = map.iterator();
+      BytesToBytesMap.MapIterator iter = map.iterator();
       final int numKeyFields = keySchema.size();
       UnsafeRow row = new UnsafeRow();
       while (iter.hasNext()) {
@@ -114,8 +114,7 @@ public final class UnsafeKVExternalSorter {
       }
 
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
-        taskContext.taskMemoryManager(),
-        shuffleMemoryManager,
+        taskMemoryManager,
         blockManager,
         taskContext,
         new KVComparator(ordering, keySchema.length()),
@@ -126,6 +125,8 @@ public final class UnsafeKVExternalSorter {
 
       sorter.spill();
       map.free();
+      // counting the memory used UnsafeInMemorySorter
+      taskMemoryManager.acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
     }
   }
 

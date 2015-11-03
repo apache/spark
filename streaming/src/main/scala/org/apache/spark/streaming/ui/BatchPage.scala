@@ -38,6 +38,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     <th>Output Op Id</th>
       <th>Description</th>
       <th>Duration</th>
+      <th>Status</th>
       <th>Job Id</th>
       <th>Duration</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
@@ -46,19 +47,41 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   private def generateJobRow(
-      outputOpId: OutputOpId,
+      outputOpData: OutputOperationUIData,
       outputOpDescription: Seq[Node],
       formattedOutputOpDuration: String,
       numSparkJobRowsInOutputOp: Int,
       isFirstRow: Boolean,
       sparkJob: SparkJobIdWithUIData): Seq[Node] = {
     if (sparkJob.jobUIData.isDefined) {
-      generateNormalJobRow(outputOpId, outputOpDescription, formattedOutputOpDuration,
+      generateNormalJobRow(outputOpData, outputOpDescription, formattedOutputOpDuration,
         numSparkJobRowsInOutputOp, isFirstRow, sparkJob.jobUIData.get)
     } else {
-      generateDroppedJobRow(outputOpId, outputOpDescription, formattedOutputOpDuration,
+      generateDroppedJobRow(outputOpData, outputOpDescription, formattedOutputOpDuration,
         numSparkJobRowsInOutputOp, isFirstRow, sparkJob.sparkJobId)
     }
+  }
+
+  private def generateOutputOpRowWithoutSparkJobs(
+    outputOpData: OutputOperationUIData,
+    outputOpDescription: Seq[Node],
+    formattedOutputOpDuration: String): Seq[Node] = {
+    <tr>
+      <td class="output-op-id-cell" >{outputOpData.id.toString}</td>
+      <td>{outputOpDescription}</td>
+      <td>{formattedOutputOpDuration}</td>
+      {outputOpStatusCell(outputOpData, rowspan = 1)}
+      <!-- Job Id -->
+      <td>-</td>
+      <!-- Duration -->
+      <td>-</td>
+      <!-- Stages: Succeeded/Total -->
+      <td>-</td>
+      <!-- Tasks (for all stages): Succeeded/Total -->
+      <td>-</td>
+      <!-- Error -->
+      <td>-</td>
+    </tr>
   }
 
   /**
@@ -66,7 +89,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * one cell, we use "rowspan" for the first row of a output op.
    */
   private def generateNormalJobRow(
-      outputOpId: OutputOpId,
+      outputOpData: OutputOperationUIData,
       outputOpDescription: Seq[Node],
       formattedOutputOpDuration: String,
       numSparkJobRowsInOutputOp: Int,
@@ -90,11 +113,12 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     // scalastyle:off
     val prefixCells =
       if (isFirstRow) {
-        <td class="output-op-id-cell" rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpId.toString}</td>
+        <td class="output-op-id-cell" rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpData.id.toString}</td>
         <td rowspan={numSparkJobRowsInOutputOp.toString}>
           {outputOpDescription}
         </td>
-        <td rowspan={numSparkJobRowsInOutputOp.toString}>{formattedOutputOpDuration}</td>
+        <td rowspan={numSparkJobRowsInOutputOp.toString}>{formattedOutputOpDuration}</td> ++
+        {outputOpStatusCell(outputOpData, numSparkJobRowsInOutputOp)}
       } else {
         Nil
       }
@@ -125,7 +149,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>
-      {failureReasonCell(lastFailureReason)}
+      {failureReasonCell(lastFailureReason, rowspan = 1)}
     </tr>
   }
 
@@ -134,7 +158,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
    * with "-" cells.
    */
   private def generateDroppedJobRow(
-      outputOpId: OutputOpId,
+      outputOpData: OutputOperationUIData,
       outputOpDescription: Seq[Node],
       formattedOutputOpDuration: String,
       numSparkJobRowsInOutputOp: Int,
@@ -145,9 +169,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     // scalastyle:off
     val prefixCells =
       if (isFirstRow) {
-        <td class="output-op-id-cell" rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpId.toString}</td>
+        <td class="output-op-id-cell" rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpData.id.toString}</td>
           <td rowspan={numSparkJobRowsInOutputOp.toString}>{outputOpDescription}</td>
-          <td rowspan={numSparkJobRowsInOutputOp.toString}>{formattedOutputOpDuration}</td>
+          <td rowspan={numSparkJobRowsInOutputOp.toString}>{formattedOutputOpDuration}</td> ++
+          {outputOpStatusCell(outputOpData, numSparkJobRowsInOutputOp)}
       } else {
         Nil
       }
@@ -156,7 +181,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     <tr>
       {prefixCells}
       <td sorttable_customkey={jobId.toString}>
-        {jobId.toString}
+        {if (jobId >= 0) jobId.toString else "-"}
       </td>
       <!-- Duration -->
       <td>-</td>
@@ -170,65 +195,60 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   }
 
   private def generateOutputOpIdRow(
-      outputOpId: OutputOpId, sparkJobs: Seq[SparkJobIdWithUIData]): Seq[Node] = {
-    // We don't count the durations of dropped jobs
-    val sparkJobDurations = sparkJobs.filter(_.jobUIData.nonEmpty).map(_.jobUIData.get).
-      map(sparkJob => {
-        sparkJob.submissionTime.map { start =>
-          val end = sparkJob.completionTime.getOrElse(System.currentTimeMillis())
-          end - start
-        }
-      })
+      outputOpData: OutputOperationUIData,
+      sparkJobs: Seq[SparkJobIdWithUIData]): Seq[Node] = {
     val formattedOutputOpDuration =
-      if (sparkJobDurations.isEmpty || sparkJobDurations.exists(_ == None)) {
-        // If no job or any job does not finish, set "formattedOutputOpDuration" to "-"
+      if (outputOpData.duration.isEmpty) {
         "-"
       } else {
-        SparkUIUtils.formatDuration(sparkJobDurations.flatMap(x => x).sum)
+        SparkUIUtils.formatDuration(outputOpData.duration.get)
       }
 
-    val description = generateOutputOpDescription(sparkJobs)
+    val description = generateOutputOpDescription(outputOpData)
 
-    generateJobRow(
-      outputOpId, description, formattedOutputOpDuration, sparkJobs.size, true, sparkJobs.head) ++
-      sparkJobs.tail.map { sparkJob =>
+    if (sparkJobs.isEmpty) {
+      generateOutputOpRowWithoutSparkJobs(outputOpData, description, formattedOutputOpDuration)
+    } else {
+      val firstRow =
         generateJobRow(
-          outputOpId, description, formattedOutputOpDuration, sparkJobs.size, false, sparkJob)
-      }.flatMap(x => x)
-  }
-
-  private def generateOutputOpDescription(sparkJobs: Seq[SparkJobIdWithUIData]): Seq[Node] = {
-    val lastStageInfo =
-      sparkJobs.flatMap(_.jobUIData).headOption. // Get the first JobUIData
-        flatMap { sparkJob => // For the first job, get the latest Stage info
-          if (sparkJob.stageIds.isEmpty) {
-            None
-          } else {
-            sparkListener.stageIdToInfo.get(sparkJob.stageIds.max)
-          }
+          outputOpData,
+          description,
+          formattedOutputOpDuration,
+          sparkJobs.size,
+          true,
+          sparkJobs.head)
+      val tailRows =
+        sparkJobs.tail.map { sparkJob =>
+          generateJobRow(
+            outputOpData,
+            description,
+            formattedOutputOpDuration,
+            sparkJobs.size,
+            false,
+            sparkJob)
         }
-    lastStageInfo match {
-      case Some(stageInfo) =>
-        val details = if (stageInfo.details.nonEmpty) {
-          <span
-            onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
-            class="expand-details">
-              +details
-          </span> ++
-          <div class="stage-details collapsed">
-            <pre>{stageInfo.details}</pre>
-          </div>
-        } else {
-          NodeSeq.Empty
-        }
-
-        <div> {stageInfo.name} {details} </div>
-      case None =>
-        Text("(Unknown)")
+      (firstRow ++ tailRows).flatten
     }
   }
 
-  private def failureReasonCell(failureReason: String): Seq[Node] = {
+  private def generateOutputOpDescription(outputOp: OutputOperationUIData): Seq[Node] = {
+    <div>
+      {outputOp.name}
+      <span
+        onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+        class="expand-details">
+          +details
+      </span>
+      <div class="stage-details collapsed">
+        <pre>{outputOp.description}</pre>
+      </div>
+    </div>
+  }
+
+  private def failureReasonCell(
+      failureReason: String,
+      rowspan: Int,
+      includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
     val isMultiline = failureReason.indexOf('\n') >= 0
     // Display the first line by default
     val failureReasonSummary = StringEscapeUtils.escapeHtml4(
@@ -237,6 +257,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
       } else {
         failureReason
       })
+    val failureDetails =
+      if (isMultiline && !includeFirstLineInExpandDetails) {
+        // Skip the first line
+        failureReason.substring(failureReason.indexOf('\n') + 1)
+      } else {
+        failureReason
+      }
     val details = if (isMultiline) {
       // scalastyle:off
       <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
@@ -244,13 +271,20 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         +details
       </span> ++
         <div class="stacktrace-details collapsed">
-          <pre>{failureReason}</pre>
+          <pre>{failureDetails}</pre>
         </div>
       // scalastyle:on
     } else {
       ""
     }
-    <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>
+
+    if (rowspan == 1) {
+      <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>
+    } else {
+      <td valign="middle" style="max-width: 300px" rowspan={rowspan.toString}>
+        {failureReasonSummary}{details}
+      </td>
+    }
   }
 
   private def getJobData(sparkJobId: SparkJobId): Option[JobUIData] = {
@@ -261,20 +295,37 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }
   }
 
+  private def generateOutputOperationStatusForUI(failure: String): String = {
+    if (failure.startsWith("org.apache.spark.SparkException")) {
+      "Failed due to Spark job error\n" + failure
+    } else {
+      var nextLineIndex = failure.indexOf("\n")
+      if (nextLineIndex < 0) {
+        nextLineIndex = failure.size
+      }
+      val firstLine = failure.substring(0, nextLineIndex)
+      s"Failed due to error: $firstLine\n$failure"
+    }
+  }
+
   /**
    * Generate the job table for the batch.
    */
   private def generateJobTable(batchUIData: BatchUIData): Seq[Node] = {
-    val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).toSeq.
-      sortBy(_._1). // sorted by OutputOpId
+    val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).
       map { case (outputOpId, outputOpIdAndSparkJobIds) =>
         // sort SparkJobIds for each OutputOpId
         (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
       }
+
+    val outputOps: Seq[(OutputOperationUIData, Seq[SparkJobId])] =
+      batchUIData.outputOperations.map { case (outputOpId, outputOperation) =>
+        val sparkJobIds = outputOpIdToSparkJobIds.getOrElse(outputOpId, Seq.empty)
+        (outputOperation, sparkJobIds)
+      }.toSeq.sortBy(_._1.id)
     sparkListener.synchronized {
-      val outputOpIdWithJobs: Seq[(OutputOpId, Seq[SparkJobIdWithUIData])] =
-        outputOpIdToSparkJobIds.map { case (outputOpId, sparkJobIds) =>
-          (outputOpId,
+      val outputOpWithJobs = outputOps.map { case (outputOpData, sparkJobIds) =>
+          (outputOpData,
             sparkJobIds.map(sparkJobId => SparkJobIdWithUIData(sparkJobId, getJobData(sparkJobId))))
         }
 
@@ -284,8 +335,8 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         </thead>
         <tbody>
           {
-            outputOpIdWithJobs.map {
-              case (outputOpId, sparkJobIds) => generateOutputOpIdRow(outputOpId, sparkJobIds)
+            outputOpWithJobs.map { case (outputOpData, sparkJobIds) =>
+              generateOutputOpIdRow(outputOpData, sparkJobIds)
             }
           }
         </tbody>
@@ -293,7 +344,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     }
   }
 
-  def render(request: HttpServletRequest): Seq[Node] = {
+  def render(request: HttpServletRequest): Seq[Node] = streamingListener.synchronized {
     val batchTime = Option(request.getParameter("id")).map(id => Time(id.toLong)).getOrElse {
       throw new IllegalArgumentException(s"Missing id parameter")
     }
@@ -346,20 +397,13 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         </ul>
       </div>
 
-    val jobTable =
-      if (batchUIData.outputOpIdSparkJobIdPairs.isEmpty) {
-        <div>Cannot find any job for Batch {formattedBatchTime}.</div>
-      } else {
-        generateJobTable(batchUIData)
-      }
-
-    val content = summary ++ jobTable
+    val content = summary ++ generateJobTable(batchUIData)
 
     SparkUIUtils.headerSparkPage(s"Details of batch at $formattedBatchTime", content, parent)
   }
 
   def generateInputMetadataTable(inputMetadatas: Seq[(Int, String)]): Seq[Node] = {
-    <table class={SparkUIUtils.TABLE_CLASS_STRIPED}>
+    <table class={SparkUIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
         <tr>
           <th>Input</th>
@@ -385,5 +429,19 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     // tab to 4 spaces and "\n" to "<br/>"
     Unparsed(StringEscapeUtils.escapeHtml4(metadataDescription).
       replaceAllLiterally("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replaceAllLiterally("\n", "<br/>"))
+  }
+
+  private def outputOpStatusCell(outputOp: OutputOperationUIData, rowspan: Int): Seq[Node] = {
+    outputOp.failureReason match {
+      case Some(failureReason) =>
+        val failureReasonForUI = generateOutputOperationStatusForUI(failureReason)
+        failureReasonCell(failureReasonForUI, rowspan, includeFirstLineInExpandDetails = false)
+      case None =>
+        if (outputOp.endTime.isEmpty) {
+          <td rowspan={rowspan.toString}>-</td>
+        } else {
+          <td rowspan={rowspan.toString}>Succeeded</td>
+        }
+    }
   }
 }

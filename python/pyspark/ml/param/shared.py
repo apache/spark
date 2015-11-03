@@ -26,12 +26,12 @@ class HasMaxIter(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0)")
+    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).")
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
-        #: param for max number of iterations (>= 0)
-        self.maxIter = Param(self, "maxIter", "max number of iterations (>= 0)")
+        #: param for max number of iterations (>= 0).
+        self.maxIter = Param(self, "maxIter", "max number of iterations (>= 0).")
 
     def setMaxIter(self, value):
         """
@@ -53,12 +53,12 @@ class HasRegParam(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0)")
+    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).")
 
     def __init__(self):
         super(HasRegParam, self).__init__()
-        #: param for regularization parameter (>= 0)
-        self.regParam = Param(self, "regParam", "regularization parameter (>= 0)")
+        #: param for regularization parameter (>= 0).
+        self.regParam = Param(self, "regParam", "regularization parameter (>= 0).")
 
     def setRegParam(self, value):
         """
@@ -80,12 +80,12 @@ class HasFeaturesCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name")
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.")
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
-        #: param for features column name
-        self.featuresCol = Param(self, "featuresCol", "features column name")
+        #: param for features column name.
+        self.featuresCol = Param(self, "featuresCol", "features column name.")
         self._setDefault(featuresCol='features')
 
     def setFeaturesCol(self, value):
@@ -108,12 +108,12 @@ class HasLabelCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    labelCol = Param(Params._dummy(), "labelCol", "label column name")
+    labelCol = Param(Params._dummy(), "labelCol", "label column name.")
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
-        #: param for label column name
-        self.labelCol = Param(self, "labelCol", "label column name")
+        #: param for label column name.
+        self.labelCol = Param(self, "labelCol", "label column name.")
         self._setDefault(labelCol='label')
 
     def setLabelCol(self, value):
@@ -136,12 +136,12 @@ class HasPredictionCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name")
+    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.")
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
-        #: param for prediction column name
-        self.predictionCol = Param(self, "predictionCol", "prediction column name")
+        #: param for prediction column name.
+        self.predictionCol = Param(self, "predictionCol", "prediction column name.")
         self._setDefault(predictionCol='prediction')
 
     def setPredictionCol(self, value):
@@ -160,7 +160,7 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities..
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -192,12 +192,12 @@ class HasRawPredictionCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.")
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
-        #: param for raw prediction (a.k.a. confidence) column name
-        self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name")
+        #: param for raw prediction (a.k.a. confidence) column name.
+        self.rawPredictionCol = Param(self, "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.")
         self._setDefault(rawPredictionCol='rawPrediction')
 
     def setRawPredictionCol(self, value):
@@ -220,12 +220,12 @@ class HasInputCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    inputCol = Param(Params._dummy(), "inputCol", "input column name")
+    inputCol = Param(Params._dummy(), "inputCol", "input column name.")
 
     def __init__(self):
         super(HasInputCol, self).__init__()
-        #: param for input column name
-        self.inputCol = Param(self, "inputCol", "input column name")
+        #: param for input column name.
+        self.inputCol = Param(self, "inputCol", "input column name.")
 
     def setInputCol(self, value):
         """
@@ -247,12 +247,12 @@ class HasInputCols(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    inputCols = Param(Params._dummy(), "inputCols", "input column names")
+    inputCols = Param(Params._dummy(), "inputCols", "input column names.")
 
     def __init__(self):
         super(HasInputCols, self).__init__()
-        #: param for input column names
-        self.inputCols = Param(self, "inputCols", "input column names")
+        #: param for input column names.
+        self.inputCols = Param(self, "inputCols", "input column names.")
 
     def setInputCols(self, value):
         """
@@ -274,12 +274,12 @@ class HasOutputCol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    outputCol = Param(Params._dummy(), "outputCol", "output column name")
+    outputCol = Param(Params._dummy(), "outputCol", "output column name.")
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
-        #: param for output column name
-        self.outputCol = Param(self, "outputCol", "output column name")
+        #: param for output column name.
+        self.outputCol = Param(self, "outputCol", "output column name.")
         self._setDefault(outputCol=self.uid + '__output')
 
     def setOutputCol(self, value):
@@ -302,12 +302,12 @@ class HasNumFeatures(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features")
+    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.")
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
-        #: param for number of features
-        self.numFeatures = Param(self, "numFeatures", "number of features")
+        #: param for number of features.
+        self.numFeatures = Param(self, "numFeatures", "number of features.")
 
     def setNumFeatures(self, value):
         """
@@ -329,12 +329,12 @@ class HasCheckpointInterval(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1)")
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "checkpoint interval (>= 1).")
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
-        #: param for checkpoint interval (>= 1)
-        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1)")
+        #: param for checkpoint interval (>= 1).
+        self.checkpointInterval = Param(self, "checkpointInterval", "checkpoint interval (>= 1).")
 
     def setCheckpointInterval(self, value):
         """
@@ -356,12 +356,12 @@ class HasSeed(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    seed = Param(Params._dummy(), "seed", "random seed")
+    seed = Param(Params._dummy(), "seed", "random seed.")
 
     def __init__(self):
         super(HasSeed, self).__init__()
-        #: param for random seed
-        self.seed = Param(self, "seed", "random seed")
+        #: param for random seed.
+        self.seed = Param(self, "seed", "random seed.")
         self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
@@ -384,12 +384,12 @@ class HasTol(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms")
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.")
 
     def __init__(self):
         super(HasTol, self).__init__()
-        #: param for the convergence tolerance for iterative algorithms
-        self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms")
+        #: param for the convergence tolerance for iterative algorithms.
+        self.tol = Param(self, "tol", "the convergence tolerance for iterative algorithms.")
 
     def setTol(self, value):
         """
@@ -407,7 +407,7 @@ class HasTol(Params):
 
 class HasStepSize(Params):
     """
-    Mixin for param stepSize: Step size to be used for each iteration of optimization..
+    Mixin for param stepSize: Step size to be used for each iteration of optimization.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -434,7 +434,7 @@ class HasStepSize(Params):
 
 class HasHandleInvalid(Params):
     """
-    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+    Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -461,7 +461,7 @@ class HasHandleInvalid(Params):
 
 class HasElasticNetParam(Params):
     """
-    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty..
+    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -489,7 +489,7 @@ class HasElasticNetParam(Params):
 
 class HasFitIntercept(Params):
     """
-    Mixin for param fitIntercept: whether to fit an intercept term..
+    Mixin for param fitIntercept: whether to fit an intercept term.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -517,7 +517,7 @@ class HasFitIntercept(Params):
 
 class HasStandardization(Params):
     """
-    Mixin for param standardization: whether to standardize the training features before fitting the model..
+    Mixin for param standardization: whether to standardize the training features before fitting the model.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -545,7 +545,7 @@ class HasStandardization(Params):
 
 class HasThresholds(Params):
     """
-    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
     """
 
     # a placeholder to make it appear in the generated doc
@@ -568,6 +568,61 @@ class HasThresholds(Params):
         Gets the value of thresholds or its default value.
         """
         return self.getOrDefault(self.thresholds)
+
+
+class HasWeightCol(Params):
+    """
+    Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def __init__(self):
+        super(HasWeightCol, self).__init__()
+        #: param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
+        self.weightCol = Param(self, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        self._paramMap[self.weightCol] = value
+        return self
+
+    def getWeightCol(self):
+        """
+        Gets the value of weightCol or its default value.
+        """
+        return self.getOrDefault(self.weightCol)
+
+
+class HasSolver(Params):
+    """
+    Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+
+    def __init__(self):
+        super(HasSolver, self).__init__()
+        #: param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+        self.solver = Param(self, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.")
+        self._setDefault(solver='auto')
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        self._paramMap[self.solver] = value
+        return self
+
+    def getSolver(self):
+        """
+        Gets the value of solver or its default value.
+        """
+        return self.getOrDefault(self.solver)
 
 
 class DecisionTreeParams(Params):

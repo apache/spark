@@ -212,6 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
+        == Physical Plan ==
         Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
@@ -227,7 +228,7 @@ class DataFrame(object):
         if extended:
             print(self._jdf.queryExecution().toString())
         else:
-            print(self._jdf.queryExecution().executedPlan().toString())
+            print(self._jdf.queryExecution().simpleString())
 
     @since(1.3)
     def isLocal(self):
@@ -1263,6 +1264,18 @@ class DataFrame(object):
             jdf = self._jdf.drop(col._jc)
         else:
             raise TypeError("col should be a string or a Column")
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
+    def toDF(self, *cols):
+        """Returns a new class:`DataFrame` that with new specified column names
+
+        :param cols: list of new column names (string)
+
+        >>> df.toDF('f1', 'f2').collect()
+        [Row(f1=2, f2=u'Alice'), Row(f1=5, f2=u'Bob')]
+        """
+        jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)

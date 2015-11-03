@@ -171,7 +171,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val overwrite = mode == SaveMode.Overwrite
     df.sqlContext.executePlan(
       InsertIntoTable(
-        UnresolvedRelation(tableIdent.toSeq),
+        UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
         df.logicalPlan,
         overwrite,
@@ -201,7 +201,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -244,6 +244,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
+   *
+   * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     val props = new Properties()
@@ -316,6 +318,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @note Currently, this method can only be used together with `HiveContext`.
    */
   def orc(path: String): Unit = format("orc").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * The DataFrame must have only one column that is of string type.
+   * Each row becomes a new line in the output file. For example:
+   * {{{
+   *   // Scala:
+   *   df.write.text("/path/to/output")
+   *
+   *   // Java:
+   *   df.write().text("/path/to/output")
+   * }}}
+   *
+   * @since 1.6.0
+   */
+  def text(path: String): Unit = format("text").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
