@@ -19,17 +19,24 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URL
+import java.util.{HashMap => JHashMap, Properties}
 
 import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
+import org.apache.spark.launcher._
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
+  SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.tags.ExtendedYarnTest
 import org.apache.spark.util.Utils
 
 /**
@@ -37,9 +44,10 @@ import org.apache.spark.util.Utils
  * applications, and require the Spark assembly to be built before they can be successfully
  * run.
  */
+@ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
-  override def yarnConfig: YarnConfiguration = new YarnConfiguration()
+  override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
   private val TEST_PYFILE = """
     |import mod1, mod2
@@ -78,10 +86,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
     // Don't provide arguments so the driver will fail.
-    val exception = intercept[SparkException] {
-      runSpark(false, mainClassName(YarnClusterDriver.getClass))
-      fail("Spark application should have failed.")
-    }
+    val finalState = runSpark(false, mainClassName(YarnClusterDriver.getClass))
+    finalState should be (SparkAppHandle.State.FAILED)
   }
 
   test("run Python application in yarn-client mode") {
@@ -100,16 +106,58 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testUseClassPathFirst(false)
   }
 
+  test("monitor app using launcher library") {
+    val env = new JHashMap[String, String]()
+    env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
+
+    val propsFile = createConfFile()
+    val handle = new SparkLauncher(env)
+      .setSparkHome(sys.props("spark.test.home"))
+      .setConf("spark.ui.enabled", "false")
+      .setPropertiesFile(propsFile)
+      .setMaster("yarn-client")
+      .setAppResource("spark-internal")
+      .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
+      .startApplication()
+
+    try {
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.RUNNING)
+      }
+
+      handle.getAppId() should not be (null)
+      handle.getAppId() should startWith ("application_")
+      handle.stop()
+
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
+  }
+
   private def testBasicYarnApp(clientMode: Boolean): Unit = {
     val result = File.createTempFile("result", null, tempDir)
-    runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
+    val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()))
-    checkResult(result)
+    checkResult(finalState, result)
   }
 
   private def testPySpark(clientMode: Boolean): Unit = {
     val primaryPyFile = new File(tempDir, "test.py")
     Files.write(TEST_PYFILE, primaryPyFile, UTF_8)
+
+    // When running tests, let's not assume the user has built the assembly module, which also
+    // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
+    // needed locations.
+    val sparkHome = sys.props("spark.test.home");
+    val pythonPath = Seq(
+        s"$sparkHome/python/lib/py4j-0.9-src.zip",
+        s"$sparkHome/python")
+    val extraEnv = Map(
+      "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator))
 
     val moduleDir =
       if (clientMode) {
@@ -128,10 +176,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
     val result = File.createTempFile("result", null, tempDir)
 
-    runSpark(clientMode, primaryPyFile.getAbsolutePath(),
-      sparkArgs = Seq("--py-files", pyFiles),
-      appArgs = Seq(result.getAbsolutePath()))
-    checkResult(result)
+    val finalState = runSpark(clientMode, primaryPyFile.getAbsolutePath(),
+      sparkArgs = Seq("--py-files" -> pyFiles),
+      appArgs = Seq(result.getAbsolutePath()),
+      extraEnv = extraEnv)
+    checkResult(finalState, result)
   }
 
   private def testUseClassPathFirst(clientMode: Boolean): Unit = {
@@ -140,15 +189,15 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val userJar = TestUtils.createJarWithFiles(Map("test.resource" -> "OVERRIDDEN"), tempDir)
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
-    runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
+    val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
       appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
       extraClassPath = Seq(originalJar.getPath()),
       extraJars = Seq("local:" + userJar.getPath()),
       extraConf = Map(
         "spark.driver.userClassPathFirst" -> "true",
         "spark.executor.userClassPathFirst" -> "true"))
-    checkResult(driverResult, "OVERRIDDEN")
-    checkResult(executorResult, "OVERRIDDEN")
+    checkResult(finalState, driverResult, "OVERRIDDEN")
+    checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
 }
@@ -195,8 +244,8 @@ private object YarnClusterDriver extends Logging with Matchers {
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {
-      sc.stop()
       Files.write(result, status, UTF_8)
+      sc.stop()
     }
 
     // verify log urls are present
@@ -277,6 +326,21 @@ private object YarnClasspathTest extends Logging {
         exitCode = 2
     } finally {
       Files.write(result, new File(resultPath), UTF_8)
+    }
+  }
+
+}
+
+private object YarnLauncherTestApp {
+
+  def main(args: Array[String]): Unit = {
+    // Do not stop the application; the test will stop it using the launcher lib. Just run a task
+    // that will prevent the process from exiting.
+    val sc = new SparkContext(new SparkConf())
+    sc.parallelize(Seq(1)).foreach { i =>
+      this.synchronized {
+        wait()
+      }
     }
   }
 

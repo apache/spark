@@ -107,7 +107,7 @@ class KMeans private (
    * Number of runs of the algorithm to execute in parallel.
    */
   @Since("1.4.0")
-  @Experimental
+  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
   def getRuns: Int = runs
 
   /**
@@ -117,7 +117,7 @@ class KMeans private (
    * return the best clustering found over any run. Default: 1.
    */
   @Since("0.8.0")
-  @Experimental
+  @deprecated("Support for runs is deprecated. This param will have no effect in 1.7.0.", "1.6.0")
   def setRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
@@ -369,7 +369,7 @@ class KMeans private (
   : Array[Array[VectorWithNorm]] = {
     // Initialize empty centers and point costs.
     val centers = Array.tabulate(runs)(r => ArrayBuffer.empty[VectorWithNorm])
-    var costs = data.map(_ => Vectors.dense(Array.fill(runs)(Double.PositiveInfinity))).cache()
+    var costs = data.map(_ => Array.fill(runs)(Double.PositiveInfinity))
 
     // Initialize each run's first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
@@ -394,21 +394,28 @@ class KMeans private (
       val bcNewCenters = data.context.broadcast(newCenters)
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-        Vectors.dense(
           Array.tabulate(runs) { r =>
             math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
-          })
-      }.cache()
+          }
+        }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs
-        .aggregate(Vectors.zeros(runs))(
+        .aggregate(new Array[Double](runs))(
           seqOp = (s, v) => {
             // s += v
-            axpy(1.0, v, s)
+            var r = 0
+            while (r < runs) {
+              s(r) += v(r)
+              r += 1
+            }
             s
           },
           combOp = (s0, s1) => {
             // s0 += s1
-            axpy(1.0, s1, s0)
+            var r = 0
+            while (r < runs) {
+              s0(r) += s1(r)
+              r += 1
+            }
             s0
           }
         )

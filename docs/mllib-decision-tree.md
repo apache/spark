@@ -191,7 +191,9 @@ maximum tree depth of 5. The test error is calculated to measure the algorithm a
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.DecisionTreeModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
@@ -229,7 +231,9 @@ val sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
+
 {% highlight java %}
 import java.util.HashMap;
 import scala.Tuple2;
@@ -291,7 +295,8 @@ DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint
@@ -335,7 +340,9 @@ depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div class="codetabs">
 
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
+Refer to the [`DecisionTree` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.DecisionTreeModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
@@ -372,7 +379,9 @@ val sameModel = DecisionTreeModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
+Refer to the [`DecisionTree` Java docs](api/java/org/apache/spark/mllib/tree/DecisionTree.html) and [`DecisionTreeModel` Java docs](api/java/org/apache/spark/mllib/tree/model/DecisionTreeModel.html) for details on the API.
+
 {% highlight java %}
 import java.util.HashMap;
 import scala.Tuple2;
@@ -440,7 +449,8 @@ DecisionTreeModel sameModel = DecisionTreeModel.load(sc.sc(), "myModelPath");
 {% endhighlight %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
+Refer to the [`DecisionTree` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTree) and [`DecisionTreeModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.DecisionTreeModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.{Column, catalyst}
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -149,13 +150,17 @@ class WindowSpec private[sql](
       case Count(child) => WindowExpression(
         UnresolvedWindowFunction("count", child :: Nil),
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case First(child) => WindowExpression(
+      case First(child, ignoreNulls) => WindowExpression(
         // TODO this is a hack for Hive UDAF first_value
-        UnresolvedWindowFunction("first_value", child :: Nil),
+        UnresolvedWindowFunction(
+          "first_value",
+          child :: ignoreNulls :: Nil),
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
-      case Last(child) => WindowExpression(
+      case Last(child, ignoreNulls) => WindowExpression(
         // TODO this is a hack for Hive UDAF last_value
-        UnresolvedWindowFunction("last_value", child :: Nil),
+        UnresolvedWindowFunction(
+          "last_value",
+          child :: ignoreNulls :: Nil),
         WindowSpecDefinition(partitionSpec, orderSpec, frame))
       case Min(child) => WindowExpression(
         UnresolvedWindowFunction("min", child :: Nil),

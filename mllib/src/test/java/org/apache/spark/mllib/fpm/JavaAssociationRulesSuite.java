@@ -17,16 +17,15 @@
 package org.apache.spark.mllib.fpm;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
-
 
 public class JavaAssociationRulesSuite implements Serializable {
   private transient JavaSparkContext sc;
@@ -46,7 +45,7 @@ public class JavaAssociationRulesSuite implements Serializable {
   public void runAssociationRules() {
 
     @SuppressWarnings("unchecked")
-    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Lists.newArrayList(
+    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
       new FreqItemset<String>(new String[] {"a"}, 15L),
       new FreqItemset<String>(new String[] {"b"}, 35L),
       new FreqItemset<String>(new String[] {"a", "b"}, 12L)

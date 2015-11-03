@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.CompactBuffer
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class BroadcastNestedLoopJoin(
     left: SparkPlan,
     right: SparkPlan,
@@ -71,7 +67,10 @@ case class BroadcastNestedLoopJoin(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case x =>
+      case Inner =>
+        // TODO we can avoid breaking the lineage, since we union an empty RDD for Inner Join case
+        left.output ++ right.output
+      case x => // TODO support the Left Semi Join
         throw new IllegalArgumentException(
           s"BroadcastNestedLoopJoin should not take $x as the JoinType")
     }

@@ -23,7 +23,15 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.CallSite
 
 /**
- * The ShuffleMapStage represents the intermediate stages in a job.
+ * ShuffleMapStages are intermediate stages in the execution DAG that produce data for a shuffle.
+ * They occur right before each shuffle operation, and might contain multiple pipelined operations
+ * before that (e.g. map and filter). When executed, they save map output files that can later be
+ * fetched by reduce tasks. The `shuffleDep` field describes the shuffle each stage is part of,
+ * and variables like `outputLocs` and `numAvailableOutputs` track how many map outputs are ready.
+ *
+ * ShuffleMapStages can also be submitted independently as jobs with DAGScheduler.submitMapStage.
+ * For such stages, the ActiveJobs that submitted them are tracked in `mapStageJobs`. Note that
+ * there can be multiple ActiveJobs trying to compute the same shuffle map stage.
  */
 private[spark] class ShuffleMapStage(
     id: Int,
@@ -37,11 +45,35 @@ private[spark] class ShuffleMapStage(
 
   override def toString: String = "ShuffleMapStage " + id
 
+  /** Running map-stage jobs that were submitted to execute this stage independently (if any) */
+  var mapStageJobs: List[ActiveJob] = Nil
+
+  /**
+   * Number of partitions that have shuffle outputs.
+   * When this reaches [[numPartitions]], this map stage is ready.
+   * This should be kept consistent as `outputLocs.filter(!_.isEmpty).size`.
+   */
   var numAvailableOutputs: Int = 0
 
+  /**
+   * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
+   * This should be the same as `outputLocs.contains(Nil)`.
+   */
   def isAvailable: Boolean = numAvailableOutputs == numPartitions
 
+  /**
+   * List of [[MapStatus]] for each partition. The index of the array is the map partition id,
+   * and each value in the array is the list of possible [[MapStatus]] for a partition
+   * (a single task might run multiple times).
+   */
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+
+  override def findMissingPartitions(): Seq[Int] = {
+    val missing = (0 until numPartitions).filter(id => outputLocs(id).isEmpty)
+    assert(missing.size == numPartitions - numAvailableOutputs,
+      s"${missing.size} missing, expected ${numPartitions - numAvailableOutputs}")
+    missing
+  }
 
   def addOutputLoc(partition: Int, status: MapStatus): Unit = {
     val prevList = outputLocs(partition)

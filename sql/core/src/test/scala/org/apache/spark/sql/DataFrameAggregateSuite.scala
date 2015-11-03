@@ -66,12 +66,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
       Seq(Row(3), Row(3), Row(3))
     )
-    ctx.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, true)
   }
 
   test("agg without groups") {
@@ -175,6 +175,39 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(0, null))
   }
 
+  test("stddev") {
+    val testData2ADev = math.sqrt(4/5.0)
+
+    checkAnswer(
+      testData2.agg(stddev('a)),
+      Row(testData2ADev))
+
+    checkAnswer(
+      testData2.agg(stddev_pop('a)),
+      Row(math.sqrt(4/6.0)))
+
+    checkAnswer(
+      testData2.agg(stddev_samp('a)),
+      Row(testData2ADev))
+  }
+
+  test("zero stddev") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() == 0)
+
+    checkAnswer(
+    emptyTableData.agg(stddev('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_pop('a)),
+    Row(null))
+
+    checkAnswer(
+    emptyTableData.agg(stddev_samp('a)),
+    Row(null))
+  }
+
   test("zero sum") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
@@ -187,5 +220,78 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       emptyTableData.agg(sumDistinct('a)),
       Row(null))
+  }
+
+  test("moments") {
+    val absTol = 1e-8
+
+    val sparkVariance = testData2.agg(variance('a))
+    val expectedVariance = Row(4.0 / 6.0)
+    checkAggregatesWithTol(sparkVariance, expectedVariance, absTol)
+    val sparkVariancePop = testData2.agg(var_pop('a))
+    checkAggregatesWithTol(sparkVariancePop, expectedVariance, absTol)
+
+    val sparkVarianceSamp = testData2.agg(var_samp('a))
+    val expectedVarianceSamp = Row(4.0 / 5.0)
+    checkAggregatesWithTol(sparkVarianceSamp, expectedVarianceSamp, absTol)
+
+    val sparkSkewness = testData2.agg(skewness('a))
+    val expectedSkewness = Row(0.0)
+    checkAggregatesWithTol(sparkSkewness, expectedSkewness, absTol)
+
+    val sparkKurtosis = testData2.agg(kurtosis('a))
+    val expectedKurtosis = Row(-1.5)
+    checkAggregatesWithTol(sparkKurtosis, expectedKurtosis, absTol)
+
+  }
+
+  test("zero moments") {
+    val emptyTableData = Seq((1, 2)).toDF("a", "b")
+    assert(emptyTableData.count() === 1)
+
+    checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(0.0))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(0.0))
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(Double.NaN))
+  }
+
+  test("null moments") {
+    val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
+    assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.agg(variance('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_samp('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(var_pop('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(skewness('a)),
+      Row(Double.NaN))
+
+    checkAnswer(
+      emptyTableData.agg(kurtosis('a)),
+      Row(Double.NaN))
   }
 }

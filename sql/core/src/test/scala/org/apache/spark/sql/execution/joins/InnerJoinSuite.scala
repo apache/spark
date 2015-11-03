@@ -27,9 +27,10 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
+  import testImplicits.localSeqToDataFrameHolder
 
-  private lazy val myUpperCaseData = ctx.createDataFrame(
-    ctx.sparkContext.parallelize(Seq(
+  private lazy val myUpperCaseData = sqlContext.createDataFrame(
+    sparkContext.parallelize(Seq(
       Row(1, "A"),
       Row(2, "B"),
       Row(3, "C"),
@@ -39,8 +40,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, "G")
     )), new StructType().add("N", IntegerType).add("L", StringType))
 
-  private lazy val myLowerCaseData = ctx.createDataFrame(
-    ctx.sparkContext.parallelize(Seq(
+  private lazy val myLowerCaseData = sqlContext.createDataFrame(
+    sparkContext.parallelize(Seq(
       Row(1, "a"),
       Row(2, "b"),
       Row(3, "c"),
@@ -211,4 +212,18 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     )
   }
 
+  {
+    lazy val left = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    lazy val right = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    testInnerJoin(
+      "inner join, null safe",
+      left,
+      right,
+      () => (left.col("b") <=> right.col("b")).expr,
+      Seq(
+        (1, 0, 1, 0),
+        (2, null, 2, null)
+      )
+    )
+  }
 }

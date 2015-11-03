@@ -50,7 +50,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         hasBytesSpilled = data.hasBytesSpilled
     })
 
-    <table class={UIUtils.TABLE_CLASS_STRIPED}>
+    <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>

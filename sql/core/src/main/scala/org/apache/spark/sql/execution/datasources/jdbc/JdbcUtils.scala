@@ -42,10 +42,13 @@ object JdbcUtils extends Logging {
   /**
    * Returns true if the table already exists in the JDBC database.
    */
-  def tableExists(conn: Connection, table: String): Boolean = {
+  def tableExists(conn: Connection, url: String, table: String): Boolean = {
+    val dialect = JdbcDialects.get(url)
+
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
-    // SQL database systems, considering "table" could also include the database name.
-    Try(conn.prepareStatement(s"SELECT 1 FROM $table LIMIT 1").executeQuery().next()).isSuccess
+    // SQL database systems using JDBC meta data calls, considering "table" could also include
+    // the database name. Query used to find table exists can be overriden by the dialects.
+    Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
   }
 
   /**

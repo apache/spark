@@ -38,6 +38,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel}
  * is equivalent to one Spark-level shuffle block.
  */
 class NettyBlockRpcServer(
+    appId: String,
     serializer: Serializer,
     blockManager: BlockDataManager)
   extends RpcHandler with Logging {
@@ -55,7 +56,7 @@ class NettyBlockRpcServer(
       case openBlocks: OpenBlocks =>
         val blocks: Seq[ManagedBuffer] =
           openBlocks.blockIds.map(BlockId.apply).map(blockManager.getBlockData)
-        val streamId = streamManager.registerStream(blocks.iterator.asJava)
+        val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
         logTrace(s"Registered streamId $streamId with ${blocks.size} buffers")
         responseContext.onSuccess(new StreamHandle(streamId, blocks.size).toByteArray)
 

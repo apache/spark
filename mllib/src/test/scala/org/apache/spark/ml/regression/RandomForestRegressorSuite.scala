@@ -137,6 +137,7 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
       data: RDD[LabeledPoint],
       rf: RandomForestRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
     val oldModel = OldRandomForest.trainRegressor(
@@ -147,5 +148,6 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val oldModelAsNew = RandomForestRegressionModel.fromOld(
       oldModel, newModel.parent.asInstanceOf[RandomForestRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    assert(newModel.numFeatures === numFeatures)
   }
 }

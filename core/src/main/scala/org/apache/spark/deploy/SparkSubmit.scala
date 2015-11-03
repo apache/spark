@@ -319,8 +319,8 @@ object SparkSubmit {
 
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (MESOS, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python " +
+      case (MESOS, CLUSTER) if args.isR =>
+        printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
@@ -328,6 +328,8 @@ object SparkSubmit {
       case (STANDALONE, CLUSTER) if args.isR =>
         printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
+      case (LOCAL, CLUSTER) =>
+        printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -551,7 +553,15 @@ object SparkSubmit {
     if (isMesosCluster) {
       assert(args.useRest, "Mesos cluster mode is only supported through the REST submission API")
       childMainClass = "org.apache.spark.deploy.rest.RestSubmissionClient"
-      childArgs += (args.primaryResource, args.mainClass)
+      if (args.isPython) {
+        // Second argument is main class
+        childArgs += (args.primaryResource, "")
+        if (args.pyFiles != null) {
+          sysProps("spark.submit.pyFiles") = args.pyFiles
+        }
+      } else {
+        childArgs += (args.primaryResource, args.mainClass)
+      }
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -643,6 +653,15 @@ object SparkSubmit {
         if (childMainClass.contains("thriftserver")) {
           // scalastyle:off println
           printStream.println(s"Failed to load main class $childMainClass.")
+          printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
+          // scalastyle:on println
+        }
+        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+      case e: NoClassDefFoundError =>
+        e.printStackTrace(printStream)
+        if (e.getMessage.contains("org/apache/hadoop/hive")) {
+          // scalastyle:off println
+          printStream.println(s"Failed to load hive class.")
           printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
           // scalastyle:on println
         }
