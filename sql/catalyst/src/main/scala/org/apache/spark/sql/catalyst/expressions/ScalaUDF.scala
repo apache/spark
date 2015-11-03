@@ -30,12 +30,17 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputTypes: Seq[DataType] = Nil)
+    inputTypes: Seq[DataType] = Nil,
+    isDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with CodegenFallback {
 
   override def nullable: Boolean = true
 
   override def toString: String = s"UDF(${children.mkString(",")})"
+
+  override def foldable: Boolean = deterministic && children.forall(_.foldable)
+
+  override def deterministic: Boolean = isDeterministic && children.forall(_.deterministic)
 
   // scalastyle:off
 
