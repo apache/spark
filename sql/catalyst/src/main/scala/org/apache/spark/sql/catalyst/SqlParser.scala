@@ -337,12 +337,23 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | sign.? ~ unsignedFloat ^^ {
       case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
     }
+    | sign.? ~ unsignedDecimal ^^ {
+      case s ~ d => Literal(toDecimalOrDouble(s.getOrElse("") + d))
+    }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
     ( "." ~> numericLit ^^ { u => "0." + u }
     | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
     )
+
+  protected lazy val unsignedDecimal: Parser[String] =
+    ( "." ~> decimalLit ^^ { u => "0." + u }
+    | elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
+    )
+
+  def decimalLit: Parser[String] =
+    elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
 
   protected lazy val sign: Parser[String] = ("+" | "-")
 
