@@ -34,6 +34,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       data: _*)
   }
 
+  test("toDS with RDD") {
+    val ds = sparkContext.makeRDD(Seq("a", "b", "c"), 3).toDS()
+    checkAnswer(
+      ds.mapPartitions(_ => Iterator(1)),
+      1, 1, 1)
+  }
+
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
     checkAnswer(
