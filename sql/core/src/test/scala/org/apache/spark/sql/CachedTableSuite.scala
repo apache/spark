@@ -376,22 +376,40 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
     sqlContext.uncacheTable("orderedTable")
 
-    // Set up two tables distributed in the same way.
-    testData.distributeBy(Column("key") :: Nil, 5).registerTempTable("t1")
-    testData2.distributeBy(Column("a") :: Nil, 5).registerTempTable("t2")
+    // Set up two tables distributed in the same way. Try this with the data distributed into
+    // different number of partitions.
+    for (numPartitions <- 1 until 10 by 4) {
+      testData.distributeBy(Column("key") :: Nil, numPartitions).registerTempTable("t1")
+      testData2.distributeBy(Column("a") :: Nil, numPartitions).registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
+
+      // Joining them should result in no exchanges.
+      verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
+      checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+        sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
+
+      // Grouping on the partition key should result in no exchanges
+      verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
+      checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
+        sql("SELECT count(*) FROM testData GROUP BY key"))
+
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+      sqlContext.dropTempTable("t1")
+      sqlContext.dropTempTable("t2")
+    }
+
+    // Distribute the tables into non-matching number of partitions. Need to shuffle.
+    testData.distributeBy(Column("key") :: Nil, 6).registerTempTable("t1")
+    testData2.distributeBy(Column("a") :: Nil, 3).registerTempTable("t2")
     sqlContext.cacheTable("t1")
     sqlContext.cacheTable("t2")
 
-    // Joining them should result in no exchanges.
-    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
-
-    // Grouping on the partition key should result in no exchanges
-    verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
-
-    // TODO: this is an issue with self joins. The number of exchanges should be 0.
-    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t1 t2 on t1.key = t2.key"), 1)
-
+    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 2)
     sqlContext.uncacheTable("t1")
     sqlContext.uncacheTable("t2")
+    sqlContext.dropTempTable("t1")
+    sqlContext.dropTempTable("t2")
   }
 }
