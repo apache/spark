@@ -175,6 +175,7 @@ private[spark] abstract class YarnSchedulerBackend(
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case RemoveExecutor(executorId, reason) =>
+        logWarning(reason.toString)
         removeExecutor(executorId, reason)
     }
 
