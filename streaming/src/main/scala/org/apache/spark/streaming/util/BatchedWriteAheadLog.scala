@@ -37,15 +37,7 @@ import org.apache.spark.util.{Utils, ThreadUtils}
 private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
   extends WriteAheadLog with Logging {
 
-  /**
-   * Wrapper class for representing the records that we will write to the WriteAheadLog. Coupled with
-   * the timestamp for the write request of the record, and the promise that will block the write
-   * request, while a separate thread is actually performing the write.
-   */
-  private[util] case class RecordBuffer(
-      record: ByteBuffer,
-      time: Long,
-      promise: Promise[WriteAheadLogRecordHandle])
+  import BatchedWriteAheadLog._
 
   /** A thread pool for fulfilling log write promises */
   private val batchWriterThreadPool = ExecutionContext.fromExecutorService(
@@ -58,7 +50,7 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
 
   // Whether the writer thread is active
   private var active: Boolean = true
-  private val buffer = new ArrayBuffer[RecordBuffer]()
+  protected val buffer = new ArrayBuffer[RecordBuffer]()
 
   startBatchedWriterThread()
 
@@ -96,7 +88,7 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
    * This method is handled by the parent WriteAheadLog.
    */
   override def readAll(): JIterator[ByteBuffer] = {
-    parent.readAll().asScala.flatMap(BatchedWriteAheadLog.deaggregate).asJava
+    parent.readAll().asScala.flatMap(deaggregate).asJava
   }
 
   /**
@@ -131,19 +123,23 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
     }
   }
 
-  /** Start the actual log writer on a separate thread. Visible(protected) for testing. */
+  /** Start the actual log writer on a separate thread. Visible (protected) for testing. */
   protected def startBatchedWriterThread(): Unit = {
-    ThreadUtils.runInNewThread("Batched WAL Writer", isDaemon = true) {
-      while (active) {
-        try {
-          flushRecords()
-        } catch {
-          case NonFatal(e) =>
-            logWarning("Encountered exception in Batched Writer Thread.", e)
+    val thread = new Thread(new Runnable {
+      override def run(): Unit = {
+        while (active) {
+          try {
+            flushRecords()
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Encountered exception in Batched Writer Thread.", e)
+          }
         }
+        logInfo("Batched WAL Writer thread exiting.")
       }
-      logInfo("Batched WAL Writer thread exiting.")
-    }
+    }, "Batched WAL Writer")
+    thread.setDaemon(true)
+    thread.start()
   }
 
   /** Write all the records in the buffer to the write ahead log. Visible for testing. */
@@ -163,7 +159,7 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
         // we take the latest record for the time to ensure that we don't clean up files earlier
         // than the expiration date of the records
         val time = buffer.last.time
-        segment = parent.write(BatchedWriteAheadLog.aggregate(buffer), time)
+        segment = parent.write(aggregate(buffer), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {
@@ -177,9 +173,19 @@ private[streaming] class BatchedWriteAheadLog(parent: WriteAheadLog)
 
 /** Static methods for aggregating and de-aggregating records. */
 private[streaming] object BatchedWriteAheadLog {
+  /**
+   * Wrapper class for representing the records that we will write to the WriteAheadLog. Coupled
+   * with the timestamp for the write request of the record, and the promise that will block the
+   * write request, while a separate thread is actually performing the write.
+   */
+  private[util] case class RecordBuffer(
+      record: ByteBuffer,
+      time: Long,
+      promise: Promise[WriteAheadLogRecordHandle])
+
   /** Aggregate multiple serialized ReceivedBlockTrackerLogEvents in a single ByteBuffer. */
   private[streaming] def aggregate(records: Seq[RecordBuffer]): ByteBuffer = {
-    ByteBuffer.wrap(Utils.serialize(records.map(_.record.array().toArray)))
+    ByteBuffer.wrap(Utils.serialize[Array[Array[Byte]]](records.map(_.record.array()).toArray))
   }
 
   /**
