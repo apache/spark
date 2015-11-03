@@ -1927,7 +1927,7 @@ setMethod("coltypes",
           function(x) {
             # Get the data types of the DataFrame by invoking dtypes() function
             types <- lapply(dtypes(irisDF), function(x) {x[[2]]})
-            
+
             # Map Spark data types into R's data types using DATA_TYPES environment
             rTypes <- lapply(types, function(x) { 
               if (exists(x, envir=DATA_TYPES)) {
@@ -1936,12 +1936,12 @@ setMethod("coltypes",
                 stop(paste("Unsupported data type: ", x))
               }
             })
-            
+
             # Find which types could not be mapped
             naIndices <- which(is.na(rTypes))
-            
+
             # Assign the original scala data types to the unmatched ones
             rTypes[naIndices] <- types[naIndices]
-            
+
             rTypes
           })
