@@ -39,7 +39,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext}
 
-class KinesisStreamSuite extends KinesisFunSuite
+abstract class KinesisStreamTests extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
   // This is the name that KCL will use to save metadata to DynamoDB
@@ -55,6 +55,8 @@ class KinesisStreamSuite extends KinesisFunSuite
   private var testUtils: KinesisTestUtils = null
   private var ssc: StreamingContext = null
   private var sc: SparkContext = null
+
+  protected val aggregateTestData: Boolean
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf()
@@ -188,7 +190,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
-      testUtils.pushData(testData)
+      testUtils.pushData(testData, aggregateTestData)
       assert(collected === testData.toSet, "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
@@ -213,7 +215,7 @@ class KinesisStreamSuite extends KinesisFunSuite
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
-      testUtils.pushData(testData)
+      testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
       assert(collected === modData.toSet, "\nData received does not match data sent")
     }
@@ -254,7 +256,7 @@ class KinesisStreamSuite extends KinesisFunSuite
     // If this times out because numBatchesWithData is empty, then its likely that foreachRDD
     // function failed with exceptions, and nothing got added to `collectedData`
     eventually(timeout(2 minutes), interval(1 seconds)) {
-      testUtils.pushData(1 to 5)
+      testUtils.pushData(1 to 5, aggregateTestData)
       assert(isCheckpointPresent && numBatchesWithData > 10)
     }
     ssc.stop(stopSparkContext = true)  // stop the SparkContext so that the blocks are not reused
@@ -285,5 +287,12 @@ class KinesisStreamSuite extends KinesisFunSuite
     }
     ssc.stop()
   }
+}
 
+class WithAggregationKinesisStreamSuite extends KinesisStreamTests {
+  override protected val aggregateTestData: Boolean = true
+}
+
+class WithoutAggregationKinesisStreamSuite extends KinesisStreamTests {
+  override protected val aggregateTestData: Boolean = false
 }
