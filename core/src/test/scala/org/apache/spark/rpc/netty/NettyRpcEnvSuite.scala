@@ -22,8 +22,13 @@ import org.apache.spark.rpc._
 
 class NettyRpcEnvSuite extends RpcEnvSuite {
 
-  override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
-    val config = RpcEnvConfig(conf, "test", "localhost", port, new SecurityManager(conf))
+  override def createRpcEnv(
+      conf: SparkConf,
+      name: String,
+      port: Int,
+      clientMode: Boolean = false): RpcEnv = {
+    val config = RpcEnvConfig(conf, "test", "localhost", port, new SecurityManager(conf),
+      clientMode)
     new NettyRpcEnvFactory().create(config)
   }
 
