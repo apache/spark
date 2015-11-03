@@ -563,6 +563,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("Specify the udtf output",
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
+    "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
+
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #2",
+    "SELECT key,value FROM (SELECT explode(map(key,value)) FROM src LIMIT 1) t")
+
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
     sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")

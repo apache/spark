@@ -511,7 +511,7 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val collector = new UDTFCollector
 
   override lazy val elementTypes = outputInspector.getAllStructFieldRefs.asScala.map {
-    field => (inspectorToDataType(field.getFieldObjectInspector), true)
+    field => (inspectorToDataType(field.getFieldObjectInspector), true, field.getFieldName)
   }
 
   @transient

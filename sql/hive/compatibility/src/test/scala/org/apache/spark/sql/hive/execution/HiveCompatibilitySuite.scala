@@ -661,6 +661,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_star",
     "lateral_view",
     "lateral_view_cp",
+    "lateral_view_noalias",
     "lateral_view_ppd",
     "leftsemijoin",
     "leftsemijoin_mr",
