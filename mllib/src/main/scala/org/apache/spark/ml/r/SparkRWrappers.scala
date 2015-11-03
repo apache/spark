@@ -31,6 +31,7 @@ private[r] object SparkRWrappers {
       family: String,
       lambda: Double,
       alpha: Double,
+      standardize: Boolean,
       solver: String): PipelineModel = {
     val formula = new RFormula().setFormula(value)
     val estimator = family match {
@@ -38,23 +39,24 @@ private[r] object SparkRWrappers {
         .setRegParam(lambda)
         .setElasticNetParam(alpha)
         .setFitIntercept(formula.hasIntercept)
+        .setStandardization(standardize)
         .setSolver(solver)
       case "binomial" => new LogisticRegression()
         .setRegParam(lambda)
         .setElasticNetParam(alpha)
         .setFitIntercept(formula.hasIntercept)
+        .setStandardization(standardize)
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
   }
 
-  def getModelWeights(model: PipelineModel): Array[Double] = {
+  def getModelCoefficients(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
-        Array(m.intercept) ++ m.weights.toArray
-      case _: LogisticRegressionModel =>
-        throw new UnsupportedOperationException(
-          "No weights available for LogisticRegressionModel")  // SPARK-9492
+        Array(m.intercept) ++ m.coefficients.toArray
+      case m: LogisticRegressionModel =>
+        Array(m.intercept) ++ m.coefficients.toArray
     }
   }
 

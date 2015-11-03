@@ -143,6 +143,21 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           }
         }
 
+        def partColsFromParts: Option[Seq[String]] = {
+          table.properties.get("spark.sql.sources.schema.numPartCols").map { numPartCols =>
+            (0 until numPartCols.toInt).map { index =>
+              val partCol = table.properties.get(s"spark.sql.sources.schema.partCol.$index").orNull
+              if (partCol == null) {
+                throw new AnalysisException(
+                  "Could not read partitioned columns from the metastore because it is corrupted " +
+                    s"(missing part $index of the it, $numPartCols parts are expected).")
+              }
+
+              partCol
+            }
+          }
+        }
+
         // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
         // After SPARK-6024, we removed this flag.
         // Although we are not using spark.sql.sources.schema any more, we need to still support.
@@ -155,7 +170,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
         // contains partition columns. We can always get datatypes of partitioning columns
         // from userSpecifiedSchema.
-        val partitionColumns = table.partitionColumns.map(_.name)
+        val partitionColumns = partColsFromParts.getOrElse(Nil)
 
         // It does not appear that the ql client for the metastore has a way to enumerate all the
         // SerDe properties directly...
@@ -218,25 +233,21 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       }
     }
 
-    val metastorePartitionColumns = userSpecifiedSchema.map { schema =>
-      val fields = partitionColumns.map(col => schema(col))
-      fields.map { field =>
-        HiveColumn(
-          name = field.name,
-          hiveType = HiveMetastoreTypes.toMetastoreType(field.dataType),
-          comment = "")
-      }.toSeq
-    }.getOrElse {
-      if (partitionColumns.length > 0) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // when we load the table. So, we are not expecting partition columns and we will discover
-        // partitions when we load the table. However, if there are specified partition columns,
-        // we simply ignore them and provide a warning message.
-        logWarning(
-          s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
-            s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
+    if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
+      tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
+      partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
+        tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
       }
-      Seq.empty[HiveColumn]
+    }
+
+    if (userSpecifiedSchema.isEmpty && partitionColumns.length > 0) {
+      // The table does not have a specified schema, which means that the schema will be inferred
+      // when we load the table. So, we are not expecting partition columns and we will discover
+      // partitions when we load the table. However, if there are specified partition columns,
+      // we simply ignore them and provide a warning message.
+      logWarning(
+        s"The schema and partitions of table $tableIdent will be inferred when it is loaded. " +
+          s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
     }
 
     val tableType = if (isExternal) {
@@ -255,8 +266,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        schema = Seq.empty,
-        partitionColumns = metastorePartitionColumns,
+        schema = Nil,
+        partitionColumns = Nil,
         tableType = tableType,
         properties = tableProperties.toMap,
         serdeProperties = options)
@@ -272,14 +283,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         }
       }
 
-      val partitionColumns = schemaToHiveColumn(relation.partitionColumns)
-      val dataColumns = schemaToHiveColumn(relation.schema).filterNot(partitionColumns.contains)
+      assert(partitionColumns.isEmpty)
+      assert(relation.partitionColumns.isEmpty)
 
       HiveTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        schema = dataColumns,
-        partitionColumns = partitionColumns,
+        schema = schemaToHiveColumn(relation.schema),
+        partitionColumns = Nil,
         tableType = tableType,
         properties = tableProperties.toMap,
         serdeProperties = options,

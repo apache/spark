@@ -107,7 +107,58 @@ object MimaExcludes {
           "org.apache.spark.sql.SQLContext.createSession")
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.SparkContext.preferredNodeLocationData_=")
+          "org.apache.spark.SparkContext.preferredNodeLocationData_="),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$2"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$3"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$4"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$5"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$6"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$7"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$8"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$9"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$10"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$11"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$12"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$13"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$14"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$15"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$16"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$17"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$18"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$19"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$20"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$21"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$22"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$23"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$24")
       )
     case v if v.startsWith("1.5") =>
       Seq(
