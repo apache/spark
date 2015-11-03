@@ -138,6 +138,7 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
           wrappedState.wrapTiminoutState(state)
           val emittedRecord = trackingFunction(key, None, wrappedState)
           emittedRecords ++= emittedRecord
+          newStateMap.remove(key)
         }
       }
     }

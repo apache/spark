@@ -17,22 +17,43 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable, Map}
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.streaming.util.{OpenHashMapBasedStateMap, StateMap}
+import org.apache.spark.streaming.util.{EmptyStateMap, OpenHashMapBasedStateMap, StateMap}
 import org.apache.spark.util.Utils
 
 class StateMapSuite extends SparkFunSuite {
 
-  test("OpenHashMapBasedStateMap - put, get, getall, remove") {
+  test("EmptyStateMap") {
+    val map = new EmptyStateMap[Int, Int]
+    intercept[scala.NotImplementedError] {
+      map.put(1, 1, 1)
+    }
+    assert(map.get(1) === None)
+    assert(map.getByTime(10000).isEmpty)
+    assert(map.getAll().isEmpty)
+    map.remove(1)   // no exception
+    assert(map.copy().getAll().isEmpty)
+  }
+
+  test("OpenHashMapBasedStateMap - put, get, getByTime, getAll, remove") {
     val map = new OpenHashMapBasedStateMap[Int, Int]()
 
     map.put(1, 100, 10)
     assert(map.get(1) === Some(100))
     assert(map.get(2) === None)
+    assert(map.getByTime(11).toSet === Set((1, 100, 10)))
+    assert(map.getByTime(10).toSet === Set.empty)
+    assert(map.getByTime(9).toSet === Set.empty)
+    assert(map.getAll().toSet === Set((1, 100, 10)))
+
     map.put(2, 200, 20)
+    assert(map.getByTime(21).toSet === Set((1, 100, 10), (2, 200, 20)))
+    assert(map.getByTime(11).toSet === Set((1, 100, 10)))
+    assert(map.getByTime(10).toSet === Set.empty)
+    assert(map.getByTime(9).toSet === Set.empty)
     assert(map.getAll().toSet === Set((1, 100, 10), (2, 200, 20)))
 
     map.remove(1)
@@ -40,7 +61,7 @@ class StateMapSuite extends SparkFunSuite {
     assert(map.getAll().toSet === Set((2, 200, 20)))
   }
 
-  test("OpenHashMapBasedStateMap - put, get, getall, remove after copy") {
+  test("OpenHashMapBasedStateMap - put, get, getByTime, getAll, remove with copy") {
     val parentMap = new OpenHashMapBasedStateMap[Int, Int]()
     parentMap.put(1, 100, 1)
     parentMap.put(2, 200, 2)
@@ -48,15 +69,19 @@ class StateMapSuite extends SparkFunSuite {
 
     // Create child map and make changes
     val map = parentMap.copy()
-    assert(map.getAll().toSet === Set((2, 200, 2)))
     assert(map.get(1) === None)
     assert(map.get(2) === Some(200))
+    assert(map.getByTime(10).toSet === Set((2, 200, 2)))
+    assert(map.getByTime(2).toSet === Set.empty)
+    assert(map.getAll().toSet === Set((2, 200, 2)))
 
     // Add new items
     map.put(3, 300, 3)
     assert(map.get(3) === Some(300))
     map.put(4, 400, 4)
     assert(map.get(4) === Some(400))
+    assert(map.getByTime(10).toSet === Set((2, 200, 2), (3, 300, 3), (4, 400, 4)))
+    assert(map.getByTime(4).toSet === Set((2, 200, 2), (3, 300, 3)))
     assert(map.getAll().toSet === Set((2, 200, 2), (3, 300, 3), (4, 400, 4)))
     assert(parentMap.getAll().toSet === Set((2, 200, 2)))
 
@@ -95,74 +120,6 @@ class StateMapSuite extends SparkFunSuite {
     assert(childMap.get(2) === Some(20000)) // item map
   }
 
-  test("OpenHashMapBasedStateMap - all operation combo testing with copies ") {
-    val numTypeMapOps = 2  // 0 = put a new value, 1 = remove value
-    val numMapCopies = 4   // to test all combos of operations across 4 copies
-    val numOpsPerCopy = numTypeMapOps
-    val numTotalOps = numOpsPerCopy * numMapCopies
-    val numKeys = math.pow(numTypeMapOps, numTotalOps).toInt  // to get all combinations of ops
-
-    var stateMap: StateMap[Int, Int] = new OpenHashMapBasedStateMap[Int, Int]()
-    val refMap = new mutable.HashMap[Int, Int]()
-
-    def assertMap(): Unit = {
-      assert(stateMap.getAll().map { x => (x._1, x._2) }.toSet === refMap.iterator.toSet)
-      for (keyId <- 0 until numKeys) {
-        assert(stateMap.get(keyId) === refMap.get(keyId))
-      }
-    }
-
-    /**
-     * Example: Operations combinations with 2 map copies
-     *
-     * _______________________________________________
-     * |         |      Copy1      |     Copy2       |
-     * |         |-----------------|-----------------|
-     * |         |   Op1    Op2    |    Op3    Op4   |
-     * |---------|-----------------|-----------------|
-     * | key 0   |   put    put   | |   put    put   |
-     * | key 1   |   put    put   | |   put    rem   |
-     * | key 2   |   put    put   |c|   rem    put   |
-     * | key 3   |   put    put   |o|   rem    rem   |
-     * | key 4   |   put    rem   |p|   put    put   |
-     * | key 5   |   put    rem   |y|   put    rem   |
-     * | key 6   |   put    rem   | |   rem    put   |
-     * | key 7   |   put    rem   |t|   rem    rem   |
-     * | key 8   |   rem    put   |h|   put    put   |
-     * | key 9   |   rem    put   |e|   put    rem   |
-     * | key 10  |   rem    put   | |   rem    put   |
-     * | key 11  |   rem    put   |m|   rem    rem   |
-     * | key 12  |   rem    rem   |a|   put    put   |
-     * | key 13  |   rem    rem   |p|   put    rem   |
-     * | key 14  |   rem    rem   | |   rem    put   |
-     * | key 15  |   rem    rem   | |   rem    rem   |
-     * |_________|_________________|_________________|
-     */
-
-    for(opId <- 0 until numTotalOps) {
-      for (keyId <- 0 until numKeys) {
-        // Find the operation type that needs to be done
-        // This is similar to finding the nth bit value of a binary number
-        // E.g.  nth bit from the right of any binary number B is [ B / (2 ^ (n - 1)) ] % 2
-        val opCode = (keyId / math.pow(numTypeMapOps, numTotalOps - opId - 1).toInt) % numTypeMapOps
-        opCode match {
-          case 0 =>
-            val value = Random.nextInt()
-            stateMap.put(keyId, value, value * 2)
-            refMap.put(keyId, value)
-          case 1 =>
-            stateMap.remove(keyId)
-            refMap.remove(keyId)
-        }
-      }
-      if (opId % numOpsPerCopy == 0) {
-        assertMap()
-        stateMap = stateMap.copy()
-      }
-    }
-    assertMap()
-  }
-
   test("OpenHashMapBasedStateMap - serializing and deserializing") {
     val map1 = new OpenHashMapBasedStateMap[Int, Int]()
     map1.put(1, 100, 1)
@@ -179,10 +136,9 @@ class StateMapSuite extends SparkFunSuite {
     // Do not test compaction
     assert(map3.asInstanceOf[OpenHashMapBasedStateMap[_, _]].shouldCompact === false)
 
-    val map3_ = Utils.deserialize[StateMap[Int, Int]](
+    val deser_map3 = Utils.deserialize[StateMap[Int, Int]](
       Utils.serialize(map3), Thread.currentThread().getContextClassLoader)
-    assert(map3_.getAll().toSet === map3.getAll().toSet)
-    assert(map3.getAll().forall { case (key, state, _) => map3_.get(key) === Some(state)})
+    assertMap(deser_map3, map3, 1, "Deserialized map not same as original map")
   }
 
   test("OpenHashMapBasedStateMap - serializing and deserializing with compaction") {
@@ -194,7 +150,7 @@ class StateMapSuite extends SparkFunSuite {
 
     // Make large delta chain with length more than deltaChainThreshold
     for(i <- 1 to targetDeltaLength) {
-      map.put(Random.nextInt(), Random.nextInt(), Random.nextLong())
+      map.put(Random.nextInt(), Random.nextInt(), 1)
       map = map.copy().asInstanceOf[OpenHashMapBasedStateMap[Int, Int]]
     }
     assert(map.deltaChainLength > deltaChainThreshold)
@@ -204,7 +160,155 @@ class StateMapSuite extends SparkFunSuite {
       Utils.serialize(map), Thread.currentThread().getContextClassLoader)
     assert(deser_map.deltaChainLength < deltaChainThreshold)
     assert(deser_map.shouldCompact === false)
-    assert(deser_map.getAll().toSet === map.getAll().toSet)
-    assert(map.getAll().forall { case (key, state, _) => deser_map.get(key) === Some(state)})
+    assertMap(deser_map, map, 1, "Deserialized + compacted map not same as original map")
+  }
+
+  test("OpenHashMapBasedStateMap - all possible sequences of operations with copies ") {
+    /*
+     * This tests the map using all permutations of sequences operations, across multiple map
+     * copies as well as between copies. It is to ensure complete coverage, though it is
+     * kind of hard to debug this. It is set up as follows.
+     *
+     * - For any key, there can be 2 types of update ops on a state map - put or remove
+     *
+     * - These operations are done on a test map in "sets". After each set, the map is "copied"
+     *   to create a new map, and the next set of operations are done on the new one. This tests
+     *   whether the map data persistes correctly across copies.
+     *
+     * - Within each set, there are a number of operations to test whether the map correctly
+     *   updates and removes data without affecting the parent state map.
+     *
+     * - Overall this creates (numSets * numOpsPerSet) operations, each of which that can 2 types
+     *   of operations. This leads to a total of [2 ^ (numSets * numOpsPerSet)] different sequence
+     *   of operations, which we will test with different keys.
+     *
+     * Example: Operation combinations with numSets = 2, and numOpsPerSet = 2 give 4 operations,
+     * 2 ^ 4 = 16 possible permutations, tested using 16 keys.
+     * _______________________________________________
+     * |         |      Set1       |     Set2        |
+     * |         |-----------------|-----------------|
+     * |         |   Op1    Op2   |c|   Op3    Op4   |
+     * |---------|----------------|o|----------------|
+     * | key 0   |   put    put   |p|   put    put   |
+     * | key 1   |   put    put   |y|   put    rem   |
+     * | key 2   |   put    put   | |   rem    put   |
+     * | key 3   |   put    put   |t|   rem    rem   |
+     * | key 4   |   put    rem   |h|   put    put   |
+     * | key 5   |   put    rem   |e|   put    rem   |
+     * | key 6   |   put    rem   | |   rem    put   |
+     * | key 7   |   put    rem   |s|   rem    rem   |
+     * | key 8   |   rem    put   |t|   put    put   |
+     * | key 9   |   rem    put   |a|   put    rem   |
+     * | key 10  |   rem    put   |t|   rem    put   |
+     * | key 11  |   rem    put   |e|   rem    rem   |
+     * | key 12  |   rem    rem   | |   put    put   |
+     * | key 13  |   rem    rem   |m|   put    rem   |
+     * | key 14  |   rem    rem   |a|   rem    put   |
+     * | key 15  |   rem    rem   |p|   rem    rem   |
+     * |_________|________________|_|________________|
+     */
+
+    val numTypeMapOps = 2   // 0 = put a new value, 1 = remove value
+    val numSets = 3
+    val numOpsPerSet = 3    // to test seq of ops like update -> remove -> update in same set
+    val numTotalOps = numOpsPerSet * numSets
+    val numKeys = math.pow(numTypeMapOps, numTotalOps).toInt  // to get all combinations of ops
+
+    val refMap = new mutable.HashMap[Int, (Int, Long)]()
+    var prevSetRefMap: immutable.Map[Int, (Int, Long)] = null
+
+    var stateMap: StateMap[Int, Int] = new OpenHashMapBasedStateMap[Int, Int]()
+    var prevSetStateMap: StateMap[Int, Int] = null
+
+    var time = 1L
+
+    for (setId <- 0 until numSets) {
+      for(opInSetId <- 0 until numOpsPerSet) {
+        val opId = setId * numOpsPerSet + opInSetId
+        for (keyId <- 0 until numKeys) {
+          time += 1
+          // Find the operation type that needs to be done
+          // This is similar to finding the nth bit value of a binary number
+          // E.g.  nth bit from the right of any binary number B is [ B / (2 ^ (n - 1)) ] % 2
+          val opCode =
+            (keyId / math.pow(numTypeMapOps, numTotalOps - opId - 1).toInt) % numTypeMapOps
+          opCode match {
+            case 0 =>
+              val value = Random.nextInt()
+              stateMap.put(keyId, value, time)
+              refMap.put(keyId, (value, time))
+            case 1 =>
+              stateMap.remove(keyId)
+              refMap.remove(keyId)
+          }
+        }
+
+        // Test whether the current state map after all key updates is correct
+        assertMap(stateMap, refMap, time, "State map does not match reference map")
+
+        // Test whether the previous map before copy has not changed
+        if (prevSetStateMap != null && prevSetRefMap != null) {
+          assertMap(prevSetStateMap, prevSetRefMap, time,
+            "Parent state map somehow got modified, does not match corresponding reference map")
+        }
+      }
+
+      // Copy the map and remember the previous maps for future tests
+      prevSetStateMap = stateMap
+      prevSetRefMap = refMap.toMap
+      stateMap = stateMap.copy()
+
+      // Assert that the copied map has the same data
+      assertMap(stateMap, prevSetRefMap, time,
+        "State map does not match reference map after copying")
+    }
+    assertMap(stateMap, refMap.toMap, time, "Final state map does not match reference map")
+  }
+
+  // Assert whether all the data and operations on a state map matches that of a reference state map
+  private def assertMap(
+      mapToTest: StateMap[Int, Int],
+      refMapToTestWith: StateMap[Int, Int],
+      time: Long,
+      msg: String): Unit = {
+    withClue(msg) {
+      // Assert all the data is same as the reference map
+      assert(mapToTest.getAll().toSet === refMapToTestWith.getAll().toSet)
+
+      // Assert that get on every key returns the right value
+      for (keyId <- refMapToTestWith.getAll().map { _._1 }) {
+        assert(mapToTest.get(keyId) === refMapToTestWith.get(keyId))
+      }
+
+      // Assert that every time threshold returns the correct data
+      for (t <- 0L to (time + 1)) {
+        assert(mapToTest.getByTime(t).toSet ===  refMapToTestWith.getByTime(t).toSet)
+      }
+    }
+  }
+
+  // Assert whether all the data and operations on a state map matches that of a reference map
+  private def assertMap(
+      mapToTest: StateMap[Int, Int],
+      refMapToTestWith: Map[Int, (Int, Long)],
+      time: Long,
+      msg: String): Unit = {
+    withClue(msg) {
+      // Assert all the data is same as the reference map
+      assert(mapToTest.getAll().toSet ===
+        refMapToTestWith.iterator.map { x => (x._1, x._2._1, x._2._2) }.toSet)
+
+      // Assert that get on every key returns the right value
+      for (keyId <- refMapToTestWith.keys) {
+        assert(mapToTest.get(keyId) === refMapToTestWith.get(keyId).map { _._1 })
+      }
+
+      // Assert that every time threshold returns the correct data
+      for (t <- 0L to (time + 1)) {
+        val expectedRecords =
+          refMapToTestWith.iterator.filter { _._2._2 < t }.map { x => (x._1, x._2._1, x._2._2) }
+        assert(mapToTest.getByTime(t).toSet ===  expectedRecords.toSet)
+      }
+    }
   }
 }

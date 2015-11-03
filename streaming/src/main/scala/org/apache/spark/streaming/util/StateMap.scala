@@ -68,9 +68,9 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
   override def put(key: K, session: S, updateTime: Long): Unit = ???
   override def get(key: K): Option[S] = None
   override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty
+  override def getAll(): Iterator[(K, S, Long)] = Iterator.empty
   override def copy(): StateMap[K, S] = new EmptyStateMap[K, S]
   override def remove(key: K): Unit = { }
-  override def getAll(): Iterator[(K, S, Long)] = Iterator.empty
   override def toDebugString(): String = ""
 }
 
