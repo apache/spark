@@ -390,7 +390,9 @@ class Dataset[T] private(
     val rightEncoder =
       if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(leftEncoder, rightEncoder)
+      ExpressionEncoder.tuple(
+        leftEncoder,
+        rightEncoder.rebind(right.output, left.output ++ right.output))
 
     withPlan[(T, U)](other) { (left, right) =>
       Project(
