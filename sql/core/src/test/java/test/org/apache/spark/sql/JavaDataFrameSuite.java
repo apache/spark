@@ -259,8 +259,8 @@ public class JavaDataFrameSuite {
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
     Assert.assertEquals(0, actual[0].getLong(0));
-    Assert.assertTrue(1 <= actual[0].getLong(1) && actual[0].getLong(1) <= 6);
+    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
     Assert.assertEquals(1, actual[1].getLong(0));
-    Assert.assertTrue(4 <= actual[1].getLong(1) && actual[1].getLong(1) <= 11);
+    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
   }
 }
