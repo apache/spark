@@ -274,12 +274,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
   // Based on Catalyst expressions. The `scanBuilder` function accepts three arguments:
   //
-  //  1. A `Seq[Attribute]`, containing all required column attributes, used to handle traits like
-  //     `PrunedFilteredScan`.
-  //  2. A `Seq[Expression]`, containing all gathered Catalyst filter expressions, used by
+  //  1. A `Seq[Attribute]`, containing all required column attributes. Used to handle relation
+  //     traits that support column pruning (e.g. `PrunedScan` and `PrunedFilteredScan`).
+  //
+  //  2. A `Seq[Expression]`, containing all gathered Catalyst filter expressions, only used for
   //     `CatalystScan`.
+  //
   //  3. A `Seq[Filter]`, containing all data source `Filter`s that are converted from (possibly a
-  //     subset of) Catalyst filter expressions and can be handled by `relation`.
+  //     subset of) Catalyst filter expressions and can be handled by `relation`.  Used to handle
+  //     relation traits (`CatalystScan` excluded) that support filter push-down (e.g.
+  //     `PrunedFilteredScan` and `HadoopFsRelation`).
+  //
+  // Note that 2 and 3 shouldn't be used together.
   protected def pruneFilterProjectRaw(
     relation: LogicalRelation,
     projects: Seq[NamedExpression],
@@ -290,7 +296,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
 
     val candidatePredicates = filterPredicates.map { _ transform {
-        case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
+      case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}
 
     val (unhandledPredicates, pushedFilters) =
@@ -447,7 +453,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    *
    * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
    *         predicate [[Expression]]s that are either not convertible or cannot be handled by
-   *         `relation`. The second element contains all converted data source [[Filter]]s.
+   *         `relation`. The second element contains all converted data source [[Filter]]s that can
+   *        be handled by `relation`.
    */
   protected[sql] def selectFilters(
     relation: BaseRelation,

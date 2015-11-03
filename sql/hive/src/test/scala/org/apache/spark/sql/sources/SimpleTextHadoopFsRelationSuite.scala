@@ -81,7 +81,17 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
       writer.save(s"$path/p=1")
 
       val isOdd = udf((_: Int) % 2 == 1)
-      val df = reader.load(path).filter(isOdd('a) && 'b > "val_1" && 'p === 1).select('a, 'p)
+      val df = reader.load(path)
+        .filter(
+          // This filter is inconvertible
+          isOdd('a) &&
+            // This filter is convertible but unhandled
+            'a > 1 &&
+            // This filter is convertible and handled
+            'b > "val_1" &&
+            // This filter references a partiiton column, won't be pushed down
+            'p === 1
+        ).select('a, 'p)
       val rawScan = df.queryExecution.executedPlan collect {
         case p: PhysicalRDD => p
       } match {
