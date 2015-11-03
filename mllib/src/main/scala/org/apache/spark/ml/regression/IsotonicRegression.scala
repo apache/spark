@@ -87,8 +87,8 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       lit(1.0)
     }
     dataset.select(col($(labelCol)), f, w)
-      .map { case Row(label: Double, feature: Double, weights: Double) =>
-      (label, feature, weights)
+      .map { case Row(label: Double, feature: Double, weight: Double) =>
+      (label, feature, weight)
     }
   }
 

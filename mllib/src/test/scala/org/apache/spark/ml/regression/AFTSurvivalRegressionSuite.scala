@@ -141,12 +141,12 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        Number of Newton-Raphson Iterations: 5
        n= 1000
      */
-    val coefficientsR = Vectors.dense(-0.039)
+    val regressionCoefficientsR = Vectors.dense(-0.039)
     val interceptR = 1.759
     val scaleR = 1.41
 
     assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.coefficients ~== coefficientsR relTol 1E-3)
+    assert(model.regressionCoefficients ~== regressionCoefficientsR relTol 1E-3)
     assert(model.scale ~== scaleR relTol 1E-3)
 
     /*
@@ -212,12 +212,12 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        Number of Newton-Raphson Iterations: 5
        n= 1000
      */
-    val coefficientsR = Vectors.dense(-0.0844, 0.0677)
+    val regressionCoefficientsR = Vectors.dense(-0.0844, 0.0677)
     val interceptR = 1.9206
     val scaleR = 0.977
 
     assert(model.intercept ~== interceptR relTol 1E-3)
-    assert(model.coefficients ~== coefficientsR relTol 1E-3)
+    assert(model.regressionCoefficients ~== regressionCoefficientsR relTol 1E-3)
     assert(model.scale ~== scaleR relTol 1E-3)
 
     /*
@@ -282,12 +282,12 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
        Number of Newton-Raphson Iterations: 6
        n= 1000
      */
-    val coefficientsR = Vectors.dense(0.896, -0.709)
+    val regressionCoefficientsR = Vectors.dense(0.896, -0.709)
     val interceptR = 0.0
     val scaleR = 1.52
 
     assert(model.intercept === interceptR)
-    assert(model.coefficients ~== coefficientsR relTol 1E-3)
+    assert(model.regressionCoefficients ~== regressionCoefficientsR relTol 1E-3)
     assert(model.scale ~== scaleR relTol 1E-3)
 
     /*
