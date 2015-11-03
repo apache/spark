@@ -17,21 +17,21 @@
 
 package org.apache.spark.ml.util
 
-import java.io.IOException
 import java.{util => ju}
+import java.io.IOException
 
 import scala.annotation.varargs
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.spark.annotation.{Since, Experimental}
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.ml.param.{Param, ParamPair, Params}
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -43,7 +43,7 @@ private[util] sealed trait BaseSaveLoad {
   /**
    * User-specified options.
    */
-  protected final var options: mutable.Map[String, String] = mutable.Map.empty
+  protected final val options: mutable.Map[String, String] = mutable.Map.empty
 
   /**
    * Java-friendly version of [[options]].
@@ -53,6 +53,7 @@ private[util] sealed trait BaseSaveLoad {
   /**
    * Sets the SQL context to use for saving/loading.
    */
+  @Since("1.6.0")
   def context(sqlContext: SQLContext): this.type = {
     optionSQLContext = Option(sqlContext)
     this
@@ -68,6 +69,7 @@ private[util] sealed trait BaseSaveLoad {
   /**
    * Adds one or more options as (key, value) pairs.
    */
+  @Since("1.6.0")
   def options(first: (String, String), others: (String, String)*): this.type = {
     options += first
     options ++= others
@@ -81,6 +83,7 @@ private[util] sealed trait BaseSaveLoad {
    * @param others other options, must be paired
    */
   @varargs
+  @Since("1.6.0")
   def options(k1: String, v1: String, others: String*): this.type = {
     options += k1 -> v1
     require(others.length % 2 == 0,
@@ -92,17 +95,18 @@ private[util] sealed trait BaseSaveLoad {
   }
 
   /**
-   * Adds options as a Scala map.
-   * @return
+   * Adds options as a Scala map (overwrites if an option already exists).
    */
+  @Since("1.6.0")
   def options(options: Map[String, String]): this.type = {
     this.options ++= options
     this
   }
 
   /**
-   * Adds options as a Java map.
+   * Adds options as a Java map (overwrites if an option already exists).
    */
+  @Since("1.6.0")
   def options(options: ju.Map[String, String]): this.type = {
     this.options ++= options.asScala
     this
@@ -115,11 +119,27 @@ private[util] sealed trait BaseSaveLoad {
 @Experimental
 @Since("1.6.0")
 abstract class Saver extends BaseSaveLoad {
+  import Saver._
 
   /**
    * Saves the ML instance to the input path.
    */
+  @Since("1.6.0")
   def to(path: String): Unit
+
+  /**
+   * Tells whether we should overwrite if the output directory exists (default: false).
+   */
+  protected final def shouldOverwrite: Boolean = {
+    options.get(Overwrite).map(_.toBoolean).getOrElse(false)
+  }
+}
+
+@Experimental
+@Since("1.6.0")
+object Saver {
+  /** Option key to control overwrite. */
+  val Overwrite: String = "overwrite"
 }
 
 /**
@@ -129,8 +149,9 @@ abstract class Saver extends BaseSaveLoad {
 trait Saveable {
 
   /**
-   * Returns a [[Saver]] instance for this class.
+   * Returns a [[Saver]] instance for this ML instance.
    */
+  @Since("1.6.0")
   def save: Saver
 }
 
@@ -145,7 +166,23 @@ abstract class Loader[T] extends BaseSaveLoad {
   /**
    * Loads the ML component from the input path.
    */
+  @Since("1.6.0")
   def from(path: String): T
+}
+
+/**
+ * Trait for objects that provide [[Loader]].
+ * @tparam T ML instance type
+ */
+@Experimental
+@Since("1.6.0")
+trait Loadable[T] {
+
+  /**
+   * Returns a [[Loader]] instance for this class.
+   */
+  @Since("1.6.0")
+  def load: Loader[T]
 }
 
 /**
@@ -153,8 +190,6 @@ abstract class Loader[T] extends BaseSaveLoad {
  * @param instance object to save
  */
 private[ml] class DefaultParamsSaver(instance: Params) extends Saver with Logging {
-
-  options("overwrite" -> "false")
 
   /**
    * Saves the ML component to the input path.
@@ -166,7 +201,7 @@ private[ml] class DefaultParamsSaver(instance: Params) extends Saver with Loggin
     val fs = FileSystem.get(hadoopConf)
     val p = new Path(path)
     if (fs.exists(p)) {
-      if (options("overwrite").toBoolean) {
+      if (shouldOverwrite) {
         logInfo(s"Path $path already exists. It will be overwritten.")
         fs.delete(p, true)
       } else {
@@ -177,15 +212,14 @@ private[ml] class DefaultParamsSaver(instance: Params) extends Saver with Loggin
 
     val uid = instance.uid
     val cls = instance.getClass.getName
-    val params = instance.params.asInstanceOf[Array[Param[Any]]]
-      .flatMap(p => instance.get(p).map(v => p -> v))
+    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
     val jsonParams = params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList
     val metadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
       ("uid" -> uid) ~
-      ("params" -> jsonParams)
+      ("paramMap" -> jsonParams)
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = compact(render(metadata))
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -210,7 +244,7 @@ private[ml] class DefaultParamsLoader[T] extends Loader[T] {
     val cls = Class.forName((metadata \ "class").extract[String])
     val uid = (metadata \ "uid").extract[String]
     val instance = cls.getConstructor(classOf[String]).newInstance(uid).asInstanceOf[Params]
-    (metadata \ "params") match {
+    (metadata \ "paramMap") match {
       case JObject(pairs) =>
         pairs.foreach { case (paramName, jsonValue) =>
           val param = instance.getParam(paramName)

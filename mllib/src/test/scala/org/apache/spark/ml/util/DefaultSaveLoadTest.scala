@@ -47,14 +47,15 @@ trait DefaultSaveLoadTest extends TempDirectory { self: Suite =>
 
     assert(newInstance.uid === instance.uid)
     instance.params.foreach { p =>
-      (instance.get(p), newInstance.get(p)) match {
-        case (None, None) =>
-        case (Some(Array(values)), Some(Array(newValues))) =>
-          assert(values === newValues)
-        case (Some(value), Some(newValue)) =>
-          assert(value === newValue)
-        case (value, newValue) =>
-          fail(s"Param values do not match, expecting $value but got $newValue.")
+      if (instance.isDefined(p)) {
+        (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
+          case (Array(values), Array(newValues)) =>
+            assert(values !== newValues, s"Values do not match on param ${p.name}.")
+          case (value, newValue) =>
+            assert(value === newValue, s"Values do not match on param ${p.name}.")
+        }
+      } else {
+        assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
       }
     }
   }
@@ -93,11 +94,11 @@ object MyParams {
   def load: Loader[MyParams] = new DefaultParamsLoader[MyParams]
 }
 
-class DefaultSaveLoadSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultSaveLoadTest {
+class DefaultSaveLoadSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultSaveLoadTest {
 
   test("default save/load") {
-    val uid = "my_params"
-    val myParams = new MyParams(uid)
+    val myParams = new MyParams("my_params")
     testDefaultSaveLoad(myParams)
   }
 }

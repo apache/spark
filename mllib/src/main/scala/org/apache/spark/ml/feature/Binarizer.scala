@@ -90,6 +90,7 @@ final class Binarizer(override val uid: String)
   override def save: Saver = new DefaultParamsSaver(this)
 }
 
-object Binarizer {
-  def load: Loader[Binarizer] = new DefaultParamsLoader[Binarizer]
+object Binarizer extends Loadable[Binarizer] {
+
+  override def load: Loader[Binarizer] = new DefaultParamsLoader[Binarizer]
 }

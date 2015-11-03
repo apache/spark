@@ -17,28 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import java.io.File
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultSaveLoadTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
-class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultSaveLoadTest {
 
-  var tmpDir: File = _
   @transient var data: Array[Double] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     data = Array(0.1, -0.5, 0.2, -0.3, 0.8, 0.7, -0.1, -0.4)
-    tmpDir = Utils.createTempDir(namePrefix = "BinarizerSuite")
-  }
-
-  override def afterAll(): Unit = {
-    Utils.deleteRecursively(tmpDir)
-    super.afterAll()
   }
 
   test("params") {
@@ -78,17 +69,10 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("save/load") {
-    val outputPath = new File(tmpDir, "saveload").getPath
-    println(outputPath)
     val binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
       .setThreshold(0.1)
-    binarizer.save.to(outputPath)
-    val newBinarizer = Binarizer.load.from(outputPath)
-    assert(newBinarizer.uid === binarizer.uid)
-    for (param <- binarizer.params) {
-      assert(binarizer.get(param) === newBinarizer.get(param))
-    }
+    testDefaultSaveLoad(binarizer)
   }
 }
