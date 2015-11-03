@@ -1932,4 +1932,137 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       assert(sampled.count() == sampledOdd.count() + sampledEven.count())
     }
   }
+
+  test("Struct Star Expansion") {
+    val structDf = testData2.select("a", "b").as("record")
+
+    checkAnswer(
+      structDf.select($"record.a", $"record.b"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*", $"record.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 1, 2) :: Row(2, 1, 2, 1) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 3, 1) :: Row(3, 2, 3, 2) :: Nil)
+
+    checkAnswer(
+      sql("select struct(a, b) as r1, struct(b, a) as r2 from testData2").select($"r1.*", $"r2.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
+
+    // Try with a registered table.
+    sql("select struct(a, b) as record from testData2").registerTempTable("structTable")
+    checkAnswer(sql("SELECT record.* FROM structTable"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin),
+      Row(Row(1, 1)) :: Nil)
+
+    // Try with an alias on the select list
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin).select($"r.*"),
+      Row(3, 2) :: Nil)
+
+    // With GROUP BY
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin),
+      Row(Row(1, 1)) :: Row(Row(2, 1)) :: Row(Row(3, 1)) :: Nil)
+
+    // With GROUP BY and alias
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil)
+
+    // With GROUP BY and alias and additional fields in the struct
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(a, record.*, b)) as r FROM
+        |   (select a as a, b as b, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 1, 2, 2) :: Row(2, 2, 2, 2) :: Row(3, 3, 2, 2) :: Nil)
+
+    // Create a data set that contains nested structs.
+    val nestedStructData = sql(
+      """
+        | SELECT struct(r1, r2) as record FROM
+        |   (SELECT struct(a, b) as r1, struct(b, a) as r2 FROM testData2) tmp
+      """.stripMargin)
+
+    checkAnswer(nestedStructData.select($"record.*"),
+      Row(Row(1, 1), Row(1, 1)) :: Row(Row(1, 2), Row(2, 1)) :: Row(Row(2, 1), Row(1, 2)) ::
+        Row(Row(2, 2), Row(2, 2)) :: Row(Row(3, 1), Row(1, 3)) :: Row(Row(3, 2), Row(2, 3)) :: Nil)
+    checkAnswer(nestedStructData.select($"record.r1"),
+      Row(Row(1, 1)) :: Row(Row(1, 2)) :: Row(Row(2, 1)) :: Row(Row(2, 2)) ::
+        Row(Row(3, 1)) :: Row(Row(3, 2)) :: Nil)
+    checkAnswer(
+      nestedStructData.select($"record.r1.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    // Try with a registered table
+    nestedStructData.registerTempTable("nestedStructTable")
+    checkAnswer(sql("SELECT record.* FROM nestedStructTable"),
+      nestedStructData.select($"record.*"))
+    checkAnswer(sql("SELECT record.r1 FROM nestedStructTable"),
+      nestedStructData.select($"record.r1"))
+    checkAnswer(sql("SELECT record.r1.* FROM nestedStructTable"),
+      nestedStructData.select($"record.r1.*"))
+
+    // Create paths with unusual characters.
+    val specialCharacterPath = sql(
+      """
+        | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
+        |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+      """.stripMargin)
+    specialCharacterPath.registerTempTable("specialCharacterTable")
+    checkAnswer(specialCharacterPath.select($"`r&&b.c`.*"),
+      nestedStructData.select($"record.*"))
+    checkAnswer(sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+      nestedStructData.select($"record.r1"))
+    checkAnswer(sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+      nestedStructData.select($"record.r2"))
+    checkAnswer(sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+      nestedStructData.select($"record.r1.*"))
+
+    // Try star expanding a scalar. This should fail.
+    assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
+      "Can only star expand struct data types."))
+
+    // Try resolving something not there.
+    assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
+      .getMessage.contains("cannot resolve"))
+  }
+
+
+  test("Struct Star Expansion - Name conflict") {
+    // Create a data set that contains a naming conflict
+    val nameConflict = sql("SELECT struct(a, b) as nameConflict, a as a FROM testData2")
+    nameConflict.registerTempTable("nameConflict")
+    // Unqualified should resolve to table.
+    checkAnswer(sql("SELECT nameConflict.* FROM nameConflict"),
+      Row(Row(1, 1), 1) :: Row(Row(1, 2), 1) :: Row(Row(2, 1), 2) :: Row(Row(2, 2), 2) ::
+        Row(Row(3, 1), 3) :: Row(Row(3, 2), 3) :: Nil)
+    // Qualify the struct type with the table name.
+    checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+  }
 }
