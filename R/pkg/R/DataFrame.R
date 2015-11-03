@@ -31,7 +31,7 @@ setOldClass("jobj")
 #'
 #' @slot env An R environment that stores bookkeeping states of the DataFrame
 #' @slot sdf A Java object reference to the backing Scala DataFrame
-#' @seealso \{createDataFrame}, \link{jsonFile}, \link{table}
+#' @seealso \link{createDataFrame}, \link{jsonFile}, \link{table}
 #' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkr-dataframes}
 #' @export
 #' examples
