@@ -20,10 +20,22 @@ require 'pygments'
 
 module Jekyll
   class IncludeExampleTag < Liquid::Tag
+
+    FileOnly = /^(\S+\.\S+)$/
+    FileTag = /^(\S+\.\S+)\s+(\S+)$/
     
     def initialize(tag_name, markup, tokens)
-      @markup = markup
       super
+      clean_markup = markup.strip
+      if clean_markup =~ FileOnly
+        @markup = $1
+        @label = ''
+      elsif clean_markup =~ FileTag
+        @markup = $1
+        @label = " #{$2}"
+      else
+        raise "Invalid syntax. Use {% include_example path/to/file [label] %}."
+      end
     end
  
     def render(context)
@@ -31,9 +43,8 @@ module Jekyll
       config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
       @code_dir = File.join(site.source, config_dir)
 
-      clean_markup = @markup.strip
-      @file = File.join(@code_dir, clean_markup)
-      @lang = clean_markup.split('.').last
+      @file = File.join(@code_dir, @markup)
+      @lang = @markup.split('.').last
 
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
@@ -61,13 +72,13 @@ module Jekyll
       # Select the array of start labels from code.
       startIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example on$" }
+        .select { |l, i| l.include? "$example on#{@label}$" }
         .map { |l, i| i }
 
       # Select the array of end labels from code.
       endIndices = lines
         .each_with_index
-        .select { |l, i| l.include? "$example off$" }
+        .select { |l, i| l.include? "$example off#{@label}$" }
         .map { |l, i| i }
 
       raise "Start indices amount is not equal to end indices amount, please check the code." \
