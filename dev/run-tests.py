@@ -539,7 +539,7 @@ def main():
 
     # spark build
     build_apache_spark(build_tool, hadoop_version)
-    if should_run_build_tests:
+    if m.should_run_build_tests:
         run_build_tests()
 
     # backwards compatibility checks
