@@ -2179,7 +2179,7 @@ setMethod("coltypes",
             )
 
             # Get the data types of the DataFrame by invoking dtypes() function
-            types <- lapply(dtypes(irisDF), function(x) {x[[2]]})
+            types <- lapply(dtypes(x), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
             rTypes <- lapply(types, function(x) {
