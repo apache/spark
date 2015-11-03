@@ -56,11 +56,8 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
     cpState == Checkpointed
   }
 
-  /**
-   * Materialize this RDD and persist its content.
-   * This is called immediately after the first action invoked on this RDD has completed.
-   */
-  final def checkpoint(): Unit = {
+  final def prepareCheckpoint(): Unit = {
+    // TODO RDD is not thread safe, why the following case will happen?
     // Guard against multiple threads checkpointing the same RDD by
     // atomically flipping the state of this RDDCheckpointData
     RDDCheckpointData.synchronized {
@@ -70,7 +67,16 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
         return
       }
     }
+    doPrepareCheckpoint()
+  }
 
+  protected def doPrepareCheckpoint(): Unit = { }
+
+  /**
+   * Materialize this RDD and persist its content.
+   * This is called immediately after the first action invoked on this RDD has completed.
+   */
+  final def checkpoint(): Unit = {
     val newRDD = doCheckpoint()
 
     // Update our state and truncate the RDD lineage
