@@ -765,6 +765,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       )
     }
   }
+
+  test("aggregation with no aggregation buffer columns (SPARK-11486)") {
+    checkAnswer(
+      sqlContext.range(1000).selectExpr("id", "repeat(id, 20) as s").groupBy("s").agg($"s"),
+      sqlContext.range(1000).selectExpr( "repeat(id, 20)", "repeat(id, 20)")
+    )
+  }
 }
 
 class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
