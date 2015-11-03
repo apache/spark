@@ -414,9 +414,11 @@ def run_python_tests(test_modules, parallelism):
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 
+
 def run_build_tests():
     set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
     run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+
 
 def run_sparkr_tests():
     set_title_and_block("Running SparkR tests", "BLOCK_SPARKR_UNIT_TESTS")
