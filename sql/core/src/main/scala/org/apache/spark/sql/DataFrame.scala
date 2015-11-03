@@ -1176,7 +1176,7 @@ class DataFrame private[sql](
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
     val elementTypes = schema.toAttributes.map {
-      attr => (attr.dataType, attr.nullable, Some(attr.name)) }
+      attr => (attr.dataType, attr.nullable, attr.name) }
     val names = schema.toAttributes.map(_.name)
     val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
@@ -1204,7 +1204,7 @@ class DataFrame private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
-    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, Some(attr.name)) }
+    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, attr.name) }
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)

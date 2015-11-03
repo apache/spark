@@ -706,7 +706,7 @@ class Analyzer(
 
     /**
      * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
-     * names is empty names are assigned by ordinal (i.e., _c0, _c1, ...) to match Hive's defaults.
+     * names is empty names are assigned from field names in generator.
      */
     private def makeGeneratorOutput(
         generator: Generator,
@@ -719,10 +719,8 @@ class Analyzer(
             AttributeReference(name, t, nullable)()
         }
       } else if (names.isEmpty) {
-        elementTypes.zipWithIndex.map {
-          // keep the default column names as Hive does _c0, _c1, _cN
-          case ((t, nullable, None), i) => AttributeReference(s"_c$i", t, nullable)()
-          case ((t, nullable, Some(name)), i) => AttributeReference(name, t, nullable)()
+        elementTypes.map {
+          case (t, nullable, name) => AttributeReference(name, t, nullable)()
         }
       } else {
         failAnalysis(
