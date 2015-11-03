@@ -108,7 +108,7 @@ class SqlLexical extends StdLexical {
   override lazy val token: Parser[Token] =
     ( rep1(digit) ~ ('.' ~> digit.*).? ~ (exp ~> sign.? ~ rep1(digit)) ^^ {
         case i ~ None ~ (sig ~ rest) =>
-          DecimalLit(i.mkString + "e" + sig.getOrElse("") + rest.mkString)
+          DecimalLit(i.mkString + "e" + sig.mkString + rest.mkString)
         case i ~ Some(d) ~ (sig ~ rest) =>
           DecimalLit(i.mkString + "." + d.mkString + "e" + sig.mkString + rest.mkString)
       }
