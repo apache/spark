@@ -141,6 +141,45 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     testOperation(inputData, TrackStateSpec(trackStateFunc), outputData, stateData)
   }
 
+  test("initial states, with nothing emitted") {
+
+    val initialState = Seq(("a", 5), ("b", 10), ("c", -20), ("d", 0))
+
+    val inputData =
+      Seq(
+        Seq(),
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val outputData = Seq.fill(inputData.size)(Seq.empty[Int])
+
+    val stateData =
+      Seq(
+        Seq(("a", 5), ("b", 10), ("c", -20), ("d", 0)),
+        Seq(("a", 6), ("b", 10), ("c", -20), ("d", 0)),
+        Seq(("a", 7), ("b", 11), ("c", -20), ("d", 0)),
+        Seq(("a", 8), ("b", 12), ("c", -19), ("d", 0)),
+        Seq(("a", 9), ("b", 13), ("c", -19), ("d", 0)),
+        Seq(("a", 10), ("b", 13), ("c", -19), ("d", 0)),
+        Seq(("a", 10), ("b", 13), ("c", -19), ("d", 0))
+      )
+
+    val trackStateFunc = (key: String, value: Option[Int], state: State[Int]) => {
+      val sum = value.getOrElse(0) + state.getOrElse(0)
+      val output = (key, sum)
+      state.update(sum)
+      None.asInstanceOf[Option[Int]]
+    }
+
+    val trackStateSpec = TrackStateSpec(trackStateFunc).initialState(sc.makeRDD(initialState))
+    testOperation(inputData, trackStateSpec, outputData, stateData)
+  }
+
   test("state removing") {
     val inputData =
       Seq(
@@ -280,4 +319,4 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       )
     }
   }
-}
+

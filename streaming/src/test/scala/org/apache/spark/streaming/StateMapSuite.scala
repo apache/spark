@@ -182,8 +182,8 @@ class StateMapSuite extends SparkFunSuite {
      *   of operations. This leads to a total of [2 ^ (numSets * numOpsPerSet)] different sequence
      *   of operations, which we will test with different keys.
      *
-     * Example: Operation combinations with numSets = 2, and numOpsPerSet = 2 give 4 operations,
-     * 2 ^ 4 = 16 possible permutations, tested using 16 keys.
+     * Example: With numSets = 2, and numOpsPerSet = 2 give numTotalOps = 4. This means that
+     * 2 ^ 4 = 16 possible permutations needs to be tested using 16 keys.
      * _______________________________________________
      * |         |      Set1       |     Set2        |
      * |         |-----------------|-----------------|
