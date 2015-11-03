@@ -110,7 +110,7 @@ class SqlLexical extends StdLexical {
         case i ~ None ~ (sig ~ rest) =>
           DecimalLit(i.mkString + "e" + sig.getOrElse("") + rest.mkString)
         case i ~ Some(d) ~ (sig ~ rest) =>
-          DecimalLit(i.mkString + "." + d.mkString + "e" + sig.getOrElse("") + rest.mkString)
+          DecimalLit(i.mkString + "." + d.mkString + "e" + sig.mkString + rest.mkString)
       }
     | digit.* ~ identChar ~ (identChar | digit).* ^^
       { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
