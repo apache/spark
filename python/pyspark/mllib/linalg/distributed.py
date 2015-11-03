@@ -252,8 +252,8 @@ class RowMatrix(DistributedMatrix):
         >>> mat = RowMatrix(rows)
 
         >>> sims = mat.columnSimilarities()
-        >>> round(sims.entries.first().value, 12)
-        0.919145030018
+        >>> sims.entries.first().value
+        0.91914503...
         """
         java_sims_mat = self._java_matrix_wrapper.call("columnSimilarities", float(threshold))
         return CoordinateMatrix(java_sims_mat)
@@ -277,13 +277,16 @@ class RowMatrix(DistributedMatrix):
         >>> rows = sc.parallelize([[3, -6], [4, -8], [0, 1]])
         >>> mat = RowMatrix(rows)
         >>> decomp = mat.tallSkinnyQR(True)
+        >>> Q = decomp.Q
+        >>> R = decomp.R
 
         >>> # Test with absolute values
-        >>> decomp.Q.rows.map(lambda row: abs(row.toArray()).tolist()).collect()
+        >>> absQRows = Q.rows.map(lambda row: abs(row.toArray()).tolist())
+        >>> absQRows.collect()
         [[0.6..., 0.0], [0.8..., 0.0], [0.0, 1.0]]
 
         >>> # Test with absolute values
-        >>> abs(decomp.R.toArray()).tolist()
+        >>> abs(R.toArray()).tolist()
         [[5.0, 10.0], [0.0, 1.0]]
         """
         decomp = JavaModelWrapper(self._java_matrix_wrapper.call("tallSkinnyQR", computeQ))
