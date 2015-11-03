@@ -786,14 +786,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setWeightCol("weight")
       .setSolver("normal")
       .fit(datasetWithWeight)
-    val weightsR = Vectors.dense(Array(6.080, -0.600))
+    val coefficientsR = Vectors.dense(Array(6.080, -0.600))
     val interceptR = 18.080
     val devianceResidualsR = Array(-1.358, 1.920)
     val seCoefR = Array(5.556, 1.960)
     val tValsR = Array(1.094, -0.306)
     val pValsR = Array(0.471, 0.811)
 
-    assert(model.weights ~== weightsR absTol 1E-3)
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
     model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
@@ -838,14 +838,14 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setSolver("normal")
       .setFitIntercept(false)
       .fit(datasetWithWeight)
-    val weightsR = Vectors.dense(Array(-3.7271, 3.0100))
+    val coefficientsR = Vectors.dense(Array(-3.7271, 3.0100))
     val interceptR = 0.0
     val devianceResidualsR = Array(-4.600, 2.344)
     val seCoefR = Array(2.9032, 0.6022)
     val tValsR = Array(-1.284, 4.998)
     val pValsR = Array(0.3279, 0.0378)
 
-    assert(model.weights ~== weightsR absTol 1E-3)
+    assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept === interceptR)
     model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }

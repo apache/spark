@@ -487,13 +487,14 @@ class LinearRegressionSummary private[regression] (
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
   }
 
-  /** number of instances in DataFrame predictions */
+  /** Number of instances in DataFrame predictions */
   lazy val numInstances: Long = predictions.count()
 
+  /** Degrees of freedom */
   private val degreesOfFreedom: Long = if (model.getFitIntercept) {
-    numInstances - model.weights.size - 1
+    numInstances - model.coefficients.size - 1
   } else {
-    numInstances - model.weights.size
+    numInstances - model.coefficients.size
   }
 
   /**
@@ -516,7 +517,7 @@ class LinearRegressionSummary private[regression] (
   lazy val coefficientStandardErrors: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
-        "No Std. Error coefficients available for this LinearRegressionModel")
+        "No Std. Error of coefficients available for this LinearRegressionModel")
     } else {
       val rss = if (model.getWeightCol.isEmpty) {
         meanSquaredError * numInstances
@@ -537,9 +538,9 @@ class LinearRegressionSummary private[regression] (
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
-        "No t values available for this LinearRegressionModel")
+        "No t-statistic available for this LinearRegressionModel")
     } else {
-      model.weights.toArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+      model.coefficients.toArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     }
   }
 
@@ -549,7 +550,7 @@ class LinearRegressionSummary private[regression] (
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
-        "No p values available for this LinearRegressionModel")
+        "No p-value available for this LinearRegressionModel")
     } else {
       tValues.map { x => 2.0 * (1.0 - StudentsT(degreesOfFreedom.toDouble).cdf(math.abs(x))) }
     }
