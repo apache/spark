@@ -1,6 +1,403 @@
 Spark Change Log
 ----------------
 
+Release 1.5.2
+
+  [SPARK-11188] [SQL] Elide stacktraces in bin/spark-sql for AnalysisExceptions
+  Dilip Biswal <dbiswal@us.ibm.com>
+  2015-11-03 12:14:01 +0100
+  Commit: 5604ce9, github.com/apache/spark/pull/9374
+
+  [SPARK-11424] Guard against double-close() of RecordReaders
+  Josh Rosen <joshrosen@databricks.com>
+  2015-10-31 10:47:22 -0700
+  Commit: b85bf8f, github.com/apache/spark/pull/9382
+
+  [SPARK-11434][SPARK-11103][SQL] Fix test ": Filter applied on merged Parquet schema with new column fails"
+  Yin Huai <yhuai@databricks.com>
+  2015-10-30 20:05:07 -0700
+  Commit: c9ac0e9, github.com/apache/spark/pull/9387
+
+  [SPARK-10829] [SPARK-11301] [SQL] fix 2 bugs for filter on partitioned columns (1.5 backport)
+  Wenchen Fan <wenchen@databricks.com>
+  2015-10-30 12:14:53 -0700
+  Commit: 6b10ea5, github.com/apache/spark/pull/9371
+
+  [SPARK-11103][SQL] Filter applied on Merged Parquet shema with new column fail
+  hyukjinkwon <gurwls223@gmail.com>
+  2015-10-30 18:17:35 +0800
+  Commit: 06d3257, github.com/apache/spark/pull/9327
+
+  [SPARK-11417] [SQL] no @Override in codegen
+  Davies Liu <davies@databricks.com>
+  2015-10-30 00:36:20 -0700
+  Commit: 0df2c78, github.com/apache/spark/pull/9372
+
+  [SPARK-11032] [SQL] correctly handle having
+  Wenchen Fan <cloud0fan@163.com>
+  2015-10-13 17:11:22 -0700
+  Commit: bb3b362, github.com/apache/spark/pull/9105
+
+  [SPARK-11246] [SQL] Table cache for Parquet broken in 1.5
+  xin Wu <xinwu@us.ibm.com>
+  2015-10-29 07:42:46 -0700
+  Commit: 76d7423, github.com/apache/spark/pull/9326
+
+  Typo in mllib-evaluation-metrics.md
+  Mageswaran.D <mageswaran1989@gmail.com>
+  2015-10-28 08:46:30 -0700
+  Commit: 9e3197a, github.com/apache/spark/pull/9333
+
+  [SPARK-11303][SQL] filter should not be pushed down into sample
+  Yanbo Liang <ybliang8@gmail.com>
+  2015-10-27 11:28:59 +0100
+  Commit: 3bd596d, github.com/apache/spark/pull/9294
+
+  [SPARK-11302][MLLIB] 2) Multivariate Gaussian Model with Covariance matrix returns incorrect answer in some cases
+  Sean Owen <sowen@cloudera.com>
+  2015-10-27 23:07:37 -0700
+  Commit: 86ee81e, github.com/apache/spark/pull/9309
+
+  [SPARK-11270][STREAMING] Add improved equality testing for TopicAndPartition from the Kafka Streaming API
+  Nick Evans <me@nicolasevans.org>
+  2015-10-27 01:29:06 -0700
+  Commit: abb0ca7, github.com/apache/spark/pull/9236
+
+  [SQL][DOC] Minor document fixes in interfaces.scala
+  Alexander Slesarenko <avslesarenko@gmail.com>
+  2015-10-26 23:49:14 +0100
+  Commit: 8a6e63c, github.com/apache/spark/pull/9284
+
+  [SPARK-5966][WIP] Spark-submit deploy-mode cluster is not compatible with master local>
+  Kevin Yu <qyu@us.ibm.com>
+  2015-10-26 09:34:15 +0000
+  Commit: a355d0d, github.com/apache/spark/pull/9220
+
+  [SPARK-11287] Fixed class name to properly start TestExecutor from deploy.client.TestClient
+  Bryan Cutler <bjcutler@us.ibm.com>
+  2015-10-25 19:05:45 +0000
+  Commit: 74921c2, github.com/apache/spark/pull/9255
+
+  [SPARK-11299][DOC] Fix link to Scala DataFrame Functions reference
+  Josh Rosen <joshrosen@databricks.com>
+  2015-10-25 10:31:44 +0100
+  Commit: 36fddb0, github.com/apache/spark/pull/9269
+
+  Fix typos
+  Jacek Laskowski <jacek.laskowski@deepsense.io>
+  2015-10-25 01:33:22 +0100
+  Commit: 5200a6e, github.com/apache/spark/pull/9250
+
+  [SPARK-11264] bin/spark-class can't find assembly jars with certain GREP_OPTIONS set
+  Jeffrey Naisbitt <jnaisbitt@familysearch.org>
+  2015-10-24 18:21:36 +0100
+  Commit: 1cd2d9c, github.com/apache/spark/pull/9231
+
+  [SPARK-11294][SPARKR] Improve R doc for read.df, write.df, saveAsTable
+  felixcheung <felixcheung_m@hotmail.com>
+  2015-10-23 21:42:00 -0700
+  Commit: 56f0bb6, github.com/apache/spark/pull/9261
+
+  [SPARK-10971][SPARKR] RRunner should allow setting path to Rscript.
+  Sun Rui <rui.sun@intel.com>
+  2015-10-23 21:38:04 -0700
+  Commit: 9695f45, github.com/apache/spark/pull/9179
+
+  Fix typo "Received" to "Receiver" in streaming-kafka-integration.md
+  Rohan Bhanderi <rohan.bhanderi@sjsu.edu>
+  2015-10-23 01:10:46 -0700
+  Commit: 03d3ad4, github.com/apache/spark/pull/9242
+
+  Preparing development version 1.5.3-SNAPSHOT
+  Patrick Wendell <pwendell@gmail.com>
+  2015-10-22 16:02:11 -0700
+  Commit: be3e343
+
+  Preparing Spark release v1.5.2-rc1
+  Patrick Wendell <pwendell@gmail.com>
+  2015-10-22 16:02:05 -0700
+  Commit: ad6ade1
+
+  [SPARK-11251] Fix page size calculation in local mode
+  Andrew Or <andrew@databricks.com>
+  2015-10-22 15:58:08 -0700
+  Commit: a76cf51, github.com/apache/spark/pull/9209
+
+  [SPARK-10812] [YARN] Fix shutdown of token renewer.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-10-07 11:38:07 -0700
+  Commit: e405c2a, github.com/apache/spark/pull/8996
+
+  [SPARK-10812] [YARN] Spark hadoop util support switching to yarn
+  Holden Karau <holden@pigscanfly.ca>
+  2015-09-28 06:33:45 -0700
+  Commit: c49e0c3, github.com/apache/spark/pull/8911
+
+  [SPARK-11244][SPARKR] sparkR.stop() should remove SQLContext
+  Forest Fang <forest.fang@outlook.com>
+  2015-10-22 09:34:07 -0700
+  Commit: f9ad0e5, github.com/apache/spark/pull/9205
+
+  [SPARK-11233][SQL] register cosh in function registry
+  Shagun Sodhani <sshagunsodhani@gmail.com>
+  2015-10-21 14:18:06 -0700
+  Commit: fe5c3ae, github.com/apache/spark/pull/9199
+
+  [SPARK-10534] [SQL] ORDER BY clause allows only columns that are present in the select projection list
+  Dilip Biswal <dbiswal@us.ibm.com>
+  2015-10-21 11:10:32 -0700
+  Commit: 59747d0, github.com/apache/spark/pull/9123
+
+  [SPARK-11153][SQL] Disables Parquet filter push-down for string and binary columns
+  Cheng Lian <lian@databricks.com>
+  2015-10-21 09:02:20 +0800
+  Commit: 0887e5e, github.com/apache/spark/pull/9152
+
+  [HOT-FIX] Remove unnessary changed introduced by the backport of SPARK-10577 (https://github.com/apache/spark/commit/30eea40fff97391b8ee3201dd7c6ea7440521386).
+  Yin Huai <yhuai@databricks.com>
+  2015-10-19 18:01:21 -0700
+  Commit: a3ab671
+
+  [SPARK-11051][CORE] Do not allow local checkpointing after the RDD is materialized and checkpointed
+  Liang-Chi Hsieh <viirya@appier.com>
+  2015-10-19 16:16:31 -0700
+  Commit: 2195fec, github.com/apache/spark/pull/9072
+
+  [SPARK-11063] [STREAMING] Change preferredLocations of Receiver's RDD to hosts rather than hostports
+  zsxwing <zsxwing@gmail.com>
+  2015-10-19 15:35:14 -0700
+  Commit: 5186ec8, github.com/apache/spark/pull/9075
+
+  [SPARK-11126][SQL] Fix the potential flaky test
+  zsxwing <zsxwing@gmail.com>
+  2015-10-19 00:06:51 -0700
+  Commit: 6480740, github.com/apache/spark/pull/9163
+
+  [SPARK-11126][SQL] Fix a memory leak in SQLListener._stageIdToStageMetrics
+  zsxwing <zsxwing@gmail.com>
+  2015-10-18 13:51:45 -0700
+  Commit: 803339c, github.com/apache/spark/pull/9132
+
+  [SPARK-11104] [STREAMING] Fix a deadlock in StreamingContex.stop
+  zsxwing <zsxwing@gmail.com>
+  2015-10-16 13:56:51 -0700
+  Commit: fa7c3ea, github.com/apache/spark/pull/9116
+
+  [SPARK-10581] [DOCS] Groups are not resolved in scaladoc in sql classes
+  Pravin Gadakh <pravingadakh177@gmail.com>
+  2015-10-16 13:38:50 -0700
+  Commit: 9814de0, github.com/apache/spark/pull/9148
+
+  [SPARK-11094] Strip extra strings from Java version in test runner
+  Jakob Odersky <jodersky@gmail.com>
+  2015-10-16 14:26:34 +0100
+  Commit: 9903e05, github.com/apache/spark/pull/9111
+
+  [SPARK-11135] [SQL] Exchange incorrectly skips sorts when existing ordering is non-empty subset of required ordering
+  Josh Rosen <joshrosen@databricks.com>
+  2015-10-15 17:36:55 -0700
+  Commit: 7aaf485, github.com/apache/spark/pull/9140
+
+  [SPARK-10515] When killing executor, the pending replacement executors should not be lost
+  KaiXinXiaoLei <huleilei1@huawei.com>, huleilei <huleilei1@huawei.com>
+  2015-10-15 14:48:01 -0700
+  Commit: 13920d5, github.com/apache/spark/pull/8945
+
+  [SPARK-11039][Documentation][Web UI] Document additional ui configurations
+  Nick Pritchard <nicholas.pritchard@falkonry.com>
+  2015-10-15 12:45:37 -0700
+  Commit: 166fdf4, github.com/apache/spark/pull/9052
+
+  [SPARK-11047] Internal accumulators miss the internal flag when replaying events in the history server
+  Carson Wang <carson.wang@intel.com>
+  2015-10-15 10:36:54 -0700
+  Commit: 025e16b, github.com/apache/spark/pull/9061
+
+  [SPARK-11066] Update DAGScheduler's "misbehaved ResultHandler"
+  shellberg <sah@zepler.org>
+  2015-10-15 18:07:10 +0100
+  Commit: 63ca9f9, github.com/apache/spark/pull/9076
+
+  [SPARK-8386] [SQL] add write.mode for insertIntoJDBC when the parm overwrite is false
+  Huaxin Gao <huaxing@us.ibm.com>
+  2015-10-14 12:31:29 -0700
+  Commit: c27e190, github.com/apache/spark/pull/9042
+
+  [SPARK-10577] [PYSPARK] DataFrame hint for broadcast join
+  Jian Feng <jzhang.chs@gmail.com>
+  2015-09-21 23:36:41 -0700
+  Commit: 30eea40, github.com/apache/spark/pull/8801
+
+  [SPARK-10845] [SQL] Makes spark.sql.hive.version a SQLConfEntry
+  Cheng Lian <lian@databricks.com>
+  2015-09-26 19:08:55 -0700
+  Commit: f366249, github.com/apache/spark/pull/8925
+
+  [SPARK-10619] Can't sort columns on Executor Page
+  Tom Graves <tgraves@yahoo-inc.com>
+  2015-10-14 10:12:25 -0700
+  Commit: ad5bf0e, github.com/apache/spark/pull/9101
+
+  [SPARK-10981] [SPARKR] SparkR Join improvements
+  Monica Liu <liu.monica.f@gmail.com>
+  2015-10-13 22:24:52 -0700
+  Commit: 3e9d56e, github.com/apache/spark/pull/9029
+
+  [SPARK-10389] [SQL] [1.5] support order by non-attribute grouping expression on Aggregate
+  Wenchen Fan <cloud0fan@163.com>
+  2015-10-13 16:16:08 -0700
+  Commit: 94e6d8f, github.com/apache/spark/pull/9102
+
+  [SPARK-10959] [PYSPARK] StreamingLogisticRegressionWithSGD does not t…
+  Bryan Cutler <bjcutler@us.ibm.com>
+  2015-10-13 15:59:36 -0700
+  Commit: 15d2736, github.com/apache/spark/pull/9087
+
+  [SPARK-10932] [PROJECT INFRA] Port two minor changes to release-build.sh from scripts' old repo
+  Josh Rosen <joshrosen@databricks.com>
+  2015-10-13 15:18:20 -0700
+  Commit: 77eeaad, github.com/apache/spark/pull/8986
+
+  [SPARK-11009] [SQL] fix wrong result of Window function in cluster mode
+  Davies Liu <davies@databricks.com>, Yin Huai <yhuai@databricks.com>
+  2015-10-13 09:40:36 -0700
+  Commit: edc5095, github.com/apache/spark/pull/9050
+
+  [SPARK-11026] [YARN] spark.yarn.user.classpath.first does work for 'spark-submit --jars hdfs://user/foo.jar'
+  Lianhui Wang <lianhuiwang09@gmail.com>
+  2015-10-13 08:29:47 -0500
+  Commit: 47bc6c0, github.com/apache/spark/pull/9045
+
+  Revert "[SPARK-10959] [PYSPARK] StreamingLogisticRegressionWithSGD does not train with given regParam and convergenceTol parameters"
+  Joseph K. Bradley <joseph.kurata.bradley@gmail.com>
+  2015-10-12 14:53:13 -0700
+  Commit: 2217f4f
+
+  [SPARK-11056] Improve documentation of SBT build.
+  Kay Ousterhout <kayousterhout@gmail.com>
+  2015-10-12 14:23:29 -0700
+  Commit: ebbff39, github.com/apache/spark/pull/9068
+
+  [SPARK-10973] [ML] [PYTHON] Fix IndexError exception on SparseVector when asked for index after the last non-zero entry
+  zero323 <matthew.szymkiewicz@gmail.com>
+  2015-10-12 12:09:06 -0700
+  Commit: be68a4b, github.com/apache/spark/pull/9064
+
+  [SPARK-11023] [YARN] Avoid creating URIs from local paths directly.
+  Marcelo Vanzin <vanzin@cloudera.com>
+  2015-10-12 10:21:57 -0700
+  Commit: cd55fbc, github.com/apache/spark/pull/9049
+
+  [SPARK-10960] [SQL] SQL with windowing function should be able to refer column in inner select
+  Liang-Chi Hsieh <viirya@appier.com>
+  2015-10-12 09:16:14 -0700
+  Commit: 6dc23e6, github.com/apache/spark/pull/9011
+
+  [SPARK-10858] YARN: archives/jar/files rename with # doesn't work unl
+  Tom Graves <tgraves@yahoo-inc.com>
+  2015-10-09 14:06:25 -0700
+  Commit: 156ac27, github.com/apache/spark/pull/9035
+
+  [SPARK-10959] [PYSPARK] StreamingLogisticRegressionWithSGD does not train with given regParam and convergenceTol parameters
+  Bryan Cutler <bjcutler@us.ibm.com>
+  2015-10-08 22:21:07 -0700
+  Commit: f95129c, github.com/apache/spark/pull/9002
+
+  [SPARK-10955] [STREAMING] Add a warning if dynamic allocation for Streaming applications
+  Hari Shreedharan <hshreedharan@apache.org>
+  2015-10-08 18:53:38 -0700
+  Commit: 3df7500, github.com/apache/spark/pull/8998
+
+  [SPARK-10914] UnsafeRow serialization breaks when two machines have different Oops size.
+  Reynold Xin <rxin@databricks.com>
+  2015-10-08 17:25:14 -0700
+  Commit: ba601b1, github.com/apache/spark/pull/9030
+
+  [SPARK-10980] [SQL] fix bug in create Decimal
+  Davies Liu <davies@databricks.com>
+  2015-10-07 15:51:09 -0700
+  Commit: 57978ae, github.com/apache/spark/pull/9014
+
+  [SPARK-10952] Only add hive to classpath if HIVE_HOME is set.
+  Kevin Cox <kevincox@kevincox.ca>
+  2015-10-07 09:53:17 -0700
+  Commit: b6a0933, github.com/apache/spark/pull/8994
+
+  [SPARK-10885] [STREAMING] Display the failed output op in Streaming UI
+  zsxwing <zsxwing@gmail.com>
+  2015-10-06 16:51:03 -0700
+  Commit: 84f510c, github.com/apache/spark/pull/8950
+
+  [SPARK-10901] [YARN] spark.yarn.user.classpath.first doesn't work
+  Thomas Graves <tgraves@staydecay.corp.gq1.yahoo.com>, Tom Graves <tgraves@yahoo-inc.com>
+  2015-10-06 10:18:50 -0700
+  Commit: 6847be6, github.com/apache/spark/pull/8959
+
+  [SPARK-10934] [SQL] handle hashCode of unsafe array correctly
+  Wenchen Fan <cloud0fan@163.com>
+  2015-10-05 17:30:54 -0700
+  Commit: c8392cd, github.com/apache/spark/pull/8987
+
+  [SPARK-10889] [STREAMING] Bump KCL to add MillisBehindLatest metric
+  Avrohom Katz <iambpentameter@gmail.com>
+  2015-10-04 09:36:07 +0100
+  Commit: d323e5e, github.com/apache/spark/pull/8957
+
+  [SPARK-10904] [SPARKR] Fix to support `select(df, c("col1", "col2"))`
+  felixcheung <felixcheung_m@hotmail.com>
+  2015-10-03 22:42:36 -0700
+  Commit: 8836ac3, github.com/apache/spark/pull/8961
+
+  [SPARK-10058] [CORE] [TESTS] Fix the flaky tests in HeartbeatReceiverSuite
+  zsxwing <zsxwing@gmail.com>
+  2015-10-01 07:09:31 -0700
+  Commit: cbc6aec, github.com/apache/spark/pull/8946
+
+  [SPARK-10871] include number of executor failures in error msg
+  Ryan Williams <ryan.blake.williams@gmail.com>
+  2015-09-29 13:19:46 -0700
+  Commit: 3b23873, github.com/apache/spark/pull/8939
+
+  [SPARK-10825] [CORE] [TESTS] Fix race conditions in StandaloneDynamicAllocationSuite
+  zsxwing <zsxwing@gmail.com>
+  2015-09-29 11:53:28 -0700
+  Commit: d544932, github.com/apache/spark/pull/8914
+
+  [SPARK-10833] [BUILD] Inline, organize BSD/MIT licenses in LICENSE
+  Sean Owen <sowen@cloudera.com>
+  2015-09-28 22:56:43 -0400
+  Commit: 9b3014b, github.com/apache/spark/pull/8919
+
+  [SPARK-10859] [SQL] fix stats of StringType in columnar cache
+  Davies Liu <davies@databricks.com>
+  2015-09-28 14:40:40 -0700
+  Commit: a367840, github.com/apache/spark/pull/8929
+
+  [SPARK-10790] [YARN] Fix initial executor number not set issue and consolidate the codes
+  jerryshao <sshao@hortonworks.com>
+  2015-09-28 06:38:54 -0700
+  Commit: de25931, github.com/apache/spark/pull/8910
+
+  [SPARK-10741] [SQL] Hive Query Having/OrderBy against Parquet table is not working
+  Wenchen Fan <cloud0fan@163.com>
+  2015-09-27 09:08:38 -0700
+  Commit: e0c3212, github.com/apache/spark/pull/8889
+
+  Preparing development version 1.5.2-SNAPSHOT
+  Patrick Wendell <pwendell@gmail.com>
+  2015-09-23 22:49:40 -0700
+  Commit: 3fb011a
+
+  Preparing Spark release v1.5.1-rc1
+  Patrick Wendell <pwendell@gmail.com>
+  2015-09-23 22:49:35 -0700
+  Commit: 4df9793
+
+  Preparing development version 1.5.2-SNAPSHOT
+  Patrick Wendell <pwendell@gmail.com>
+  2015-09-23 21:32:16 -0700
+  Commit: 179f36e
+
 Release 1.5.1
 
   [SPARK-10692] [STREAMING] Expose failureReasons in BatchInfo for streaming UI to clear failed batches
