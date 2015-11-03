@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.memory;
 
-import java.util.*;
+import javax.annotation.concurrent.GuardedBy;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.HashSet;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.util.Utils;
 
 /**
  * Manages the memory allocated by an individual task.
@@ -87,13 +94,9 @@ public class TaskMemoryManager {
    */
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
-  /**
-   * Tracks memory allocated with {@link TaskMemoryManager#allocate(long)}, used to detect / clean
-   * up leaked memory.
-   */
-  private final HashSet<MemoryBlock> allocatedNonPageMemory = new HashSet<MemoryBlock>();
+  private final MemoryManager memoryManager;
 
-  private final ExecutorMemoryManager executorMemoryManager;
+  private final long taskAttemptId;
 
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
@@ -103,45 +106,148 @@ public class TaskMemoryManager {
   private final boolean inHeap;
 
   /**
-   * Construct a new MemoryManager.
+   * The size of memory granted to each consumer.
    */
-  public TaskMemoryManager(ExecutorMemoryManager executorMemoryManager) {
-    this.inHeap = executorMemoryManager.inHeap;
-    this.executorMemoryManager = executorMemoryManager;
+  @GuardedBy("this")
+  private final HashSet<MemoryConsumer> consumers;
+
+  /**
+   * Construct a new TaskMemoryManager.
+   */
+  public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
+    this.inHeap = memoryManager.tungstenMemoryIsAllocatedInHeap();
+    this.memoryManager = memoryManager;
+    this.taskAttemptId = taskAttemptId;
+    this.consumers = new HashSet<>();
+  }
+
+  /**
+   * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
+   * spill() of consumers to release more memory.
+   *
+   * @return number of bytes successfully granted (<= N).
+   */
+  public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
+    assert(required >= 0);
+    synchronized (this) {
+      long got = memoryManager.acquireExecutionMemory(required, taskAttemptId);
+
+      // try to release memory from other consumers first, then we can reduce the frequency of
+      // spilling, avoid to have too many spilled files.
+      if (got < required) {
+        // Call spill() on other consumers to release memory
+        for (MemoryConsumer c: consumers) {
+          if (c != null && c != consumer && c.getUsed() > 0) {
+            try {
+              long released = c.spill(required - got, consumer);
+              if (released > 0) {
+                logger.info("Task {} released {} from {} for {}", taskAttemptId,
+                  Utils.bytesToString(released), c, consumer);
+                got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+                if (got >= required) {
+                  break;
+                }
+              }
+            } catch (IOException e) {
+              logger.error("error while calling spill() on " + c, e);
+              throw new OutOfMemoryError("error while calling spill() on " + c + " : "
+                + e.getMessage());
+            }
+          }
+        }
+      }
+
+      // call spill() on itself
+      if (got < required && consumer != null) {
+        try {
+          long released = consumer.spill(required - got, consumer);
+          if (released > 0) {
+            logger.info("Task {} released {} from itself ({})", taskAttemptId,
+              Utils.bytesToString(released), consumer);
+            got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId);
+          }
+        } catch (IOException e) {
+          logger.error("error while calling spill() on " + consumer, e);
+          throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "
+            + e.getMessage());
+        }
+      }
+
+      consumers.add(consumer);
+      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
+      return got;
+    }
+  }
+
+  /**
+   * Release N bytes of execution memory for a MemoryConsumer.
+   */
+  public void releaseExecutionMemory(long size, MemoryConsumer consumer) {
+    logger.debug("Task {} release {} from {}", taskAttemptId, Utils.bytesToString(size), consumer);
+    memoryManager.releaseExecutionMemory(size, taskAttemptId);
+  }
+
+  /**
+   * Dump the memory usage of all consumers.
+   */
+  public void showMemoryUsage() {
+    logger.info("Memory used in task " + taskAttemptId);
+    synchronized (this) {
+      for (MemoryConsumer c: consumers) {
+        if (c.getUsed() > 0) {
+          logger.info("Acquired by " + c + ": " + Utils.bytesToString(c.getUsed()));
+        }
+      }
+    }
+  }
+
+  /**
+   * Return the page size in bytes.
+   */
+  public long pageSizeBytes() {
+    return memoryManager.pageSizeBytes();
   }
 
   /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
-   * intended for allocating large blocks of memory that will be shared between operators.
+   * intended for allocating large blocks of Tungsten memory that will be shared between operators.
+   *
+   * Returns `null` if there was not enough memory to allocate the page.
    */
-  public MemoryBlock allocatePage(long size) {
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
       throw new IllegalArgumentException(
         "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
+    }
+
+    long acquired = acquireExecutionMemory(size, consumer);
+    if (acquired <= 0) {
+      return null;
     }
 
     final int pageNumber;
     synchronized (this) {
       pageNumber = allocatedPages.nextClearBit(0);
       if (pageNumber >= PAGE_TABLE_SIZE) {
+        releaseExecutionMemory(acquired, consumer);
         throw new IllegalStateException(
           "Have already allocated a maximum of " + PAGE_TABLE_SIZE + " pages");
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = executorMemoryManager.allocate(size);
+    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
-      logger.trace("Allocate page number {} ({} bytes)", pageNumber, size);
+      logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
     }
     return page;
   }
 
   /**
-   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage(long)}.
+   * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
-  public void freePage(MemoryBlock page) {
+  public void freePage(MemoryBlock page, MemoryConsumer consumer) {
     assert (page.pageNumber != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
     assert(allocatedPages.get(page.pageNumber));
@@ -152,45 +258,16 @@ public class TaskMemoryManager {
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
     }
-    // Cannot access a page once it's freed.
-    executorMemoryManager.free(page);
-  }
-
-  /**
-   * Allocates a contiguous block of memory. Note that the allocated memory is not guaranteed
-   * to be zeroed out (call `zero()` on the result if this is necessary). This method is intended
-   * to be used for allocating operators' internal data structures. For data pages that you want to
-   * exchange between operators, consider using {@link TaskMemoryManager#allocatePage(long)}, since
-   * that will enable intra-memory pointers (see
-   * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)} and this class's
-   * top-level Javadoc for more details).
-   */
-  public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    assert(size > 0) : "Size must be positive, but got " + size;
-    final MemoryBlock memory = executorMemoryManager.allocate(size);
-    synchronized(allocatedNonPageMemory) {
-      allocatedNonPageMemory.add(memory);
-    }
-    return memory;
-  }
-
-  /**
-   * Free memory allocated by {@link TaskMemoryManager#allocate(long)}.
-   */
-  public void free(MemoryBlock memory) {
-    assert (memory.pageNumber == -1) : "Should call freePage() for pages, not free()";
-    executorMemoryManager.free(memory);
-    synchronized(allocatedNonPageMemory) {
-      final boolean wasAlreadyRemoved = !allocatedNonPageMemory.remove(memory);
-      assert (!wasAlreadyRemoved) : "Called free() on memory that was already freed!";
-    }
+    long pageSize = page.size();
+    memoryManager.tungstenMemoryAllocator().free(page);
+    releaseExecutionMemory(pageSize, consumer);
   }
 
   /**
    * Given a memory page and offset within that page, encode this address into a 64-bit long.
    * This address will remain valid as long as the corresponding page has not been freed.
    *
-   * @param page a data page allocated by {@link TaskMemoryManager#allocate(long)}.
+   * @param page a data page allocated by {@link TaskMemoryManager#allocatePage}/
    * @param offsetInPage an offset in this page which incorporates the base offset. In other words,
    *                     this should be the value that you would pass as the base offset into an
    *                     UNSAFE call (e.g. page.baseOffset() + something).
@@ -262,25 +339,23 @@ public class TaskMemoryManager {
    * value can be used to detect memory leaks.
    */
   public long cleanUpAllAllocatedMemory() {
-    long freedBytes = 0;
-    for (MemoryBlock page : pageTable) {
-      if (page != null) {
-        freedBytes += page.size();
-        freePage(page);
+    synchronized (this) {
+      Arrays.fill(pageTable, null);
+      for (MemoryConsumer c: consumers) {
+        if (c != null && c.getUsed() > 0) {
+          // In case of failed task, it's normal to see leaked memory
+          logger.warn("leak " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
+        }
       }
+      consumers.clear();
     }
+    return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
+  }
 
-    synchronized (allocatedNonPageMemory) {
-      final Iterator<MemoryBlock> iter = allocatedNonPageMemory.iterator();
-      while (iter.hasNext()) {
-        final MemoryBlock memory = iter.next();
-        freedBytes += memory.size();
-        // We don't call free() here because that calls Set.remove, which would lead to a
-        // ConcurrentModificationException here.
-        executorMemoryManager.free(memory);
-        iter.remove();
-      }
-    }
-    return freedBytes;
+  /**
+   * Returns the memory consumption, in bytes, for the current task
+   */
+  public long getMemoryConsumptionForThisTask() {
+    return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
   }
 }
