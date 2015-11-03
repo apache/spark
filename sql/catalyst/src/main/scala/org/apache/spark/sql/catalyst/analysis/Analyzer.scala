@@ -147,7 +147,7 @@ class Analyzer(
             case u @ UnresolvedAlias(child) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
-              case g: Generator if g.elementTypes.size > 1 => MultiAlias(g, Nil)
+              case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
               case other => Alias(other, s"_c$i")()
             }
@@ -722,7 +722,7 @@ class Analyzer(
 
     /**
      * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
-     * names is empty names are assigned by ordinal (i.e., _c0, _c1, ...) to match Hive's defaults.
+     * names is empty names are assigned from field names in generator.
      */
     private def makeGeneratorOutput(
         generator: Generator,
@@ -731,13 +731,12 @@ class Analyzer(
 
       if (names.length == elementTypes.length) {
         names.zip(elementTypes).map {
-          case (name, (t, nullable)) =>
+          case (name, (t, nullable, _)) =>
             AttributeReference(name, t, nullable)()
         }
       } else if (names.isEmpty) {
-        elementTypes.zipWithIndex.map {
-          // keep the default column names as Hive does _c0, _c1, _cN
-          case ((t, nullable), i) => AttributeReference(s"_c$i", t, nullable)()
+        elementTypes.map {
+          case (t, nullable, name) => AttributeReference(name, t, nullable)()
         }
       } else {
         failAnalysis(
