@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType, _}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * A [[Projection]] that is calculated by calling the `eval` of each of the specified expressions.
@@ -62,6 +61,8 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
     this(expressions.map(BindReferences.bindReference(_, inputSchema)))
 
+  private[this] val buffer = new Array[Any](expressions.size)
+
   expressions.foreach(_.foreach {
     case n: Nondeterministic => n.setInitialValues()
     case _ =>
@@ -79,7 +80,13 @@ case class InterpretedMutableProjection(expressions: Seq[Expression]) extends Mu
   override def apply(input: InternalRow): InternalRow = {
     var i = 0
     while (i < exprArray.length) {
-      mutableRow(i) = exprArray(i).eval(input)
+      // Store the result into buffer first, to make the projection atomic (needed by aggregation)
+      buffer(i) = exprArray(i).eval(input)
+      i += 1
+    }
+    i = 0
+    while (i < exprArray.length) {
+      mutableRow(i) = buffer(i)
       i += 1
     }
     mutableRow
