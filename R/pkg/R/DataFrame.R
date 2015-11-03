@@ -1929,9 +1929,9 @@ setMethod("coltypes",
             types <- lapply(dtypes(irisDF), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- lapply(types, function(x) { 
+            rTypes <- lapply(types, function(x) {
               if (exists(x, envir=DATA_TYPES)) {
-                get(x, envir=DATA_TYPES) 
+                get(x, envir=DATA_TYPES)
               } else {
                 stop(paste("Unsupported data type: ", x))
               }
