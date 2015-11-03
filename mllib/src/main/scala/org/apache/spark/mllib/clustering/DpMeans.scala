@@ -18,7 +18,7 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
@@ -146,8 +146,8 @@ class DpMeans private (
         val localCentersCount = findLocalCenters.count()
         logInfo(" Local centers count :: " + localCentersCount)
         if (localCentersCount > getMaxClusterCount) {
-          logInfo(" Local centers count " + localCentersCount + " exceeds user expectation")
-          sys.exit()
+          throw new SparkException(s" Local centers count $localCentersCount " +
+            s"exceeds user expectation")
         }
         localCenters = findLocalCenters.collect()
         if (localCenters.isEmpty) {
@@ -163,39 +163,34 @@ class DpMeans private (
       }
 
       // Find the sum and count of points belonging to each cluster
-      case class WeightedPoint(vector: Vector, count: Long)
-      val mergeClusters = (x: WeightedPoint, y: WeightedPoint) => {
-        axpy(1.0, y.vector, x.vector)
-        WeightedPoint(x.vector, x.count + y.count)
-      }
-
-      val dims = globalCenters(0).vector.size
-      val clusterStat = zippedData.mapPartitions { points =>
-        val activeCenters = globalCenters
-        val k = activeCenters.length
-
-        val sums = Array.fill(k)(Vectors.zeros(dims))
-        val counts = Array.fill(k)(0L)
-        val totalCost = Array.fill(k)(0.0D)
-        points.foreach { point =>
-          val (currentCenter, cost) = DpMeans.assignCluster(activeCenters, point)
-          totalCost(currentCenter) += cost
-          val currentSum = sums(currentCenter)
-          axpy(1.0, point.vector, currentSum)
-          counts(currentCenter) += 1
+      val dims = globalCenters.head.vector.size
+      val zeroValue = List.tabulate(globalCenters.size) { i =>
+        (i, (Vectors.zeros(dims), 0L))
+      }.toMap
+      val clusterSumAndCount = zippedData.aggregate(zeroValue)(
+        seqOp = (clusterStat: Map[Int, (Vector, Long)], point: VectorWithNorm) => {
+          val (closestClusterId, cost) = DpMeans.assignCluster(globalCenters, point)
+          val (sum, count) = clusterStat(closestClusterId)
+          axpy(1.0, point.vector, sum)
+          clusterStat + (closestClusterId ->(sum, count + 1L))
+        },
+        combOp = (agg1: Map[Int, (Vector, Long)], agg2: Map[Int, (Vector, Long)]) => {
+          agg1.keySet.map { case clusterIdx =>
+            val (sum1, n1) = agg1(clusterIdx)
+            val (sum2, n2) = agg2(clusterIdx)
+            axpy(1.0, sum2, sum1)
+            (clusterIdx, (sum1, n1 + n2))
+          }.toMap
         }
-        val result = Iterator.tabulate(k) { i => (i, WeightedPoint(sums(i), counts(i))) }
-        result
-      }.aggregateByKey(WeightedPoint(Vectors.zeros(dims), 0L))(mergeClusters, mergeClusters)
-        .collectAsMap()
+      )
 
       // Update the cluster centers and convergence check
-      var changed = false
+      var isCenterChanged = false
       var j = 0
-      val currentK = clusterStat.size
+      val currentK = clusterSumAndCount.size
 
       while (j < currentK) {
-        val (sumOfPoints, count) = (clusterStat(j).vector, clusterStat(j).count)
+        val (sumOfPoints, count) = clusterSumAndCount(j)
         if (count != 0) {
           scal(1.0 / count, sumOfPoints)
           val newCenter = new VectorWithNorm(sumOfPoints)
@@ -203,18 +198,18 @@ class DpMeans private (
           if (previousK == currentK) {
             if (DpMeans.squaredDistance(newCenter, globalCenters(j))
               > convergenceTol * convergenceTol) {
-              changed = true
+              isCenterChanged = true
             }
           }
           else {
-            changed = true
+            isCenterChanged = true
           }
           globalCenters(j) = newCenter
         }
         previousK = currentK
         j += 1
       }
-      if (!changed) {
+      if (!isCenterChanged) {
         converged = true
         logInfo("DpMeans clustering finished in " + (iteration + 1) + " iterations")
       }
@@ -249,8 +244,8 @@ private object DpMeans {
       centers: ArrayBuffer[VectorWithNorm],
       lambdaValue: Double): Iterator[VectorWithNorm] = {
     var newCenters = ArrayBuffer.empty[VectorWithNorm]
-    if (!points.isEmpty) {
-      if (centers.length == 0) newCenters += points.next
+    if (points.nonEmpty) {
+      if (centers.isEmpty) newCenters += points.next
       points.foreach { z =>
         val dist = newCenters.union(centers).map { center => squaredDistance(z, center) }
         if (dist.min > lambdaValue) newCenters += z
