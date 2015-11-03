@@ -40,4 +40,20 @@ private[spark] object CholeskyDecomposition {
     assert(code == 0, s"lapack.dpotrs returned $code.")
     bx
   }
+
+  /**
+   * Computes the inverse of a real symmetric positive definite matrix A
+   * using the Cholesky factorization A = U**T*U.
+   * The input arguments are modified in-place to store the inverse matrix.
+   * @param UAi the upper triangular factor U from the Cholesky factorization A = U**T*U
+   * @param k the dimension of A
+   * @return the upper triangle of the (symmetric) inverse of A
+   */
+  def inverse(UAi: Array[Double], k: Int): Array[Double] = {
+    val info = new intW(0)
+    lapack.dpptri("U", k, UAi, info)
+    val code = info.`val`
+    assert(code == 0, s"lapack.dpptri returned $code.")
+    UAi
+  }
 }
