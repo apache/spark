@@ -56,7 +56,7 @@ class MemoryListener extends SparkListener {
     val memoryInfo = activeExecutorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
     memoryInfo.updateExecutorMetrics(executorMetrics)
     activeStagesToMem.foreach { case (_, stageMemMetrics) =>
-      if(stageMemMetrics.contains(executorId)) {
+      if (stageMemMetrics.contains(executorId)) {
         stageMemMetrics.get(executorId).get.updateExecutorMetrics(executorMetrics)
       }
     }

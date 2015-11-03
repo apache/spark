@@ -161,12 +161,13 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  // When a stage is submitted and completed, we updated our executor memory metrics for that stage,
-  // and then log the metrics. Anytime we receive more executor metrics, we update our running set of
-  // {{executorIdToLatestMetrics}} and {{executorIdToModifiedMaxMetrics}}. Since stages submit and
-  // complete time might be interleaved, we maintain the latest and max metrics for each time segment.
-  // So, for each stage start and stage complete, we replace each item in
-  // {{executorIdToModifiedMaxMetrics}} with that in {{executorIdToLatestMetrics}}.
+  // When a stage is submitted and completed, we updated our executor memory metrics for that
+  // stage, and then log the metrics. Anytime we receive more executor metrics, we update our
+  // running set of {{executorIdToLatestMetrics}} and {{executorIdToModifiedMaxMetrics}}.
+  // Since stages submit and complete time might be interleaved, we maintain the latest and
+  // max metrics for each time segment. So, for each stage start and stage complete, we
+  // replace each item in {{executorIdToModifiedMaxMetrics}} with that
+  // in {{executorIdToLatestMetrics}}.
   private def updateAndLogExecutorMemoryMetrics() : Unit = {
     executorIdToModifiedMaxMetrics.foreach { case(_, metrics) => logEvent(metrics) }
     executorIdToLatestMetrics.foreach {case(_, metrics) => logEvent(metrics) }
