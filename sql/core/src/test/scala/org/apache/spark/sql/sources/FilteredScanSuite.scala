@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+
 import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
@@ -300,6 +302,16 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
       }
       val rawCount = rawPlan.execute().count()
       assert(ColumnsRequired.set === requiredColumnNames)
+
+      assert {
+        val table = caseInsensitiveContext.table("oneToTenFiltered")
+        val relation = table.queryExecution.logical.collectFirst {
+          case LogicalRelation(r, _) => r
+        }.get
+
+        // `relation` should be able to handle all pushed filters
+        relation.unhandledFilters(FiltersPushed.list.toArray).isEmpty
+      }
 
       if (rawCount != expectedCount) {
         fail(

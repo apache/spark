@@ -181,7 +181,7 @@ class SimpleTextRelation(
     }
   }
 
-  // `SimpleTextRelation` only handles `GreaterThan` filter.  THis is used to test filter push-down
+  // `SimpleTextRelation` only handles `GreaterThan` filter.  This is used to test filter push-down
   // and `BaseRelation.unhandledFilters()`.
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     filters.filter {
