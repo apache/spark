@@ -105,6 +105,8 @@ object PageRank extends Logging {
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
     val personalized = srcId isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
+
     // Initialize the PageRank graph with each edge attribute having
     // weight 1/outDegree and each vertex with attribute resetProb.
     // When running personalized pagerank, only the source vertex
@@ -115,15 +117,10 @@ object PageRank extends Logging {
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
-      .mapVertices( (id, attr) => {
-        if (personalized) {
-          if (id == srcId.get) resetProb else 0.0
-        } else {
-          resetProb
-        }
-      })
+      .mapVertices { (id, attr) =>
+        if (!(id != src && personalized)) resetProb else 0.0
+      }
 
-    val src: VertexId = srcId.getOrElse(-1L)
     def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
 
     var iteration = 0
@@ -201,6 +198,8 @@ object PageRank extends Logging {
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
     val personalized = srcId.isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
+
     // Initialize the pagerankGraph with each edge attribute
     // having weight 1/outDegree and each vertex with attribute 1.0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
@@ -211,17 +210,10 @@ object PageRank extends Logging {
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initalPR, delta = 0)
-      .mapVertices( (id, attr) => {
-        if (personalized && id == srcId.get) {
-          (resetProb, Double.NegativeInfinity)
-        } else {
-          (0.0, 0.0)
-        }
-      } )
+      .mapVertices { (id, attr) =>
+        if (id == src) (resetProb, Double.NegativeInfinity) else (0.0, 0.0)
+      }
       .cache()
-
-    val src: VertexId = srcId.getOrElse(-1L)
-
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
