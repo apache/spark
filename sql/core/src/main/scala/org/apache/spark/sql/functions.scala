@@ -329,14 +329,6 @@ object functions {
   def skewness(e: Column): Column = Skewness(e.expr)
 
   /**
-   * Aggregate function: returns the skewness of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def skewness(columnName: String): Column = skewness(Column(columnName))
-
-  /**
    * Aggregate function: returns the population standard deviation of
    * the expression in a group.
    *
