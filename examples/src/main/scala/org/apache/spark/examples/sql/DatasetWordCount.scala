@@ -21,6 +21,10 @@ package org.apache.spark.examples.sql
 import org.apache.spark.sql.{Dataset, SQLContext}
 import org.apache.spark.{SparkContext, SparkConf}
 
+/**
+ * Given a Dataset of Strings, we tokenize by splitting on whitespace and count the number of
+ * occurrences of each unique word using `groupBy`.
+ */
 object DatasetWordCount {
   def main(args: Array[String]): Unit = {
     val sparkConf = new SparkConf().setAppName("DatasetWordCount")
@@ -36,7 +40,7 @@ object DatasetWordCount {
       case (word, iter) => Iterator(word -> iter.length)
     }
 
-    counts.foreach { case (word, count) => println(s"$word: $count") }
+    counts.collect().foreach(println)
   }
 }
 // scalastyle:on println
