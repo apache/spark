@@ -33,7 +33,8 @@ abstract class EmittedRecordsDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: C
 }
 
 
-private[streaming] class EmittedRecordsDStreamImpl[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+private[streaming] class EmittedRecordsDStreamImpl[
+    K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     trackStateDStream: TrackStateDStream[K, V, S, T])
   extends EmittedRecordsDStream[K, V, S, T](trackStateDStream.context) {
 
@@ -46,7 +47,8 @@ private[streaming] class EmittedRecordsDStreamImpl[K: ClassTag, V: ClassTag, S: 
   }
 
   def stateSnapshots(): DStream[(K, S)] = {
-    trackStateDStream.flatMap[(K, S)] { _.stateMap.getAll().map { case (k, s, _) => (k, s) }.toTraversable }
+    trackStateDStream.flatMap[(K, S)] {
+      _.stateMap.getAll().map { case (k, s, _) => (k, s) }.toTraversable }
   }
 }
 

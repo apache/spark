@@ -349,7 +349,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     )
   }
 
-  def trackStateByKey[S: ClassTag, T: ClassTag](spec: TrackStateSpec[K, V, S, T]): EmittedRecordsDStream[K, V, S, T] = {
+  /** TODO: Add scala docs */
+  def trackStateByKey[S: ClassTag, T: ClassTag](
+    spec: TrackStateSpec[K, V, S, T]): EmittedRecordsDStream[K, V, S, T] = {
     new EmittedRecordsDStreamImpl[K, V, S, T](
       new TrackStateDStream[K, V, S, T](
         self,

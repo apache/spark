@@ -65,7 +65,9 @@ private[streaming] object StateMap {
 
 /** Specific implementation of SessionStore interface representing an empty map */
 private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMap[K, S] {
-  override def put(key: K, session: S, updateTime: Long): Unit = ???
+  override def put(key: K, session: S, updateTime: Long): Unit = {
+    throw new NotImplementedError("put() should not be called on an EmptyStateMap")
+  }
   override def get(key: K): Option[S] = None
   override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty
   override def getAll(): Iterator[(K, S, Long)] = Iterator.empty
@@ -184,7 +186,7 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
 
   override def toDebugString(): String = {
     val tabs = if (deltaChainLength > 0) {
-      ("    " * (deltaChainLength - 1)) +"+--- "
+      ("    " * (deltaChainLength - 1)) + "+--- "
     } else ""
     parentStateMap.toDebugString() + "\n" + deltaMap.iterator.mkString(tabs, "\n" + tabs, "")
   }

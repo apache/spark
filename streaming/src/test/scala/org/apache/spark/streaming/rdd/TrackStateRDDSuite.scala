@@ -128,8 +128,8 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       initStateRDD, Seq(("k1", 1)),                   // should increment k1's state 0 -> 1
       Set(("k1", 1, updateTime), ("k2", 0, initTime)))
 
-    val rdd4 = testStateUpdates(
-      rdd3, Seq(("x", 0), ("k2", 1), ("k2", 1), ("k3", 1)),     // should update k2, 0 -> 2 and create k3, 0
+    val rdd4 = testStateUpdates(rdd3,
+      Seq(("x", 0), ("k2", 1), ("k2", 1), ("k3", 1)),  // should update k2, 0 -> 2 and create k3, 0
       Set(("k1", 1, updateTime), ("k2", 2, updateTime), ("k3", 0, updateTime)))
 
     val rdd5 = testStateUpdates(

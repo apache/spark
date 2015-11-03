@@ -223,7 +223,7 @@ class StateMapSuite extends SparkFunSuite {
     var time = 1L
 
     for (setId <- 0 until numSets) {
-      for(opInSetId <- 0 until numOpsPerSet) {
+      for (opInSetId <- 0 until numOpsPerSet) {
         val opId = setId * numOpsPerSet + opInSetId
         for (keyId <- 0 until numKeys) {
           time += 1

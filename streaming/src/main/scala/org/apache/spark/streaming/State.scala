@@ -26,10 +26,10 @@ package org.apache.spark.streaming
  * }}}
  */
 sealed abstract class State[S] {
-  
+
   /** Whether the state already exists */
   def exists(): Boolean
-  
+
   /**
    * Get the state if it exists, otherwise wise it will throw an exception.
    * Check with `exists()` whether the state exists or not before calling `get()`.
@@ -56,7 +56,9 @@ sealed abstract class State[S] {
     if (exists) this.get else default
   }
 
-  @inline final override def toString() = getOption.map { _.toString }.getOrElse("<state not set>")
+  @inline final override def toString(): String = {
+    getOption.map { _.toString }.getOrElse("<state not set>")
+  }
 }
 
 /** Internal implementation of the [[State]] interface */

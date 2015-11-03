@@ -30,7 +30,7 @@ import org.apache.spark._
 
 private[streaming] case class TrackStateRDDRecord[K, S, T](
     var stateMap: StateMap[K, S], var emittedRecords: Seq[T]) {
-/*
+  /*
   private def writeObject(outputStream: ObjectOutputStream): Unit = {
     outputStream.writeObject(stateMap)
     outputStream.writeInt(emittedRecords.size)
@@ -165,7 +165,7 @@ private[streaming] object TrackStateRDD {
       partitioner: Partitioner,
       updateTime: Long): TrackStateRDD[K, V, S, T] = {
 
-    val rddOfTrackStateRecords =  pairRDD.partitionBy(partitioner).mapPartitions ({ iterator =>
+    val rddOfTrackStateRecords = pairRDD.partitionBy(partitioner).mapPartitions ({ iterator =>
       val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
       iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime) }
       Iterator(TrackStateRDDRecord(stateMap, Seq.empty[T]))

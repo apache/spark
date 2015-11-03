@@ -182,11 +182,9 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     val trackStateFunc = (key: String, value: Option[Int], state: State[Int]) => {
       if (state.exists) {
         state.remove()
-        println(s"$key: state exists, removed state, and returning key")
         Some(key)
       } else {
         state.update(value.get)
-        println(s"$key: State does not exists, saving state, and not returning anything")
         None
       }
     }
