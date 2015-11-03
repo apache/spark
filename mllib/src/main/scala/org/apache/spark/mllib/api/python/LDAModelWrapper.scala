@@ -16,11 +16,11 @@
  */
 package org.apache.spark.mllib.api.python
 
+import scala.collection.JavaConverters
+
 import org.apache.spark.SparkContext
-import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.mllib.clustering.LDAModel
 import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * Wrapper around LDAModel to provide helper methods in Python
@@ -31,17 +31,14 @@ private[python] class LDAModelWrapper(model: LDAModel) {
 
   def vocabSize(): Int = model.vocabSize
 
-  def describeTopics(jsc: JavaSparkContext): DataFrame = describeTopics(this.model.vocabSize, jsc)
+  def describeTopics(): java.util.List[Array[Any]] = describeTopics(this.model.vocabSize)
 
-  def describeTopics(maxTermsPerTopic: Int, jsc: JavaSparkContext): DataFrame = {
-    val sqlContext = new SQLContext(jsc.sc)
-    import sqlContext.implicits._
+  def describeTopics(maxTermsPerTopic: Int): java.util.List[Array[Any]] = {
 
-    // Since the return value of `describeTopics` is a little complicated,
-    // the return value are converted to `Row` to take advantage of DataFrame serialization.
-    val topics = model.describeTopics(maxTermsPerTopic)
-    val rdd = jsc.sc.parallelize(topics)
-    rdd.toDF("terms", "termWeights")
+    val seq = model.describeTopics(maxTermsPerTopic).map { case (terms, termWeights) =>
+        Array.empty[Any] ++ terms ++ termWeights
+      }.toSeq
+    JavaConverters.seqAsJavaListConverter(seq).asJava
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)

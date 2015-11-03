@@ -741,18 +741,20 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
         WARNING: If vocabSize and k are large, this can return a large object!
         """
         if maxTermsPerTopic is None:
-            df = self.call("describeTopics", self._sc)
+            topics = self.call("describeTopics")
         else:
-            df = self.call("describeTopics", maxTermsPerTopic, self._sc)
+            topics = self.call("describeTopics", maxTermsPerTopic)
 
+        # Converts the result to make the format similar to Scala.
+        # The returned value is mixed up with topics and topi weights.
         converted = []
-        rows = df.collect()
-        for row in df.collect():
-            terms = row["terms"]
-            termWeights = row["termWeights"]
-            if len(terms) != len(termWeights):
+        for elms in [list(elms) for elms in topics]:
+            half_len = int(len(elms) / 2)
+            topics = elms[:half_len]
+            topicWeights = elms[(-1 * half_len):]
+            if len(topics) != len(topicWeights):
                 raise TypeError("Something wrong with a return value: %s" % (topics))
-            converted.append((terms, termWeights))
+            converted.append((topics, topicWeights))
         return converted
 
     @classmethod
