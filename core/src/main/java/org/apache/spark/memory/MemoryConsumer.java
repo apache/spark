@@ -41,7 +41,7 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Returns the size of used on-heap memory in bytes.
+   * Returns the size, in bytes, of used memory of the specified mode.
    */
   long getMemoryUsed(MemoryMode mode) {
     if (mode == MemoryMode.ON_HEAP) {
