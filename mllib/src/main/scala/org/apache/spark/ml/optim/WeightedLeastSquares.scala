@@ -115,7 +115,8 @@ private[ml] class WeightedLeastSquares(
 
     val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
     // aaInv is a packed upper triangular matrix, here we get all elements on diagonal
-    val diagInvAtWA = new DenseVector((1 to k).map{ i => aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
+    val diagInvAtWA = new DenseVector((1 to k).map { i =>
+      aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
 
     // compute intercept
     val intercept = if (fitIntercept) {
