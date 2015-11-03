@@ -106,7 +106,7 @@ sealed abstract class Attribute extends Serializable {
       .withMetadata(existingMetadata)
       .putMetadata(AttributeKeys.ML_ATTR, withoutName.withoutIndex.toMetadataImpl())
       .build()
-    StructField(name.get, DoubleType, nullable = false, newMetadata)
+    StructField(name.get, DoubleType, nullable = true, newMetadata)
   }
 
   /** Converts to a [[StructField]]. */
