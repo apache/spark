@@ -40,6 +40,10 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
+    // run only once, and before other condition push-down optimizations
+    // FIXME: need a better way of identifying if rule was already applied. attribute.nullable do not help
+    Batch("Join Skew optimization", FixedPoint(1),
+      JoinSkewOptimizer) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -974,5 +978,48 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
       a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * For an inner join - remove rows with null keys on both sides
+ */
+object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Adds a null filter on given columns, if any
+   */
+  def addNullFilter(columns: AttributeSet, expr: LogicalPlan) = {
+    columns.map(IsNotNull(_))
+      .reduceLeftOption(And)
+      .map(Filter(_, expr))
+      .getOrElse(expr)
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f@Join(left, right, joinType, joinCondition) =>
+      // get "real" join conditions, which refer both left and right
+      val joinConditionsOnBothRelations = joinCondition
+        .map(splitConjunctivePredicates).getOrElse(Nil)
+        .filter(cond => !canEvaluate(cond, left) && !canEvaluate(cond, right))
+
+      def nullableJoinKeys(leftOrRight: LogicalPlan) = {
+        val joinKeys = leftOrRight.outputSet.intersect(
+          joinConditionsOnBothRelations.map(_.references).reduceLeftOption(_ ++ _).getOrElse(AttributeSet.empty)
+        )
+        joinKeys.filter(_.nullable)
+      }
+
+      def hasNullableKeys = Seq(left, right).exists(nullableJoinKeys(_).nonEmpty)
+
+      joinType match {
+        case _ @ (Inner | LeftSemi) if hasNullableKeys =>
+          // add a non-null keys filter for both sides sub queries
+          val newLeft = addNullFilter(nullableJoinKeys(left), left)
+          val newRight = addNullFilter(nullableJoinKeys(right), right)
+
+          Join(newLeft, newRight, joinType, joinCondition)
+
+        case _ => f
+      }
   }
 }

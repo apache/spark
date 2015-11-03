@@ -33,6 +33,8 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
+      Batch("Join Skew optimization", FixedPoint(1),
+          JoinSkewOptimizer) ::
       Batch("Filter Pushdown", Once,
         SamplePushDown,
         CombineFilters,
@@ -279,7 +281,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("joins: push down left semi join") {
+  test("joins: push down left semi join, and add null filter") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
 
@@ -288,8 +290,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b >= 1)
-    val right = testRelation1.where('d >= 2)
+    val left = testRelation.where('a.isNotNull).where('b >= 1)
+    val right = testRelation1.where('d.isNotNull).where('d >= 2)
     val correctAnswer =
       left.join(right, LeftSemi, Option("a".attr === "d".attr)).analyze
 
@@ -474,7 +476,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("joins: can't push down") {
+  test("joins: can't push down query filters, but inner join can be optimized for null skew") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
@@ -483,7 +485,11 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateSubQueries(originalQuery.analyze), optimized)
+    val expectedQueryWithNullFilters = {
+      x.where('b.isNotNull)
+        .join(y.where('b.isNotNull), condition = Some("x.b".attr === "y.b".attr))
+    }
+    comparePlans(analysis.EliminateSubQueries(expectedQueryWithNullFilters.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
