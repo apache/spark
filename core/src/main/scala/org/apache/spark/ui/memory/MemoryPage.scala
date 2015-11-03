@@ -44,9 +44,9 @@ private[ui] class MemoryPage(parent: MemoryTab) extends WebUIPage("") {
 
     val activeExecMemTable = new MemTableBase(activeMemInfoSorted, memoryListener)
     val removedExecMemTable = new MemTableBase(removedMemInfoSorted, memoryListener)
-    val completedStagesTable = new stagesTableBase(
+    val completedStagesTable = new StagesTableBase(
       completedStages, parent.basePath, progressListener)
-    val failedStagesTable = new stagesTableBase(failedStages, parent.basePath, progressListener)
+    val failedStagesTable = new StagesTableBase(failedStages, parent.basePath, progressListener)
 
     val summary: NodeSeq =
       <div>

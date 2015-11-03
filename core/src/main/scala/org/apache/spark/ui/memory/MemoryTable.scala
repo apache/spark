@@ -93,7 +93,7 @@ private[ui] class MemTableBase(
   }
 }
 
-private[ui] class stagesTableBase(
+private[ui] class StagesTableBase(
     stageInfos: Seq[StageInfo],
     basePath: String,
     listener: JobProgressListener) {
