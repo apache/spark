@@ -466,9 +466,9 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | ident <~ "." ~ "*" ^^ { case tableName => UnresolvedStar(Option(tableName)) }
-    | primary
-    )
+    | (ident <~ "."). + <~ "*" ^^ { case target => { UnresolvedStar(Option(target)) }
+    } | primary
+   )
 
   protected lazy val signedPrimary: Parser[Expression] =
     sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e }

@@ -60,7 +60,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
+    case _ if name.endsWith(".*") => UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(
+      name.substring(0, name.length - 2))))
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
