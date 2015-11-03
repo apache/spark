@@ -80,11 +80,17 @@ def action_logging(action):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             session = settings.Session()
+
+            if hasattr(login.current_user, 'username'):
+                user = login.current_user.username
+            else:
+                user = 'anonymous'
+
             session.add(
                 models.Log(
                     event=action,
                     task_instance=None,
-                    owner=login.current_user.username
+                    owner=user
                     ))
             session.commit()
             return f(*args, **kwargs)
