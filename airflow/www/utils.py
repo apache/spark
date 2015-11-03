@@ -13,9 +13,7 @@ import wtforms
 from wtforms.compat import text_type
 
 from airflow.configuration import conf
-from airflow import login
-from airflow import models
-from airflow import settings
+from airflow import login, models, settings
 AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
 
 
@@ -90,8 +88,7 @@ def action_logging(action):
                 models.Log(
                     event=action,
                     task_instance=None,
-                    owner=user
-                    ))
+                    owner=user))
             session.commit()
             return f(*args, **kwargs)
         return wrapper
