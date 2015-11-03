@@ -166,9 +166,9 @@ public class JavaAPISuite implements Serializable {
     long s0 = splits[0].count();
     long s1 = splits[1].count();
     long s2 = splits[2].count();
-    Assert.assertTrue(s0 + " not within expected range", s0 > 100 && s0 < 300);
-    Assert.assertTrue(s1 + " not within expected range", s1 > 200 && s0 < 400);
-    Assert.assertTrue(s2 + " not within expected range", s2 > 500 && s2 < 700);
+    Assert.assertTrue(s0 + " not within expected range", s0 > 150 && s0 < 250);
+    Assert.assertTrue(s1 + " not within expected range", s1 > 250 && s0 < 350);
+    Assert.assertTrue(s2 + " not within expected range", s2 > 430 && s2 < 570);
   }
 
   @Test
