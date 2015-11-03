@@ -240,7 +240,10 @@ class Analyzer(
           x.child
         }
 
-        // We will insert another Projection if the GROUP BY keys are contained in the
+        // When expanding the input rows during evaluation, the column values will be set to
+        // null for the grouping sets that contains null (e.g., (null, null)). If these values
+        // are also used in aggregation, the aggregated values are always null.
+        // Thus, we will insert another Projection if the GROUP BY keys are contained in the
         // aggregation. And the top operators can references those keys by its alias.
         // e.g. SELECT a, b, sum(a) FROM src GROUP BY a, b with rollup ==>
         //      SELECT a, b, sum(a1) FROM (SELECT a, b, a AS a1 FROM src) GROUP BY a, b with rollup
@@ -254,7 +257,7 @@ class Analyzer(
 
         val alias4AttrInAggregatedFuncAndGroupBy = new ArrayBuffer[Alias]()
 
-        // Generate alias for each attribute in attrInAggregatedFuncAndGroupBy
+        // generate alias for each attribute in attrInAggregatedFuncAndGroupBy
         val attrInAggregatedFuncPairs = attrInAggregatedFuncAndGroupBy.map(a => {
           val alias = Alias(a, a.toString)()
           alias4AttrInAggregatedFuncAndGroupBy += alias
@@ -277,6 +280,8 @@ class Analyzer(
         }
 
         val newChild = if (alias4AttrInAggregatedFuncAndGroupBy.nonEmpty) {
+          // When applying this rule, two Projections could be generated.
+          // Here, we expect the optimizer can collapse them.
           Project(child.output ++ alias4AttrInAggregatedFuncAndGroupBy, child)
         } else {
           child
