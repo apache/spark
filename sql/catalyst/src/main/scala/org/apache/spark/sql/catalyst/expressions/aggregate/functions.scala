@@ -23,6 +23,7 @@ import java.util
 import com.clearspring.analytics.hash.MurmurHash
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -56,37 +57,37 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case _ => DoubleType
   }
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val sum = AttributeReference("sum", sumDataType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentSum :: currentCount :: Nil
+  override val aggBufferAttributes = sum :: count :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Cast(Literal(0), sumDataType),
-    /* currentCount = */ Literal(0L)
+    /* sum = */ Cast(Literal(0), sumDataType),
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
+    /* sum = */
     Add(
-      currentSum,
+      sum,
       Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentSum = */ currentSum.left + currentSum.right,
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* sum = */ sum.left + sum.right,
+    /* count = */ count.left + count.right
   )
 
-  // If all input are nulls, currentCount will be 0 and we will get null after the division.
+  // If all input are nulls, count will be 0 and we will get null after the division.
   override val evaluateExpression = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)
-      Cast(Cast(currentSum, dt) / Cast(currentCount, dt), resultType)
+      Cast(Cast(sum, dt) / Cast(count, dt), resultType)
     case _ =>
-      Cast(currentSum, resultType) / Cast(currentCount, resultType)
+      Cast(sum, resultType) / Cast(count, resultType)
   }
 }
 
@@ -101,23 +102,23 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentCount :: Nil
+  override val aggBufferAttributes = count :: Nil
 
   override val initialValues = Seq(
-    /* currentCount = */ Literal(0L)
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* count = */ count.left + count.right
   )
 
-  override val evaluateExpression = Cast(currentCount, LongType)
+  override val evaluateExpression = Cast(count, LongType)
 }
 
 /**
@@ -371,101 +372,77 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   private val resultType = DoubleType
 
-  private val preCount = AttributeReference("preCount", resultType)()
-  private val currentCount = AttributeReference("currentCount", resultType)()
-  private val preAvg = AttributeReference("preAvg", resultType)()
-  private val currentAvg = AttributeReference("currentAvg", resultType)()
-  private val currentMk = AttributeReference("currentMk", resultType)()
+  private val count = AttributeReference("count", resultType)()
+  private val avg = AttributeReference("avg", resultType)()
+  private val mk = AttributeReference("mk", resultType)()
 
-  override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
-                                  currentAvg :: currentMk :: Nil
+  override val aggBufferAttributes = count :: avg :: mk :: Nil
 
   override val initialValues = Seq(
-    /* preCount = */ Cast(Literal(0), resultType),
-    /* currentCount = */ Cast(Literal(0), resultType),
-    /* preAvg = */ Cast(Literal(0), resultType),
-    /* currentAvg = */ Cast(Literal(0), resultType),
-    /* currentMk = */ Cast(Literal(0), resultType)
+    /* count = */ Cast(Literal(0), resultType),
+    /* avg = */ Cast(Literal(0), resultType),
+    /* mk = */ Cast(Literal(0), resultType)
   )
 
   override val updateExpressions = {
+    val value = Cast(child, resultType)
+    val newCount = count + Cast(Literal(1), resultType)
 
     // update average
     // avg = avg + (value - avg)/count
-    def avgAdd: Expression = {
-      currentAvg + ((Cast(child, resultType) - currentAvg) / currentCount)
-    }
+    val newAvg = avg + (value - avg) / newCount
 
     // update sum of square of difference from mean
     // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    def mkAdd: Expression = {
-      val delta1 = Cast(child, resultType) - preAvg
-      val delta2 = Cast(child, resultType) - currentAvg
-      currentMk + (delta1 * delta2)
-    }
+    val newMk = mk + (value - avg) * (value - newAvg)
 
     Seq(
-      /* preCount = */ If(IsNull(child), preCount, currentCount),
-      /* currentCount = */ If(IsNull(child), currentCount,
-                           Add(currentCount, Cast(Literal(1), resultType))),
-      /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
-      /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
-      /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
+      /* count = */ If(IsNull(child), count, newCount),
+      /* avg = */ If(IsNull(child), avg, newAvg),
+      /* mk = */ If(IsNull(child), mk, newMk)
     )
   }
 
   override val mergeExpressions = {
 
     // count merge
-    def countMerge: Expression = {
-      currentCount.left + currentCount.right
-    }
+    val newCount = count.left + count.right
 
     // average merge
-    def avgMerge: Expression = {
-      ((currentAvg.left * preCount) + (currentAvg.right * currentCount.right)) /
-      (preCount + currentCount.right)
-    }
+    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
 
     // update sum of square differences
-    def mkMerge: Expression = {
-      val avgDelta = currentAvg.right - preAvg
-      val mkDelta = (avgDelta * avgDelta) * (preCount * currentCount.right) /
-        (preCount + currentCount.right)
-
-      currentMk.left + currentMk.right + mkDelta
+    val newMk = {
+      val avgDelta = avg.right - avg.left
+      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
+      mk.left + mk.right + mkDelta
     }
 
     Seq(
-      /* preCount = */ If(IsNull(currentCount.left),
-                         Cast(Literal(0), resultType), currentCount.left),
-      /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
-                             If(IsNull(currentCount.right), currentCount.left, countMerge)),
-      /* preAvg = */ If(IsNull(currentAvg.left), Cast(Literal(0), resultType), currentAvg.left),
-      /* currentAvg = */ If(IsNull(currentAvg.left), currentAvg.right,
-                           If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
-      /* currentMk = */ If(IsNull(currentMk.left), currentMk.right,
-                          If(IsNull(currentMk.right), currentMk.left, mkMerge))
+      /* count = */ If(IsNull(count.left), count.right,
+                       If(IsNull(count.right), count.left, newCount)),
+      /* avg = */ If(IsNull(avg.left), avg.right,
+                     If(IsNull(avg.right), avg.left, newAvg)),
+      /* mk = */ If(IsNull(mk.left), mk.right,
+                    If(IsNull(mk.right), mk.left, newMk))
     )
   }
 
   override val evaluateExpression = {
-    // when currentCount == 0, return null
-    // when currentCount == 1, return 0
-    // when currentCount >1
-    // stddev_samp = sqrt (currentMk/(currentCount -1))
-    // stddev_pop = sqrt (currentMk/currentCount)
-    val varCol = {
+    // when count == 0, return null
+    // when count == 1, return 0
+    // when count >1
+    // stddev_samp = sqrt (mk/(count -1))
+    // stddev_pop = sqrt (mk/count)
+    val varCol =
       if (isSample) {
-        currentMk / Cast((currentCount - Cast(Literal(1), resultType)), resultType)
+        mk / Cast((count - Cast(Literal(1), resultType)), resultType)
+      } else {
+        mk / count
       }
-      else {
-        currentMk / currentCount
-      }
-    }
 
-    If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-      If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+    If(EqualTo(count, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(count, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
         Cast(Sqrt(varCol), resultType)))
   }
 }
@@ -498,30 +475,188 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   private val sumDataType = resultType
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
+  private val sum = AttributeReference("sum", sumDataType)()
 
   private val zero = Cast(Literal(0), sumDataType)
 
-  override val aggBufferAttributes = currentSum :: Nil
+  override val aggBufferAttributes = sum :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Literal.create(null, sumDataType)
+    /* sum = */ Literal.create(null, sumDataType)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
-    Coalesce(Seq(Add(Coalesce(Seq(currentSum, zero)), Cast(child, sumDataType)), currentSum))
+    /* sum = */
+    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
   )
 
   override val mergeExpressions = {
-    val add = Add(Coalesce(Seq(currentSum.left, zero)), Cast(currentSum.right, sumDataType))
+    val add = Add(Coalesce(Seq(sum.left, zero)), Cast(sum.right, sumDataType))
     Seq(
-      /* currentSum = */
-      Coalesce(Seq(add, currentSum.left))
+      /* sum = */
+      Coalesce(Seq(add, sum.left))
     )
   }
 
-  override val evaluateExpression = Cast(currentSum, resultType)
+  override val evaluateExpression = Cast(sum, resultType)
+}
+
+/**
+ * Compute Pearson correlation between two expressions.
+ * When applied on empty data (i.e., count is zero), it returns NULL.
+ *
+ * Definition of Pearson correlation can be found at
+ * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
+ *
+ * @param left one of the expressions to compute correlation with.
+ * @param right another expression to compute correlation with.
+ */
+case class Corr(
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate {
+
+  def children: Seq[Expression] = Seq(left, right)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = DoubleType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+
+  def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  def inputAggBufferAttributes: Seq[AttributeReference] = aggBufferAttributes.map(_.newInstance())
+
+  val aggBufferAttributes: Seq[AttributeReference] = Seq(
+    AttributeReference("xAvg", DoubleType)(),
+    AttributeReference("yAvg", DoubleType)(),
+    AttributeReference("Ck", DoubleType)(),
+    AttributeReference("MkX", DoubleType)(),
+    AttributeReference("MkY", DoubleType)(),
+    AttributeReference("count", LongType)())
+
+  // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
+  private[this] val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
+  private[this] val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
+  private[this] val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
+  private[this] val mutableAggBufferOffsetPlus4 = mutableAggBufferOffset + 4
+  private[this] val mutableAggBufferOffsetPlus5 = mutableAggBufferOffset + 5
+
+  // Local cache of inputAggBufferOffset(s) that will be used in update and merge
+  private[this] val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
+  private[this] val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
+  private[this] val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
+  private[this] val inputAggBufferOffsetPlus4 = inputAggBufferOffset + 4
+  private[this] val inputAggBufferOffsetPlus5 = inputAggBufferOffset + 5
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.setDouble(mutableAggBufferOffset, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus3, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus4, 0.0)
+    buffer.setLong(mutableAggBufferOffsetPlus5, 0L)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
+
+    if (leftEval != null && rightEval != null) {
+      val x = leftEval.asInstanceOf[Double]
+      val y = rightEval.asInstanceOf[Double]
+
+      var xAvg = buffer.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer.getLong(mutableAggBufferOffsetPlus5)
+
+      val deltaX = x - xAvg
+      val deltaY = y - yAvg
+      count += 1
+      xAvg += deltaX / count
+      yAvg += deltaY / count
+      Ck += deltaX * (y - yAvg)
+      MkX += deltaX * (x - xAvg)
+      MkY += deltaY * (y - yAvg)
+
+      buffer.setDouble(mutableAggBufferOffset, xAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  // Merge counters from other partitions. Formula can be found at:
+  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val count2 = buffer2.getLong(inputAggBufferOffsetPlus5)
+
+    // We only go to merge two buffers if there is at least one record aggregated in buffer2.
+    // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
+    // is more than zero too, then we won't get a divide by zero exception.
+    if (count2 > 0) {
+      var xAvg = buffer1.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer1.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer1.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer1.getLong(mutableAggBufferOffsetPlus5)
+
+      val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
+      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
+      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
+      val MkX2 = buffer2.getDouble(inputAggBufferOffsetPlus3)
+      val MkY2 = buffer2.getDouble(inputAggBufferOffsetPlus4)
+
+      val totalCount = count + count2
+      val deltaX = xAvg - xAvg2
+      val deltaY = yAvg - yAvg2
+      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
+      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
+      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
+      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
+      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
+      count = totalCount
+
+      buffer1.setDouble(mutableAggBufferOffset, xAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer1.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer1.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer1.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    val count = buffer.getLong(mutableAggBufferOffsetPlus5)
+    if (count > 0) {
+      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      val corr = Ck / math.sqrt(MkX * MkY)
+      if (corr.isNaN) {
+        null
+      } else {
+        corr
+      }
+    } else {
+      null
+    }
+  }
 }
 
 // scalastyle:off

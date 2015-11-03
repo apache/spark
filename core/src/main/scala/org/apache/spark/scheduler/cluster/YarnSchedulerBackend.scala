@@ -170,13 +170,12 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
-        // See SPARK-10987.
-        am.send(DriverHello)
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
       case RemoveExecutor(executorId, reason) =>
+        logWarning(reason.toString)
         removeExecutor(executorId, reason)
     }
 
