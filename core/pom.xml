@@ -174,10 +174,6 @@
       <artifactId>lz4</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.roaringbitmap</groupId>
-      <artifactId>RoaringBitmap</artifactId>
-    </dependency>
-    <dependency>
       <groupId>commons-net</groupId>
       <artifactId>commons-net</artifactId>
     </dependency>
@@ -266,7 +262,7 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
-      <version>0.8.0</version>
+      <version>0.7.1</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
@@ -287,6 +283,10 @@
         <exclusion>
           <groupId>org.tachyonproject</groupId>
           <artifactId>tachyon-underfs-glusterfs</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.tachyonproject</groupId>
+          <artifactId>tachyon-underfs-s3</artifactId>
         </exclusion>
       </exclusions>
     </dependency>

@@ -26,7 +26,21 @@ import org.apache.spark.SparkException
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.rpc.RpcAddress
 
-private[netty] case class OutboxMessage(content: Array[Byte], callback: RpcResponseCallback)
+private[netty] case class OutboxMessage(content: Array[Byte],
+  _onFailure: (Throwable) => Unit,
+  _onSuccess: (TransportClient, Array[Byte]) => Unit) {
+
+  def createCallback(client: TransportClient): RpcResponseCallback = new RpcResponseCallback() {
+    override def onFailure(e: Throwable): Unit = {
+      _onFailure(e)
+    }
+
+    override def onSuccess(response: Array[Byte]): Unit = {
+      _onSuccess(client, response)
+    }
+  }
+
+}
 
 private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
 
@@ -68,7 +82,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       }
     }
     if (dropped) {
-      message.callback.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
+      message._onFailure(new SparkException("Message is dropped because Outbox is stopped"))
     } else {
       drainOutbox()
     }
@@ -108,7 +122,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       try {
         val _client = synchronized { client }
         if (_client != null) {
-          _client.sendRpc(message.content, message.callback)
+          _client.sendRpc(message.content, message.createCallback(_client))
         } else {
           assert(stopped == true)
         }
@@ -181,7 +195,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
     // update messages and it's safe to just drain the queue.
     var message = messages.poll()
     while (message != null) {
-      message.callback.onFailure(e)
+      message._onFailure(e)
       message = messages.poll()
     }
     assert(messages.isEmpty)
@@ -215,7 +229,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
     // update messages and it's safe to just drain the queue.
     var message = messages.poll()
     while (message != null) {
-      message.callback.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
+      message._onFailure(new SparkException("Message is dropped because Outbox is stopped"))
       message = messages.poll()
     }
   }
