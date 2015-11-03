@@ -41,10 +41,10 @@ module Jekyll
       rendered_code = Pygments.highlight(code, :lexer => @lang)
 
       spark_version = site.config['SPARK_VERSION_SHORT']
-      hint = "<div class=\"hint\">Find the example here: " \
+      hint = "<div class=\"hint\"><small>Find full example code here: " \
         "<a href=\"https://github.com/apache/spark/tree/" \
         "v#{spark_version}/examples/src/main/#{clean_markup}\">" \
-        "examples/src/main/#{clean_markup}</a></div>"
+        "examples/src/main/#{clean_markup}</a></small></div>"
 
       rendered_code + hint
     end
