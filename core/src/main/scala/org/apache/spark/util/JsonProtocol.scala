@@ -367,7 +367,7 @@ private[spark] object JsonProtocol {
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
-      case ExecutorLostFailure(executorId, exitCausedByApp) =>
+      case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
         ("Executor ID" -> executorId) ~
         ("Exit Caused By App" -> exitCausedByApp) ~
         ("Loss Reason" -> reason.map(_.toString))
