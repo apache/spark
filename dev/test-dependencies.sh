@@ -53,7 +53,7 @@ $MVN install -q \
   -DskipTests
 
 echo "Generating dependency manifest"
-$MVN dependency:build-classpath \
+$MVN dependency:build-classpath -pl assembly \
   | grep "Building Spark Project Assembly" -A 5 \
   | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
   | grep -v spark > dev/pr-deps
