@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.TaskContext
-import org.apache.spark.rdd.{MapPartitionsWithPreparationRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, UnsafeFixedWidthAggregationMap}
 import org.apache.spark.sql.types.StructType
 
 case class TungstenAggregate(
@@ -84,59 +83,39 @@ case class TungstenAggregate(
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
-    /**
-     * Set up the underlying unsafe data structures used before computing the parent partition.
-     * This makes sure our iterator is not starved by other operators in the same task.
-     */
-    def preparePartition(): TungstenAggregationIterator = {
-      new TungstenAggregationIterator(
-        groupingExpressions,
-        nonCompleteAggregateExpressions,
-        nonCompleteAggregateAttributes,
-        completeAggregateExpressions,
-        completeAggregateAttributes,
-        initialInputBufferOffset,
-        resultExpressions,
-        newMutableProjection,
-        child.output,
-        testFallbackStartsAt,
-        numInputRows,
-        numOutputRows,
-        dataSize,
-        spillSize)
-    }
+    child.execute().mapPartitions { iter =>
 
-    /** Compute a partition using the iterator already set up previously. */
-    def executePartition(
-        context: TaskContext,
-        partitionIndex: Int,
-        aggregationIterator: TungstenAggregationIterator,
-        parentIterator: Iterator[InternalRow]): Iterator[UnsafeRow] = {
-      val hasInput = parentIterator.hasNext
-      if (!hasInput) {
-        // We're not using the underlying map, so we just can free it here
-        aggregationIterator.free()
-        if (groupingExpressions.isEmpty) {
+      val hasInput = iter.hasNext
+      if (!hasInput && groupingExpressions.nonEmpty) {
+        // This is a grouped aggregate and the input iterator is empty,
+        // so return an empty iterator.
+        Iterator.empty
+      } else {
+        val aggregationIterator =
+          new TungstenAggregationIterator(
+            groupingExpressions,
+            nonCompleteAggregateExpressions,
+            nonCompleteAggregateAttributes,
+            completeAggregateExpressions,
+            completeAggregateAttributes,
+            initialInputBufferOffset,
+            resultExpressions,
+            newMutableProjection,
+            child.output,
+            iter,
+            testFallbackStartsAt,
+            numInputRows,
+            numOutputRows,
+            dataSize,
+            spillSize)
+        if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
-          // This is a grouped aggregate and the input iterator is empty,
-          // so return an empty iterator.
-          Iterator.empty
+          aggregationIterator
         }
-      } else {
-        aggregationIterator.start(parentIterator)
-        aggregationIterator
       }
     }
-
-    // Note: we need to set up the iterator in each partition before computing the
-    // parent partition, so we cannot simply use `mapPartitions` here (SPARK-9747).
-    val resultRdd = {
-      new MapPartitionsWithPreparationRDD[UnsafeRow, InternalRow, TungstenAggregationIterator](
-        child.execute(), preparePartition, executePartition, preservesPartitioning = true)
-    }
-    resultRdd.asInstanceOf[RDD[InternalRow]]
   }
 
   override def simpleString: String = {

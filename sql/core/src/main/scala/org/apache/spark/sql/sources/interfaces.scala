@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
 
@@ -43,7 +43,7 @@ import org.apache.spark.util.SerializableConfiguration
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
  *
- * A new instance of this class with be instantiated each time a DDL call is made.
+ * A new instance of this class will be instantiated each time a DDL call is made.
  *
  * @since 1.5.0
  */
@@ -74,7 +74,7 @@ trait DataSourceRegister {
  * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
- * A new instance of this class with be instantiated each time a DDL call is made.
+ * A new instance of this class will be instantiated each time a DDL call is made.
  *
  * @since 1.3.0
  */
@@ -100,7 +100,7 @@ trait RelationProvider {
  * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
- * A new instance of this class with be instantiated each time a DDL call is made.
+ * A new instance of this class will be instantiated each time a DDL call is made.
  *
  * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
  * users need to provide a schema when using a [[SchemaRelationProvider]].
@@ -135,7 +135,7 @@ trait SchemaRelationProvider {
  * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
- * A new instance of this class with be instantiated each time a DDL call is made.
+ * A new instance of this class will be instantiated each time a DDL call is made.
  *
  * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
  * that users need to provide a schema and a (possibly empty) list of partition columns when
@@ -195,7 +195,7 @@ trait CreatableRelationProvider {
  * implementation should inherit from one of the descendant `Scan` classes, which define various
  * abstract methods for execution.
  *
- * BaseRelations must also define a equality function that only returns true when the two
+ * BaseRelations must also define an equality function that only returns true when the two
  * instances will return the same data. This equality function is used when determining when
  * it is safe to substitute cached results for a given relation.
  *
@@ -208,7 +208,7 @@ abstract class BaseRelation {
 
   /**
    * Returns an estimated size of this relation in bytes. This information is used by the planner
-   * to decided when it is safe to broadcast a relation and can be overridden by sources that
+   * to decide when it is safe to broadcast a relation and can be overridden by sources that
    * know the size ahead of time. By default, the system will assume that tables are too
    * large to broadcast. This method will be called multiple times during query planning
    * and thus should not perform expensive operations for each invocation.
@@ -383,7 +383,7 @@ abstract class OutputWriter {
 
 /**
  * ::Experimental::
- * A [[BaseRelation]] that provides much of the common code required for formats that store their
+ * A [[BaseRelation]] that provides much of the common code required for relations that store their
  * data to an HDFS compatible filesystem.
  *
  * For the read path, similar to [[PrunedFilteredScan]], it can eliminate unneeded columns and
@@ -544,11 +544,32 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
-    val typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled()
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-      typeInference)
+    userDefinedPartitionColumns match {
+      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
+        val spec = PartitioningUtils.parsePartitions(
+          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference = false)
+
+        // Without auto inference, all of value in the `row` should be null or in StringType,
+        // we need to cast into the data type that user specified.
+        def castPartitionValuesToUserSchema(row: InternalRow) = {
+          InternalRow((0 until row.numFields).map { i =>
+            Cast(
+              Literal.create(row.getString(i), StringType),
+              userProvidedSchema.fields(i).dataType).eval()
+          }: _*)
+        }
+
+        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
+          part.copy(values = castPartitionValuesToUserSchema(part.values))
+        })
+
+      case _ =>
+        // user did not provide a partitioning schema
+        PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled())
+    }
   }
 
   /**
@@ -564,11 +585,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  final private[sql] def buildScan(
+  final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -583,7 +604,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
@@ -717,6 +738,44 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
     buildScan(requiredColumns, filters, inputFiles)
+  }
+
+  /**
+   * For a non-partitioned relation, this method builds an `RDD[InternalRow]` containing all rows
+   * within this relation. For partitioned relations, this method is called for each selected
+   * partition, and builds an `RDD[InternalRow]` containing all rows within that single partition.
+   *
+   * Note:
+   *
+   * 1. Rows contained in the returned `RDD[InternalRow]` are assumed to be `UnsafeRow`s.
+   * 2. This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *        overhead of broadcasting the Configuration for every Hadoop RDD.
+   */
+  private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val requiredSchema = StructType(requiredColumns.map(dataSchema.apply))
+    val internalRows = {
+      val externalRows = buildScan(requiredColumns, filters, inputFiles, broadcastedConf)
+      execution.RDDConversions.rowToRowRdd(externalRows, requiredSchema.map(_.dataType))
+    }
+
+    internalRows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredSchema)
+      iterator.map(unsafeProjection)
+    }
   }
 
   /**

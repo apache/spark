@@ -24,10 +24,14 @@ import scala.util.Random
 
 import org.scalatest.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.execution.Exchange
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.test.SQLTestData.TestData2
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.test.{ExamplePointUDT, ExamplePoint, SharedSQLContext}
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -103,6 +107,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.take(2) === testData.collect().take(2))
     assert(testData.head(2) === testData.collect().take(2))
     assert(testData.head(2).head.schema === testData.schema)
+  }
+
+  test("dataframe alias") {
+    val df = Seq(Tuple1(1)).toDF("c").as("t")
+    val dfAlias = df.alias("t2")
+    df.col("t.c")
+    dfAlias.col("t2.c")
   }
 
   test("simple explode") {
@@ -388,13 +399,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value"))
   }
 
-  test("drop unknown column with same name (no-op) with column reference") {
+  test("drop unknown column with same name with column reference") {
     val col = Column("key")
     val df = testData.drop(col)
     checkAnswer(
       df,
-      testData.collect().toSeq)
-    assert(df.schema.map(_.name) === Seq("key", "value"))
+      testData.collect().map(x => Row(x.getString(1))).toSeq)
+    assert(df.schema.map(_.name) === Seq("value"))
   }
 
   test("drop column after join with duplicate columns using column reference") {
@@ -974,5 +985,132 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       except.filter('i < rand(7) * 10),
       expected(except)
     )
+  }
+
+  test("SPARK-10743: keep the name of expression if possible when do cast") {
+    val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
+    assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+  }
+
+  test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
+        val df = sqlContext.read.parquet(path.getAbsolutePath)
+        checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
+      }
+    }
+  }
+
+  /**
+   * Verifies that there is no Exchange between the Aggregations for `df`
+   */
+  private def verifyNonExchangingAgg(df: DataFrame) = {
+    var atFirstAgg: Boolean = false
+    df.queryExecution.executedPlan.foreach {
+      case agg: TungstenAggregate => {
+        atFirstAgg = !atFirstAgg
+      }
+      case _ => {
+        if (atFirstAgg) {
+          fail("Should not have operators between the two aggregations")
+        }
+      }
+    }
+  }
+
+  /**
+   * Verifies that there is an Exchange between the Aggregations for `df`
+   */
+  private def verifyExchangingAgg(df: DataFrame) = {
+    var atFirstAgg: Boolean = false
+    df.queryExecution.executedPlan.foreach {
+      case agg: TungstenAggregate => {
+        if (atFirstAgg) {
+          fail("Should not have back to back Aggregates")
+        }
+        atFirstAgg = true
+      }
+      case e: Exchange => atFirstAgg = false
+      case _ =>
+    }
+  }
+
+  test("distributeBy and localSort") {
+    val original = testData.repartition(1)
+    assert(original.rdd.partitions.length == 1)
+    val df = original.distributeBy(Column("key") :: Nil, 5)
+    assert(df.rdd.partitions.length  == 5)
+    checkAnswer(original.select(), df.select())
+
+    val df2 = original.distributeBy(Column("key") :: Nil, 10)
+    assert(df2.rdd.partitions.length  == 10)
+    checkAnswer(original.select(), df2.select())
+
+    // Group by the column we are distributed by. This should generate a plan with no exchange
+    // between the aggregates
+    val df3 = testData.distributeBy(Column("key") :: Nil).groupBy("key").count()
+    verifyNonExchangingAgg(df3)
+    verifyNonExchangingAgg(testData.distributeBy(Column("key") :: Column("value") :: Nil)
+      .groupBy("key", "value").count())
+
+    // Grouping by just the first distributeBy expr, need to exchange.
+    verifyExchangingAgg(testData.distributeBy(Column("key") :: Column("value") :: Nil)
+      .groupBy("key").count())
+
+    val data = sqlContext.sparkContext.parallelize(
+      (1 to 100).map(i => TestData2(i % 10, i))).toDF()
+
+    // Distribute and order by.
+    val df4 = data.distributeBy(Column("a") :: Nil).localSort($"b".desc)
+    // Walk each partition and verify that it is sorted descending and does not contain all
+    // the values.
+    df4.rdd.foreachPartition(p => {
+      var previousValue: Int = -1
+      var allSequential: Boolean = true
+      p.foreach(r => {
+        val v: Int = r.getInt(1)
+        if (previousValue != -1) {
+          if (previousValue < v) throw new SparkException("Partition is not ordered.")
+          if (v + 1 != previousValue) allSequential = false
+        }
+        previousValue = v
+      })
+      if (allSequential) throw new SparkException("Partition should not be globally ordered")
+    })
+
+    // Distribute and order by with multiple order bys
+    val df5 = data.distributeBy(Column("a") :: Nil, 2).localSort($"b".asc, $"a".asc)
+    // Walk each partition and verify that it is sorted ascending
+    df5.rdd.foreachPartition(p => {
+      var previousValue: Int = -1
+      var allSequential: Boolean = true
+      p.foreach(r => {
+        val v: Int = r.getInt(1)
+        if (previousValue != -1) {
+          if (previousValue > v) throw new SparkException("Partition is not ordered.")
+          if (v - 1 != previousValue) allSequential = false
+        }
+        previousValue = v
+      })
+      if (allSequential) throw new SparkException("Partition should not be all sequential")
+    })
+
+    // Distribute into one partition and order by. This partition should contain all the values.
+    val df6 = data.distributeBy(Column("a") :: Nil, 1).localSort($"b".asc)
+    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    df6.rdd.foreachPartition(p => {
+      var previousValue: Int = -1
+      var allSequential: Boolean = true
+      p.foreach(r => {
+        val v: Int = r.getInt(1)
+        if (previousValue != -1) {
+          if (previousValue > v) throw new SparkException("Partition is not ordered.")
+          if (v - 1 != previousValue) allSequential = false
+        }
+        previousValue = v
+      })
+      if (!allSequential) throw new SparkException("Partition should contain all sequential values")
+    })
   }
 }

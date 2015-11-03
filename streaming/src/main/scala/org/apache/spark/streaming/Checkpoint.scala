@@ -352,7 +352,9 @@ class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoade
 
   override def resolveClass(desc: ObjectStreamClass): Class[_] = {
     try {
-      return loader.loadClass(desc.getName())
+      // scalastyle:off classforname
+      return Class.forName(desc.getName(), false, loader)
+      // scalastyle:on classforname
     } catch {
       case e: Exception =>
     }
