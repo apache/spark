@@ -22,6 +22,7 @@ import java.io.File
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd._
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
@@ -249,6 +250,37 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     assert(rdd.isCheckpointed === true)
     assert(rdd.isCheckpointedAndMaterialized === true)
     assert(rdd.partitions.size === 0)
+  }
+
+  runTest("SPARK-8582: checkpointing should only launch one job") { reliableCheckpoint: Boolean =>
+    @volatile var jobCounter = 0
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobCounter += 1
+      }
+    })
+    val rdd = sc.parallelize(1 to 100, 10)
+    checkpoint(rdd, reliableCheckpoint)
+    assert(rdd.collect() === (1 to 100))
+    sc.listenerBus.waitUntilEmpty(10000)
+    assert(jobCounter === 1)
+  }
+
+  runTest("checkpointing without draining Iterators") { reliableCheckpoint: Boolean =>
+    @volatile var jobCounter = 0
+    sc.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        jobCounter += 1
+      }
+    })
+    val rdd = sc.parallelize(1 to 100, 10)
+    checkpoint(rdd, reliableCheckpoint)
+    assert(rdd.take(5) === (1 to 5))
+    sc.listenerBus.waitUntilEmpty(10000)
+    // Because `take(5)` only consumes the first partition, there should be another job to
+    // checkpoint other partitions.
+    assert(jobCounter === 2)
+    assert(rdd.collect() === (1 to 100))
   }
 
   // Utility test methods

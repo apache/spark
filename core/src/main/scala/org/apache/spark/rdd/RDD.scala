@@ -38,7 +38,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{BoundedPriorityQueue, CheckpointingIterator, Utils}
+import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
   SamplingUtils}
@@ -263,11 +263,9 @@ abstract class RDD[T: ClassTag](
     } else {
       computeOrReadCheckpoint(split, context)
     }
-    if (checkpointData.isDefined) {
-      checkpointData.get.getCheckpointIterator(iter, context, split.index)
-    } else {
-      iter
-    }
+    checkpointData.collect { case data: ReliableRDDCheckpointData[T] =>
+      data.getCheckpointIterator(this, iter, context, split.index)
+    }.getOrElse(iter)
   }
 
   /**
