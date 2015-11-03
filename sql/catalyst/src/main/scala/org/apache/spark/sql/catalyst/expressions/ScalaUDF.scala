@@ -963,6 +963,8 @@ case class ScalaUDF(
       }
   }
 
+  // scalastyle:on
+
   // Generate codes used to convert the arguments to Scala type for user-defined funtions
   private[this] def genCodeForConverter(ctx: CodeGenContext, index: Int): String  = {
     val converterClassName = classOf[Any => Any].getName
@@ -970,9 +972,11 @@ case class ScalaUDF(
     val expressionClassName = classOf[Expression].getName
     val scalaUDFClassName = classOf[ScalaUDF].getName
 
-    val converterTerm = ctx.freshName("converter" + index.toString)
+    val converterTerm = ctx.freshName("converter")
     ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName.createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)expressions[${ctx.references.size - 1}]).getChildren().apply($index))).dataType());")
+      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
+        s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
+          s"expressions[${ctx.references.size - 1}]).getChildren().apply($index))).dataType());")
     converterTerm
   }
 
@@ -990,7 +994,9 @@ case class ScalaUDF(
     // Generate codes used to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
     ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName.createToCatalystConverter((($scalaUDFClassName)expressions[${ctx.references.size - 1}]).dataType());")
+      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
+        s".createToCatalystConverter((($scalaUDFClassName)expressions" +
+          s"[${ctx.references.size - 1}]).dataType());")
 
     val resultTerm = ctx.freshName("result")
 
@@ -999,61 +1005,12 @@ case class ScalaUDF(
     val converterTerms = (0 until children.size).map(genCodeForConverter(ctx, _))
 
     // Initialize user-defined function
-    val funcClassName = children.size match {
-      case 0 =>
-        classOf[() => Any].getName
-      case 1 =>
-        classOf[(Any) => Any].getName
-      case 2 =>
-        classOf[(Any, Any) => Any].getName
-      case 3 =>
-        classOf[(Any, Any, Any) => Any].getName
-      case 4 =>
-        classOf[(Any, Any, Any, Any) => Any].getName
-      case 5 =>
-        classOf[(Any, Any, Any, Any, Any) => Any].getName
-      case 6 =>
-        classOf[(Any, Any, Any, Any, Any, Any) => Any].getName
-      case 7 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 8 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 9 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 10 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 11 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 12 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 13 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 14 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 15 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 16 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 17 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 18 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 19 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 20 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 21 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case 22 =>
-        classOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => Any].getName
-      case _ =>
-        throw new UnsupportedOperationException(
-          "ScalaUDF doesn't support user-defined functions with more than 22 arguments")
-    }
+    val funcClassName = s"scala.Function${children.size}"
 
     val funcTerm = ctx.freshName("udf")
     ctx.addMutableState(funcClassName, funcTerm,
-      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions[${ctx.references.size - 1}]).userDefinedFunc());")
+      s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions" +
+        s"[${ctx.references.size - 1}]).userDefinedFunc());")
 
     // codegen for children expressions
     val evals = children.map(_.gen(ctx))
@@ -1066,7 +1023,9 @@ case class ScalaUDF(
     val funcArguments = converterTerms.zip(evals).map {
       case (converter, eval) => s"$converter.apply(${eval.value})"
     }.mkString(",")
-    val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = (${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}.apply($funcTerm.apply($funcArguments));"
+    val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
+      s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +
+        s".apply($funcTerm.apply($funcArguments));"
 
     evalCode + s"""
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -1079,7 +1038,6 @@ case class ScalaUDF(
     """
   }
 
-  // scalastyle:on
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)
   override def eval(input: InternalRow): Any = converter(f(input))
 }
