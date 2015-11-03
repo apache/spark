@@ -281,6 +281,23 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("joins: push down left semi join, do NOT add null skew filter for <=>") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery = {
+      x.join(y, LeftSemi, Option("x.a".attr <=> "y.d".attr && "x.b".attr >= 1 && "y.d".attr >= 2))
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation.where('b >= 1)
+    val right = testRelation1.where('d >= 2)
+    val correctAnswer =
+      left.join(right, LeftSemi, Option("a".attr <=> "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("joins: push down left semi join, and add null filter") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)

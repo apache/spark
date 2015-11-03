@@ -1000,6 +1000,7 @@ object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
       // get "real" join conditions, which refer both left and right
       val joinConditionsOnBothRelations = joinCondition
         .map(splitConjunctivePredicates).getOrElse(Nil)
+        .filter(_.isInstanceOf[EqualTo])
         .filter(cond => !canEvaluate(cond, left) && !canEvaluate(cond, right))
 
       def nullableJoinKeys(leftOrRight: LogicalPlan) = {
