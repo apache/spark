@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
+
 object GradientBoostingRegressionExample {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("GradientBoostedTreesRegressionExample")
@@ -37,11 +38,11 @@ object GradientBoostingRegressionExample {
     val (trainingData, testData) = (splits(0), splits(1))
 
     // Train a GradientBoostedTrees model.
-    //  The defaultParams for Regression use SquaredError by default.
+    // The defaultParams for Regression use SquaredError by default.
     val boostingStrategy = BoostingStrategy.defaultParams("Regression")
     boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
     boostingStrategy.treeStrategy.maxDepth = 5
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
+    // Empty categoricalFeaturesInfo indicates all features are continuous.
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
 
     val model = GradientBoostedTrees.train(trainingData, boostingStrategy)

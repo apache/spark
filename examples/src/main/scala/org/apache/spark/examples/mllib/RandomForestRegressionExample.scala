@@ -24,6 +24,7 @@ import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.mllib.tree.model.RandomForestModel
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
+
 object RandomForestRegressionExample {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("RandomForestRegressionExample")
@@ -36,7 +37,7 @@ object RandomForestRegressionExample {
     val (trainingData, testData) = (splits(0), splits(1))
 
     // Train a RandomForest model.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
+    // Empty categoricalFeaturesInfo indicates all features are continuous.
     val numClasses = 2
     val categoricalFeaturesInfo = Map[Int, Int]()
     val numTrees = 3 // Use more in practice.

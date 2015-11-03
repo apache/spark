@@ -25,6 +25,7 @@ import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
+
 object GradientBoostingClassificationExample {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("GradientBoostedTreesClassificationExample")
@@ -37,12 +38,12 @@ object GradientBoostingClassificationExample {
     val (trainingData, testData) = (splits(0), splits(1))
 
     // Train a GradientBoostedTrees model.
-    //  The defaultParams for Classification use LogLoss by default.
+    // The defaultParams for Classification use LogLoss by default.
     val boostingStrategy = BoostingStrategy.defaultParams("Classification")
     boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
     boostingStrategy.treeStrategy.numClasses = 2
     boostingStrategy.treeStrategy.maxDepth = 5
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
+    // Empty categoricalFeaturesInfo indicates all features are continuous.
     boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
 
     val model = GradientBoostedTrees.train(trainingData, boostingStrategy)

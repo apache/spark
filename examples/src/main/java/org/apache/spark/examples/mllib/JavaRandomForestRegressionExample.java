@@ -20,7 +20,9 @@ package org.apache.spark.examples.mllib;
 // $example on$
 import java.util.HashMap;
 import java.util.Map;
+
 import scala.Tuple2;
+
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -33,21 +35,22 @@ import org.apache.spark.mllib.tree.model.RandomForestModel;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 // $example off$
+
 public class JavaRandomForestRegressionExample {
   public static void main(String[] args) {
     // $example on$
     SparkConf sparkConf = new SparkConf().setAppName("JavaRandomForestRegressionExample");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
+    JavaSparkContext jsc = new JavaSparkContext(sparkConf);
     // Load and parse the data file.
     String datapath = "data/mllib/sample_libsvm_data.txt";
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(jsc.sc(), datapath).toJavaRDD();
     // Split the data into training and test sets (30% held out for testing)
     JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
     JavaRDD<LabeledPoint> trainingData = splits[0];
     JavaRDD<LabeledPoint> testData = splits[1];
 
     // Set parameters.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
+    // Empty categoricalFeaturesInfo indicates all features are continuous.
     Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
     Integer numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
@@ -84,8 +87,8 @@ public class JavaRandomForestRegressionExample {
     System.out.println("Learned regression forest model:\n" + model.toDebugString());
 
     // Save and load model
-    model.save(sc.sc(), "target/tmp/myRandomForestRegressionModel");
-    RandomForestModel sameModel = RandomForestModel.load(sc.sc(),
+    model.save(jsc.sc(), "target/tmp/myRandomForestRegressionModel");
+    RandomForestModel sameModel = RandomForestModel.load(jsc.sc(),
       "target/tmp/myRandomForestRegressionModel");
     // $example off$
   }
