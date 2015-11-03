@@ -366,6 +366,28 @@ private[python] class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib BisectingKMeans.run()
+   */
+  def trainBisectingKMeansModel(
+      data: JavaRDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      minDivisibleClusterSize: Double,
+      seed: java.lang.Long): BisectingKMeansModel = {
+    val bisectingAlgo = new BisectingKMeans()
+      .setK(k)
+      .setMinDivisibleClusterSize(minDivisibleClusterSize)
+      .setMaxIterations(maxIterations)
+
+    if (seed != null) bisectingAlgo.setSeed(seed)
+    try {
+      bisectingAlgo.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * Java stub for Python mllib GaussianMixture.run()
    * Returns a list containing weights, mean and covariance of each mixture component.
    */

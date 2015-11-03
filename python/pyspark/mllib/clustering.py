@@ -41,7 +41,7 @@ from pyspark.streaming import DStream
 __all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
            'PowerIterationClusteringModel', 'PowerIterationClustering',
            'StreamingKMeans', 'StreamingKMeansModel',
-           'LDA', 'LDAModel']
+           'LDA', 'LDAModel', 'BisectingKMeans', 'BisectingKMeansModel']
 
 
 @inherit_doc
@@ -784,6 +784,104 @@ class LDA(object):
                               docConcentration, topicConcentration, seed,
                               checkpointInterval, optimizer)
         return LDAModel(model)
+
+
+@inherit_doc
+class BisectingKMeansModel(JavaModelWrapper):
+    """A clustering model derived from the bisecting k-means method.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> from numpy.testing import assert_almost_equal, assert_equal
+    >>> data = [
+    ...     Vectors.dense([0.9, 0.9]),
+    ...     Vectors.dense([1.1, 1.1]),
+    ...     Vectors.dense([10.9, 10.9]),
+    ...     Vectors.dense([11.1, 11.1]),
+    ...     Vectors.dense([100.9, 100.9]),
+    ...     Vectors.dense([101.1, 101.1]),
+    ... ]
+    >>> rdd = sc.parallelize(data)
+    >>> model = BisectingKMeans.train(rdd, k=3, seed=1)
+    >>> model.clusterCenters()
+    [array([ 1.,  1.]), array([ 11.,  11.]), array([ 101.,  101.])]
+    >>> model.predict(data[0]) == model.predict(data[1])
+    True
+    >>> model.predict(data[2]) == model.predict(data[3])
+    True
+    >>> model.predict(data[4]) == model.predict(data[5])
+    True
+    >>> model.predict(rdd).collect()
+    [0, 0, 1, 1, 2, 2]
+    >>> model.computeCost(data[0])
+    0.02...
+    >>> model.computeCost(rdd)
+    0.119...
+
+    .. versionadded:: 1.6.0
+    """
+
+    @since('1.6.0')
+    def clusterCenters(self):
+        """Gets leaf cluster centers in a cluster tree"""
+        centers = self.call("clusterCenters")
+        return [c.toArray() for c in centers]
+
+    @since('1.6.0')
+    def predict(self, x):
+        """Predicts the index of the cluster that the input point belongs to.
+
+        :param x: a data point or RDD of data points
+        """
+        if isinstance(x, RDD):
+            return self.call("predict", x.map(_convert_to_vector))
+        else:
+            return self.call("predict", _convert_to_vector(x))
+
+    @since('1.6.0')
+    def computeCost(self, x):
+        """
+         If input is a data point , computes the squared distance between the input point and
+         the cluster center it belongs to.
+         If input is RDD of data points, computes the sum of squared distances between the input
+         points and their corresponding cluster centers.
+
+        :param x: a data point or RDD of data points
+        """
+        if isinstance(x, RDD):
+            return self.call("computeCost", x.map(_convert_to_vector))
+        else:
+            return self.call("computeCost", _convert_to_vector(x))
+
+
+class BisectingKMeans(object):
+    """
+    A bisecting k-means algorithm based on the paper "A comparison of document clustering
+    techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
+    The algorithm starts from a single cluster that contains all points.
+    Iteratively it finds divisible clusters on the bottom level and bisects each of them using
+    k-means, until there are `k` leaf clusters in total or no leaf clusters are divisible.
+    The bisecting steps of clusters on the same level are grouped together to increase parallelism.
+    If bisecting all divisible clusters on the bottom level would result more than `k`
+    leaf clusters, larger clusters get higher priority.
+
+    .. versionadded:: 1.6.0
+    """
+
+    @classmethod
+    @since('1.6.0')
+    def train(cls, rdd, k, maxIterations=20, minDivisibleClusterSize=1.0, seed=None):
+        """Trains a bisecting k-means model.
+
+        :param k: the desired number of leaf clusters (default: 4).
+            The actual number could be smaller if there are no divisible leaf clusters.
+        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
+        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or
+            the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
+        :param seed: a random seed (default: hash value of the class name)
+        """
+        model = callMLlibFunc("trainBisectingKMeansModel", rdd.map(_convert_to_vector),
+                              k, maxIterations, minDivisibleClusterSize, seed)
+        return BisectingKMeansModel(model)
 
 
 def _test():
