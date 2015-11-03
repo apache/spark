@@ -79,6 +79,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
     }
 
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
+    val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
       public Object generate($exprType[] expr) {
@@ -112,7 +113,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allProjections
           // copy all the results into MutableRow
-          ${updates.mkString("\n")}
+          $allUpdates
           return mutableRow;
         }
       }
