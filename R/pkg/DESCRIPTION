@@ -18,10 +18,10 @@ Collate:
     'schema.R'
     'generics.R'
     'jobj.R'
-    'RDD.R'
-    'pairRDD.R'
     'column.R'
     'group.R'
+    'RDD.R'
+    'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
     'backend.R'
@@ -35,3 +35,4 @@ Collate:
     'sparkR.R'
     'stats.R'
     'utils.R'
+RoxygenNote: 5.0.0
