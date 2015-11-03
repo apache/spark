@@ -132,7 +132,7 @@ _functions_1_6 = {
               " the expression in a group.",
     "variance": "Aggregate function: returns the population variance of the values in a group.",
     "var_samp": "Aggregate function: returns the unbiased variance of the values in a group.",
-    "var_pop": "Aggregate function: returns the population variance of the values in a group.",
+    "var_pop":  "Aggregate function: returns the population variance of the values in a group.",
     "skewness": "Aggregate function: returns the skewness of the values in a group.",
     "kurtosis": "Aggregate function: returns the kurtosis of the values in a group."
 }
@@ -187,6 +187,8 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+for _name, _doc in _functions_1_6.items():
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 del _name, _doc
 
 
