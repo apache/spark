@@ -51,16 +51,6 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
-  @deprecated("Use getModelCoefficients instead.", "1.6.0")
-  def getModelWeights(model: PipelineModel): Array[Double] = {
-    model.stages.last match {
-      case m: LinearRegressionModel =>
-        Array(m.intercept) ++ m.weights.toArray
-      case m: LogisticRegressionModel =>
-        Array(m.intercept) ++ m.weights.toArray
-    }
-  }
-
   def getModelCoefficients(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
