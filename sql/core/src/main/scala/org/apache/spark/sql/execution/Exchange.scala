@@ -194,12 +194,13 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
   // TODO: Determine the number of partitions.
-  private def numPartitions: Int = sqlContext.conf.numShufflePartitions
+  private def defaultPartitions: Int = sqlContext.conf.numShufflePartitions
 
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
    */
-  private def canonicalPartitioning(requiredDistribution: Distribution): Partitioning = {
+  private def createPartitioning(requiredDistribution: Distribution,
+      numPartitions: Int): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
       case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
@@ -220,7 +221,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (child.outputPartitioning.satisfies(distribution)) {
         child
       } else {
-        Exchange(canonicalPartitioning(distribution), child)
+        Exchange(createPartitioning(distribution, defaultPartitions), child)
       }
     }
 
@@ -229,12 +230,33 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     if (children.length > 1
         && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
         && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
-      children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
-        val targetPartitioning = canonicalPartitioning(distribution)
-        if (child.outputPartitioning.guarantees(targetPartitioning)) {
-          child
-        } else {
-          Exchange(targetPartitioning, child)
+
+      // First check if the existing partitions of the children all match. This means they are
+      // partitioned by the same partitioning into the same number of partitions. In that case,
+      // don't try to make them match `defaultPartitions`, just use the existing partitioning.
+      // TODO: this should be a cost based descision. For example, a big relation should probably
+      // maintain its existing number of partitions and smaller partitions should be shuffled.
+      // defaultPartitions is arbitrary.
+      val numPartitions = children.head.outputPartitioning.numPartitions
+      val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
+        case (child, distribution) => {
+          child.outputPartitioning.guarantees(
+            createPartitioning(distribution, numPartitions))
+        }
+      }
+
+      children = if (useExistingPartitioning) {
+        children
+      } else {
+        children.zip(requiredChildDistributions).map {
+          case (child, distribution) => {
+            val targetPartitioning = createPartitioning(distribution, defaultPartitions)
+            if (child.outputPartitioning.guarantees(targetPartitioning)) {
+              child
+            } else {
+              Exchange(targetPartitioning, child)
+            }
+          }
         }
       }
     }

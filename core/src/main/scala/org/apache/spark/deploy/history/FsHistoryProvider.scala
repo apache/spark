@@ -27,6 +27,7 @@ import scala.collection.mutable
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
@@ -51,6 +52,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   import FsHistoryProvider._
 
   private val NOT_STARTED = "<Not Started>"
+
+  // Interval between safemode checks.
+  private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
+    "spark.history.fs.safemodeCheck.interval", "5s")
 
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.update.interval", "10s")
@@ -107,9 +112,57 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  initialize()
+  // Conf option used for testing the initialization code.
+  val initThread = if (!conf.getBoolean("spark.history.testing.skipInitialize", false)) {
+      initialize(None)
+    } else {
+      null
+    }
 
-  private def initialize(): Unit = {
+  private[history] def initialize(errorHandler: Option[Thread.UncaughtExceptionHandler]): Thread = {
+    if (!isFsInSafeMode()) {
+      startPolling()
+      return null
+    }
+
+    // Cannot probe anything while the FS is in safe mode, so spawn a new thread that will wait
+    // for the FS to leave safe mode before enabling polling. This allows the main history server
+    // UI to be shown (so that the user can see the HDFS status).
+    //
+    // The synchronization in the run() method is needed because of the tests; mockito can
+    // misbehave if the test is modifying the mocked methods while the thread is calling
+    // them.
+    val initThread = new Thread(new Runnable() {
+      override def run(): Unit = {
+        try {
+          clock.synchronized {
+            while (isFsInSafeMode()) {
+              logInfo("HDFS is still in safe mode. Waiting...")
+              val deadline = clock.getTimeMillis() +
+                TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
+              clock.waitTillTime(deadline)
+            }
+          }
+          startPolling()
+        } catch {
+          case _: InterruptedException =>
+        }
+      }
+    })
+    initThread.setDaemon(true)
+    initThread.setName(s"${getClass().getSimpleName()}-init")
+    initThread.setUncaughtExceptionHandler(errorHandler.getOrElse(
+      new Thread.UncaughtExceptionHandler() {
+        override def uncaughtException(t: Thread, e: Throwable): Unit = {
+          logError("Error initializing FsHistoryProvider.", e)
+          System.exit(1)
+        }
+      }))
+    initThread.start()
+    initThread
+  }
+
+  private def startPolling(): Unit = {
     // Validate the log directory.
     val path = new Path(logDir)
     if (!fs.exists(path)) {
@@ -170,7 +223,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getConfig(): Map[String, String] = Map("Event log directory" -> logDir.toString)
+  override def getConfig(): Map[String, String] = {
+    val safeMode = if (isFsInSafeMode()) {
+      Map("HDFS State" -> "In safe mode, application logs not available.")
+    } else {
+      Map()
+    }
+    Map("Event log directory" -> logDir.toString) ++ safeMode
+  }
+
+  override def stop(): Unit = {
+    if (initThread != null && initThread.isAlive()) {
+      initThread.interrupt()
+      initThread.join()
+    }
+  }
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -583,6 +650,37 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       true
     }
+  }
+
+  /**
+   * Checks whether HDFS is in safe mode. The API is slightly different between hadoop 1 and 2,
+   * so we have to resort to ugly reflection (as usual...).
+   *
+   * Note that DistributedFileSystem is a `@LimitedPrivate` class, which for all practical reasons
+   * makes it more public than not.
+   */
+  private[history] def isFsInSafeMode(): Boolean = fs match {
+    case dfs: DistributedFileSystem =>
+      isFsInSafeMode(dfs)
+    case _ =>
+      false
+  }
+
+  // For testing.
+  private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
+    val hadoop1Class = "org.apache.hadoop.hdfs.protocol.FSConstants$SafeModeAction"
+    val hadoop2Class = "org.apache.hadoop.hdfs.protocol.HdfsConstants$SafeModeAction"
+    val actionClass: Class[_] =
+      try {
+        getClass().getClassLoader().loadClass(hadoop2Class)
+      } catch {
+        case _: ClassNotFoundException =>
+          getClass().getClassLoader().loadClass(hadoop1Class)
+      }
+
+    val action = actionClass.getField("SAFEMODE_GET").get(null)
+    val method = dfs.getClass().getMethod("setSafeMode", action.getClass())
+    method.invoke(dfs, action).asInstanceOf[Boolean]
   }
 
 }

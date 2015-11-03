@@ -19,10 +19,8 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import org.apache.spark.SparkEnv;
-import org.apache.spark.shuffle.ShuffleMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -32,7 +30,6 @@ import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryLocation;
-import org.apache.spark.unsafe.memory.TaskMemoryManager;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -88,8 +85,6 @@ public final class UnsafeFixedWidthAggregationMap {
    * @param aggregationBufferSchema the schema of the aggregation buffer, used for row conversion.
    * @param groupingKeySchema the schema of the grouping key, used for row conversion.
    * @param taskMemoryManager the memory manager used to allocate our Unsafe memory structures.
-   * @param shuffleMemoryManager the shuffle memory manager, for coordinating our memory usage with
-   *                             other tasks.
    * @param initialCapacity the initial capacity of the map (a sizing hint to avoid re-hashing).
    * @param pageSizeBytes the data page size, in bytes; limits the maximum record size.
    * @param enablePerfMetrics if true, performance metrics will be recorded (has minor perf impact)
@@ -99,15 +94,14 @@ public final class UnsafeFixedWidthAggregationMap {
       StructType aggregationBufferSchema,
       StructType groupingKeySchema,
       TaskMemoryManager taskMemoryManager,
-      ShuffleMemoryManager shuffleMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
-    this.map = new BytesToBytesMap(
-      taskMemoryManager, shuffleMemoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
+    this.map =
+      new BytesToBytesMap(taskMemoryManager, initialCapacity, pageSizeBytes, enablePerfMetrics);
     this.enablePerfMetrics = enablePerfMetrics;
 
     // Initialize the buffer for aggregation value
@@ -169,7 +163,7 @@ public final class UnsafeFixedWidthAggregationMap {
   public KVIterator<UnsafeRow, UnsafeRow> iterator() {
     return new KVIterator<UnsafeRow, UnsafeRow>() {
 
-      private final BytesToBytesMap.BytesToBytesMapIterator mapLocationIterator =
+      private final BytesToBytesMap.MapIterator mapLocationIterator =
         map.destructiveIterator();
       private final UnsafeRow key = new UnsafeRow();
       private final UnsafeRow value = new UnsafeRow();
@@ -222,11 +216,6 @@ public final class UnsafeFixedWidthAggregationMap {
     return map.getPeakMemoryUsedBytes();
   }
 
-  @VisibleForTesting
-  public int getNumDataPages() {
-    return map.getNumDataPages();
-  }
-
   /**
    * Free the memory associated with this map. This is idempotent and can be called multiple times.
    */
@@ -256,7 +245,7 @@ public final class UnsafeFixedWidthAggregationMap {
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     UnsafeKVExternalSorter sorter = new UnsafeKVExternalSorter(
       groupingKeySchema, aggregationBufferSchema,
-      SparkEnv.get().blockManager(), map.getShuffleMemoryManager(), map.getPageSizeBytes(), map);
+      SparkEnv.get().blockManager(), map.getPageSizeBytes(), map);
     return sorter;
   }
 }
