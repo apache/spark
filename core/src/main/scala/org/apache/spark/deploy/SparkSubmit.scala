@@ -521,7 +521,7 @@ object SparkSubmit {
         sysProps.put("spark.yarn.isPython", "true")
       }
       if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when the keytab is specified")
+        require(args.keytab != null, "Keytab must be specified when principal is specified")
         sysProps.put("spark.yarn.keytab", args.keytab)
         sysProps.put("spark.yarn.principal", args.principal)
         UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)

@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -153,10 +153,11 @@ private[hive] class ClientWrapper(
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
 
-    val keytab = System.getProperty("spark.yarn.keytab")
-    val principal = System.getProperty("spark.yarn.principal")
-    if (keytab != null && principal != null) {
-      UserGroupInformation.loginUserFromKeytab(principal, keytab)
+    val sparkConf = new SparkConf
+    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
+      UserGroupInformation.loginUserFromKeytab(
+        sparkConf.get("spark.yarn.principal"),
+        sparkConf.get("spark.yarn.keytab"))
     }
 
     val ret = try {
