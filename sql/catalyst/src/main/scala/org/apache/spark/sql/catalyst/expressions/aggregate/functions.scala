@@ -384,16 +384,16 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
   )
 
   override val updateExpressions = {
-    val value = Cast(child, resultType) - avg
+    val value = Cast(child, resultType)
     val newCount = count + Cast(Literal(1), resultType)
 
     // update average
     // avg = avg + (value - avg)/count
-    val newAvg = avg + (value / newCount)
+    val newAvg = avg + (value - avg) / newCount
 
     // update sum of square of difference from mean
     // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    val newMk =  mk + (value - avg) * (value - newAvg)
+    val newMk = mk + (value - avg) * (value - newAvg)
 
     Seq(
       /* count = */ If(IsNull(child), count, newCount),
