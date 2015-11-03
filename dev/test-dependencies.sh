@@ -25,6 +25,7 @@ set -e
 MVN="build/mvn --force"
 # NOTE: These should match those in the release publishing script
 INSTALL_PROFILES="-Phive-thriftserver -Pyarn -Phive -Phadoop-2.2"
+ASSEMBLY_PROFILES="-Phadoop-1"
 LOCAL_REPO="mvn-tmp"
 
 if [ -n "$AMPLAB_JENKINS" ]; then
@@ -39,7 +40,7 @@ spark_version="spark-$(date +%s | tail -c6)"
 $MVN -q versions:set -DnewVersion=$spark_version > /dev/null
 
 echo "Performing Maven install"
-$MVN install -q \
+$MVN $INSTALL_PROFILES install -q \
   -pl '!assembly' \
   -pl '!examples' \
   -pl '!external/flume-assembly' \
@@ -53,7 +54,7 @@ $MVN install -q \
   -DskipTests
 
 echo "Generating dependency manifest"
-$MVN dependency:build-classpath -pl assembly \
+$MVN $ASSEMBLY_PROFILES dependency:build-classpath -pl assembly \
   | grep "Building Spark Project Assembly" -A 5 \
   | tail -n 1 | tr ":" "\n" | rev | cut -d "/" -f 1 | rev | sort \
   | grep -v spark > dev/pr-deps
