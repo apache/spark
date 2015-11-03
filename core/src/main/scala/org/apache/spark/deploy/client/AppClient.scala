@@ -225,8 +225,10 @@ private[spark] class AppClient(
         }
     }
 
-    private def receiveAndReplyAsync[T](masterRef: RpcEndpointRef, context: RpcCallContext,
-                                     msg: T): Unit = {
+    private def receiveAndReplyAsync[T](
+        masterRef: RpcEndpointRef,
+        context: RpcCallContext,
+        msg: T): Unit = {
       receiveAndReplyThreadPool.execute(new Runnable {
         override def run(): Unit = {
           try {
