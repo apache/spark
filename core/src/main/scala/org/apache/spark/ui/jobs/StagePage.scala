@@ -49,7 +49,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             ("shuffle-read-time-proportion", "Shuffle Read Time"),
             ("executor-runtime-proportion", "Executor Computing Time"),
             ("shuffle-write-time-proportion", "Shuffle Write Time"),
-            ("serialization-time-proportion", "Result Serialization TIme"),
+            ("serialization-time-proportion", "Result Serialization Time"),
             ("getting-result-time-proportion", "Getting Result Time"))
 
           legendPairs.zipWithIndex.map {
