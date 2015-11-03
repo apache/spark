@@ -59,7 +59,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       }.flatten
       assert(analyzedPredicate.nonEmpty)
 
-      val selectedFilters = DataSourceStrategy.selectFilters(analyzedPredicate)
+      val selectedFilters = analyzedPredicate.flatMap(DataSourceStrategy.translateFilter)
       assert(selectedFilters.nonEmpty)
 
       selectedFilters.foreach { pred =>
