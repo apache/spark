@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.{InternalAccumulator, TaskContext}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -33,8 +35,8 @@ case class BroadcastLeftSemiJoinHash(
     rightKeys: Seq[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
-
+    condition: Option[Expression],
+    sj: LeftSemiJoin) extends BinaryNode with HashSemiJoin {
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
     "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
@@ -55,7 +57,12 @@ case class BroadcastLeftSemiJoinHash(
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
       left.execute().mapPartitions { streamIter =>
-        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
+        sj match {
+          case LeftSemi =>
+            hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
+          case LeftAnti =>
+            hashAntiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
+        }
       }
     } else {
       val hashRelation =
@@ -70,7 +77,10 @@ case class BroadcastLeftSemiJoinHash(
               InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
           case _ =>
         }
-        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+        sj match {
+          case LeftSemi => hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+          case LeftAnti => hashAntiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+        }
       }
     }
   }

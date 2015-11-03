@@ -21,9 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.{TableIdentifier, errors}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
@@ -262,4 +262,69 @@ case class UnresolvedAlias(child: Expression)
   override def name: String = throw new UnresolvedException(this, "name")
 
   override lazy val resolved = false
+}
+
+trait SubQueryExpression extends Unevaluable {
+  def subquery: LogicalPlan
+
+  override def dataType: DataType = BooleanType
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+
+  /**
+   * Replace the subquery with new one, usually will be used when resolving the subquery.
+   */
+  def withNewSubQuery(newSubquery: LogicalPlan): this.type
+}
+
+/**
+ * Exist subquery expression, only used in subquery predicate only.
+ *
+ * positive: true means EXISTS, other wise means NOT EXISTS
+ *
+ * NOTICE: Exists is a LeafExpression, and we need to resolve the subquery
+ * explicitly in analyzer rule.
+ */
+case class Exists(subquery: LogicalPlan, positive: Boolean)
+  extends LeafExpression with SubQueryExpression {
+
+  override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
+    this.copy(subquery = newSubquery).asInstanceOf[this.type]
+  }
+
+  override lazy val resolved = true
+
+  override def toString: String = if (positive) {
+    s"Exists(${subquery.asCode})"
+  } else {
+    s"NotExists(${subquery.asCode})"
+  }
+}
+
+/**
+ * In subquery expression, only used in subquery predicate only.
+ *
+ * child: The referenced key in WHERE clause for IN / NOT IN
+ *  e.g. SELECT value FROM src a WHERE a.key IN (SELECT key FROM src1 b WHERE b.key > 10)
+ *  The child expression is the 'a.key'
+ *
+ * positive: true means EXISTS, other wise means NOT EXISTS
+ *
+ * NOTICE: InSubquery is a LeafExpression, and we need to resolve its subquery
+ * explicitly in analyzer rule.
+ */
+case class InSubquery(child: Expression, subquery: LogicalPlan, positive: Boolean)
+  extends UnaryExpression with SubQueryExpression {
+
+  override def withNewSubQuery(newSubquery: LogicalPlan): this.type = {
+    this.copy(subquery = newSubquery).asInstanceOf[this.type]
+  }
+
+  override lazy val resolved = child.resolved
+
+  override def toString: String = if (positive) {
+    s"InSubQuery($child, ${subquery.asCode})"
+  } else {
+    s"NotInSubQuery($child, ${subquery.asCode})"
+  }
 }
