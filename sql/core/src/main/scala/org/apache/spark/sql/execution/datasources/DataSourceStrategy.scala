@@ -17,21 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -106,8 +106,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) =>
-          toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f, t.paths, confBroadcast))) :: Nil
+        (a, f) => t.buildInternalScan(a.map(_.name).toArray, f, t.paths, confBroadcast)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -152,7 +151,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           // Don't scan any partition columns to save I/O.  Here we are being optimistic and
           // assuming partition columns data stored in data files are always consistent with those
           // partition values encoded in partition directory paths.
-          val dataRows = relation.buildScan(
+          val dataRows = relation.buildInternalScan(
             requiredDataColumns.map(_.name).toArray, filters, Array(dir), confBroadcast)
 
           // Merges data values with partition values.
@@ -161,7 +160,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             requiredDataColumns,
             partitionColumns,
             partitionValues,
-            toCatalystRDD(logicalRelation, requiredDataColumns, dataRows))
+            dataRows)
         }
 
         val unionedRows =
@@ -199,15 +198,24 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // Builds `AttributeReference`s for all partition columns so that we can use them to project
       // required partition columns.  Note that if a partition column appears in `requiredColumns`,
       // we should use the `AttributeReference` in `requiredColumns`.
-      val requiredColumnMap = requiredColumns.map(a => a.name -> a).toMap
-      val partitionColumns = partitionColumnSchema.toAttributes.map { a =>
-        requiredColumnMap.getOrElse(a.name, a)
+      val partitionColumns = {
+        val requiredColumnMap = requiredColumns.map(a => a.name -> a).toMap
+        partitionColumnSchema.toAttributes.map { a =>
+          requiredColumnMap.getOrElse(a.name, a)
+        }
       }
 
       val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
-        val projection = UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
+        // Note that we can't use an `UnsafeRowJoiner` to replace the following `JoinedRow` and
+        // `UnsafeProjection`.  Because the projection may also adjust column order.
         val mutableJoinedRow = new JoinedRow()
-        iterator.map(dataRow => projection(mutableJoinedRow(dataRow, partitionValues)))
+        val unsafePartitionValues = UnsafeProjection.create(partitionColumnSchema)(partitionValues)
+        val unsafeProjection =
+          UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
+
+        iterator.map { unsafeDataRow =>
+          unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
+        }
       }
 
       // This is an internal RDD whose call site the user should not be concerned with

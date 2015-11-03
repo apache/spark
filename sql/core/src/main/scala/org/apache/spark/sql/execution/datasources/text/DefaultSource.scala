@@ -25,16 +25,20 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext, Job}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{UnsafeRowWriter, BufferHolder}
+import org.apache.spark.sql.columnar.MutableUnsafeRow
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A data source for reading text files.
@@ -79,8 +83,12 @@ private[sql] class TextRelation(
   /** This is an internal data source that outputs internal row format. */
   override val needConversion: Boolean = false
 
-  /** Read path. */
-  override def buildScan(inputPaths: Array[FileStatus]): RDD[Row] = {
+
+  override private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputPaths: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
     val paths = inputPaths.map(_.getPath).sortBy(_.toUri)
@@ -92,17 +100,19 @@ private[sql] class TextRelation(
     sqlContext.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf], classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
       .mapPartitions { iter =>
-        var buffer = new Array[Byte](1024)
-        val row = new GenericMutableRow(1)
+        val bufferHolder = new BufferHolder
+        val unsafeRowWriter = new UnsafeRowWriter
+        val unsafeRow = new UnsafeRow
+
         iter.map { case (_, line) =>
-          if (line.getLength > buffer.length) {
-            buffer = new Array[Byte](line.getLength)
-          }
-          System.arraycopy(line.getBytes, 0, buffer, 0, line.getLength)
-          row.update(0, UTF8String.fromBytes(buffer, 0, line.getLength))
-          row
+          // Writes to an UnsafeRow directly
+          bufferHolder.reset()
+          unsafeRowWriter.initialize(bufferHolder, 1)
+          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+          unsafeRow.pointTo(bufferHolder.buffer, 1, bufferHolder.totalSize())
+          unsafeRow
         }
-      }.asInstanceOf[RDD[Row]]
+      }
   }
 
   /** Write path. */

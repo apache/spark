@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc.netty
+package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.SparkConf
 
-class NettyRpcAddressSuite extends SparkFunSuite {
-
-  test("toString") {
-    val addr = new RpcEndpointAddress("localhost", 12345, "test")
-    assert(addr.toString === "spark://test@localhost:12345")
+/**
+ * Customized SparkConf that allows env variables to be overridden.
+ */
+class SparkConfWithEnv(env: Map[String, String]) extends SparkConf(false) {
+  override def getenv(name: String): String = {
+    env.get(name).getOrElse(super.getenv(name))
   }
 
-  test("toString for client mode") {
-    val addr = RpcEndpointAddress(null, "test")
-    assert(addr.toString === "spark-client://test")
+  override def clone: SparkConf = {
+    new SparkConfWithEnv(env).setAll(getAll)
   }
 
 }

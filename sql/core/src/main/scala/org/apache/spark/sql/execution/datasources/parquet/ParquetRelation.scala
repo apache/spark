@@ -282,11 +282,11 @@ private[sql] class ParquetRelation(
     }
   }
 
-  override def buildScan(
+  override def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
@@ -361,7 +361,7 @@ private[sql] class ParquetRelation(
               id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
+      }
     }
   }
 
