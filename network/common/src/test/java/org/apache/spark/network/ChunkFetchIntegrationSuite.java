@@ -117,6 +117,7 @@ public class ChunkFetchIntegrationSuite {
 
   @AfterClass
   public static void tearDown() {
+    bufferChunk.release();
     server.close();
     clientFactory.close();
     testFile.delete();
