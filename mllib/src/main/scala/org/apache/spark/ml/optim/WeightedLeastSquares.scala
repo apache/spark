@@ -26,12 +26,12 @@ import org.apache.spark.rdd.RDD
  * Model fitted by [[WeightedLeastSquares]].
  * @param coefficients model coefficients
  * @param intercept model intercept
- * @param diag diagonal of matrix (A^T * W * A)^-1
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1
  */
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
-    val diag: DenseVector) extends Serializable
+    val diagInvAtWA: DenseVector) extends Serializable
 
 /**
  * Weighted least squares solver via normal equation.
@@ -114,7 +114,8 @@ private[ml] class WeightedLeastSquares(
     val x = new DenseVector(CholeskyDecomposition.solve(aaBar.values, abBar.values))
 
     val aaInv = CholeskyDecomposition.inverse(aaBar.values, k)
-    val diag = new DenseVector((1 to k).map{ i => aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
+    // aaInv is a packed upper triangular matrix, here we get all elements on diagonal
+    val diagInvAtWA = new DenseVector((1 to k).map{ i => aaInv(i + (i - 1) * i / 2 - 1) / wSum }.toArray)
 
     // compute intercept
     val intercept = if (fitIntercept) {
@@ -123,7 +124,7 @@ private[ml] class WeightedLeastSquares(
       0.0
     }
 
-    new WeightedLeastSquaresModel(x, intercept, diag)
+    new WeightedLeastSquaresModel(x, intercept, diagInvAtWA)
   }
 }
 

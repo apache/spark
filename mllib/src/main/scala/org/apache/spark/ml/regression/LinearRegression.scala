@@ -175,7 +175,7 @@ class LinearRegression(override val uid: String)
         predictionColName,
         $(labelCol),
         summaryModel,
-        model.diag.toArray,
+        model.diagInvAtWA.toArray,
         $(featuresCol),
         Array(0D))
 
@@ -422,10 +422,10 @@ class LinearRegressionTrainingSummary private[regression] (
     predictionCol: String,
     labelCol: String,
     model: LinearRegressionModel,
-    diag: Array[Double],
+    diagInvAtWA: Array[Double],
     val featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diag) {
+  extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diagInvAtWA) {
 
   /** Number of training iterations until termination */
   val totalIterations = objectiveHistory.length
@@ -443,7 +443,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val model: LinearRegressionModel,
-    val diag: Array[Double]) extends Serializable {
+    val diagInvAtWA: Array[Double]) extends Serializable {
 
   @transient private val metrics = new RegressionMetrics(
     predictions
@@ -487,25 +487,34 @@ class LinearRegressionSummary private[regression] (
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
   }
 
+  /** number of instances in DataFrame predictions */
   lazy val numInstances: Long = predictions.count()
 
-  lazy val dfe = if (model.getFitIntercept) {
-    numInstances - model.weights.size -1
+  lazy private val dfe: Long = if (model.getFitIntercept) {
+    numInstances - model.weights.size - 1
   } else {
     numInstances - model.weights.size
   }
 
+  /**
+   * The weighted residuals, the usual residuals rescaled by
+   * the square root of the instance weights.
+   */
   lazy val devianceResiduals: Array[Double] = {
     val weighted = if (model.getWeightCol.isEmpty) lit(1.0) else sqrt(col(model.getWeightCol))
     val dr = predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
       .multiply(weighted).as("weightedResiduals"))
       .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
-      .take(1)(0)
+      .first()
     Array(dr.getDouble(0), dr.getDouble(1))
   }
 
-  lazy val seCoef: Array[Double] = {
-    if (diag.length == 1 && diag(0) == 0) {
+  /**
+   * Standard error of estimated coefficients.
+   * Note that standard error of estimated intercept is not supported currently.
+   */
+  lazy val coefficientStandardErrors: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
         "No Std. Error coefficients available for this LinearRegressionModel")
     } else {
@@ -515,28 +524,30 @@ class LinearRegressionSummary private[regression] (
         val t = udf { (pred: Double, label: Double, weight: Double) =>
           math.pow(label - pred, 2.0) * weight }
         predictions.select(t(col(model.getPredictionCol), col(model.getLabelCol),
-          col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).take(1)(0).getDouble(0)
+          col(model.getWeightCol)).as("wse")).agg(sum(col("wse"))).first().getDouble(0)
       }
       val sigma2 = rss / dfe
-      diag.map(_ * sigma2).map(math.sqrt(_))
+      diagInvAtWA.map(_ * sigma2).map(math.sqrt(_))
     }
   }
 
-  lazy val tVals: Array[Double] = {
-    if (diag.length == 1 && diag(0) == 0) {
+  /** T-statistic of estimated coefficients */
+  lazy val tValues: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
         "No t values available for this LinearRegressionModel")
     } else {
-      model.weights.toArray.zip(seCoef).map { x => x._1 / x._2 }
+      model.weights.toArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     }
   }
 
-  lazy val pVals: Array[Double] = {
-    if (diag.length == 1 && diag(0) == 0) {
+  /** Two-sided p-value of estimated coefficients */
+  lazy val pValues: Array[Double] = {
+    if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
         "No p values available for this LinearRegressionModel")
     } else {
-      tVals.map { x => 2.0 * (1.0 - StudentsT(dfe.toDouble).cdf(math.abs(x))) }
+      tValues.map { x => 2.0 * (1.0 - StudentsT(dfe.toDouble).cdf(math.abs(x))) }
     }
   }
 
