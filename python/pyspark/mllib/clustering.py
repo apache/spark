@@ -687,23 +687,13 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
     ...     [2, SparseVector(2, {0: 1.0})],
     ... ]
     >>> rdd =  sc.parallelize(data)
-    >>> model = LDA.train(rdd, k=2)
+    >>> model = LDA.train(rdd, k=2, seed = 1)
     >>> model.vocabSize()
     2
-    >>> topics = model.describeTopics()
-    >>> len(topics)
-    2
-    >>> len(list(topics[0])[0])
-    2
-    >>> len(list(topics[0])[1])
-    2
-    >>> topics = model.describeTopics(1)
-    >>> len(topics)
-    2
-    >>> len(list(topics[0])[0])
-    1
-    >>> len(list(topics[0])[1])
-    1
+    >>> model.describeTopics()
+    [([1, 0], [0.5..., 0.49...]), ([0, 1], [0.5..., 0.49...])]
+    >>> model.describeTopics(1)
+    [([1], [0.5...]), ([0], [0.5...])]
 
     >>> topics = model.topicsMatrix()
     >>> topics_expect = array([[0.5,  0.5], [0.5, 0.5]])
@@ -735,6 +725,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
         """Vocabulary size (number of terms or terms in the vocabulary)"""
         return self.call("vocabSize")
 
+    @since('1.6.0')
     def describeTopics(self, maxTermsPerTopic=None):
         """Return the topics described by weighted terms.
 
@@ -744,18 +735,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
             topics = self.call("describeTopics")
         else:
             topics = self.call("describeTopics", maxTermsPerTopic)
-
-        # Converts the result to make the format similar to Scala.
-        # The returned value is mixed up with topics and topi weights.
-        converted = []
-        for elms in [list(elms) for elms in topics]:
-            half_len = int(len(elms) / 2)
-            topics = elms[:half_len]
-            topicWeights = elms[(-1 * half_len):]
-            if len(topics) != len(topicWeights):
-                raise TypeError("Something wrong with a return value: %s" % (topics))
-            converted.append((topics, topicWeights))
-        return converted
+        return topics
 
     @classmethod
     @since('1.5.0')
