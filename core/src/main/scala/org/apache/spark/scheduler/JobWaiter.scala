@@ -17,6 +17,10 @@
 
 package org.apache.spark.scheduler
 
+import scala.concurrent.duration.Duration
+import scala.concurrent._
+import scala.util.Try
+
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
  * results to the given handler function.
@@ -26,19 +30,37 @@ private[spark] class JobWaiter[T](
     val jobId: Int,
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
-  extends JobListener {
+  extends JobListener with Future[Unit] {
 
-  private var finishedTasks = 0
+  private[this] val promise: Promise[Unit] = {
+    if (totalTasks == 0) {
+      Promise.successful[Unit]()
+    } else {
+      Promise[Unit]()
+    }
+  }
+  private[this] val promiseFuture: Future[Unit] = promise.future
+  private[this] var finishedTasks = 0
 
-  // Is the job as a whole finished (succeeded or failed)?
-  @volatile
-  private var _jobFinished = totalTasks == 0
+  override def onComplete[U](func: (Try[Unit]) => U)(implicit executor: ExecutionContext): Unit = {
+    promiseFuture.onComplete(func)
+  }
 
-  def jobFinished: Boolean = _jobFinished
+  override def isCompleted: Boolean = promiseFuture.isCompleted
 
-  // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
-  // partition RDDs), we set the jobResult directly to JobSucceeded.
-  private var jobResult: JobResult = if (jobFinished) JobSucceeded else null
+  override def value: Option[Try[Unit]] = promiseFuture.value
+
+  @throws(classOf[Exception])
+  override def result(atMost: Duration)(implicit permit: CanAwait): Unit = {
+    promiseFuture.result(atMost)(permit)
+  }
+
+  @throws(classOf[InterruptedException])
+  @throws(classOf[TimeoutException])
+  override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = {
+    promiseFuture.ready(atMost)(permit)
+    this
+  }
 
   /**
    * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
@@ -50,28 +72,23 @@ private[spark] class JobWaiter[T](
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = synchronized {
-    if (_jobFinished) {
+    if (isCompleted) {
       throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
     }
     resultHandler(index, result.asInstanceOf[T])
     finishedTasks += 1
     if (finishedTasks == totalTasks) {
-      _jobFinished = true
-      jobResult = JobSucceeded
-      this.notifyAll()
+      promise.success()
     }
   }
 
   override def jobFailed(exception: Exception): Unit = synchronized {
-    _jobFinished = true
-    jobResult = JobFailed(exception)
-    this.notifyAll()
-  }
-
-  def awaitResult(): JobResult = synchronized {
-    while (!_jobFinished) {
-      this.wait()
+    // There are certain situations where jobFailed can be called multiple times for the same
+    // job. We guard against this by making this method idempotent.
+    if (!isCompleted) {
+      promise.failure(exception)
+    } else {
+      assert(promiseFuture.value.get.isFailure)
     }
-    return jobResult
   }
 }
