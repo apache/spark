@@ -286,7 +286,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     tMemManager.releaseExecutionMemory(500L, MemoryMode.OFF_HEAP, null)
     assert(tMemManager.getMemoryConsumptionForThisTask === 500L)
     tMemManager.releaseExecutionMemory(500L, MemoryMode.OFF_HEAP, null)
-    assert(tMemManager.getMemoryConsumptionForThisTask === 0l)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 0L)
   }
 }
 
