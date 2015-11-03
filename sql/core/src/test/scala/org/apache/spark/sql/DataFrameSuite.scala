@@ -177,9 +177,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filterExpr") {
-    checkAnswer(
-      testData.filter("key > 90"),
-      testData.collect().filter(_.getInt(0) > 90).toSeq)
+    val res = testData.collect().filter(_.getInt(0) > 90).toSeq
+    checkAnswer(testData.filter("key > 90"), res)
+    checkAnswer(testData.filter("key > 9.0e1"), res)
+    checkAnswer(testData.filter("key > .9e+2"), res)
+    checkAnswer(testData.filter("key > 0.9e+2"), res)
+    checkAnswer(testData.filter("key > 900e-1"), res)
+    checkAnswer(testData.filter("key > 900.0E-1"), res)
+    checkAnswer(testData.filter("key > 9.e+1"), res)
   }
 
   test("filterExpr using where") {
