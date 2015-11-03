@@ -21,7 +21,7 @@ import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.{Elem, Node, Unparsed}
 
@@ -70,6 +70,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
   private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
+
+  private def getLocalitySummaryString(stageData: StageUIData): String = {
+    val localityCounts = new HashMap[String, Long]
+    stageData.taskData.values.foreach( taskUIData => {
+      val locality = taskUIData.taskInfo.taskLocality.toString
+      localityCounts.put(locality, localityCounts.getOrElse(locality, 0L) + 1)
+    })
+    return localityCounts.map { _ match {
+      case (localityLevel, count) => s"$localityLevel ($count)"
+    }}.mkString("; ")
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -123,24 +134,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
       val hasAccumulators = externalAccumulables.size > 0
 
-      val tasksLocality = new mutable.HashMap[String, Long]
-      if (stageData.taskData.size > 0) {
-        for ((key, value) <- stageData.taskData) {
-          val locality = value.taskInfo.taskLocality.toString;
-          if (tasksLocality.contains(locality)) {
-            val count: Long = tasksLocality.get(locality).get + 1;
-            tasksLocality.put(locality, count);
-          } else {
-            tasksLocality.put(locality, 1);
-          }
-        }
-      }
-      var localityLevels: String = "";
-      for ((key, value) <- tasksLocality) {
-        localityLevels = localityLevels.concat(key)
-          .concat("(").concat(value.toString).concat(")").concat(" ")
-      }
-
       val summary =
         <div>
           <ul class="unstyled">
@@ -150,7 +143,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </li>
             <li>
               <strong>Locality Level Summary: </strong>
-              {localityLevels}
+              {getLocalitySummaryString(stageData)}
             </li>
             {if (stageData.hasInput) {
               <li>
