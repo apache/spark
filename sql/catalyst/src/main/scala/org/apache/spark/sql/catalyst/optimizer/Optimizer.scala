@@ -41,7 +41,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
     // run only once, and before other condition push-down optimizations
-    // FIXME: need a better way of identifying if rule was already applied. attribute.nullable do not help
     Batch("Join Skew optimization", FixedPoint(1),
       JoinSkewOptimizer) ::
     Batch("Operator Optimizations", FixedPoint(100),
@@ -988,7 +987,7 @@ object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Adds a null filter on given columns, if any
    */
-  def addNullFilter(columns: AttributeSet, expr: LogicalPlan) = {
+  def addNullFilter(columns: AttributeSet, expr: LogicalPlan): LogicalPlan = {
     columns.map(IsNotNull(_))
       .reduceLeftOption(And)
       .map(Filter(_, expr))
@@ -1005,7 +1004,9 @@ object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
 
       def nullableJoinKeys(leftOrRight: LogicalPlan) = {
         val joinKeys = leftOrRight.outputSet.intersect(
-          joinConditionsOnBothRelations.map(_.references).reduceLeftOption(_ ++ _).getOrElse(AttributeSet.empty)
+          joinConditionsOnBothRelations
+            .map(_.references)
+            .reduceLeftOption(_ ++ _).getOrElse(AttributeSet.empty)
         )
         joinKeys.filter(_.nullable)
       }
