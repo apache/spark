@@ -525,7 +525,10 @@ class TungstenAggregationIterator(
           }
           i = 0
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
-          assert(buffer != null)
+          if (buffer == null) {
+            // failed to allocate the first page
+            throw OutOfMemoryError("No enough memory for aggregation")
+          }
         }
         processRow(buffer, newInput)
         i += 1
