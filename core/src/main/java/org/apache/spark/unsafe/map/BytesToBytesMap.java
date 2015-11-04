@@ -845,7 +845,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void reset() {
     numElements = 0;
     Arrays.fill(getArray(), 0);
-    Arrays.fill((long[]) bitset.memoryBlock().getBaseObject(), 0);
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
