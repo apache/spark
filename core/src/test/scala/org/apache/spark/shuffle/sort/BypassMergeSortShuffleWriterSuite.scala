@@ -32,9 +32,9 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
-import org.apache.spark.executor.{TaskMetrics, ShuffleWriteMetrics}
-import org.apache.spark.shuffle.{ShuffleOutputCoordinator, IndexShuffleBlockResolver}
+import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleOutputCoordinator}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
