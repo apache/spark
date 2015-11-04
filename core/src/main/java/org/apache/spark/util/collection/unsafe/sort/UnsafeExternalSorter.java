@@ -123,8 +123,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter =
-        new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator,
-          initialSize);
+        new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
       acquireMemory(inMemSorter.getMemoryUsage());
     } else {
       this.inMemSorter = existingInMemorySorter;
@@ -132,8 +131,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
-    // the end of the task. This is necessary to avoid memory leaks in when the downstream
-    // operator does not fully consume the sorter's output (e.g. sort followed by limit).
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
+    // does not fully consume the sorter's output (e.g. sort followed by limit).
     taskContext.addTaskCompletionListener(
       new TaskCompletionListener() {
         @Override

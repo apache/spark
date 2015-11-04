@@ -205,8 +205,11 @@ class UnsafeFixedWidthAggregationMapSuite
     val out = new scala.collection.mutable.ArrayBuffer[String]
     val iter = sorter.sortedIterator()
     while (iter.next()) {
-      assert(iter.getKey.getString(0).length === iter.getValue.getInt(0))
-      out += iter.getKey.getString(0)
+      // At here, we also test if copy is correct.
+      val key = iter.getKey.copy()
+      val value = iter.getValue.copy()
+      assert(key.getString(0).length === value.getInt(0))
+      out += key.getString(0)
     }
 
     assert(out === (keys ++ additionalKeys).sorted)
@@ -243,8 +246,11 @@ class UnsafeFixedWidthAggregationMapSuite
     val out = new scala.collection.mutable.ArrayBuffer[String]
     val iter = sorter.sortedIterator()
     while (iter.next()) {
-      assert(iter.getKey.getString(0).length === iter.getValue.getInt(0))
-      out += iter.getKey.getString(0)
+      // At here, we also test if copy is correct.
+      val key = iter.getKey.copy()
+      val value = iter.getValue.copy()
+      assert(key.getString(0).length === value.getInt(0))
+      out += key.getString(0)
     }
 
     assert(out === additionalKeys.sorted)
