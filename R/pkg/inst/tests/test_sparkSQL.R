@@ -1473,7 +1473,7 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
   # Test primitive types
   DF <- createDataFrame(sqlContext, data, schema)
   expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
-  
+
   # Test complex types
   x <- createDataFrame(sqlContext, list(list(as.environment(
     list("a"="b", "c"="d", "e"="f")))))
