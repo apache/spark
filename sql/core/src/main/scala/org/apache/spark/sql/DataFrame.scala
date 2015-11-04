@@ -241,18 +241,6 @@ class DataFrame private[sql](
     sb.toString()
   }
 
-  private[sql] def sortInternal(global: Boolean, sortExprs: Seq[Column]): DataFrame = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder =>
-          expr
-        case expr: Expression =>
-          SortOrder(expr, Ascending)
-      }
-    }
-    Sort(sortOrder, global = global, logicalPlan)
-  }
-
   override def toString: String = {
     try {
       schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
@@ -620,6 +608,32 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   *
+   * This is the same operation as "SORT BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
+    sortWithinPartitions(sortCol, sortCols : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   *
+   * This is the same operation as "SORT BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def sortWithinPartitions(sortExprs: Column*): DataFrame = {
+    sortInternal(global = false, sortExprs)
+  }
+
+  /**
    * Returns a new [[DataFrame]] sorted by the specified column, all in ascending order.
    * {{{
    *   // The following 3 are equivalent
@@ -645,7 +659,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sort(sortExprs: Column*): DataFrame = {
-    sortInternal(true, sortExprs)
+    sortInternal(global = true, sortExprs)
   }
 
   /**
@@ -665,44 +679,6 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
-
-  /**
-   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
-   * `numPartitions`. The resulting DataFrame is hash partitioned.
-   * @group dfops
-   * @since 1.6.0
-   */
-  def distributeBy(partitionExprs: Seq[Column], numPartitions: Int): DataFrame = {
-    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, Some(numPartitions))
-  }
-
-  /**
-   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
-   * the existing number of partitions. The resulting DataFrame is hash partitioned.
-   * @group dfops
-   * @since 1.6.0
-   */
-  def distributeBy(partitionExprs: Seq[Column]): DataFrame = {
-    RepartitionByExpression(partitionExprs.map { _.expr }, logicalPlan, None)
-  }
-
-  /**
-   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
-   * @group dfops
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def localSort(sortCol: String, sortCols: String*): DataFrame = localSort(sortCol, sortCols : _*)
-
-  /**
-   * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
-   * @group dfops
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def localSort(sortExprs: Column*): DataFrame = {
-    sortInternal(false, sortExprs)
-  }
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -798,7 +774,9 @@ class DataFrame private[sql](
    * SQL expressions.
    *
    * {{{
+   *   // The following are equivalent:
    *   df.selectExpr("colA", "colB as newName", "abs(colC)")
+   *   df.select(expr("colA"), expr("colB as newName"), expr("abs(colC)"))
    * }}}
    * @group dfops
    * @since 1.3.0
@@ -1175,7 +1153,8 @@ class DataFrame private[sql](
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
-    val elementTypes = schema.toAttributes.map { attr => (attr.dataType, attr.nullable) }
+    val elementTypes = schema.toAttributes.map {
+      attr => (attr.dataType, attr.nullable, attr.name) }
     val names = schema.toAttributes.map(_.name)
     val convert = CatalystTypeConverters.createToCatalystConverter(schema)
 
@@ -1184,7 +1163,7 @@ class DataFrame private[sql](
     val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
 
     Generate(generator, join = true, outer = false,
-      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
+      qualifier = None, generatorOutput = Nil, logicalPlan)
   }
 
   /**
@@ -1203,8 +1182,7 @@ class DataFrame private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
-    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable) }
-    val names = attributes.map(_.name)
+    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, attr.name) }
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
@@ -1213,7 +1191,7 @@ class DataFrame private[sql](
     val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
 
     Generate(generator, join = true, outer = false,
-      qualifier = None, names.map(UnresolvedAttribute(_)), logicalPlan)
+      qualifier = None, generatorOutput = Nil, logicalPlan)
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -1383,7 +1361,7 @@ class DataFrame private[sql](
     val statistics = List[(String, Expression => Expression)](
       "count" -> Count,
       "mean" -> Average,
-      "stddev" -> Stddev,
+      "stddev" -> StddevSamp,
       "min" -> Min,
       "max" -> Max)
 
@@ -1524,11 +1502,39 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] that has exactly `numPartitions` partitions.
-   * @group rdd
+   * @group dfops
    * @since 1.3.0
    */
   def repartition(numPartitions: Int): DataFrame = {
     Repartition(numPartitions, shuffle = true, logicalPlan)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting DataFrame is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def repartition(numPartitions: Int, partitionExprs: Column*): DataFrame = {
+    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, Some(numPartitions))
+  }
+
+  /**
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
+   * the existing number of partitions. The resulting DataFrame is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def repartition(partitionExprs: Column*): DataFrame = {
+    RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions = None)
   }
 
   /**
@@ -2016,6 +2022,12 @@ class DataFrame private[sql](
     write.mode(SaveMode.Append).insertInto(tableName)
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+  // End of deprecated methods
+  ////////////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////////
+
   /**
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
    * an execution.
@@ -2045,10 +2057,16 @@ class DataFrame private[sql](
     }
   }
 
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
-  // End of deprecated methods
-  ////////////////////////////////////////////////////////////////////////////
-  ////////////////////////////////////////////////////////////////////////////
+  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): DataFrame = {
+    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
+      col.expr match {
+        case expr: SortOrder =>
+          expr
+        case expr: Expression =>
+          SortOrder(expr, Ascending)
+      }
+    }
+    Sort(sortOrder, global = global, logicalPlan)
+  }
 
 }

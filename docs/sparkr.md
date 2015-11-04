@@ -30,14 +30,22 @@ The entry point into SparkR is the `SparkContext` which connects your R program 
 You can create a `SparkContext` using `sparkR.init` and pass in options such as the application name
 , any spark packages depended on, etc. Further, to work with DataFrames we will need a `SQLContext`,
 which can be created from the  SparkContext. If you are working from the `sparkR` shell, the
-`SQLContext` and `SparkContext` should already be created for you.
+`SQLContext` and `SparkContext` should already be created for you, and you would not need to call
+`sparkR.init`.
 
+<div data-lang="r" markdown="1">
 {% highlight r %}
 sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
+</div>
 
-In the event you are creating `SparkContext` instead of using `sparkR` shell or `spark-submit`, you 
+## Starting Up from RStudio
+
+You can also start SparkR from RStudio. You can connect your R program to a Spark cluster from
+RStudio, R shell, Rscript or other R IDEs. To start, make sure SPARK_HOME is set in environment
+(you can check [Sys.getenv](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Sys.getenv.html)),
+load the SparkR package, and call `sparkR.init` as below. In addition to calling `sparkR.init`, you
 could also specify certain Spark driver properties. Normally these
 [Application properties](configuration.html#application-properties) and
 [Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
@@ -45,9 +53,41 @@ driver JVM process would have been started, in this case SparkR takes care of th
 them, pass them as you would other configuration properties in the `sparkEnvir` argument to
 `sparkR.init()`.
 
+<div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.init("local[*]", "SparkR", "/home/spark", list(spark.driver.memory="2g"))
+if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
+  Sys.setenv(SPARK_HOME = "/home/spark")
+}
+library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
+sc <- sparkR.init(master = "local[*]", sparkEnvir = list(spark.driver.memory="2g"))
 {% endhighlight %}
+</div>
+
+The following options can be set in `sparkEnvir` with `sparkR.init` from RStudio:
+
+<table class="table">
+  <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+  <tr>
+    <td><code>spark.driver.memory</code></td>
+    <td>Application Properties</td>
+    <td><code>--driver-memory</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraClassPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-class-path</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraJavaOptions</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-java-options</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraLibraryPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-library-path</code></td>
+  </tr>
+</table>
 
 </div>
 

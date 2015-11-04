@@ -157,11 +157,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
+    assert(inMemSorter != null);
     if (trigger != this) {
       if (readingIterator != null) {
         return readingIterator.spill();
+      } else {
+
       }
-      return 0L;
+      return 0L; // this should throw exception
     }
 
     if (inMemSorter == null || inMemSorter.numRecords() <= 0) {
