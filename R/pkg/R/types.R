@@ -36,7 +36,7 @@ PRIMITIVE_TYPES <- as.environment(list(
 # The complex data types. These do not have any direct mapping to R's types.
 COMPLEX_TYPES <- list(
   "map"=NA,
-  "array"="list",
+  "array"=NA,
   "struct"=NA)
 
 # The full list of data types.
