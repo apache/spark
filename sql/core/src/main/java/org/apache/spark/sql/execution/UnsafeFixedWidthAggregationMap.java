@@ -236,11 +236,8 @@ public final class UnsafeFixedWidthAggregationMap {
 
   /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
-   * that can be used to insert more records to do external sorting.
    *
-   * The only memory that is allocated is the address/prefix array, 16 bytes per record.
-   *
-   * Note that this destroys the map, and as a result, the map cannot be used anymore after this.
+   * Note that the map will be reset for inserting new records.
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
     return new UnsafeKVExternalSorter(

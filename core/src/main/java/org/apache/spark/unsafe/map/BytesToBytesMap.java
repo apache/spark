@@ -648,7 +648,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert(bitset != null);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY || numElements > growthThreshold && !canGrowArray) {
+
+      if (numElements == MAX_CAPACITY
+        // The map could be reused from last spill (because of no enough memory to grow),
+        // then we don't try to grow again if hit the `growthThreshold`.
+        || !canGrowArray && numElements > growthThreshold) {
         return false;
       }
 
