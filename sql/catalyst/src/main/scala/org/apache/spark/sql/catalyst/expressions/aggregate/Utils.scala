@@ -252,7 +252,10 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
-      val groupByMap = a.groupingExpressions.map(expressionAttributePair)
+      val groupByMap = a.groupingExpressions.collect {
+        case ne: NamedExpression => ne -> ne.toAttribute
+        case e => e -> new AttributeReference(e.prettyName, e.dataType, e.nullable)()
+      }
       val groupByAttrs = groupByMap.map(_._2)
 
       // Functions used to modify aggregate functions and their inputs.
@@ -306,7 +309,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
 
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction, id, regularAggChildAttrMap)
-        val a = Alias(e.copy(aggregateFunction = af), "ra")()
+        val a = Alias(e.copy(aggregateFunction = af), e.toString)()
 
         // Get the result of the first aggregate in the last aggregate.
         val b = AggregateExpression2(
@@ -364,10 +367,10 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
 
   private def nullify(e: Expression) = Literal.create(null, e.dataType)
 
-  private def expressionAttributePair(e: Expression) = (e, toAttribute(e))
-
-  private def toAttribute(e: Expression) = e match {
-    case ne: NamedExpression => ne.toAttribute.withNullability(true)
-    case e: Expression => new AttributeReference(e.prettyName, e.dataType, true)()
-  }
+  private def expressionAttributePair(e: Expression) =
+    // We are creating a new reference here instead of reusing a reference in case of a
+    // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
+    // children, in this case attribute reuse causes the input of the regular aggregate to bound to
+    // the (nulled out) input of the distinct aggregate.
+    e -> new AttributeReference(e.prettyName, e.dataType, true)()
 }
