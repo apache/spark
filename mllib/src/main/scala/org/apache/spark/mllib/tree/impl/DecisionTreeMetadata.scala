@@ -140,8 +140,6 @@ private[spark] object DecisionTreeMetadata extends Logging {
     val unorderedFeatures = new mutable.HashSet[Int]()
     val numBins = Array.fill[Int](numFeatures)(maxPossibleBins)
     if (numClasses > 2) {
-      println("Multiclass")
-      println(strategy.categoricalFeaturesInfo)
       // Multiclass classification
       val maxCategoriesForUnorderedFeature =
         ((math.log(maxPossibleBins / 2 + 1) / math.log(2.0)) + 1).floor.toInt
@@ -153,7 +151,6 @@ private[spark] object DecisionTreeMetadata extends Logging {
           //  which require 2 * ((1 << numCategories - 1) - 1) bins.
           // We do this check with log values to prevent overflows in case numCategories is large.
           // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
-          println(maxCategoriesForUnorderedFeature.toString+numCategories.toString+"[")
           if (numCategories <= maxCategoriesForUnorderedFeature) {
             unorderedFeatures.add(featureIndex)
             numBins(featureIndex) = numUnorderedBins(numCategories)

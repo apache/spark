@@ -81,7 +81,6 @@ private[spark] class DTStatsAggregator(
 
   private val parentStats: Array[Double] = new Array[Double](statsSize)
 
-
   /**
    * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
    * @param featureOffset  For ordered features, this is a pre-computed (node, feature) offset
@@ -94,6 +93,9 @@ private[spark] class DTStatsAggregator(
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
   }
 
+  /**
+   * Get an [[ImpurityCalculator]] for a given (node, feature, bin).
+   */
   def getParentImpurityCalculator(): ImpurityCalculator = {
     impurityAggregator.getCalculator(parentStats)
   }
@@ -105,6 +107,10 @@ private[spark] class DTStatsAggregator(
     val i = featureOffsets(featureIndex) + binIndex * statsSize
     impurityAggregator.update(allStats, i, label, instanceWeight)
   }
+
+  /**
+   * Update the parent node stats using the given label.
+   */
   def updateParent(label: Double, instanceWeight: Double): Unit = {
     impurityAggregator.update(parentStats, 0, label, instanceWeight)
   }
@@ -174,7 +180,7 @@ private[spark] class DTStatsAggregator(
 
     require(statsSize == other.statsSize,
       s"DTStatsAggregator.merge requires that both aggregators have the same length parent stats vectors."
-        + s" This aggregator is of length $statsSize, but the other is ${other.statsSize}.")
+        + s" This aggregator's parent stats are length $statsSize, but the other is ${other.statsSize}.")
     var j = 0
     while (j < statsSize) {
       parentStats(j) += other.parentStats(j)

@@ -114,10 +114,13 @@ private[spark] class EntropyAggregator(numClasses: Int)
     new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
 
+  /**
+   * Get an [[ImpurityCalculator]] for a node.
+   * @param sufficientStats  Sufficient stats array for a node.
+   */
   def getCalculator(sufficientStats: Array[Double]): EntropyCalculator = {
     new EntropyCalculator(sufficientStats)
   }
-
 }
 
 /**
