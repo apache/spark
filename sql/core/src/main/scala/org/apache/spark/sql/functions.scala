@@ -255,14 +255,6 @@ object functions {
   def kurtosis(e: Column): Column = Kurtosis(e.expr)
 
   /**
-   * Aggregate function: returns the kurtosis of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
-
-  /**
    * Aggregate function: returns the last value in a group.
    *
    * @group agg_funcs
@@ -337,14 +329,6 @@ object functions {
   def skewness(e: Column): Column = Skewness(e.expr)
 
   /**
-   * Aggregate function: returns the skewness of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def skewness(columnName: String): Column = skewness(Column(columnName))
-
-  /**
    * Aggregate function: returns the unbiased sample standard deviation of
    * the expression in a group.
    *
@@ -360,25 +344,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(columnName: String): Column = stddev(Column(columnName))
-
-  /**
-   * Aggregate function: returns the unbiased sample standard deviation of
-   * the expression in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
   def stddev_samp(e: Column): Column = StddevSamp(e.expr)
-
-  /**
-   * Aggregate function: returns the unbiased sample standard deviation of
-   * the expression in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
   /**
    * Aggregate function: returns the population standard deviation of
@@ -388,15 +354,6 @@ object functions {
    * @since 1.6.0
    */
   def stddev_pop(e: Column): Column = StddevPop(e.expr)
-
-  /**
-   * Aggregate function: returns the population standard deviation of
-   * the expression in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
@@ -439,14 +396,6 @@ object functions {
   def variance(e: Column): Column = Variance(e.expr)
 
   /**
-   * Aggregate function: returns the population variance of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def variance(columnName: String): Column = variance(Column(columnName))
-
-  /**
    * Aggregate function: returns the unbiased variance of the values in a group.
    *
    * @group agg_funcs
@@ -455,28 +404,12 @@ object functions {
   def var_samp(e: Column): Column = VarianceSamp(e.expr)
 
   /**
-   * Aggregate function: returns the unbiased variance of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def var_samp(columnName: String): Column = var_samp(Column(columnName))
-
-  /**
    * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
   def var_pop(e: Column): Column = VariancePop(e.expr)
-
-  /**
-   * Aggregate function: returns the population variance of the values in a group.
-   *
-   * @group agg_funcs
-   * @since 1.6.0
-   */
-  def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions

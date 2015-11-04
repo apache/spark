@@ -177,9 +177,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filterExpr") {
-    checkAnswer(
-      testData.filter("key > 90"),
-      testData.collect().filter(_.getInt(0) > 90).toSeq)
+    val res = testData.collect().filter(_.getInt(0) > 90).toSeq
+    checkAnswer(testData.filter("key > 90"), res)
+    checkAnswer(testData.filter("key > 9.0e1"), res)
+    checkAnswer(testData.filter("key > .9e+2"), res)
+    checkAnswer(testData.filter("key > 0.9e+2"), res)
+    checkAnswer(testData.filter("key > 900e-1"), res)
+    checkAnswer(testData.filter("key > 900.0E-1"), res)
+    checkAnswer(testData.filter("key > 9.e+1"), res)
   }
 
   test("filterExpr using where") {
@@ -1112,5 +1117,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       })
       if (!allSequential) throw new SparkException("Partition should contain all sequential values")
     })
+  }
+
+  test("fix case sensitivity of partition by") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        val p = path.getAbsolutePath
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
+        checkAnswer(sqlContext.read.parquet(p).select("YeaR"), Row(2012))
+      }
+    }
   }
 }

@@ -392,10 +392,13 @@ class LogisticRegression(override val uid: String)
 @Experimental
 class LogisticRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val coefficients: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams {
+
+  @deprecated("Use coefficients instead.", "1.6.0")
+  def weights: Vector = coefficients
 
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
@@ -407,7 +410,7 @@ class LogisticRegressionModel private[ml] (
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, weights) + intercept
+    BLAS.dot(features, coefficients) + intercept
   }
 
   /** Score (probability) for class label 1.  For binary classification only. */
@@ -416,7 +419,7 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
-  override val numFeatures: Int = weights.size
+  override val numFeatures: Int = coefficients.size
 
   override val numClasses: Int = 2
 
@@ -483,7 +486,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    val newModel = copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
+    val newModel = copyValues(new LogisticRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }

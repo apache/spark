@@ -51,13 +51,12 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
-  def getModelWeights(model: PipelineModel): Array[Double] = {
+  def getModelCoefficients(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
-        Array(m.intercept) ++ m.weights.toArray
-      case _: LogisticRegressionModel =>
-        throw new UnsupportedOperationException(
-          "No weights available for LogisticRegressionModel")  // SPARK-9492
+        Array(m.intercept) ++ m.coefficients.toArray
+      case m: LogisticRegressionModel =>
+        Array(m.intercept) ++ m.coefficients.toArray
     }
   }
 
