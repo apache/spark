@@ -101,7 +101,7 @@ class PrefixSpanModel(JavaModelWrapper):
     >>> rdd = sc.parallelize(data, 2)
     >>> model = PrefixSpan.train(rdd)
     >>> sorted(model.freqSequences().collect())
-    [FreqSequences(sequence=[[u'a']], freq=3), FreqSequences(sequence=[[u'a'], [u'a']], freq=1), ...
+    [FreqSequence(sequence=[[u'a']], freq=3), FreqSequence(sequence=[[u'a'], [u'a']], freq=1), ...
 
     .. versionadded:: 1.6.0
     """
@@ -109,7 +109,7 @@ class PrefixSpanModel(JavaModelWrapper):
     @since("1.6.0")
     def freqSequences(self):
         """Gets frequence sequences"""
-        return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequences(x[0], x[1]))
+        return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
 
 class PrefixSpan(object):
@@ -117,8 +117,9 @@ class PrefixSpan(object):
     .. note:: Experimental
 
     A parallel PrefixSpan algorithm to mine frequent sequential patterns.
-    The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
-    Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
+    The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan:
+    Mining Sequential Patterns Efficiently by Prefix-Projected Pattern Growth
+    ([[http://doi.org/10.1109/ICDE.2001.914830]]).
 
     .. versionadded:: 1.6.0
     """
@@ -143,9 +144,9 @@ class PrefixSpan(object):
                               data, minSupport, maxPatternLength, maxLocalProjDBSize)
         return PrefixSpanModel(model)
 
-    class FreqSequences(namedtuple("FreqSequences", ["sequence", "freq"])):
+    class FreqSequence(namedtuple("FreqSequence", ["sequence", "freq"])):
         """
-        Represents an (sequence, freq) tuple.
+        Represents a (sequence, freq) tuple.
 
         .. versionadded:: 1.6.0
         """
