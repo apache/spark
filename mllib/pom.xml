@@ -144,6 +144,13 @@
       <activation>
         <property><name>!scala-2.11</name></property>
       </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.scalamacros</groupId>
+          <artifactId>quasiquotes_${scala.binary.version}</artifactId>
+          <version>${scala.macros.version}</version>
+        </dependency>
+      </dependencies>
       <build>
 	<plugins>
 	  <plugin>
