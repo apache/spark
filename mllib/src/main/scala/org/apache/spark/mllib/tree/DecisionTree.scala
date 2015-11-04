@@ -369,8 +369,7 @@ object DecisionTree extends Serializable with Logging {
       if (unorderedFeatures.contains(featureIndex)) {
         // Unordered feature
         val featureValue = treePoint.binnedFeatures(featureIndex)
-        val (leftNodeFeatureOffset, rightNodeFeatureOffset) =
-          agg.getLeftRightFeatureOffsets(featureIndexIdx)
+        val leftNodeFeatureOffset = agg.getFeatureOffset(featureIndexIdx)
         // Update the left or right bin for each split.
         val numSplits = agg.metadata.numSplits(featureIndex)
         var splitIndex = 0
@@ -845,8 +844,7 @@ object DecisionTree extends Serializable with Logging {
         (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
       } else if (binAggregates.metadata.isUnordered(featureIndex)) {
         // Unordered categorical feature
-        val (leftChildOffset, rightChildOffset) =
-          binAggregates.getLeftRightFeatureOffsets(featureIndexIdx)
+        val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
         val (bestFeatureSplitIndex, bestFeatureGainStats) =
           Range(0, numSplits).map { splitIndex =>
             val leftChildStats = binAggregates.getImpurityCalculator(leftChildOffset, splitIndex)
