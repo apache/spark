@@ -31,6 +31,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.util.{ResetSystemProperties, Utils}
+import org.apache.spark.TestUtils.JavaSourceFromString
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
@@ -364,6 +365,72 @@ class SparkSubmitSuite
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
     }
+  }
+
+  // SPARK-11195
+  test("classes are correctly loaded when tasks fail") {
+    // Compile a simple jar that throws a user defined exception on the driver
+    val tempDir = Utils.createTempDir()
+    val srcDir = new File(tempDir, "repro/")
+    srcDir.mkdirs()
+    // scalastyle:off line.size.limit
+    val mainSource = new JavaSourceFromString(new File(srcDir, "MyJob").getAbsolutePath,
+      """package repro;
+        |
+        |import java.util.*;
+        |import java.util.regex.*;
+        |import org.apache.spark.*;
+        |import org.apache.spark.api.java.*;
+        |import org.apache.spark.api.java.function.*;
+        |
+        |public class MyJob {
+        |  public static class MyException extends Exception {
+        |  }
+        |
+        |  public static void main(String[] args) {
+        |    SparkConf conf = new SparkConf();
+        |    JavaSparkContext sc = new JavaSparkContext(conf);
+        |
+        |    JavaRDD rdd = sc.parallelize(Arrays.asList(new Integer[]{1}), 1).map(new Function<Integer, Boolean>() {
+        |      public Boolean call(Integer x) throws MyException {
+        |        throw new MyException();
+        |      }
+        |    });
+        |
+        |    try {
+        |      rdd.collect();
+        |
+        |      assert(false); // should be unreachable
+        |    } catch (Exception e) {
+        |      // the driver should not have any problems resolving the exception class and determining
+        |      // why the task failed.
+        |
+        |      Pattern unknownFailure = Pattern.compile(".*Lost task.*: UnknownReason.*", Pattern.DOTALL);
+        |      Pattern expectedFailure = Pattern.compile(".*Lost task.*: repro.MyJob\\$MyException.*", Pattern.DOTALL);
+        |
+        |      assert(!unknownFailure.matcher(e.getMessage()).matches());
+        |      assert(expectedFailure.matcher(e.getMessage()).matches());
+        |    }
+        |  }
+        |}
+      """.stripMargin)
+    // scalastyle:on line.size.limit
+    val sparkJar = "../assembly/target/scala-2.10/spark-assembly-1.5.1-hadoop2.2.0.jar"
+    val classes = TestUtils.createCompiledClasses("MyJob", srcDir, mainSource,
+      Seq(new File(sparkJar).toURI.toURL))
+    val jarFile = new File(tempDir, "testJar-%s.jar".format(System.currentTimeMillis()))
+    TestUtils.createJar(classes, jarFile, directoryPrefix = Some("repro"))
+
+    val args = Seq(
+      // enabled so we know if the test job has succeeded or not
+      "--driver-java-options", "-enableassertions",
+      "--class", "repro.MyJob",
+      "--name", "testApp",
+      "--master", "local",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      jarFile.toString)
+    runSparkSubmit(args)
   }
 
   test("correctly builds R packages included in a jar with --packages") {
