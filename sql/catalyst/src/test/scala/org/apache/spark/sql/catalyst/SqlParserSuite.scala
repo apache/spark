@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.Command
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.expressions.{Literal, GreaterThan, Not, Attribute}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project, LogicalPlan, Command}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 private[sql] case class TestCommand(cmd: String) extends LogicalPlan with Command {
   override def output: Seq[Attribute] = Seq.empty
@@ -49,7 +50,7 @@ private[sql] class CaseInsensitiveTestParser extends AbstractSparkSQLParser {
     }
 }
 
-class SqlParserSuite extends SparkFunSuite {
+class SqlParserSuite extends PlanTest {
 
   test("test long keyword") {
     val parser = new SuperLongKeywordTestParser
@@ -62,5 +63,67 @@ class SqlParserSuite extends SparkFunSuite {
     assert(TestCommand("NotRealCommand") === parser.parse("EXECUTE NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser.parse("execute NotRealCommand"))
     assert(TestCommand("NotRealCommand") === parser.parse("exEcute NotRealCommand"))
+  }
+
+  test("test NOT operator with comparison operations") {
+    val parsed = SqlParser.parse("SELECT NOT TRUE > TRUE")
+    val expected = Project(
+      UnresolvedAlias(
+        Not(
+          GreaterThan(Literal(true), Literal(true)))
+      ) :: Nil,
+      OneRowRelation)
+    comparePlans(parsed, expected)
+  }
+
+  test("support hive interval literal") {
+    def checkInterval(sql: String, result: CalendarInterval): Unit = {
+      val parsed = SqlParser.parse(sql)
+      val expected = Project(
+        UnresolvedAlias(
+          Literal(result)
+        ) :: Nil,
+        OneRowRelation)
+      comparePlans(parsed, expected)
+    }
+
+    def checkYearMonth(lit: String): Unit = {
+      checkInterval(
+        s"SELECT INTERVAL '$lit' YEAR TO MONTH",
+        CalendarInterval.fromYearMonthString(lit))
+    }
+
+    def checkDayTime(lit: String): Unit = {
+      checkInterval(
+        s"SELECT INTERVAL '$lit' DAY TO SECOND",
+        CalendarInterval.fromDayTimeString(lit))
+    }
+
+    def checkSingleUnit(lit: String, unit: String): Unit = {
+      checkInterval(
+        s"SELECT INTERVAL '$lit' $unit",
+        CalendarInterval.fromSingleUnitString(unit, lit))
+    }
+
+    checkYearMonth("123-10")
+    checkYearMonth("496-0")
+    checkYearMonth("-2-3")
+    checkYearMonth("-123-0")
+
+    checkDayTime("99 11:22:33.123456789")
+    checkDayTime("-99 11:22:33.123456789")
+    checkDayTime("10 9:8:7.123456789")
+    checkDayTime("1 0:0:0")
+    checkDayTime("-1 0:0:0")
+    checkDayTime("1 0:0:1")
+
+    for (unit <- Seq("year", "month", "day", "hour", "minute", "second")) {
+      checkSingleUnit("7", unit)
+      checkSingleUnit("-7", unit)
+      checkSingleUnit("0", unit)
+    }
+
+    checkSingleUnit("13.123456789", "second")
+    checkSingleUnit("-13.123456789", "second")
   }
 }
