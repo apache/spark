@@ -328,13 +328,6 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   override val evaluateExpression = min
 }
 
-// Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg(child) {
-
-  override def isSample: Boolean = true
-  override def prettyName: String = "stddev"
-}
-
 // Compute the population standard deviation of a column
 case class StddevPop(child: Expression) extends StddevAgg(child) {
 
@@ -1271,28 +1264,6 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
     }
 
     getStatistic(n, mean, moments)
-  }
-}
-
-case class Variance(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def prettyName: String = "variance"
-
-  override protected val momentOrder = 2
-
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-
-    if (n == 0.0) Double.NaN else moments(2) / n
   }
 }
 

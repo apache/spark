@@ -96,10 +96,10 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
-      case "stddev" | "std" => Stddev
+      case "stddev" | "std" => StddevSamp
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
-      case "variance" => Variance
+      case "variance" => VarianceSamp
       case "var_pop" => VariancePop
       case "var_samp" => VarianceSamp
       case "sum" => Sum

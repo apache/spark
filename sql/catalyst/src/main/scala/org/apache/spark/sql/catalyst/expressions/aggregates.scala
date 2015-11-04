@@ -785,13 +785,6 @@ abstract class StddevAgg1(child: Expression) extends UnaryExpression with Partia
 
 }
 
-// Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV($child)"
-  override def isSample: Boolean = true
-}
-
 // Compute the population standard deviation of a column
 case class StddevPop(child: Expression) extends StddevAgg1(child) {
 
@@ -807,20 +800,21 @@ case class StddevSamp(child: Expression) extends StddevAgg1(child) {
 }
 
 case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
-    def this() = this(null)
+  def this() = this(null)
 
-    override def children: Seq[Expression] = child :: Nil
-    override def nullable: Boolean = false
-    override def dataType: DataType = ArrayType(DoubleType)
-    override def toString: String = s"computePartialStddev($child)"
-    override def newInstance(): ComputePartialStdFunction =
-      new ComputePartialStdFunction(child, this)
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = ArrayType(DoubleType)
+  override def toString: String = s"computePartialStddev($child)"
+  override def newInstance(): ComputePartialStdFunction =
+    new ComputePartialStdFunction(child, this)
 }
 
 case class ComputePartialStdFunction (
     expr: Expression,
     base: AggregateExpression1
-) extends AggregateFunction1 {
+  ) extends AggregateFunction1 {
+
   def this() = this(null, null)  // Required for serialization
 
   private val computeType = DoubleType
@@ -1046,25 +1040,6 @@ case class Skewness(child: Expression) extends UnaryExpression with AggregateExp
   override def prettyName: String = "skewness"
 
   override def toString: String = s"SKEWNESS($child)"
-}
-
-// placeholder
-case class Variance(child: Expression) extends UnaryExpression with AggregateExpression1 {
-
-  override def newInstance(): AggregateFunction1 = {
-    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
-      "please set spark.sql.useAggregate2 = true")
-  }
-
-  override def nullable: Boolean = false
-
-  override def dataType: DoubleType.type = DoubleType
-
-  override def foldable: Boolean = false
-
-  override def prettyName: String = "variance"
-
-  override def toString: String = s"VARIANCE($child)"
 }
 
 // placeholder

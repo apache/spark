@@ -536,7 +536,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
         "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(0, -1.5, 1, 3, 2, 2.0 / 3.0, 1, 6, 3)
+      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -757,7 +757,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("variance") {
     val absTol = 1e-8
     val sparkAnswer = sql("SELECT VARIANCE(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 6.0)
+    val expectedAnswer = Row(0.8)
     checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
@@ -784,16 +784,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("stddev agg") {
     checkAnswer(
-        sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
+      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
       (1 to 3).map(i => Row(i, math.sqrt(1.0 / 2.0), math.sqrt(1.0 / 4.0), math.sqrt(1.0 / 2.0))))
   }
 
   test("variance agg") {
     val absTol = 1e-8
-    val sparkAnswer = sql("SELECT a, variance(b), var_samp(b), var_pop(b)" +
-      "FROM testData2 GROUP BY a")
-    val expectedAnswer = (1 to 3).map(i => Row(i, 1.0 / 4.0, 1.0 / 2.0, 1.0 / 4.0))
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
+    checkAggregatesWithTol(
+      sql("SELECT a, variance(b), var_samp(b), var_pop(b) FROM testData2 GROUP BY a"),
+      (1 to 3).map(i => Row(i, 1.0 / 2.0, 1.0 / 2.0, 1.0 / 4.0)),
+      absTol)
   }
 
   test("skewness and kurtosis agg") {
