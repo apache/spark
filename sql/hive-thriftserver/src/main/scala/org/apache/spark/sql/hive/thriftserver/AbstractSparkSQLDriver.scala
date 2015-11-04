@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.sql.AnalysisException
-
 import scala.collection.JavaConversions._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -27,6 +25,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
 private[hive] abstract class AbstractSparkSQLDriver(
@@ -92,5 +91,6 @@ private[hive] abstract class AbstractSparkSQLDriver(
   }
 }
 
-private[hive] case class CommandProcessorResponseWrapper (rc : CommandProcessorResponse,
-                                                          cause : Throwable)
+private[hive] case class CommandProcessorResponseWrapper(
+    rc : CommandProcessorResponse,
+    cause : Throwable)

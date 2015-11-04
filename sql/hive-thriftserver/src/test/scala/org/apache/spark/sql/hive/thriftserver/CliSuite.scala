@@ -59,7 +59,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
    *
    * @param queriesAndExpectedAnswers one or more tupes of query + answer
    */
-
   def runCliWithin(
       timeout: FiniteDuration,
       extraArgs: Seq[String] = Seq.empty,
@@ -95,15 +94,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
           foundAllExpectedAnswers.trySuccess(())
         }
       }
-      else
-        {
-          errorResponses.foreach { r =>
-            if (line.contains(r)) {
-              foundAllExpectedAnswers.tryFailure(
-                new RuntimeException(s"Failed with error line '$line'"))
-            }
+      else {
+        errorResponses.foreach { r =>
+          if (line.contains(r)) {
+            foundAllExpectedAnswers.tryFailure(
+              new RuntimeException(s"Failed with error line '$line'"))
           }
         }
+      }
     }
 
     // Searching expected output line from both stdout and stderr of the CLI process
