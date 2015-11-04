@@ -1,4 +1,4 @@
-Spark SQL
+Spark SQL - test Somil
 =========
 
 This module provides support for executing relational queries expressed in either SQL or a LINQ-like Scala DSL.
