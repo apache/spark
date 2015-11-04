@@ -209,11 +209,6 @@ def data_profiling_required(f):
     return decorated_function
 
 
-def pool_link(v, c, m, p):
-    url = '/admin/taskinstance/?flt1_pool_equals=' + m.pool
-    return Markup("<a href='{url}'>{m.pool}</a>".format(**locals()))
-
-
 def fused_slots(v, c, m, p):
     url = (
         '/admin/taskinstance/' +
