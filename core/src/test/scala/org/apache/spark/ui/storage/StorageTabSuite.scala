@@ -22,6 +22,7 @@ import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
+import org.apache.spark.SparkConf
 
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
@@ -43,7 +44,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     bus = new LiveListenerBus
-    storageStatusListener = new StorageStatusListener
+    storageStatusListener = new StorageStatusListener(new SparkConf())
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)

@@ -49,6 +49,7 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
+  
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -184,6 +185,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val isAlive = listener.storageStatusList.contains(status)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -193,7 +195,7 @@ private[spark] object ExecutorsPage {
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
-
+    
     new ExecutorSummary(
       execId,
       hostPort,
@@ -208,6 +210,7 @@ private[spark] object ExecutorsPage {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
+      isAlive,
       maxMem,
       executorLogs
     )

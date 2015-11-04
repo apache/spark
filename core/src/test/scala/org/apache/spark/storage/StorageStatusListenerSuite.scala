@@ -20,6 +20,13 @@ package org.apache.spark.storage
 import org.apache.spark.{SparkFunSuite, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
+import org.apache.spark.SparkConfSuite
+import org.apache.spark.SparkConf
+
+/**
+ * Test the behavior of StorageStatusListener in response to all relevant events.
+ */
+
 
 /**
  * Test the behavior of StorageStatusListener in response to all relevant events.
@@ -29,9 +36,10 @@ class StorageStatusListenerSuite extends SparkFunSuite {
   private val bm2 = BlockManagerId("fat", "duck", 2)
   private val taskInfo1 = new TaskInfo(0, 0, 0, 0, "big", "dog", TaskLocality.ANY, false)
   private val taskInfo2 = new TaskInfo(0, 0, 0, 0, "fat", "duck", TaskLocality.ANY, false)
+  val conf = new SparkConf()
 
   test("block manager added/removed") {
-    val listener = new StorageStatusListener
+    val listener = new StorageStatusListener(conf)
 
     // Block manager add
     assert(listener.executorIdToStorageStatus.size === 0)
@@ -60,7 +68,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
   }
 
   test("task end without updated blocks") {
-    val listener = new StorageStatusListener
+    val listener = new StorageStatusListener(conf)
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm2, 2000L))
     val taskMetrics = new TaskMetrics
@@ -77,7 +85,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
   }
 
   test("task end with updated blocks") {
-    val listener = new StorageStatusListener
+    val listener = new StorageStatusListener(conf)
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm2, 2000L))
     val taskMetrics1 = new TaskMetrics
@@ -126,7 +134,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
   }
 
   test("unpersist RDD") {
-    val listener = new StorageStatusListener
+    val listener = new StorageStatusListener(conf)
     listener.onBlockManagerAdded(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     val taskMetrics1 = new TaskMetrics
     val taskMetrics2 = new TaskMetrics
@@ -148,5 +156,13 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     assert(listener.executorIdToStorageStatus("big").containsBlock(RDDBlockId(1, 2)))
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(1))
     assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
+  }
+  
+  test("Killed Executor Entry removed after configurable time") {
+    val localtestconf = new SparkConf().set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR,"5s")
+    val listener = new StorageStatusListener(localtestconf)
+    listener.removedExecutorIdToStorageStatus.put("1", new StorageStatus(null, 50))
+    Thread.sleep(5500)
+    assert(listener.removedExecutorIdToStorageStatus.asMap.get("1") == null)
   }
 }

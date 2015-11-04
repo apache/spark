@@ -18,9 +18,14 @@
 package org.apache.spark.storage
 
 import scala.collection.mutable
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
+import com.google.common.cache.CacheBuilder
+import java.util.concurrent.TimeUnit
+import com.google.common.cache.CacheLoader
+import org.apache.spark.SparkConf
+
+import scala.collection.JavaConversions._
 
 /**
  * :: DeveloperApi ::
@@ -28,15 +33,30 @@ import org.apache.spark.scheduler._
  *
  * This class is thread-safe (unlike JobProgressListener)
  */
+
+object StorageStatusListener {
+  val TIME_TO_EXPIRE_KILLED_EXECUTOR = "spark.ui.timeToExpireKilledExecutor"
+}
+
 @DeveloperApi
-class StorageStatusListener extends SparkListener {
+class StorageStatusListener(conf: SparkConf) extends SparkListener {
+  
+  import StorageStatusListener._
+  
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder()
+    .expireAfterWrite(conf.getTimeAsSeconds(TIME_TO_EXPIRE_KILLED_EXECUTOR, "0"), TimeUnit.SECONDS)
+    .build[String, StorageStatus]()
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
   }
-
+  
+  def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized{
+    removedExecutorIdToStorageStatus.asMap().values().toSeq
+  }
+ 
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
     executorIdToStorageStatus.get(execId).foreach { storageStatus =>
