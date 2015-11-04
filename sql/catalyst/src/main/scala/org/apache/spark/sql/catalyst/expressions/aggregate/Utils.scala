@@ -309,8 +309,8 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
         val a = Alias(e.copy(aggregateFunction = af), "ra")()
 
         // Get the result of the first aggregate in the last aggregate.
-        val b = AggregateExpression2(aggregate.First(
-          evalWithinGroup(id, a.toAttribute), Literal(true)),
+        val b = AggregateExpression2(
+          aggregate.First(evalWithinGroup(id, a.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
         (e, a, b)
