@@ -128,6 +128,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
 @Experimental
 class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[IsotonicRegressionModel] with IsotonicRegressionBase {
+
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("isoReg"))
 
@@ -154,8 +155,10 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   /** @group setParam */
   @Since("1.5.0")
   def setFeatureIndex(value: Int): this.type = set(featureIndex, value)
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): IsotonicRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
@@ -169,6 +172,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
     copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
   }
+
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true)

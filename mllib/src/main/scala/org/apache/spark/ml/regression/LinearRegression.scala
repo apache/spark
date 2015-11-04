@@ -65,6 +65,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
 
@@ -327,6 +328,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       objectiveHistory)
     model.setSummary(trainingSummary)
   }
+
   @Since("1.3.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }

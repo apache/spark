@@ -42,6 +42,7 @@ import org.apache.spark.sql.functions._
 final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestParams with TreeRegressorParams {
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfr"))
 
@@ -50,31 +51,40 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   // Parameters from TreeRegressorParams:
   @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
+
   @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
+
   @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
+
   @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
+
   @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
+
   @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
+
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
+
   @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
   @Since("1.4.0")
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
+
   @Since("1.4.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from RandomForestParams:
   @Since("1.4.0")
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
+
   @Since("1.4.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
@@ -91,6 +101,7 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     val numFeatures = oldDataset.first().features.size
     new RandomForestRegressionModel(trees, numFeatures)
   }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)
 }

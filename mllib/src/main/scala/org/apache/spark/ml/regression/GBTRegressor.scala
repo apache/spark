@@ -47,6 +47,7 @@ import org.apache.spark.sql.types.DoubleType
 final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTParams with TreeRegressorParams with Logging {
+
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("gbtr"))
 
@@ -55,17 +56,23 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   // Parameters from TreeRegressorParams:
   @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
+
   @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
+
   @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
+
   @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
+
   @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
+
   @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
+
   @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
@@ -82,6 +89,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   // Parameters from TreeEnsembleParams:
   @Since("1.4.0")
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
+
   @Since("1.4.0")
   override def setSeed(value: Long): this.type = {
     logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
@@ -91,6 +99,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   // Parameters from GBTParams:
   @Since("1.4.0")
   override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
+
   @Since("1.4.0")
   override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
@@ -138,6 +147,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
     val oldModel = oldGBT.run(oldDataset)
     GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
   }
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
