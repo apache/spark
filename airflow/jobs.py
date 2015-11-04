@@ -174,7 +174,7 @@ class BaseJob(Base):
             statsd.incr(self.__class__.__name__.lower()+'_end', 1, 1)
 
     def _execute(self):
-        raise NotImplemented("This method needs to be overridden")
+        raise NotImplementedError("This method needs to be overridden")
 
 
 class SchedulerJob(BaseJob):

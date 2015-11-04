@@ -1503,7 +1503,7 @@ class BaseOperator(object):
 
         Refer to get_template_context for more context.
         """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def post_execute(self, context):
         """
@@ -2016,7 +2016,7 @@ class DAG(object):
         parameter. This allows to not explicitly add every single task to the
         dag explicitly.
         """
-        raise NotImplemented("")
+        raise NotImplementedError("")
 
     def override_start_date(self, start_date):
         """
