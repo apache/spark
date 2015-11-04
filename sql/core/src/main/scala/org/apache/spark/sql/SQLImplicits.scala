@@ -52,6 +52,10 @@ abstract class SQLImplicits {
     DatasetHolder(_sqlContext.createDataset(rdd))
   }
 
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 1.6.0
+   */
   implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(s))
   }
