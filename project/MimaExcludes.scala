@@ -161,6 +161,9 @@ object MimaExcludes {
           "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$23"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.UDFRegistration.org$apache$spark$sql$UDFRegistration$$builder$24")
+      ) ++ Seq(
+        // SPARK-11485
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df")
       )
     case v if v.startsWith("1.5") =>
       Seq(
