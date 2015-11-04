@@ -19,6 +19,7 @@
 # values are equivalent R types. This is stored in an environment to allow for
 # more efficient look up (environments use hashmaps).
 PRIMITIVE_TYPES <- as.environment(list(
+  "byte"="integer",
   "smallint"="integer",
   "tinyint"="integer",
   "integer"="integer",
