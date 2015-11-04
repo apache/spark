@@ -212,6 +212,9 @@ class ExecutorRunnable(
       Seq("--user-class-path", "file:" + absPath)
     }.toSeq
 
+    val rpcArg = sparkConf.getOption("spark.rpc").map(v =>
+      Seq("--rpc-framework", v)).getOrElse(Seq.empty)
+
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server",
@@ -228,6 +231,7 @@ class ExecutorRunnable(
         "--hostname", hostname.toString,
         "--cores", executorCores.toString,
         "--app-id", appId) ++
+      rpcArg ++
       userClassPath ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
