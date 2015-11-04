@@ -71,7 +71,7 @@ object Variance extends Impurity {
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  */
-private[spark] class VarianceAggregator()
+private[tree] class VarianceAggregator()
   extends ImpurityAggregator(statsSize = 3) with Serializable {
 
   /**
