@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{ArrayList => JArrayList, List => JList}
-import org.apache.spark.sql.AnalysisException
+
+import scala.collection.JavaConversions._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -26,9 +27,8 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-
-import scala.collection.JavaConversions._
 
 private[hive] class SparkSQLDriver(
     val context: HiveContext = SparkSQLEnv.hiveContext)
