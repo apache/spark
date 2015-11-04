@@ -43,10 +43,13 @@
     </div>
     {% endfor %}
 
-    <div class="legend_item state" style="border-color:grey;">no status</div>
+    <div style"background-color: blue;">
+    <div class="legend_item state" style="border-color:white;">no status</div>
+    <div class="legend_item state" style="border-color:grey;">queued</div>
     <div class="legend_item state" style="border-color:red;">failed</div>
     <div class="legend_item state" style="border-color:lime;">running</div>
     <div class="legend_item state" style="border-color:green;">success</div>
+    </div>
     <div style="clear:both;"></div>
 </div>
 <hr style="margin-bottom: 0px;"/>
@@ -78,7 +81,9 @@
     var arrange = "{{ arrange }}";
     var g = dagreD3.json.decode(nodes, edges);
     var duration = 500;
-    var stateFocusMap = {'no status':false, 'failed':false, 'running':false, 'success': false}
+    var stateFocusMap = {
+        'no status':false, 'failed':false, 'running':false, 
+        'queued': false, 'success': false};
 
 
     var layout = dagreD3.layout().rankDir(arrange).nodeSep(15).rankSep(15);

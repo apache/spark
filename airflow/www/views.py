@@ -1177,15 +1177,13 @@ class Airflow(BaseView):
 
         task_instances = {
             ti.task_id: utils.alchemy_to_dict(ti)
-            for ti in dag.get_task_instances(session, dttm, dttm)
-            }
+            for ti in dag.get_task_instances(session, dttm, dttm)}
         tasks = {
             t.task_id: {
                 'dag_id': t.dag_id,
                 'task_type': t.task_type,
             }
-            for t in dag.tasks
-            }
+            for t in dag.tasks}
         if not tasks:
             flash("No tasks found", "error")
         session.commit()
