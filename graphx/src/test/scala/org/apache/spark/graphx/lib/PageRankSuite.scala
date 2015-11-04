@@ -118,23 +118,26 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       val dynamicRanks = starGraph.personalizedPageRank(0, 0, resetProb).vertices.cache()
       assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
 
-      val parallelStaticRanks1 = starGraph.staticParallelPersonalizedPageRank(Array(0), 1, resetProb).mapVertices{
-        case (vertexId, vector) => vector(0)
-      }.vertices.cache()
+      val parallelStaticRanks1 = starGraph
+        .staticParallelPersonalizedPageRank(Array(0), 1, resetProb).mapVertices{
+          case (vertexId, vector) => vector(0)
+        }.vertices.cache()
       assert(compareRanks(staticRanks1, parallelStaticRanks1) < errorTol)
 
-      val parallelStaticRanks2 = starGraph.staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices{
-        case (vertexId, vector) => vector(0)
-      }.vertices.cache()
+      val parallelStaticRanks2 = starGraph
+        .staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices{
+          case (vertexId, vector) => vector(0)
+        }.vertices.cache()
       assert(compareRanks(staticRanks2, parallelStaticRanks2) < errorTol)
 
       // We have one outbound edge from 1 to 0
       val otherStaticRanks2 = starGraph.staticPersonalizedPageRank(1, numIter = 2, resetProb)
         .vertices.cache()
       val otherDynamicRanks = starGraph.personalizedPageRank(1, 0, resetProb).vertices.cache()
-      val otherParallelStaticRanks2 = starGraph.staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices{
-        case (vertexId, vector) => vector(1)
-      }.vertices.cache()
+      val otherParallelStaticRanks2 = starGraph
+        .staticParallelPersonalizedPageRank(Array(0, 1), 2, resetProb).mapVertices{
+          case (vertexId, vector) => vector(1)
+        }.vertices.cache()
       assert(compareRanks(otherDynamicRanks, otherStaticRanks2) < errorTol)
       assert(compareRanks(otherStaticRanks2, otherParallelStaticRanks2) < errorTol)
       assert(compareRanks(otherDynamicRanks, otherParallelStaticRanks2) < errorTol)
@@ -193,9 +196,10 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
 
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
 
-      val parallelStaticRanks = chain.staticParallelPersonalizedPageRank(Array(4), numIter, resetProb).mapVertices{
-        case (vertexId, vector) => vector(0)
-      }.vertices.cache()
+      val parallelStaticRanks = chain
+        .staticParallelPersonalizedPageRank(Array(4), numIter, resetProb).mapVertices{
+          case (vertexId, vector) => vector(0)
+        }.vertices.cache()
       assert(compareRanks(staticRanks, parallelStaticRanks) < errorTol)
     }
   }
