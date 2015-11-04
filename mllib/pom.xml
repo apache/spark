@@ -138,7 +138,54 @@
         </dependency>
       </dependencies>
     </profile>
-  </profiles>
+    <!-- Enable paradise for scala 2.10 -->
+    <profile>
+      <id>scala-2.10</id>
+      <activation>
+        <property><name>!scala-2.11</name></property>
+      </activation>
+      <build>
+	<plugins>
+	  <plugin>
+	    <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <version>3.2.2</version>
+	    <configuration>
+              <scalaVersion>${scala.version}</scalaVersion>
+              <recompileMode>incremental</recompileMode>
+              <useZincServer>true</useZincServer>
+              <args>
+		<arg>-unchecked</arg>
+		<arg>-deprecation</arg>
+		<arg>-feature</arg>
+              </args>
+              <jvmArgs>
+		<jvmArg>-Xms1024m</jvmArg>
+		<jvmArg>-Xmx1024m</jvmArg>
+		<jvmArg>-XX:PermSize=${PermGen}</jvmArg>
+		<jvmArg>-XX:MaxPermSize=${MaxPermGen}</jvmArg>
+		<jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
+              </jvmArgs>
+              <javacArgs>
+		<javacArg>-source</javacArg>
+		<javacArg>${java.version}</javacArg>
+		<javacArg>-target</javacArg>
+		<javacArg>${java.version}</javacArg>
+		<javacArg>-Xlint:all,-serial,-path</javacArg>
+              </javacArgs>
+	      <compilerPlugins>
+		<compilerPlugin>
+		  <groupId>org.scalamacros</groupId>
+		  <artifactId>paradise_${scala.version}</artifactId>
+		  <version>2.1.0-M5</version>
+		</compilerPlugin>
+	      </compilerPlugins>
+	    </configuration>
+	  </plugin>
+	</plugins>
+      </build>
+    </profile>
+    </profiles>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
