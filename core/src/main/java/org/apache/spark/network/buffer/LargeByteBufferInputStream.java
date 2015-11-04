@@ -72,10 +72,6 @@ public class LargeByteBufferInputStream extends InputStream {
     }
   }
 
-  // only for testing
-  @VisibleForTesting
-  boolean disposed = false;
-
   /**
    * Clean up the buffer, and potentially dispose of it
    */
@@ -84,7 +80,6 @@ public class LargeByteBufferInputStream extends InputStream {
     if (buffer != null) {
       if (dispose) {
         buffer.dispose();
-        disposed = true;
       }
       buffer = null;
     }

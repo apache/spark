@@ -101,7 +101,6 @@ public class WrappedLargeByteBuffer implements LargeByteBuffer {
     size = sum;
   }
 
-
   @Override
   public WrappedLargeByteBuffer get(byte[] dest) {
     return get(dest, 0, dest.length);

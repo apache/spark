@@ -65,7 +65,7 @@ public class LargeByteBufferOutputStream extends OutputStream {
   }
 
   /**
-   * exposed for testing.  You don't really ever want to call this method -- the returned
+   * You don't really ever want to call this method -- the returned
    * buffer will not implement {{asByteBuffer}} correctly.
    */
   @VisibleForTesting

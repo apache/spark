@@ -20,11 +20,13 @@ import java.io.{File, FileInputStream, FileOutputStream, OutputStream}
 import java.nio.channels.FileChannel.MapMode
 
 import org.junit.Assert._
+import org.mockito.Mockito._
 import org.scalatest.Matchers
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 
-class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
+class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
   test("read from large mapped file") {
     val testFile = File.createTempFile("large-buffer-input-stream-test", ".bin")
@@ -47,17 +49,13 @@ class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
 
       val read = new Array[Byte](buffer.length)
       (0 until (len / buffer.length).toInt).foreach { idx =>
-        in.disposed should be(false)
         in.read(read) should be(read.length)
         (0 until buffer.length).foreach { arrIdx =>
           assertEquals(buffer(arrIdx), read(arrIdx))
         }
       }
-      in.disposed should be(false)
       in.read(read) should be(-1)
-      in.disposed should be(false)
       in.close()
-      in.disposed should be(true)
     } finally {
       testFile.delete()
     }
@@ -65,11 +63,15 @@ class LargeByteBufferInputStreamSuite extends SparkFunSuite with Matchers {
 
   test("dispose on close") {
     // don't need to read to the end -- dispose anytime we close
-    val data = new Array[Byte](10)
-    val in = new LargeByteBufferInputStream(LargeByteBufferHelper.asLargeByteBuffer(data), true)
-    in.disposed should be (false)
+    val mockBuffer = mock[LargeByteBuffer]
+    when(mockBuffer.remaining()).thenReturn(0)
+    val in = new LargeByteBufferInputStream(mockBuffer, true)
+    verify(mockBuffer, times(0)).dispose()
+    // reading to the end shouldn't auto-dispose
+    in.read() should be (-1)
+    verify(mockBuffer, times(0)).dispose()
     in.close()
-    in.disposed should be (true)
+    verify(mockBuffer, times(1)).dispose()
   }
 
   test("io stream roundtrip") {

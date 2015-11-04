@@ -47,7 +47,6 @@ import java.nio.channels.WritableByteChannel;
 public interface LargeByteBuffer {
   public byte get();
 
-
   /**
    * Bulk copy data from this buffer into the given array.  First checks there is sufficient
    * data in this buffer; if not, throws a {@link java.nio.BufferUnderflowException}.  Behaves
@@ -68,7 +67,6 @@ public interface LargeByteBuffer {
    * @return this buffer
    */
   public LargeByteBuffer get(byte[] dst, int offset, int length);
-
 
   public LargeByteBuffer rewind();
 

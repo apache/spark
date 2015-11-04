@@ -77,7 +77,7 @@ public class LargeByteBufferHelperSuite {
 
   @Test
   public void testAllocate() {
-    WrappedLargeByteBuffer buf = (WrappedLargeByteBuffer) LargeByteBufferHelper.allocate(95,10);
+    WrappedLargeByteBuffer buf = (WrappedLargeByteBuffer) LargeByteBufferHelper.allocate(95, 10);
     assertEquals(10, buf.underlying.length);
     for (int i = 0 ; i < 9; i++) {
       assertEquals(10, buf.underlying[i].capacity());
