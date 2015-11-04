@@ -51,6 +51,7 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
+  
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -58,7 +59,7 @@ private[ui] class ExecutorsPage(
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
-    val execInfo = for (status <- storageStatusList) yield getExecInfo(status)
+    val execInfo = for (statusId <- 0 until storageStatusList.size) yield ExecutorsPage.getExecInfo(listener, statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
@@ -181,13 +182,16 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  private def getExecInfo(status: StorageStatus): ExecutorSummaryInfo = {
+  def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
+    
+    val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val isAlive = listener.storageStatusList.contains(status)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -196,9 +200,8 @@ private[spark] object ExecutorsPage {
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
-    val isAlive = listener.storageStatusList.contains(status)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
-
+    
     new ExecutorSummary(
       execId,
       hostPort,
