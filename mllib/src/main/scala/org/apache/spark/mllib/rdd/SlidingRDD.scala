@@ -72,22 +72,28 @@ class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int
       Array(new SlidingRDDPartition[T](0, parentPartitions(0), Seq.empty, 0))
     } else {
       val n1 = n - 1
-      // Get partitions sizes
-      val sizes =
-        parent.context.runJob(parent, (iter: Iterator[T]) => iter.length, 0 until n)
+      val w1 = windowSize - 1
+      // Get partition ids, sizes and first w-1 elements
+      val idSizeFullHeads = parent.context.runJob(parent,
+        (taskContext: TaskContext, iter: Iterator[T]) => {
+          val w1Array = iter.take(w1).toArray
+          val partitionSize = iter.length + w1Array.size
+          (taskContext.partitionId(), partitionSize, w1Array)
+        },
+        0 until n)
+      val sizes = idSizeFullHeads.map(_._2)
       val cumSizes = sizes.scanLeft(0)(_ + _)
       // Get the first required items of each partition, starting from the second partition.
-      val nextHeads = parent.context.runJob(parent,
-        (taskContext: TaskContext, iter: Iterator[T]) => {
-          val part = cumSizes(taskContext.partitionId()) % step
-          val required = if (part == 0) {
-              math.max(windowSize - step, 0)
-            } else {
-              math.max(windowSize - part, 0)
-            }
-          (required, iter.take(required).toArray)
-        },
-        1 until n, true)
+      // Heads contain all required elements to produce a window spanning from previous partitions.
+      val nextHeads = idSizeFullHeads.tail.map { case (id, size, head) =>
+        val part = cumSizes(id) % step
+        val required = if (part == 0) {
+            math.max(windowSize - step, 0)
+          } else {
+            math.max(windowSize - part, 0)
+          }
+        (required, head.take(required))
+      }
       val partitions = mutable.ArrayBuffer[SlidingRDDPartition[T]]()
       var i = 0
       var partitionIndex = 0
