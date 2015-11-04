@@ -119,7 +119,7 @@ private[tree] class EntropyAggregator(numClasses: Int)
    * @param sufficientStats  Sufficient stats array for a node.
    */
   def getCalculator(sufficientStats: Array[Double]): EntropyCalculator = {
-    new EntropyCalculator(sufficientStats)
+    new EntropyCalculator(sufficientStats.clone())
   }
 }
 

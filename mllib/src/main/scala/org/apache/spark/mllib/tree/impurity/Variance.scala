@@ -99,7 +99,7 @@ private[tree] class VarianceAggregator()
    * @param sufficientStats  Sufficient stats array for a node.
    */
   def getCalculator(sufficientStats: Array[Double]): VarianceCalculator = {
-    new VarianceCalculator(sufficientStats)
+    new VarianceCalculator(sufficientStats.clone())
   }
 }
 
