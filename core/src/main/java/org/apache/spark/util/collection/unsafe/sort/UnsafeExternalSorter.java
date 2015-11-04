@@ -121,7 +121,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     if (existingInMemorySorter == null) {
       this.inMemSorter =
         new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
-      acquireMemory(inMemSorter.getMemoryUsage());
+      acquireOnHeapMemory(inMemSorter.getMemoryUsage());
     } else {
       this.inMemSorter = existingInMemorySorter;
       // will acquire after free the map
@@ -276,7 +276,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       if (inMemSorter != null) {
         long used = inMemSorter.getMemoryUsage();
         inMemSorter = null;
-        releaseMemory(used);
+        releaseOnHeapMemory(used);
       }
     }
   }
@@ -292,7 +292,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       long used = inMemSorter.getMemoryUsage();
       long needed = used + inMemSorter.getMemoryToExpand();
       try {
-        acquireMemory(needed);  // could trigger spilling
+        acquireOnHeapMemory(needed);  // could trigger spilling
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
@@ -300,14 +300,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
-        releaseMemory(needed);
+        releaseOnHeapMemory(needed);
       } else {
         try {
           inMemSorter.expandPointerArray();
-          releaseMemory(used);
+          releaseOnHeapMemory(used);
         } catch (OutOfMemoryError oom) {
           // Just in case that JVM had run out of memory
-          releaseMemory(needed);
+          releaseOnHeapMemory(needed);
           spill();
         }
       }
@@ -484,7 +484,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           assert(inMemSorter != null);
           long used = inMemSorter.getMemoryUsage();
           inMemSorter = null;
-          releaseMemory(used);
+          releaseOnHeapMemory(used);
         }
         numRecords--;
         upstream.loadNext();

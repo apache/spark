@@ -35,16 +35,16 @@ public class TaskMemoryManagerSuite {
     @Override
     public long spill(long size, MemoryConsumer trigger) throws IOException {
       long used = getMemoryUsed(taskMemoryManager.tungstenMemoryMode);
-      releaseMemory(used);
+      releaseOnHeapMemory(used);
       return used;
     }
 
     void use(long size) {
-      acquireMemory(size);
+      acquireOnHeapMemory(size);
     }
 
     void free(long size) {
-      releaseMemory(size);
+      releaseOnHeapMemory(size);
     }
   }
 

@@ -114,7 +114,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.writeMetrics = writeMetrics;
-    acquireMemory(initialSize * 8L);
+    acquireOnHeapMemory(initialSize * 8L);
     this.inMemSorter = new ShuffleInMemorySorter(initialSize);
     this.peakMemoryUsedBytes = getMemoryUsage();
   }
@@ -303,7 +303,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     if (inMemSorter != null) {
       long sorterMemoryUsage = inMemSorter.getMemoryUsage();
       inMemSorter = null;
-      releaseMemory(sorterMemoryUsage);
+      releaseOnHeapMemory(sorterMemoryUsage);
     }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
@@ -323,7 +323,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       long used = inMemSorter.getMemoryUsage();
       long needed = used + inMemSorter.getMemoryToExpand();
       try {
-        acquireMemory(needed);  // could trigger spilling
+        acquireOnHeapMemory(needed);  // could trigger spilling
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
@@ -331,14 +331,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
-        releaseMemory(needed);
+        releaseOnHeapMemory(needed);
       } else {
         try {
           inMemSorter.expandPointerArray();
-          releaseMemory(used);
+          releaseOnHeapMemory(used);
         } catch (OutOfMemoryError oom) {
           // Just in case that JVM had run out of memory
-          releaseMemory(needed);
+          releaseOnHeapMemory(needed);
           spill();
         }
       }
@@ -406,7 +406,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         freeMemory();
         long sorterMemoryUsage = inMemSorter.getMemoryUsage();
         inMemSorter = null;
-        releaseMemory(sorterMemoryUsage);
+        releaseOnHeapMemory(sorterMemoryUsage);
       }
       return spills.toArray(new SpillInfo[spills.size()]);
     } catch (IOException e) {

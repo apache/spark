@@ -82,7 +82,7 @@ public abstract class MemoryConsumer {
    *
    * If there is not enough memory, throws OutOfMemoryError.
    */
-  protected void acquireMemory(long size) {
+  protected void acquireOnHeapMemory(long size) {
     long got = taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
     if (got < size) {
       taskMemoryManager.releaseExecutionMemory(got, MemoryMode.ON_HEAP, this);
@@ -93,9 +93,9 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Release `size` bytes memory.
+   * Release `size` bytes of on-heap memory.
    */
-  protected void releaseMemory(long size) {
+  protected void releaseOnHeapMemory(long size) {
     onHeapMemoryUsed -= size;
     taskMemoryManager.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this);
   }

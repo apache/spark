@@ -732,7 +732,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    acquireMemory(capacity * 16);
+    acquireOnHeapMemory(capacity * 16);
     longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
     bitset = new BitSet(MemoryBlock.fromLongArray(new long[capacity / 64]));
 
@@ -748,7 +748,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     if (longArray != null) {
       long used = longArray.memoryBlock().size();
       longArray = null;
-      releaseMemory(used);
+      releaseOnHeapMemory(used);
       bitset = null;
     }
   }
@@ -895,7 +895,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         }
       }
     }
-    releaseMemory(oldLongArray.memoryBlock().size());
+    releaseOnHeapMemory(oldLongArray.memoryBlock().size());
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
