@@ -36,7 +36,7 @@ import org.apache.spark.sql.DataFrame
  * for regression.
  * It supports both continuous and categorical features.
  */
-@Since("1.4.0") 
+@Since("1.4.0")
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
