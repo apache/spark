@@ -35,6 +35,9 @@ import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcResponse;
+import org.apache.spark.network.protocol.StreamFailure;
+import org.apache.spark.network.protocol.StreamRequest;
+import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -92,6 +95,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       processFetchRequest((ChunkFetchRequest) request);
     } else if (request instanceof RpcRequest) {
       processRpcRequest((RpcRequest) request);
+    } else if (request instanceof StreamRequest) {
+      processStreamRequest((StreamRequest) request);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
@@ -115,6 +120,21 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
 
     respond(new ChunkFetchSuccess(req.streamChunkId, buf));
+  }
+
+  private void processStreamRequest(final StreamRequest req) {
+    final String client = NettyUtils.getRemoteAddress(channel);
+    ManagedBuffer buf;
+    try {
+      buf = streamManager.openStream(req.streamId);
+    } catch (Exception e) {
+      logger.error(String.format(
+        "Error opening stream %s for request from %s", req.streamId, client), e);
+      respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
+      return;
+    }
+
+    respond(new StreamResponse(req.streamId, buf.size(), buf));
   }
 
   private void processRpcRequest(final RpcRequest req) {

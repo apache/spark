@@ -45,27 +45,32 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
   public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
     Object body = null;
     long bodyLength = 0;
+    boolean isBodyInFrame = false;
 
-    // Only ChunkFetchSuccesses have data besides the header.
+    // Detect ResponseWithBody messages and get the data buffer out of them.
     // The body is used in order to enable zero-copy transfer for the payload.
-    if (in instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
+    if (in instanceof ResponseWithBody) {
+      ResponseWithBody resp = (ResponseWithBody) in;
       try {
-        bodyLength = resp.buffer.size();
-        body = resp.buffer.convertToNetty();
+        bodyLength = resp.body.size();
+        body = resp.body.convertToNetty();
+        isBodyInFrame = resp.isBodyInFrame;
       } catch (Exception e) {
-        // Re-encode this message as BlockFetchFailure.
-        logger.error(String.format("Error opening block %s for client %s",
-          resp.streamChunkId, ctx.channel().remoteAddress()), e);
-        encode(ctx, new ChunkFetchFailure(resp.streamChunkId, e.getMessage()), out);
+        // Re-encode this message as a failure response.
+        String error = e.getMessage() != null ? e.getMessage() : "null";
+        logger.error(String.format("Error processing %s for client %s",
+          resp, ctx.channel().remoteAddress()), e);
+        encode(ctx, resp.createFailureResponse(error), out);
         return;
       }
     }
 
     Message.Type msgType = in.type();
-    // All messages have the frame length, message type, and message itself.
+    // All messages have the frame length, message type, and message itself. The frame length
+    // may optionally include the length of the body data, depending on what message is being
+    // sent.
     int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
-    long frameLength = headerLength + bodyLength;
+    long frameLength = headerLength + (isBodyInFrame ? bodyLength : 0);
     ByteBuf header = ctx.alloc().heapBuffer(headerLength);
     header.writeLong(frameLength);
     msgType.encode(header);

@@ -24,57 +24,58 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
- * Response to {@link ChunkFetchRequest} when a chunk exists and has been successfully fetched.
- *
- * Note that the server-side encoding of this messages does NOT include the buffer itself, as this
- * may be written by Netty in a more efficient manner (i.e., zero-copy write).
- * Similarly, the client-side decoding will reuse the Netty ByteBuf as the buffer.
+ * Response to {@link StreamRequest} when the stream has been successfully opened.
+ * <p>
+ * Note the message itself does not contain the stream data. That is written separately by the
+ * sender. The receiver is expected to set a temporary channel handler that will consume the
+ * number of bytes this message says the stream has.
  */
-public final class ChunkFetchSuccess extends ResponseWithBody {
-  public final StreamChunkId streamChunkId;
+public final class StreamResponse extends ResponseWithBody {
+   public final String streamId;
+   public final long byteCount;
 
-  public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
-    super(buffer, true);
-    this.streamChunkId = streamChunkId;
-  }
+   public StreamResponse(String streamId, long byteCount, ManagedBuffer buffer) {
+     super(buffer, false);
+     this.streamId = streamId;
+     this.byteCount = byteCount;
+   }
 
   @Override
-  public Type type() { return Type.ChunkFetchSuccess; }
+  public Type type() { return Type.StreamResponse; }
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength();
+    return 8 + Encoders.Strings.encodedLength(streamId);
   }
 
   /** Encoding does NOT include 'buffer' itself. See {@link MessageEncoder}. */
   @Override
   public void encode(ByteBuf buf) {
-    streamChunkId.encode(buf);
+    Encoders.Strings.encode(buf, streamId);
+    buf.writeLong(byteCount);
   }
 
   @Override
   public ResponseMessage createFailureResponse(String error) {
-    return new ChunkFetchFailure(streamChunkId, error);
+    return new StreamFailure(streamId, error);
   }
 
-  /** Decoding uses the given ByteBuf as our data, and will retain() it. */
-  public static ChunkFetchSuccess decode(ByteBuf buf) {
-    StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    buf.retain();
-    NettyManagedBuffer managedBuf = new NettyManagedBuffer(buf.duplicate());
-    return new ChunkFetchSuccess(streamChunkId, managedBuf);
+  public static StreamResponse decode(ByteBuf buf) {
+    String streamId = Encoders.Strings.decode(buf);
+    long byteCount = buf.readLong();
+    return new StreamResponse(streamId, byteCount, null);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamChunkId, body);
+    return Objects.hashCode(byteCount, streamId);
   }
 
   @Override
   public boolean equals(Object other) {
-    if (other instanceof ChunkFetchSuccess) {
-      ChunkFetchSuccess o = (ChunkFetchSuccess) other;
-      return streamChunkId.equals(o.streamChunkId) && body.equals(o.body);
+    if (other instanceof StreamResponse) {
+      StreamResponse o = (StreamResponse) other;
+      return byteCount == o.byteCount && streamId.equals(o.streamId);
     }
     return false;
   }
@@ -82,8 +83,9 @@ public final class ChunkFetchSuccess extends ResponseWithBody {
   @Override
   public String toString() {
     return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
-      .add("buffer", body)
+      .add("streamId", streamId)
+      .add("byteCount", byteCount)
       .toString();
   }
+
 }
