@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import javax.annotation.Nullable;
 
-import org.apache.spark.*;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -38,6 +37,7 @@ import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.*;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
