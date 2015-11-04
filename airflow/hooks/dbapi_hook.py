@@ -167,4 +167,4 @@ class DbApiHook(BaseHook):
         """
         Loads a tab-delimited file into a database table
         """
-        raise NotImplemented()
+        raise NotImplementedError()

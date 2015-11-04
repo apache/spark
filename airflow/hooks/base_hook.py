@@ -59,13 +59,13 @@ class BaseHook(object):
         return connection.get_hook()
 
     def get_conn(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def get_records(self, sql):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def get_pandas_df(self, sql):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def run(self, sql):
-        raise NotImplemented()
+        raise NotImplementedError()
