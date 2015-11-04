@@ -17,13 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.lang.{Long => JLong}
-
-import com.clearspring.analytics.hash.MurmurHash
-
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -35,11 +28,13 @@ case class StddevPop(child: Expression) extends StddevAgg(child) {
   override def prettyName: String = "stddev_pop"
 }
 
+
 // Compute the sample standard deviation of a column
 case class StddevSamp(child: Expression) extends StddevAgg(child) {
   override def isSample: Boolean = true
   override def prettyName: String = "stddev_samp"
 }
+
 
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
@@ -127,7 +122,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     // stddev_pop = sqrt (mk/count)
     val varCol =
       if (isSample) {
-        mk / Cast((count - Cast(Literal(1), resultType)), resultType)
+        mk / Cast(count - Cast(Literal(1), resultType), resultType)
       } else {
         mk / count
       }
