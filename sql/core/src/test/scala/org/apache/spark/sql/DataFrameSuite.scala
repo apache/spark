@@ -1118,4 +1118,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       if (!allSequential) throw new SparkException("Partition should contain all sequential values")
     })
   }
+
+  test("fix case sensitivity of partition by") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        val p = path.getAbsolutePath
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
+        checkAnswer(sqlContext.read.parquet(p).select("YeaR"), Row(2012))
+      }
+    }
+  }
 }
