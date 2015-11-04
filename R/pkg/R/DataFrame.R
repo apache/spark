@@ -2065,8 +2065,6 @@ setMethod("attach",
 setMethod("with",
           signature(data = "DataFrame"),
           function(data, expr, ...) {
-            stopifnot(!missing(data))
-            stopifnot(inherits(data, "DataFrame"))
             cols <- columns(data)
             stopifnot(length(cols) > 0)
 
