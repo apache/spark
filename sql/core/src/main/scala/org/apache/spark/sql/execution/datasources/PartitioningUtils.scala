@@ -287,10 +287,11 @@ private[sql] object PartitioningUtils {
 
   def validatePartitionColumnDataTypes(
       schema: StructType,
-      partitionColumns: Array[String]): Unit = {
+      partitionColumns: Array[String],
+      caseSensitive: Boolean): Unit = {
 
-    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns).foreach { field =>
-      field.dataType match {
+    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
+      field => field.dataType match {
         case _: AtomicType => // OK
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }
