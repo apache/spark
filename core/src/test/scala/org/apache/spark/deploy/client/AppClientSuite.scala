@@ -173,7 +173,9 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     }
 
     def disconnected(): Unit = {
-      disconnectedCount += 1
+      synchronized {
+        disconnectedCount += 1
+      }
     }
 
     def dead(reason: String): Unit = {
