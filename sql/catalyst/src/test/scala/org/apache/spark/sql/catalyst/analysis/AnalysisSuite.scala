@@ -217,5 +217,21 @@ class AnalysisSuite extends AnalysisTest {
       nullResult,
       udf4)
     // checkUDF(udf4, expected4)
+    }
+
+  test("SPARK-11863 mixture of aliases and real columns in orderby clause - tpcds 19,55,71") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+    val alias1 = a.as("a1")
+    val alias2 = c.as("a2")
+
+    val plan = testRelation2.
+      groupBy('a, 'c) ('a.as("a1"), 'c.as("a2"), count('a).as("a3")).
+      orderBy('a1.asc, 'c.asc)
+
+    val expected = testRelation2.
+      groupBy(a, c) (alias1, alias2, count(a).as("a3")).
+      orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
+    checkAnalysis(plan, expected)
   }
 }

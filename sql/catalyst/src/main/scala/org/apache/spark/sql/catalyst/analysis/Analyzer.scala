@@ -638,40 +638,28 @@ class Analyzer(
       case sort @ Sort(sortOrder, global, aggregate: Aggregate)
         if aggregate.resolved =>
 
-        // Try resolving the ordering as though it is in the aggregate clause.
-        try {
+          // Try resolving the ordering as though it is in the aggregate clause.
           val aliasedOrdering = sortOrder.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
             resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
 
+
+          val originalAggExprs = aggregate.aggregateExpressions.map(
+            CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+
+          try {
           // If we pass the analysis check, then the ordering expressions should only reference to
           // aggregate expressions or grouping expressions, and it's safe to push them down to
           // Aggregate.
           checkAnalysis(resolvedAggregate)
 
-          val originalAggExprs = aggregate.aggregateExpressions.map(
-            CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
-
           // If the ordering expression is same with original aggregate expression, we don't need
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
-          val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
-            case (evaluated, order) =>
-              val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
-              }
-
-              if (index == -1) {
-                needsPushDown += evaluated
-                order.copy(child = evaluated.toAttribute)
-              } else {
-                order.copy(child = originalAggExprs(index).toAttribute)
-              }
-          }
+          val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
+            resolvedAliasedOrdering, sortOrder, originalAggExprs, true)
 
           // Since we don't rely on sort.resolved as the stop condition for this rule,
           // we need to check this and prevent applying this rule multiple times
@@ -684,13 +672,54 @@ class Analyzer(
           }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-          // just return the original plan.
-          case ae: AnalysisException => sort
+          // Return the plan after replacing any alias's in the sort with the attributes
+          // from aggregate expression if they are semantically equivalent.
+          case ae: AnalysisException =>
+            val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
+              resolvedAliasedOrdering, sortOrder, originalAggExprs, false)
+            Sort(evaluatedOrderings, global, aggregate)
         }
     }
 
     protected def containsAggregate(condition: Expression): Boolean = {
       condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+    }
+
+    /**
+     * This method is called from ResolveAggregateFunctions while resolving a plan having Sort
+     * with GroupBy. When called with isPushdown = true, this computes the order by attributes
+     * that needs to be pushed down to Aggregate expression. When called with isPushdown = false,
+     * this computes the evaluatedOrderings by replacing the Alias names referenced by Sort
+     * expression with the attributes in agregate expressions after checking the semantic equality.
+     * Example : select c1 as a , c2 as b from tab group by c1, c2 order by a, c2
+     *
+     */
+    def computeEvaluatedOrderings(
+        resolvedAliasedOrdering: Seq[Alias],
+        sortOrder: Seq[SortOrder],
+        originalAggExprs: Seq[NamedExpression],
+        isPushDown: Boolean) : (Seq[SortOrder], ArrayBuffer[NamedExpression]) = {
+
+      val needsPushDown = ArrayBuffer.empty[NamedExpression]
+      val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
+        case (evaluated, order) =>
+          val index = originalAggExprs.indexWhere {
+            case Alias(child, _) => child semanticEquals evaluated.child
+            case other => other semanticEquals evaluated.child
+          }
+          if (index == -1) {
+            if (isPushDown) {
+              needsPushDown += evaluated
+              order.copy(child = evaluated.toAttribute)
+            }
+            else {
+              order
+            }
+          } else {
+            order.copy(child = originalAggExprs(index).toAttribute)
+          }
+      }
+      (evaluatedOrderings, needsPushDown)
     }
   }
 
