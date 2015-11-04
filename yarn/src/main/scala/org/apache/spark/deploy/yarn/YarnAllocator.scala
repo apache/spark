@@ -550,6 +550,10 @@ private[yarn] class YarnAllocator(
 
   private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
 
+  private[yarn] def getNumPendingLossReasonRequests: Int = synchronized {
+    pendingLossReasonRequests.size
+  }
+
   /**
    * Split the pending container requests into 3 groups based on current localities of pending
    * tasks.
@@ -582,6 +586,7 @@ private[yarn] class YarnAllocator(
 
     (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
   }
+
 }
 
 private object YarnAllocator {

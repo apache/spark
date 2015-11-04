@@ -115,15 +115,12 @@ private[spark] abstract class YarnSchedulerBackend(
      * (e.g., preemption), according to the application master, then we pass that information down
      * to the TaskSetManager to inform the TaskSetManager that tasks on that lost executor should
      * not count towards a job failure.
-     *
-     * TODO there's a race condition where while we are querying the ApplicationMaster for
-     * the executor loss reason, there is the potential that tasks will be scheduled on
-     * the executor that failed. We should fix this by having this onDisconnected event
-     * also "blacklist" executors so that tasks are not assigned to them.
      */
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       addressToExecutorId.get(rpcAddress).foreach { executorId =>
-        yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        if (disableExecutor(executorId)) {
+          yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+        }
       }
     }
   }
