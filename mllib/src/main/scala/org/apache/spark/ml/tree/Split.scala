@@ -85,7 +85,7 @@ final class CategoricalSplit private[ml] (
   /**
    * If true, then "categories" is the set of categories for splitting to the left, and vice versa.
    */
-  private val isLeft: Boolean = _leftCategories.length <= numCategories / 2
+  private[ml] val isLeft: Boolean = _leftCategories.length <= numCategories / 2
 
   /** Set of categories determining the splitting rule, along with [[isLeft]]. */
   private val categories: Set[Double] = {
