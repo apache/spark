@@ -24,7 +24,7 @@ import scala.util.{Try, Random}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, TaskContextImpl, TaskContext, SparkFunSuite}
-import org.apache.spark.memory.{TaskMemoryManager, GrantEverythingMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -48,7 +48,7 @@ class UnsafeFixedWidthAggregationMapSuite
   private def emptyAggregationBuffer: InternalRow = InternalRow(0)
   private val PAGE_SIZE_BYTES: Long = 1L << 26; // 64 megabytes
 
-  private var memoryManager: GrantEverythingMemoryManager = null
+  private var memoryManager: TestMemoryManager = null
   private var taskMemoryManager: TaskMemoryManager = null
 
   def testWithMemoryLeakDetection(name: String)(f: => Unit) {
@@ -62,7 +62,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
     test(name) {
       val conf = new SparkConf().set("spark.unsafe.offHeap", "false")
-      memoryManager = new GrantEverythingMemoryManager(conf)
+      memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 
       TaskContext.setTaskContext(new TaskContextImpl(
@@ -193,10 +193,6 @@ class UnsafeFixedWidthAggregationMapSuite
     // Convert the map into a sorter
     val sorter = map.destructAndCreateExternalSorter()
 
-    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
-    }
-
     // Add more keys to the sorter and make sure the results come out sorted.
     val additionalKeys = randomStrings(1024)
     val keyConverter = UnsafeProjection.create(groupKeySchema)
@@ -208,7 +204,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        memoryManager.markExecutionAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemoryOnce()
         sorter.closeCurrentPage()
       }
     }
@@ -251,7 +247,7 @@ class UnsafeFixedWidthAggregationMapSuite
       sorter.insertKV(keyConverter.apply(k), valueConverter.apply(v))
 
       if ((i % 100) == 0) {
-        memoryManager.markExecutionAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemoryOnce()
         sorter.closeCurrentPage()
       }
     }
@@ -294,16 +290,12 @@ class UnsafeFixedWidthAggregationMapSuite
     // Convert the map into a sorter. Right now, it contains one record.
     val sorter = map.destructAndCreateExternalSorter()
 
-    withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      assert(taskMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
-    }
-
     // Add more keys to the sorter and make sure the results come out sorted.
     (1 to 4096).foreach { i =>
       sorter.insertKV(UnsafeRow.createFromByteArray(0, 0), UnsafeRow.createFromByteArray(0, 0))
 
       if ((i % 100) == 0) {
-        memoryManager.markExecutionAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemoryOnce()
         sorter.closeCurrentPage()
       }
     }
@@ -342,7 +334,7 @@ class UnsafeFixedWidthAggregationMapSuite
       buf.setInt(0, str.length)
     }
     // Simulate running out of space
-    memoryManager.markExecutionAsOutOfMemory()
+    memoryManager.limit(0)
     val str = rand.nextString(1024)
     val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
     assert(buf == null)

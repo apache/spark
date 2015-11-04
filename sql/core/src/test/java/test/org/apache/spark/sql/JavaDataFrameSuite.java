@@ -91,7 +91,6 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
-    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions

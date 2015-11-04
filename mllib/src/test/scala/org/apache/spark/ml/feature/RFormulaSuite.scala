@@ -107,6 +107,25 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result.collect() === expected.collect())
   }
 
+  test("index string label") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = sqlContext.createDataFrame(
+      Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        ("female", "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
+        ("female", "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 0.0),
+        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0))
+    ).toDF("id", "a", "b", "features", "label")
+    // assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
+
   test("attribute generation") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original = sqlContext.createDataFrame(

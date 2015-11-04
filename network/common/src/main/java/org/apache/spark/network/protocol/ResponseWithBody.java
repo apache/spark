@@ -15,29 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.encoders
+package org.apache.spark.network.protocol;
 
-import org.apache.spark.SparkFunSuite
+import com.google.common.base.Objects;
+import io.netty.buffer.ByteBuf;
 
-class PrimitiveEncoderSuite extends SparkFunSuite {
-  test("long encoder") {
-    val enc = new LongEncoder()
-    val row = enc.toRow(10)
-    assert(row.getLong(0) == 10)
-    assert(enc.fromRow(row) == 10)
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
+
+/**
+ * Abstract class for response messages that contain a large data portion kept in a separate
+ * buffer. These messages are treated especially by MessageEncoder.
+ */
+public abstract class ResponseWithBody implements ResponseMessage {
+  public final ManagedBuffer body;
+  public final boolean isBodyInFrame;
+
+  protected ResponseWithBody(ManagedBuffer body, boolean isBodyInFrame) {
+    this.body = body;
+    this.isBodyInFrame = isBodyInFrame;
   }
 
-  test("int encoder") {
-    val enc = new IntEncoder()
-    val row = enc.toRow(10)
-    assert(row.getInt(0) == 10)
-    assert(enc.fromRow(row) == 10)
-  }
-
-  test("string encoder") {
-    val enc = new StringEncoder()
-    val row = enc.toRow("test")
-    assert(row.getString(0) == "test")
-    assert(enc.fromRow(row) == "test")
-  }
+  public abstract ResponseMessage createFailureResponse(String error);
 }

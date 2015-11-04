@@ -67,6 +67,12 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
+        case expressions.Kurtosis(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Kurtosis(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.Last(child, ignoreNulls) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.Last(child, ignoreNulls),
@@ -85,9 +91,9 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
-        case expressions.Stddev(child) =>
+        case expressions.Skewness(child) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Stddev(child),
+            aggregateFunction = aggregate.Skewness(child),
             mode = aggregate.Complete,
             isDistinct = false)
 
@@ -115,9 +121,27 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
+        case expressions.Corr(left, right) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.Corr(left, right),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
         case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.VariancePop(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.VariancePop(child),
+            mode = aggregate.Complete,
+            isDistinct = false)
+
+        case expressions.VarianceSamp(child) =>
+          aggregate.AggregateExpression2(
+            aggregateFunction = aggregate.VarianceSamp(child),
             mode = aggregate.Complete,
             isDistinct = false)
       }
