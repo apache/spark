@@ -161,8 +161,9 @@ private[spark] class DTStatsAggregator(
     }
 
     require(statsSize == other.statsSize,
-      s"DTStatsAggregator.merge requires that both aggregators have the same length parent stats vectors."
-        + s" This aggregator's parent stats are length $statsSize, but the other is ${other.statsSize}.")
+      s"DTStatsAggregator.merge requires that both aggregators have the same length parent " +
+        s"stats vectors. This aggregator's parent stats are length $statsSize, " +
+        s"but the other is ${other.statsSize}.")
     var j = 0
     while (j < statsSize) {
       parentStats(j) += other.parentStats(j)
