@@ -23,15 +23,23 @@ NULL
 setOldClass("jobj")
 
 #' @title S4 class that represents a DataFrame
-#' @description DataFrames can be created using functions like
-#'              \code{jsonFile}, \code{table} etc.
+#' @description DataFrames can be created using functions like \link{createDataFrame},
+#'              \link{jsonFile}, \link{table} etc.
+#' @family dataframe_funcs
 #' @rdname DataFrame
-#' @seealso jsonFile, table
 #' @docType class
 #'
 #' @slot env An R environment that stores bookkeeping states of the DataFrame
 #' @slot sdf A Java object reference to the backing Scala DataFrame
+#' @seealso \link{createDataFrame}, \link{jsonFile}, \link{table}
+#' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkr-dataframes}
 #' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(sqlContext, faithful)
+#'}
 setClass("DataFrame",
          slots = list(env = "environment",
                       sdf = "jobj"))
@@ -46,7 +54,6 @@ setMethod("initialize", "DataFrame", function(.Object, sdf, isCached) {
 
 #' @rdname DataFrame
 #' @export
-#'
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the dataFrame is cached
 dataFrame <- function(sdf, isCached = FALSE) {
@@ -61,6 +68,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname printSchema
 #' @name printSchema
 #' @export
@@ -85,6 +93,7 @@ setMethod("printSchema",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname schema
 #' @name schema
 #' @export
@@ -108,6 +117,7 @@ setMethod("schema",
 #'
 #' @param x A SparkSQL DataFrame
 #' @param extended Logical. If extended is False, explain() only prints the physical plan.
+#' @family dataframe_funcs
 #' @rdname explain
 #' @name explain
 #' @export
@@ -138,6 +148,7 @@ setMethod("explain",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname isLocal
 #' @name isLocal
 #' @export
@@ -162,6 +173,7 @@ setMethod("isLocal",
 #' @param x A SparkSQL DataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
 #'
+#' @family dataframe_funcs
 #' @rdname showDF
 #' @name showDF
 #' @export
@@ -186,6 +198,7 @@ setMethod("showDF",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname show
 #' @name show
 #' @export
@@ -212,6 +225,7 @@ setMethod("show", "DataFrame",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname dtypes
 #' @name dtypes
 #' @export
@@ -237,6 +251,7 @@ setMethod("dtypes",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname columns
 #' @name columns
 #' @aliases names
@@ -257,6 +272,7 @@ setMethod("columns",
             })
           })
 
+#' @family dataframe_funcs
 #' @rdname columns
 #' @name names
 setMethod("names",
@@ -265,6 +281,7 @@ setMethod("names",
             columns(x)
           })
 
+#' @family dataframe_funcs
 #' @rdname columns
 #' @name names<-
 setMethod("names<-",
@@ -283,6 +300,7 @@ setMethod("names<-",
 #' @param x A SparkSQL DataFrame
 #' @param tableName A character vector containing the name of the table
 #'
+#' @family dataframe_funcs
 #' @rdname registerTempTable
 #' @name registerTempTable
 #' @export
@@ -310,6 +328,7 @@ setMethod("registerTempTable",
 #' @param overwrite A logical argument indicating whether or not to overwrite
 #' the existing rows in the table.
 #'
+#' @family dataframe_funcs
 #' @rdname insertInto
 #' @name insertInto
 #' @export
@@ -334,6 +353,7 @@ setMethod("insertInto",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname cache
 #' @name cache
 #' @export
@@ -360,6 +380,8 @@ setMethod("cache",
 #' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
 #'
 #' @param x The DataFrame to persist
+#'
+#' @family dataframe_funcs
 #' @rdname persist
 #' @name persist
 #' @export
@@ -386,6 +408,8 @@ setMethod("persist",
 #'
 #' @param x The DataFrame to unpersist
 #' @param blocking Whether to block until all blocks are deleted
+#'
+#' @family dataframe_funcs
 #' @rdname unpersist-methods
 #' @name unpersist
 #' @export
@@ -412,6 +436,8 @@ setMethod("unpersist",
 #'
 #' @param x A SparkSQL DataFrame
 #' @param numPartitions The number of partitions to use.
+#'
+#' @family dataframe_funcs
 #' @rdname repartition
 #' @name repartition
 #' @export
@@ -435,8 +461,10 @@ setMethod("repartition",
 # Convert the rows of a DataFrame into JSON objects and return an RDD where
 # each element contains a JSON string.
 #
-#@param x A SparkSQL DataFrame
+# @param x A SparkSQL DataFrame
 # @return A StringRRDD of JSON objects
+#
+# @family dataframe_funcs
 # @rdname tojson
 # @export
 # @examples
@@ -462,6 +490,8 @@ setMethod("toJSON",
 #'
 #' @param x A SparkSQL DataFrame
 #' @param path The directory where the file is saved
+#'
+#' @family dataframe_funcs
 #' @rdname saveAsParquetFile
 #' @name saveAsParquetFile
 #' @export
@@ -484,6 +514,8 @@ setMethod("saveAsParquetFile",
 #' Return a new DataFrame containing the distinct rows in this DataFrame.
 #'
 #' @param x A SparkSQL DataFrame
+#'
+#' @family dataframe_funcs
 #' @rdname distinct
 #' @name distinct
 #' @export
@@ -506,6 +538,7 @@ setMethod("distinct",
 #
 #' @description Returns a new DataFrame containing distinct rows in this DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname unique
 #' @name unique
 #' @aliases distinct
@@ -522,6 +555,8 @@ setMethod("unique",
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
+#'
+#' @family dataframe_funcs
 #' @rdname sample
 #' @aliases sample_frac
 #' @export
@@ -545,6 +580,7 @@ setMethod("sample",
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname sample
 #' @name sample_frac
 setMethod("sample_frac",
@@ -560,6 +596,7 @@ setMethod("sample_frac",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname count
 #' @name count
 #' @aliases nrow
@@ -583,6 +620,7 @@ setMethod("count",
 #'
 #' @name nrow
 #'
+#' @family dataframe_funcs
 #' @rdname nrow
 #' @aliases count
 setMethod("nrow",
@@ -595,6 +633,7 @@ setMethod("nrow",
 #'
 #' @param x a SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname ncol
 #' @name ncol
 #' @export
@@ -615,6 +654,7 @@ setMethod("ncol",
 #' Returns the dimentions (number of rows and columns) of a DataFrame
 #' @param x a SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname dim
 #' @name dim
 #' @export
@@ -637,6 +677,8 @@ setMethod("dim",
 #' @param x A SparkSQL DataFrame
 #' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
 #' should be converted to factors. FALSE by default.
+#'
+#' @family dataframe_funcs
 #' @rdname collect
 #' @name collect
 #' @export
@@ -704,6 +746,7 @@ setMethod("collect",
 #' @param num The number of rows to return
 #' @return A new DataFrame containing the number of rows specified.
 #'
+#' @family dataframe_funcs
 #' @rdname limit
 #' @name limit
 #' @export
@@ -724,6 +767,7 @@ setMethod("limit",
 
 #' Take the first NUM rows of a DataFrame and return a the results as a data.frame
 #'
+#' @family dataframe_funcs
 #' @rdname take
 #' @name take
 #' @export
@@ -752,6 +796,7 @@ setMethod("take",
 #' @param num The number of rows to return. Default is 6.
 #' @return A data.frame
 #'
+#' @family dataframe_funcs
 #' @rdname head
 #' @name head
 #' @export
@@ -774,6 +819,7 @@ setMethod("head",
 #'
 #' @param x A SparkSQL DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname first
 #' @name first
 #' @export
@@ -797,6 +843,7 @@ setMethod("first",
 #
 # @param x A Spark DataFrame
 #
+# @family dataframe_funcs
 # @rdname DataFrame
 # @export
 # @examples
@@ -827,6 +874,7 @@ setMethod("toRDD",
 #' @return a GroupedData
 #' @seealso GroupedData
 #' @aliases group_by
+#' @family dataframe_funcs
 #' @rdname groupBy
 #' @name groupBy
 #' @export
@@ -851,6 +899,7 @@ setMethod("groupBy",
              groupedData(sgd)
            })
 
+#' @family dataframe_funcs
 #' @rdname groupBy
 #' @name group_by
 setMethod("group_by",
@@ -864,6 +913,7 @@ setMethod("group_by",
 #' Compute aggregates by specifying a list of columns
 #'
 #' @param x a DataFrame
+#' @family dataframe_funcs
 #' @rdname agg
 #' @name agg
 #' @aliases summarize
@@ -874,6 +924,7 @@ setMethod("agg",
             agg(groupBy(x), ...)
           })
 
+#' @family dataframe_funcs
 #' @rdname agg
 #' @name summarize
 setMethod("summarize",
@@ -889,6 +940,7 @@ setMethod("summarize",
 # the requested map function.                                                     #
 ###################################################################################
 
+# @family dataframe_funcs
 # @rdname lapply
 setMethod("lapply",
           signature(X = "DataFrame", FUN = "function"),
@@ -897,6 +949,7 @@ setMethod("lapply",
             lapply(rdd, FUN)
           })
 
+# @family dataframe_funcs
 # @rdname lapply
 setMethod("map",
           signature(X = "DataFrame", FUN = "function"),
@@ -904,6 +957,7 @@ setMethod("map",
             lapply(X, FUN)
           })
 
+# @family dataframe_funcs
 # @rdname flatMap
 setMethod("flatMap",
           signature(X = "DataFrame", FUN = "function"),
@@ -911,7 +965,7 @@ setMethod("flatMap",
             rdd <- toRDD(X)
             flatMap(rdd, FUN)
           })
-
+# @family dataframe_funcs
 # @rdname lapplyPartition
 setMethod("lapplyPartition",
           signature(X = "DataFrame", FUN = "function"),
@@ -920,6 +974,7 @@ setMethod("lapplyPartition",
             lapplyPartition(rdd, FUN)
           })
 
+# @family dataframe_funcs
 # @rdname lapplyPartition
 setMethod("mapPartitions",
           signature(X = "DataFrame", FUN = "function"),
@@ -927,6 +982,7 @@ setMethod("mapPartitions",
             lapplyPartition(X, FUN)
           })
 
+# @family dataframe_funcs
 # @rdname foreach
 setMethod("foreach",
           signature(x = "DataFrame", func = "function"),
@@ -935,6 +991,7 @@ setMethod("foreach",
             foreach(rdd, func)
           })
 
+# @family dataframe_funcs
 # @rdname foreach
 setMethod("foreachPartition",
           signature(x = "DataFrame", func = "function"),
@@ -1034,6 +1091,7 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' @param select expression for the single Column or a list of columns to select from the DataFrame
 #' @return A new DataFrame containing only the rows that meet the condition with selected columns
 #' @export
+#' @family dataframe_funcs
 #' @rdname subset
 #' @name subset
 #' @aliases [
@@ -1064,6 +1122,7 @@ setMethod("subset", signature(x = "DataFrame"),
 #' @param col A list of columns or single Column or name
 #' @return A new DataFrame with selected columns
 #' @export
+#' @family dataframe_funcs
 #' @rdname select
 #' @name select
 #' @family subsetting functions
@@ -1091,6 +1150,7 @@ setMethod("select", signature(x = "DataFrame", col = "character"),
             }
           })
 
+#' @family dataframe_funcs
 #' @rdname select
 #' @export
 setMethod("select", signature(x = "DataFrame", col = "Column"),
@@ -1102,6 +1162,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname select
 #' @export
 setMethod("select",
@@ -1126,6 +1187,7 @@ setMethod("select",
 #' @param expr A string containing a SQL expression
 #' @param ... Additional expressions
 #' @return A DataFrame
+#' @family dataframe_funcs
 #' @rdname selectExpr
 #' @name selectExpr
 #' @export
@@ -1153,6 +1215,7 @@ setMethod("selectExpr",
 #' @param colName A string containing the name of the new column.
 #' @param col A Column expression.
 #' @return A DataFrame with the new column added.
+#' @family dataframe_funcs
 #' @rdname withColumn
 #' @name withColumn
 #' @aliases mutate transform
@@ -1178,6 +1241,7 @@ setMethod("withColumn",
 #' @param .data A DataFrame
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
+#' @family dataframe_funcs
 #' @rdname withColumn
 #' @name mutate
 #' @aliases withColumn transform
@@ -1211,6 +1275,7 @@ setMethod("mutate",
           })
 
 #' @export
+#' @family dataframe_funcs
 #' @rdname withColumn
 #' @name transform
 #' @aliases withColumn mutate
@@ -1228,6 +1293,7 @@ setMethod("transform",
 #' @param existingCol The name of the column you want to change.
 #' @param newCol The new column name.
 #' @return A DataFrame with the column name changed.
+#' @family dataframe_funcs
 #' @rdname withColumnRenamed
 #' @name withColumnRenamed
 #' @export
@@ -1259,6 +1325,7 @@ setMethod("withColumnRenamed",
 #' @param x A DataFrame
 #' @param newCol A named pair of the form new_column_name = existing_column
 #' @return A DataFrame with the column name changed.
+#' @family dataframe_funcs
 #' @rdname withColumnRenamed
 #' @name rename
 #' @aliases withColumnRenamed
@@ -1303,6 +1370,7 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @param decreasing A logical argument indicating sorting order for columns when
 #'                   a character vector is specified for col
 #' @return A DataFrame where all elements are sorted.
+#' @family dataframe_funcs
 #' @rdname arrange
 #' @name arrange
 #' @aliases orderby
@@ -1329,6 +1397,7 @@ setMethod("arrange",
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname arrange
 #' @export
 setMethod("arrange",
@@ -1360,6 +1429,7 @@ setMethod("arrange",
             do.call("arrange", c(x, jcols))
           })
 
+#' @family dataframe_funcs
 #' @rdname arrange
 #' @name orderby
 setMethod("orderBy",
@@ -1376,6 +1446,7 @@ setMethod("orderBy",
 #' @param condition The condition to filter on. This may either be a Column expression
 #' or a string containing a SQL statement
 #' @return A DataFrame containing only the rows that meet the condition.
+#' @family dataframe_funcs
 #' @rdname filter
 #' @name filter
 #' @family subsetting functions
@@ -1399,6 +1470,7 @@ setMethod("filter",
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname filter
 #' @name where
 setMethod("where",
@@ -1419,6 +1491,7 @@ setMethod("where",
 #' 'inner', 'outer', 'full', 'fullouter', leftouter', 'left_outer', 'left',
 #' 'right_outer', 'rightouter', 'right', and 'leftsemi'. The default joinType is "inner".
 #' @return A DataFrame containing the result of the join operation.
+#' @family dataframe_funcs
 #' @rdname join
 #' @name join
 #' @export
@@ -1477,6 +1550,7 @@ setMethod("join",
 #'   be returned. If all.x is set to FALSE and all.y is set to TRUE, a right
 #'   outer join will be returned. If all.x and all.y are set to TRUE, a full
 #'   outer join will be returned.
+#' @family dataframe_funcs
 #' @rdname merge
 #' @export
 #' @examples
@@ -1608,6 +1682,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the union.
+#' @family dataframe_funcs
 #' @rdname unionAll
 #' @name unionAll
 #' @export
@@ -1627,9 +1702,10 @@ setMethod("unionAll",
           })
 
 #' @title Union two or more DataFrames
-#
+#'
 #' @description Returns a new DataFrame containing rows of all parameters.
-#
+#'
+#' @family dataframe_funcs
 #' @rdname rbind
 #' @name rbind
 #' @aliases unionAll
@@ -1651,6 +1727,7 @@ setMethod("rbind",
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the intersect.
+#' @family dataframe_funcs
 #' @rdname intersect
 #' @name intersect
 #' @export
@@ -1677,6 +1754,7 @@ setMethod("intersect",
 #' @param x A Spark DataFrame
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the except operation.
+#' @family dataframe_funcs
 #' @rdname except
 #' @name except
 #' @export
@@ -1716,6 +1794,7 @@ setMethod("except",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
+#' @family dataframe_funcs
 #' @rdname write.df
 #' @name write.df
 #' @aliases saveDF
@@ -1751,6 +1830,7 @@ setMethod("write.df",
             callJMethod(df@sdf, "save", source, jmode, options)
           })
 
+#' @family dataframe_funcs
 #' @rdname write.df
 #' @name saveDF
 #' @export
@@ -1781,6 +1861,7 @@ setMethod("saveDF",
 #' @param source A name for external data source
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode
 #'
+#' @family dataframe_funcs
 #' @rdname saveAsTable
 #' @name saveAsTable
 #' @export
@@ -1821,6 +1902,7 @@ setMethod("saveAsTable",
 #' @param col A string of name
 #' @param ... Additional expressions
 #' @return A DataFrame
+#' @family dataframe_funcs
 #' @rdname describe
 #' @name describe
 #' @aliases summary
@@ -1843,6 +1925,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname describe
 #' @name describe
 setMethod("describe",
@@ -1857,6 +1940,7 @@ setMethod("describe",
 #'
 #' @description Computes statistics for numeric columns of the DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname summary
 #' @name summary
 setMethod("summary",
@@ -1881,6 +1965,7 @@ setMethod("summary",
 #' @param cols Optional list of column names to consider.
 #' @return A DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname nafunctions
 #' @name dropna
 #' @aliases na.omit
@@ -1910,6 +1995,7 @@ setMethod("dropna",
             dataFrame(sdf)
           })
 
+#' @family dataframe_funcs
 #' @rdname nafunctions
 #' @name na.omit
 #' @export
@@ -1937,6 +2023,7 @@ setMethod("na.omit",
 #'             column is simply ignored.
 #' @return A DataFrame
 #'
+#' @family dataframe_funcs
 #' @rdname nafunctions
 #' @name fillna
 #' @export
@@ -2000,6 +2087,7 @@ setMethod("fillna",
 #' @title Download data from a DataFrame into a data.frame
 #' @param x a DataFrame
 #' @return a data.frame
+#' @family dataframe_funcs
 #' @rdname as.data.frame
 #' @examples \dontrun{
 #'
@@ -2020,6 +2108,7 @@ setMethod("as.data.frame",
 #' the DataFrame is searched by R when evaluating a variable, so columns in
 #' the DataFrame can be accessed by simply giving their names.
 #'
+#' @family dataframe_funcs
 #' @rdname attach
 #' @title Attach DataFrame to R search path
 #' @param what (DataFrame) The DataFrame to attach
