@@ -30,7 +30,7 @@ case class VarianceSamp(child: Expression,
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def prettyName: String = "variance_samp"
+  override def prettyName: String = "var_samp"
 
   override protected val momentOrder = 2
 
@@ -53,7 +53,7 @@ case class VariancePop(child: Expression,
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def prettyName: String = "variance_pop"
+  override def prettyName: String = "var_pop"
 
   override protected val momentOrder = 2
 

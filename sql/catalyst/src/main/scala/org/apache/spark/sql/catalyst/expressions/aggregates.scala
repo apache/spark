@@ -1019,8 +1019,6 @@ case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExp
   override def foldable: Boolean = false
 
   override def prettyName: String = "kurtosis"
-
-  override def toString: String = s"KURTOSIS($child)"
 }
 
 // placeholder
@@ -1038,8 +1036,6 @@ case class Skewness(child: Expression) extends UnaryExpression with AggregateExp
   override def foldable: Boolean = false
 
   override def prettyName: String = "skewness"
-
-  override def toString: String = s"SKEWNESS($child)"
 }
 
 // placeholder
@@ -1056,9 +1052,7 @@ case class VariancePop(child: Expression) extends UnaryExpression with Aggregate
 
   override def foldable: Boolean = false
 
-  override def prettyName: String = "variance_pop"
-
-  override def toString: String = s"VAR_POP($child)"
+  override def prettyName: String = "var_pop"
 }
 
 // placeholder
@@ -1075,7 +1069,5 @@ case class VarianceSamp(child: Expression) extends UnaryExpression with Aggregat
 
   override def foldable: Boolean = false
 
-  override def prettyName: String = "variance_samp"
-
-  override def toString: String = s"VAR_SAMP($child)"
+  override def prettyName: String = "var_samp"
 }
