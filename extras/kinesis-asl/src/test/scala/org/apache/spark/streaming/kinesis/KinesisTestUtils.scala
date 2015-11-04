@@ -71,6 +71,7 @@ private[kinesis] class KinesisTestUtils extends Logging {
       .setRecordMaxBufferedTime(2000)
       .setMaxConnections(1)
       .setRegion(regionName)
+      .setMetricsLevel("none")
 
     new KinesisProducer(conf)
   }
