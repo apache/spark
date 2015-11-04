@@ -655,6 +655,8 @@ class BackfillJob(BaseJob):
                         State.SUCCESS, State.SKIPPED) and key in tasks_to_run:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                elif ti.state in (State.RUNNING, State.QUEUED):
+                    continue
                 elif ti.is_runnable(flag_upstream_failed=True):
                     executor.queue_task_instance(
                         ti,
@@ -675,8 +677,10 @@ class BackfillJob(BaseJob):
                     continue
                 ti = tasks_to_run[key]
                 ti.refresh_from_db()
-                if ti.state in (State.FAILED, State.SKIPPED):
-                    if ti.state == State.FAILED:
+                if (
+                        ti.state in (State.FAILED, State.SKIPPED) or
+                        state == State.FAILED):
+                    if ti.state == State.FAILED or state == State.FAILED:
                         failed.append(key)
                         logging.error("Task instance " + str(key) + " failed")
                     elif ti.state == State.SKIPPED:
@@ -690,9 +694,14 @@ class BackfillJob(BaseJob):
                         if key in tasks_to_run:
                             wont_run.append(key)
                             tasks_to_run.pop(key)
-                elif ti.state == State.SUCCESS:
+                elif ti.state == State.SUCCESS and state == State.SUCCESS:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                elif ti.state != State.SUCCESS and state == State.SUCCESS:
+                    logging.error(
+                        "The airflow run command failed "
+                        "at reporting an error. This should not occur "
+                        "in normal circustances. State is {}".format(ti.state))
 
             msg = (
                 "[backfill progress] "
@@ -711,8 +720,11 @@ class BackfillJob(BaseJob):
         executor.end()
         session.close()
         if failed:
-            raise AirflowException(
-                "Some tasks instances failed, here's the list:\n"+str(failed))
+            logging.error(
+                "------------------------------------------\n"
+                "Some tasks instances failed, "
+                "here's the list:\n{}".format(failed))
+            sys.exit(1)
         logging.info("All done. Exiting.")
 
 
