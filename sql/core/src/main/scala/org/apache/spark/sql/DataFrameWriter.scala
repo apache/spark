@@ -167,15 +167,17 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
-    // A partitioned relation schema's can be different from the input logicalPlan, since
-    // partition columns are all moved after data column. We Project to adjust the ordering.
-    // TODO: this belongs in the analyzer.
-    val input = partitioningColumns.map { parCols =>
-      val projectList = df.logicalPlan.output.filterNot(c => parCols.contains(c.name)) ++
-        parCols.map(UnresolvedAttribute(_))
+    // A partitioned relation's schema can be different from the input logicalPlan, since
+    // partition columns are all moved after data columns. We Project to adjust the ordering.
+    // TODO: this belongs to the analyzer.
+    val input = normalizedParCols.map { parCols =>
+      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
+        parCols.contains(attr.name)
+      }
+      val projectList = inputDataCols ++ inputPartCols.map(c => UnresolvedAttribute(c.name))
       Project(projectList, df.logicalPlan)
     }.getOrElse(df.logicalPlan)
 
@@ -186,6 +188,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         input,
         overwrite,
         ifNotExists = false)).toRdd
+  }
+
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
+    parCols.map { col =>
+      df.logicalPlan.output
+        .map(_.name)
+        .find(df.queryExecution.analyzer.resolver(_, col))
+        .getOrElse(throw new AnalysisException(
+          s"Partition column $col not found in schema ${df.logicalPlan.schema}"))
+    }
   }
 
   /**
