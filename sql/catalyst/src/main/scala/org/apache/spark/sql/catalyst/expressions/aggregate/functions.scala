@@ -1263,7 +1263,7 @@ case class Skewness(child: Expression,
     val m2 = moments(2)
     val m3 = moments(3)
     if (n == 0.0 || m2 == 0.0) {
-      null 
+      null
     } else {
       math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
     }
@@ -1291,7 +1291,7 @@ case class Kurtosis(child: Expression,
     val m2 = moments(2)
     val m4 = moments(4)
     if (n == 0.0 || m2 == 0.0) {
-      null 
+      null
     } else {
       n * m4 / (m2 * m2) - 3.0
     }
