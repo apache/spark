@@ -246,7 +246,7 @@ class HadoopTableReader(
     if (hivePartitionRDDs.size == 0) {
       new EmptyRDD[InternalRow](sc.sparkContext)
     } else {
-      new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
+      new ParallelUnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
     }
   }
 
