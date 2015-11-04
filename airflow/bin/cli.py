@@ -85,7 +85,8 @@ def backfill(args):
             include_adhoc=args.include_adhoc,
             local=args.local,
             donot_pickle=(args.donot_pickle or conf.getboolean('core', 'donot_pickle')),
-            ignore_dependencies=args.ignore_dependencies)
+            ignore_dependencies=args.ignore_dependencies,
+            pool=args.pool)
 
 
 def run(args):
@@ -144,7 +145,8 @@ def run(args):
             force=args.force,
             pickle_id=args.pickle,
             task_start_date=task_start_date,
-            ignore_dependencies=args.ignore_dependencies)
+            ignore_dependencies=args.ignore_dependencies,
+            pool=args.pool)
         run_job.run()
     elif args.raw:
         ti.run(
@@ -152,6 +154,7 @@ def run(args):
             force=args.force,
             ignore_dependencies=args.ignore_dependencies,
             job_id=args.job_id,
+            pool=args.pool,
         )
     else:
         pickle_id = None
@@ -450,6 +453,8 @@ def get_parser():
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
     parser_backfill.add_argument(
+        "-p", "--pool", help="Pool to use to run the backfill")
+    parser_backfill.add_argument(
         "-dr", "--dry_run", help="Perform a dry run", action="store_true")
     parser_backfill.set_defaults(func=backfill)
 
@@ -508,6 +513,8 @@ def get_parser():
         "-r", "--raw",
         help=argparse.SUPPRESS,
         action="store_true")
+    parser_run.add_argument(
+        "--pool", help="Pool to use to run the task instance")
     parser_run.add_argument(
         "-i", "--ignore_dependencies",
         help="Ignore upstream and depends_on_past dependencies",

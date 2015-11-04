@@ -537,38 +537,28 @@ class TaskInstance(Base):
             pickle_id=None,
             raw=False,
             task_start_date=None,
-            job_id=None):
+            job_id=None,
+            pool=None):
         """
         Returns a command that can be executed anywhere where airflow is
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
         iso = self.execution_date.isoformat()
-        mark_success = "--mark_success" if mark_success else ""
-        pickle = "--pickle {0}".format(pickle_id) if pickle_id else ""
-        job_id = "--job_id {0}".format(job_id) if job_id else ""
-        ignore_dependencies = "-i" if ignore_dependencies else ""
-        force = "--force" if force else ""
-        local = "--local" if local else ""
-        task_start_date = \
-            "-s " + task_start_date.isoformat() if task_start_date else ""
-        raw = "--raw" if raw else ""
-        subdir = ""
-        if not pickle and self.task.dag and self.task.dag.full_filepath:
-            subdir = "-sd DAGS_FOLDER/{0}".format(self.task.dag.filepath)
-        return (
-            "airflow run "
-            "{self.dag_id} {self.task_id} {iso} "
-            "{mark_success} "
-            "{pickle} "
-            "{local} "
-            "{ignore_dependencies} "
-            "{force} "
-            "{job_id} "
-            "{raw} "
-            "{subdir} "
-            "{task_start_date} "
-        ).format(**locals())
+        cmd = "airflow run {self.dag_id} {self.task_id} {iso} "
+        cmd += "--mark_success " if mark_success else ""
+        cmd += "--pickle {pickle_id} " if pickle_id else ""
+        cmd += "--job_id {job_id} " if job_id else ""
+        cmd += "-i " if ignore_dependencies else ""
+        cmd += "--force " if force else ""
+        cmd += "--local " if local else ""
+        cmd += "--pool {pool} " if pool else ""
+        cmd += "--raw " if raw else ""
+        if task_start_date:
+            cmd += "-s " + task_start_date.isoformat() + ' '
+        if not pickle_id and self.task.dag and self.task.dag.full_filepath:
+            cmd += "-sd DAGS_FOLDER/{self.task.dag.filepath} "
+        return cmd.format(**locals())
 
     @property
     def log_filepath(self):
@@ -869,11 +859,13 @@ class TaskInstance(Base):
             force=False,  # Disregards previous successes
             mark_success=False,  # Don't run the task, act as if it succeeded
             test_mode=False,  # Doesn't record success or failure in the DB
-            job_id=None,):
+            job_id=None,
+            pool=None,):
         """
         Runs the task instance.
         """
         task = self.task
+        self.pool = pool or task.pool
         session = settings.Session()
         self.refresh_from_db(session)
         session.commit()
@@ -910,7 +902,7 @@ class TaskInstance(Base):
             logging.info(msg.format(**locals()))
 
             self.start_date = datetime.now()
-            if not force and task.pool:
+            if not force and self.pool:
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
@@ -918,7 +910,7 @@ class TaskInstance(Base):
                 session.merge(self)
                 session.commit()
                 session.close()
-                logging.info("Queuing into pool {}".format(task.pool))
+                logging.info("Queuing into pool {}".format(self.pool))
                 return
             if self.state == State.UP_FOR_RETRY:
                 self.try_number += 1
@@ -2271,7 +2263,9 @@ class DAG(object):
     def run(
             self, start_date=None, end_date=None, mark_success=False,
             include_adhoc=False, local=False, executor=None,
-            donot_pickle=conf.getboolean('core', 'donot_pickle'), ignore_dependencies=False):
+            donot_pickle=conf.getboolean('core', 'donot_pickle'), 
+            ignore_dependencies=False,
+            pool=None):
         from airflow.jobs import BackfillJob
         if not executor and local:
             executor = LocalExecutor()
@@ -2285,7 +2279,8 @@ class DAG(object):
             include_adhoc=include_adhoc,
             executor=executor,
             donot_pickle=donot_pickle,
-            ignore_dependencies=ignore_dependencies)
+            ignore_dependencies=ignore_dependencies,
+            pool=pool)
         job.run()
 
 
