@@ -20,7 +20,7 @@ if sys.version >= "3":
     from io import BytesIO
 else:
     from StringIO import StringIO
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer, UTF8Deserializer, read_int
@@ -31,7 +31,9 @@ __all__ = ['FlumeUtils', 'utf8_decoder']
 
 def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
-    return s and s.decode('utf-8')
+    if s is None:
+        return None
+    return s.decode('utf-8')
 
 
 class FlumeUtils(object):

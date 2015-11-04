@@ -18,15 +18,17 @@
 package org.apache.spark.streaming.zeromq
 
 import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+
 import akka.actor.{Props, SupervisorStrategy}
 import akka.util.ByteString
 import akka.zeromq.Subscribe
+
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.receiver.ActorSupervisorStrategy
 
 object ZeroMQUtils {
@@ -75,7 +77,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn =
+      (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](jssc.ssc, publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
   }
 
@@ -99,7 +102,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn =
+      (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](jssc.ssc, publisherUrl, subscribe, fn, storageLevel)
   }
 
@@ -122,7 +126,8 @@ object ZeroMQUtils {
     ): JavaReceiverInputDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    val fn = (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).toIterator
+    val fn =
+      (x: Seq[ByteString]) => bytesToObjects.call(x.map(_.toArray).toArray).iterator().asScala
     createStream[T](jssc.ssc, publisherUrl, subscribe, fn)
   }
 }

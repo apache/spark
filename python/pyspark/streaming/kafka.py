@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
@@ -29,7 +29,9 @@ __all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_dec
 
 def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
-    return s and s.decode('utf-8')
+    if s is None:
+        return None
+    return s.decode('utf-8')
 
 
 class KafkaUtils(object):
@@ -251,6 +253,16 @@ class TopicAndPartition(object):
 
     def _jTopicAndPartition(self, helper):
         return helper.createTopicAndPartition(self._topic, self._partition)
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self._topic == other._topic
+                    and self._partition == other._partition)
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 class Broker(object):

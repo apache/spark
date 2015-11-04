@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -30,8 +34,31 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
  */
-private[sql] abstract class SQLImplicits {
+abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
+
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder[T]()
+
+  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder[Int](flat = true)
+  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
+  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder[Double](flat = true)
+  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder[Float](flat = true)
+  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder[Byte](flat = true)
+  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder[Short](flat = true)
+  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder[Boolean](flat = true)
+  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder[String](flat = true)
+
+  implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(rdd))
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 1.6.0
+   */
+  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(s))
+  }
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[Column]].
@@ -40,7 +67,7 @@ private[sql] abstract class SQLImplicits {
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
   /**
-   * Creates a DataFrame from an RDD of case classes or tuples.
+   * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    * @since 1.3.0
    */
   implicit def rddToDataFrameHolder[A <: Product : TypeTag](rdd: RDD[A]): DataFrameHolder = {

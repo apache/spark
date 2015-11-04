@@ -17,19 +17,58 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.scalatest.BeforeAndAfterAll
+import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import _root_.test.org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
-  import sqlContext.implicits._
+class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
+
+  def inputSchema: StructType = schema
+
+  def bufferSchema: StructType = schema
+
+  def dataType: DataType = schema
+
+  def deterministic: Boolean = true
+
+  def initialize(buffer: MutableAggregationBuffer): Unit = {
+    (0 until schema.length).foreach { i =>
+      buffer.update(i, null)
+    }
+  }
+
+  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (!input.isNullAt(0) && input.getInt(0) == 50) {
+      (0 until schema.length).foreach { i =>
+        buffer.update(i, input.get(i))
+      }
+    }
+  }
+
+  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    if (!buffer2.isNullAt(0) && buffer2.getInt(0) == 50) {
+      (0 until schema.length).foreach { i =>
+        buffer1.update(i, buffer2.get(i))
+      }
+    }
+  }
+
+  def evaluate(buffer: Row): Any = {
+    Row.fromSeq(buffer.toSeq)
+  }
+}
+
+abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   var originalUseAggregate2: Boolean = _
 
@@ -69,7 +108,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     data2.write.saveAsTable("agg2")
 
     val emptyDF = sqlContext.createDataFrame(
-      sqlContext.sparkContext.emptyRDD[Row],
+      sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
     emptyDF.registerTempTable("emptyTable")
 
@@ -262,6 +301,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
     checkAnswer(
       sqlContext.sql(
         """
+          |SELECT key, mean(value)
+          |FROM agg1
+          |GROUP BY key
+        """.stripMargin),
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
           |SELECT avg(value), key
           |FROM agg1
           |GROUP BY key
@@ -285,6 +333,44 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       Row(11.125) :: Nil)
   }
 
+  test("first_value and last_value") {
+    // We force to use a single partition for the sort and aggregate to make result
+    // deterministic.
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
+            |FROM (SELECT key FROM agg1 ORDER BY key) tmp
+          """.stripMargin),
+        Row(null, 3, null, 3, 1, 3, 1, 3) :: Nil)
+
+      checkAnswer(
+        sqlContext.sql(
+          """
+            |SELECT
+            |  first_valUE(key),
+            |  lasT_value(key),
+            |  firSt(key),
+            |  lASt(key),
+            |  first_valUE(key, true),
+            |  lasT_value(key, true),
+            |  firSt(key, true),
+            |  lASt(key, true)
+            |FROM (SELECT key FROM agg1 ORDER BY key DESC) tmp
+          """.stripMargin),
+        Row(3, null, 3, null, 3, 1, 3, 1) :: Nil)
+    }
+  }
+
   test("udaf") {
     checkAnswer(
       sqlContext.sql(
@@ -305,7 +391,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(null, null, 110.0, null, null, 10.0) :: Nil)
   }
 
-  test("non-AlgebraicAggregate aggreguate function") {
+  test("interpreted aggregate function") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -330,7 +416,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       Row(null) :: Nil)
   }
 
-  test("non-AlgebraicAggregate and AlgebraicAggregate aggreguate function") {
+  test("interpreted and expression-based aggregation functions") {
     checkAnswer(
       sqlContext.sql(
         """
@@ -480,6 +566,109 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
         Row(0, null, 1, 1, null, 0) :: Nil)
   }
 
+  test("pearson correlation") {
+    val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
+    val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr1 - 1.0) < 1e-12)
+    val corr2 = df.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    assert(math.abs(corr2 + 1.0) < 1e-12)
+    // non-trivial example. To reproduce in python, use:
+    // >>> from scipy.stats import pearsonr
+    // >>> import numpy as np
+    // >>> a = np.array(range(20))
+    // >>> b = np.array([x * x - 2 * x + 3.5 for x in range(20)])
+    // >>> pearsonr(a, b)
+    // (0.95723391394758572, 3.8902121417802199e-11)
+    // In R, use:
+    // > a <- 0:19
+    // > b <- mapply(function(x) x * x - 2 * x + 3.5, a)
+    // > cor(a, b)
+    // [1] 0.957233913947585835
+    val df2 = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val corr3 = df2.groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
+
+    val df3 = Seq.tabulate(0)(i => (1.0 * i, 2.0 * i)).toDF("a", "b")
+    val corr4 = df3.groupBy().agg(corr("a", "b")).collect()(0)
+    assert(corr4 == Row(null))
+
+    val df4 = Seq.tabulate(10)(i => (1 * i, 2 * i, i * -1)).toDF("a", "b", "c")
+    val corr5 = df4.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(corr5 - 1.0) < 1e-12)
+    val corr6 = df4.groupBy().agg(corr("a", "c")).collect()(0).getDouble(0)
+    assert(math.abs(corr6 + 1.0) < 1e-12)
+
+    // Test for udaf_corr in HiveCompatibilitySuite
+    // udaf_corr has been blacklisted due to numerical errors
+    // We test it here:
+    // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
+    // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
+    // SELECT corr(b, c) FROM covar_tab WHERE a = 3; => NULL
+    // SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a; =>
+    // 1       NULL
+    // 2       NULL
+    // 3       NULL
+    // 4       NULL
+    // 5       NULL
+    // 6       NULL
+    // SELECT corr(b, c) FROM covar_tab; => 0.6633880657639323
+
+    val covar_tab = Seq[(Integer, Integer, Integer)](
+      (1, null, 15),
+      (2, 3, null),
+      (3, 7, 12),
+      (4, 4, 14),
+      (5, 8, 17),
+      (6, 2, 11)).toDF("a", "b", "c")
+
+    covar_tab.registerTempTable("covar_tab")
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a < 1
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a < 3
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT corr(b, c) FROM covar_tab WHERE a = 3
+        """.stripMargin),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT a, corr(b, c) FROM covar_tab GROUP BY a ORDER BY a
+        """.stripMargin),
+      Row(1, null) ::
+      Row(2, null) ::
+      Row(3, null) ::
+      Row(4, null) ::
+      Row(5, null) ::
+      Row(6, null) :: Nil)
+
+    val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
+    assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+
+    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
+      val errorMessage = intercept[SparkException] {
+        val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
+        val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
+      }.getMessage
+      assert(errorMessage.contains("java.lang.UnsupportedOperationException: " +
+        "Corr only supports the new AggregateExpression2"))
+    }
+  }
+
   test("test Last implemented based on AggregateExpression1") {
     // TODO: Remove this test once we remove AggregateExpression1.
     import org.apache.spark.sql.functions._
@@ -511,40 +700,69 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Be
       }.getMessage
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
     }
+  }
 
-    // TODO: once we support Hive UDAF in the new interface,
-    // we can remove the following two tests.
-    withSQLConf("spark.sql.useAggregate2" -> "true") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  mydoublesum(value + 1.5 * key),
-            |  stddev_samp(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-
-      // This will fall back to the old aggregate
-      val newAggregateOperators = sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  sum(value + 1.5 * key),
-          |  stddev_samp(value)
-          |FROM agg1
-          |GROUP BY key
-        """.stripMargin).queryExecution.executedPlan.collect {
-        case agg: aggregate.SortBasedAggregate => agg
-        case agg: aggregate.TungstenAggregate => agg
+  test("udaf with all data types") {
+    val struct =
+      StructType(
+        StructField("f1", FloatType, true) ::
+          StructField("f2", ArrayType(BooleanType), true) :: Nil)
+    val dataTypes = Seq(StringType, BinaryType, NullType, BooleanType,
+      ByteType, ShortType, IntegerType, LongType,
+      FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+      DateType, TimestampType,
+      ArrayType(IntegerType), MapType(StringType, LongType), struct,
+      new MyDenseVectorUDT())
+    // Right now, we will use SortBasedAggregate to handle UDAFs.
+    // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortBasedAggregate to use
+    // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
+    // SortBasedAggregate to use a safe row as the aggregation buffer.
+    Seq(dataTypes, UnsafeRow.mutableFieldTypes.asScala.toSeq).foreach { dataTypes =>
+      val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
+        StructField(s"col$index", dataType, nullable = true)
       }
-      val message =
-        "We should fallback to the old aggregation code path if " +
-          "there is any aggregate function that cannot be converted to the new interface."
-      assert(newAggregateOperators.isEmpty, message)
+      // The schema used for data generator.
+      val schemaForGenerator = StructType(fields)
+      // The schema used for the DataFrame df.
+      val schema = StructType(StructField("id", IntegerType) +: fields)
+
+      logInfo(s"Testing schema: ${schema.treeString}")
+
+      val udaf = new ScalaAggregateFunction(schema)
+      // Generate data at the driver side. We need to materialize the data first and then
+      // create RDD.
+      val maybeDataGenerator =
+        RandomDataGenerator.forType(
+          dataType = schemaForGenerator,
+          nullable = true,
+          seed = Some(System.nanoTime()))
+      val dataGenerator =
+        maybeDataGenerator
+          .getOrElse(fail(s"Failed to create data generator for schema $schemaForGenerator"))
+      val data = (1 to 50).map { i =>
+        dataGenerator.apply() match {
+          case row: Row => Row.fromSeq(i +: row.toSeq)
+          case null => Row.fromSeq(i +: Seq.fill(schemaForGenerator.length)(null))
+          case other =>
+            fail(s"Row or null is expected to be generated, " +
+              s"but a ${other.getClass.getCanonicalName} is generated.")
+        }
+      }
+
+      // Create a DF for the schema with random data.
+      val rdd = sqlContext.sparkContext.parallelize(data, 1)
+      val df = sqlContext.createDataFrame(rdd, schema)
+
+      val allColumns = df.schema.fields.map(f => col(f.name))
+      val expectedAnaswer =
+        data
+          .find(r => r.getInt(0) == 50)
+          .getOrElse(fail("A row with id 50 should be the expected answer."))
+      checkAnswer(
+        df.groupBy().agg(udaf(allColumns: _*)),
+        // udaf returns a Row as the output value.
+        Row(expectedAnaswer)
+      )
     }
   }
 }
@@ -597,7 +815,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
     sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
   }
 
-  override protected def checkAnswer(actual: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
       sqlContext.setConf(
         "spark.sql.TungstenAggregate.testFallbackStartsAt",
@@ -605,6 +823,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
 
       // Create a new df to make sure its physical operator picks up
       // spark.sql.TungstenAggregate.testFallbackStartsAt.
+      // todo: remove it?
       val newActual = DataFrame(sqlContext, actual.logicalPlan)
 
       QueryTest.checkAnswer(newActual, expectedAnswer) match {
@@ -626,12 +845,12 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: Row): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
   // Override it to make sure we call the actually overridden checkAnswer.
-  override protected def checkAnswer(df: DataFrame, expectedAnswer: DataFrame): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect())
   }
 }

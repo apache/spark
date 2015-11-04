@@ -53,7 +53,7 @@ case class DescribeCommand(
   *                      If it is false, an exception will be thrown
   */
 case class CreateTableUsing(
-    tableName: String,
+    tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
@@ -72,7 +72,7 @@ case class CreateTableUsing(
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 case class CreateTableUsingAsSelect(
-    tableName: String,
+    tableIdent: TableIdentifier,
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
@@ -80,12 +80,10 @@ case class CreateTableUsingAsSelect(
     options: Map[String, String],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
-  // TODO: Override resolved after we support databaseName.
-  // override lazy val resolved = databaseName != None && childrenResolved
 }
 
 case class CreateTempTableUsing(
-    tableName: String,
+    tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
@@ -93,14 +91,16 @@ case class CreateTempTableUsing(
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
       sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
-    sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    sqlContext.catalog.registerTable(
+      tableIdent,
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+
     Seq.empty[Row]
   }
 }
 
 case class CreateTempTableUsingAsSelect(
-    tableName: String,
+    tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],
     mode: SaveMode,
@@ -110,8 +110,9 @@ case class CreateTempTableUsingAsSelect(
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
     val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
-    sqlContext.registerDataFrameAsTable(
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)), tableName)
+    sqlContext.catalog.registerTable(
+      tableIdent,
+      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -126,7 +127,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent.toSeq)
+    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
     val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {

@@ -17,15 +17,13 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: Experimental ::
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
@@ -41,19 +39,18 @@ import org.apache.spark.sql.DataFrame
  *                of bins may not exactly equal numBins. The last bin in each partition may
  *                be smaller as a result, meaning there may be an extra sample at
  *                partition boundaries.
- * @since 1.3.0
  */
-@Experimental
-class BinaryClassificationMetrics(
-    val scoreAndLabels: RDD[(Double, Double)],
-    val numBins: Int) extends Logging {
+@Since("1.0.0")
+class BinaryClassificationMetrics @Since("1.3.0") (
+    @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
+    @Since("1.3.0") val numBins: Int) extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
 
   /**
    * Defaults `numBins` to 0.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /**
@@ -65,16 +62,16 @@ class BinaryClassificationMetrics(
 
   /**
    * Unpersist intermediate RDDs used in the computation.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def unpersist() {
     cumulativeCounts.unpersist()
   }
 
   /**
    * Returns thresholds in descending order.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def thresholds(): RDD[Double] = cumulativeCounts.map(_._1)
 
   /**
@@ -82,8 +79,8 @@ class BinaryClassificationMetrics(
    * which is an RDD of (false positive rate, true positive rate)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def roc(): RDD[(Double, Double)] = {
     val rocCurve = createCurve(FalsePositiveRate, Recall)
     val sc = confusions.context
@@ -94,16 +91,16 @@ class BinaryClassificationMetrics(
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def areaUnderROC(): Double = AreaUnderCurve.of(roc())
 
   /**
    * Returns the precision-recall curve, which is an RDD of (recall, precision),
    * NOT (precision, recall), with (0.0, 1.0) prepended to it.
    * @see http://en.wikipedia.org/wiki/Precision_and_recall
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def pr(): RDD[(Double, Double)] = {
     val prCurve = createCurve(Recall, Precision)
     val sc = confusions.context
@@ -113,8 +110,8 @@ class BinaryClassificationMetrics(
 
   /**
    * Computes the area under the precision-recall curve.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def areaUnderPR(): Double = AreaUnderCurve.of(pr())
 
   /**
@@ -122,26 +119,26 @@ class BinaryClassificationMetrics(
    * @param beta the beta factor in F-Measure computation.
    * @return an RDD of (threshold, F-Measure) pairs.
    * @see http://en.wikipedia.org/wiki/F1_score
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def fMeasureByThreshold(beta: Double): RDD[(Double, Double)] = createCurve(FMeasure(beta))
 
   /**
    * Returns the (threshold, F-Measure) curve with beta = 1.0.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def fMeasureByThreshold(): RDD[(Double, Double)] = fMeasureByThreshold(1.0)
 
   /**
    * Returns the (threshold, precision) curve.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def precisionByThreshold(): RDD[(Double, Double)] = createCurve(Precision)
 
   /**
    * Returns the (threshold, recall) curve.
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def recallByThreshold(): RDD[(Double, Double)] = createCurve(Recall)
 
   private lazy val (

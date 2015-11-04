@@ -20,13 +20,11 @@ package org.apache.spark.sql.columnar.compression
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.runtimeMirror
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 
 private[sql] case object PassThrough extends CompressionScheme {
@@ -161,7 +159,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
     override def next(row: MutableRow, ordinal: Int): Unit = {
       if (valueCount == run) {
         currentValue = columnType.extract(buffer)
-        run = buffer.getInt()
+        run = ByteBufferHelper.getInt(buffer)
         valueCount = 1
       } else {
         valueCount += 1
@@ -270,20 +268,13 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
     extends compression.Decoder[T] {
 
-    private val dictionary = {
-      // TODO Can we clean up this mess? Maybe move this to `DataType`?
-      implicit val classTag = {
-        val mirror = runtimeMirror(Utils.getSparkClassLoader)
-        ClassTag[T#InternalType](mirror.runtimeClass(columnType.scalaTag.tpe))
-      }
-
-      Array.fill(buffer.getInt()) {
-        columnType.extract(buffer)
-      }
+    private val dictionary: Array[Any] = {
+      val elementNum = ByteBufferHelper.getInt(buffer)
+      Array.fill[Any](elementNum)(columnType.extract(buffer).asInstanceOf[Any])
     }
 
     override def next(row: MutableRow, ordinal: Int): Unit = {
-      columnType.setField(row, ordinal, dictionary(buffer.getShort()))
+      columnType.setField(row, ordinal, dictionary(buffer.getShort()).asInstanceOf[T#InternalType])
     }
 
     override def hasNext: Boolean = buffer.hasRemaining
@@ -359,7 +350,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   }
 
   class Decoder(buffer: ByteBuffer) extends compression.Decoder[BooleanType.type] {
-    private val count = buffer.getInt()
+    private val count = ByteBufferHelper.getInt(buffer)
 
     private var currentWord = 0: Long
 
@@ -370,7 +361,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
 
       visited += 1
       if (bit == 0) {
-        currentWord = buffer.getLong()
+        currentWord = ByteBufferHelper.getLong(buffer)
       }
 
       row.setBoolean(ordinal, ((currentWord >> bit) & 1) != 0)
@@ -454,7 +445,7 @@ private[sql] case object IntDelta extends CompressionScheme {
 
     override def next(row: MutableRow, ordinal: Int): Unit = {
       val delta = buffer.get()
-      prev = if (delta > Byte.MinValue) prev + delta else buffer.getInt()
+      prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getInt(buffer)
       row.setInt(ordinal, prev)
     }
   }
@@ -534,7 +525,7 @@ private[sql] case object LongDelta extends CompressionScheme {
 
     override def next(row: MutableRow, ordinal: Int): Unit = {
       val delta = buffer.get()
-      prev = if (delta > Byte.MinValue) prev + delta else buffer.getLong()
+      prev = if (delta > Byte.MinValue) prev + delta else ByteBufferHelper.getLong(buffer)
       row.setLong(ordinal, prev)
     }
   }

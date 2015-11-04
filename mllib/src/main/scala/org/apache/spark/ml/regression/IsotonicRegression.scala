@@ -40,6 +40,7 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   /**
    * Param for whether the output sequence should be isotonic/increasing (true) or
    * antitonic/decreasing (false).
+   * Default: true
    * @group param
    */
   final val isotonic: BooleanParam =
@@ -86,8 +87,8 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
       lit(1.0)
     }
     dataset.select(col($(labelCol)), f, w)
-      .map { case Row(label: Double, feature: Double, weights: Double) =>
-      (label, feature, weights)
+      .map { case Row(label: Double, feature: Double, weight: Double) =>
+      (label, feature, weight)
     }
   }
 
@@ -202,7 +203,7 @@ class IsotonicRegressionModel private[ml] (
   def predictions: Vector = Vectors.dense(oldModel.predictions)
 
   override def copy(extra: ParamMap): IsotonicRegressionModel = {
-    copyValues(new IsotonicRegressionModel(uid, oldModel), extra)
+    copyValues(new IsotonicRegressionModel(uid, oldModel), extra).setParent(parent)
   }
 
   override def transform(dataset: DataFrame): DataFrame = {

@@ -18,14 +18,34 @@
 package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
+  import testImplicits._
+
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
-  import sqlContext._
+  // We have a very limited number of supported types at here since it is just for a
+  // test relation and we do very basic testing at here.
+  override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: BinaryType => false
+    // We are using random data generator and the generated strings are not really valid string.
+    case _: StringType => false
+    case _: BooleanType => false // see https://issues.apache.org/jira/browse/SPARK-10442
+    case _: CalendarIntervalType => false
+    case _: DateType => false
+    case _: TimestampType => false
+    case _: ArrayType => false
+    case _: MapType => false
+    case _: StructType => false
+    case _: UserDefinedType[_] => false
+    case _ => true
+  }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
@@ -44,9 +64,49 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        read.format(dataSourceName)
+        hiveContext.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+
+  private val writer = testDF.write.option("dataSchema", dataSchema.json).format(dataSourceName)
+  private val reader = sqlContext.read.option("dataSchema", dataSchema.json).format(dataSourceName)
+
+  test("unhandledFilters") {
+    withTempPath { dir =>
+
+      val path = dir.getCanonicalPath
+      writer.save(s"$path/p=0")
+      writer.save(s"$path/p=1")
+
+      val isOdd = udf((_: Int) % 2 == 1)
+      val df = reader.load(path)
+        .filter(
+          // This filter is inconvertible
+          isOdd('a) &&
+            // This filter is convertible but unhandled
+            'a > 1 &&
+            // This filter is convertible and handled
+            'b > "val_1" &&
+            // This filter references a partiiton column, won't be pushed down
+            'p === 1
+        ).select('a, 'p)
+      val rawScan = df.queryExecution.executedPlan collect {
+        case p: PhysicalRDD => p
+      } match {
+        case Seq(p) => p
+      }
+
+      val outputSchema = new StructType().add("a", IntegerType).add("p", IntegerType)
+
+      assertResult(Set((2, 1), (3, 1))) {
+        rawScan.execute().collect()
+          .map { CatalystTypeConverters.convertToScala(_, outputSchema) }
+          .map { case Row(a, p) => (a, p) }.toSet
+      }
+
+      checkAnswer(df, Row(3, 1))
     }
   }
 }

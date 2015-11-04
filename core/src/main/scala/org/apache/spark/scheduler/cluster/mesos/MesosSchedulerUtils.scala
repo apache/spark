@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -137,7 +137,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   protected def getResource(res: JList[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from
     // a specific role or wildcard.
-    res.filter(_.getName == name).map(_.getScalar.getValue).sum
+    res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
   protected def markRegistered(): Unit = {
@@ -169,7 +169,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       amountToUse: Double): (List[Resource], List[Resource]) = {
     var remain = amountToUse
     var requestedResources = new ArrayBuffer[Resource]
-    val remainingResources = resources.map {
+    val remainingResources = resources.asScala.map {
       case r => {
         if (remain > 0 &&
           r.getType == Value.Type.SCALAR &&
@@ -214,7 +214,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
-    offerAttributes.map(attr => {
+    offerAttributes.asScala.map(attr => {
       val attrValue = attr.getType match {
         case Value.Type.SCALAR => attr.getScalar
         case Value.Type.RANGES => attr.getRanges
@@ -253,7 +253,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
             requiredValues.map(_.toLong).exists(offerRange.contains(_))
           case Some(offeredValue: Value.Set) =>
             // check if the specified required values is a subset of offered set
-            requiredValues.subsetOf(offeredValue.getItemList.toSet)
+            requiredValues.subsetOf(offeredValue.getItemList.asScala.toSet)
           case Some(textValue: Value.Text) =>
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
@@ -299,14 +299,13 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
       Map()
     } else {
       try {
-        Map() ++ mapAsScalaMap(splitter.split(constraintsVal)).map {
-          case (k, v) =>
-            if (v == null || v.isEmpty) {
-              (k, Set[String]())
-            } else {
-              (k, v.split(',').toSet)
-            }
-        }
+        splitter.split(constraintsVal).asScala.toMap.mapValues(v =>
+          if (v == null || v.isEmpty) {
+            Set[String]()
+          } else {
+            v.split(',').toSet
+          }
+        )
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)

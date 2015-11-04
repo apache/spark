@@ -134,6 +134,13 @@ public class JavaLDASuite implements Serializable {
     double[] topicWeights = topTopics._3();
     assertEquals(3, topicIndices.length);
     assertEquals(3, topicWeights.length);
+
+    // Check: topTopicAssignments
+    Tuple3<Long, int[], int[]> topicAssignment = model.javaTopicAssignments().first();
+    Long docId2 = topicAssignment._1();
+    int[] termIndices2 = topicAssignment._2();
+    int[] topicIndices2 = topicAssignment._3();
+    assertEquals(termIndices2.length, topicIndices2.length);
   }
 
   @Test

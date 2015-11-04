@@ -19,16 +19,20 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
+import org.apache.spark.annotation.Since
+
 /**
  * Represents a distributively stored matrix backed by one or more RDDs.
- * @since 1.0.0
  */
+@Since("1.0.0")
 trait DistributedMatrix extends Serializable {
 
   /** Gets or computes the number of rows. */
+  @Since("1.0.0")
   def numRows(): Long
 
   /** Gets or computes the number of columns. */
+  @Since("1.0.0")
   def numCols(): Long
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */

@@ -29,14 +29,14 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructTyp
 /**
  * stop words list
  */
-private object StopWords {
+private[spark] object StopWords {
 
   /**
    * Use the same default stopwords list as scikit-learn.
    * The original list can be found from "Glasgow Information Retrieval Group"
    * [[http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words]]
    */
-  val EnglishStopWords = Array( "a", "about", "above", "across", "after", "afterwards", "again",
+  val English = Array( "a", "about", "above", "across", "after", "afterwards", "again",
     "against", "all", "almost", "alone", "along", "already", "also", "although", "always",
     "am", "among", "amongst", "amoungst", "amount", "an", "and", "another",
     "any", "anyhow", "anyone", "anything", "anyway", "anywhere", "are",
@@ -98,6 +98,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
+   * Default: [[StopWords.English]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
@@ -110,6 +111,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * whether to do a case sensitive comparison over the stop words
+   * Default: false
    * @group param
    */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
@@ -121,7 +123,7 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWords.EnglishStopWords, caseSensitive -> false)
+  setDefault(stopWords -> StopWords.English, caseSensitive -> false)
 
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)

@@ -17,9 +17,11 @@
 
 package org.apache.spark
 
-import java.io.{File, FileInputStream}
-import java.security.{KeyStore, NoSuchAlgorithmException}
-import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
+import java.io.File
+import java.security.NoSuchAlgorithmException
+import javax.net.ssl.SSLContext
+
+import scala.collection.JavaConverters._
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
@@ -79,7 +81,6 @@ private[spark] case class SSLOptions(
    * object. It can be used then to compose the ultimate Akka configuration.
    */
   def createAkkaConfig: Option[Config] = {
-    import scala.collection.JavaConversions._
     if (enabled) {
       Some(ConfigFactory.empty()
         .withValue("akka.remote.netty.tcp.security.key-store",
@@ -97,7 +98,7 @@ private[spark] case class SSLOptions(
         .withValue("akka.remote.netty.tcp.security.protocol",
           ConfigValueFactory.fromAnyRef(protocol.getOrElse("")))
         .withValue("akka.remote.netty.tcp.security.enabled-algorithms",
-          ConfigValueFactory.fromIterable(supportedAlgorithms.toSeq))
+          ConfigValueFactory.fromIterable(supportedAlgorithms.asJava))
         .withValue("akka.remote.netty.tcp.enable-ssl",
           ConfigValueFactory.fromAnyRef(true)))
     } else {

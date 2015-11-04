@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.{Column, Row}
@@ -26,7 +25,7 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * The abstract class for implementing user-defined aggregate functions.
+ * The base class for implementing user-defined aggregate functions (UDAF).
  */
 @Experimental
 abstract class UserDefinedAggregateFunction extends Serializable {
@@ -67,22 +66,35 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   /**
    * The [[DataType]] of the returned value of this [[UserDefinedAggregateFunction]].
    */
-  def returnDataType: DataType
+  def dataType: DataType
 
-  /** Indicates if this function is deterministic. */
+  /**
+   * Returns true iff this function is deterministic, i.e. given the same input,
+   * always return the same output.
+   */
   def deterministic: Boolean
 
   /**
-   *  Initializes the given aggregation buffer. Initial values set by this method should satisfy
-   *  the condition that when merging two buffers with initial values, the new buffer
-   *  still store initial values.
+   * Initializes the given aggregation buffer, i.e. the zero value of the aggregation buffer.
+   *
+   * The contract should be that applying the merge function on two initial buffers should just
+   * return the initial buffer itself, i.e.
+   * `merge(initialBuffer, initialBuffer)` should equal `initialBuffer`.
    */
   def initialize(buffer: MutableAggregationBuffer): Unit
 
-  /** Updates the given aggregation buffer `buffer` with new input data from `input`. */
+  /**
+   * Updates the given aggregation buffer `buffer` with new input data from `input`.
+   *
+   * This is called once per input row.
+   */
   def update(buffer: MutableAggregationBuffer, input: Row): Unit
 
-  /** Merges two aggregation buffers and stores the updated buffer values back to `buffer1`. */
+  /**
+   * Merges two aggregation buffers and stores the updated buffer values back to `buffer1`.
+   *
+   * This is called when we merge two partially aggregated data together.
+   */
   def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit
 
   /**
@@ -92,7 +104,7 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   def evaluate(buffer: Row): Any
 
   /**
-   * Creates a [[Column]] for this UDAF with given [[Column]]s as arguments.
+   * Creates a [[Column]] for this UDAF using given [[Column]]s as input arguments.
    */
   @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
@@ -105,16 +117,16 @@ abstract class UserDefinedAggregateFunction extends Serializable {
   }
 
   /**
-   * Creates a [[Column]] for this UDAF with given [[Column]]s as arguments.
-   * If `isDistinct` is true, this UDAF is working on distinct input values.
+   * Creates a [[Column]] for this UDAF using the distinct values of the given
+   * [[Column]]s as input arguments.
    */
   @scala.annotation.varargs
-  def apply(isDistinct: Boolean, exprs: Column*): Column = {
+  def distinct(exprs: Column*): Column = {
     val aggregateExpression =
       AggregateExpression2(
         ScalaUDAF(exprs.map(_.expr), this),
         Complete,
-        isDistinct = isDistinct)
+        isDistinct = true)
     Column(aggregateExpression)
   }
 }
@@ -122,9 +134,11 @@ abstract class UserDefinedAggregateFunction extends Serializable {
 /**
  * :: Experimental ::
  * A [[Row]] representing an mutable aggregation buffer.
+ *
+ * This is not meant to be extended outside of Spark.
  */
 @Experimental
-trait MutableAggregationBuffer extends Row {
+abstract class MutableAggregationBuffer extends Row {
 
   /** Update the ith value of this buffer. */
   def update(i: Int, value: Any): Unit

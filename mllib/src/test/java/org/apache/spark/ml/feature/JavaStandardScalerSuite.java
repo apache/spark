@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.feature;
 
+import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,7 +48,7 @@ public class JavaStandardScalerSuite {
   @Test
   public void standardScaler() {
     // The tests are to check Java compatibility.
-    List<VectorIndexerSuite.FeatureData> points = Lists.newArrayList(
+    List<VectorIndexerSuite.FeatureData> points = Arrays.asList(
       new VectorIndexerSuite.FeatureData(Vectors.dense(0.0, -2.0)),
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 3.0)),
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 4.0))

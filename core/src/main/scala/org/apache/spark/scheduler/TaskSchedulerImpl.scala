@@ -332,7 +332,8 @@ private[spark] class TaskSchedulerImpl(
           // We lost this entire executor, so remember that it's gone
           val execId = taskIdToExecutorId(tid)
           if (activeExecutorIds.contains(execId)) {
-            removeExecutor(execId)
+            removeExecutor(execId,
+              SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
             failedExecutor = Some(execId)
           }
         }
@@ -464,14 +465,23 @@ private[spark] class TaskSchedulerImpl(
       if (activeExecutorIds.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
         logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
-        removeExecutor(executorId)
+        removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
-         // We may get multiple executorLost() calls with different loss reasons. For example, one
-         // may be triggered by a dropped connection from the slave while another may be a report
-         // of executor termination from Mesos. We produce log messages for both so we eventually
-         // report the termination reason.
-         logError("Lost an executor " + executorId + " (already removed): " + reason)
+         executorIdToHost.get(executorId) match {
+           case Some(_) =>
+             // If the host mapping still exists, it means we don't know the loss reason for the
+             // executor. So call removeExecutor() to update tasks running on that executor when
+             // the real loss reason is finally known.
+             removeExecutor(executorId, reason)
+
+           case None =>
+             // We may get multiple executorLost() calls with different loss reasons. For example,
+             // one may be triggered by a dropped connection from the slave while another may be a
+             // report of executor termination from Mesos. We produce log messages for both so we
+             // eventually report the termination reason.
+             logError("Lost an executor " + executorId + " (already removed): " + reason)
+         }
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
@@ -481,8 +491,12 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  /** Remove an executor from all our data structures and mark it as lost */
-  private def removeExecutor(executorId: String) {
+  /**
+   * Remove an executor from all our data structures and mark it as lost. If the executor's loss
+   * reason is not yet known, do not yet remove its association with its host nor update the status
+   * of any running tasks, since the loss reason defines whether we'll fail those tasks.
+   */
+  private def removeExecutor(executorId: String, reason: ExecutorLossReason) {
     activeExecutorIds -= executorId
     val host = executorIdToHost(executorId)
     val execs = executorsByHost.getOrElse(host, new HashSet)
@@ -496,8 +510,11 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-    executorIdToHost -= executorId
-    rootPool.executorLost(executorId, host)
+
+    if (reason != LossReasonPending) {
+      executorIdToHost -= executorId
+      rootPool.executorLost(executorId, host, reason)
+    }
   }
 
   def executorAdded(execId: String, host: String) {

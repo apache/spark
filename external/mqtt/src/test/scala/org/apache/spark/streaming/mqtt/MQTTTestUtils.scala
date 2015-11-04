@@ -33,7 +33,7 @@ import org.apache.spark.{Logging, SparkConf}
 /**
  * Share codes for Scala and Python unit tests
  */
-private class MQTTTestUtils extends Logging {
+private[mqtt] class MQTTTestUtils extends Logging {
 
   private val persistenceDir = Utils.createTempDir()
   private val brokerHost = "localhost"

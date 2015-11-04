@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,11 +28,9 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * :: DeveloperApi ::
  * Performs a hash based outer join for two child relations by shuffling the data using
  * the join keys. This operator requires loading the associated partition in both side into memory.
  */
-@DeveloperApi
 case class ShuffledHashOuterJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -92,9 +89,9 @@ case class ShuffledHashOuterJoin(
         case FullOuter =>
           // TODO(davies): use UnsafeRow
           val leftHashTable =
-            buildHashTable(leftIter, numLeftRows, newProjection(leftKeys, left.output))
+            buildHashTable(leftIter, numLeftRows, newProjection(leftKeys, left.output)).asScala
           val rightHashTable =
-            buildHashTable(rightIter, numRightRows, newProjection(rightKeys, right.output))
+            buildHashTable(rightIter, numRightRows, newProjection(rightKeys, right.output)).asScala
           (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
             fullOuterIterator(key,
               leftHashTable.getOrElse(key, EMPTY_LIST),

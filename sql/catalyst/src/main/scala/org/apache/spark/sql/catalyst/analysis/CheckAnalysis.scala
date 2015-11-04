@@ -49,6 +49,9 @@ trait CheckAnalysis {
     plan.foreachUp {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case u: UnresolvedRelation =>
+        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
@@ -110,7 +113,8 @@ trait CheckAnalysis {
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
-                    "Add to group by or wrap in first() if you don't care which value you get.")
+                    "Add to group by or wrap in first() (or first_value) if you don't care " +
+                    "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
               case e if e.references.isEmpty => // OK
               case e => e.children.foreach(checkValidAggregateExpression)
@@ -136,6 +140,12 @@ trait CheckAnalysis {
                   s"sorting is not supported for columns of type ${order.dataType.simpleString}")
               }
             }
+
+          case s @ SetOperation(left, right) if left.output.length != right.output.length =>
+            failAnalysis(
+              s"${s.nodeName} can only be performed on tables with the same number of columns, " +
+               s"but the left table has ${left.output.length} columns and the right has " +
+               s"${right.output.length}")
 
           case _ => // Fallbacks to the following checks
         }

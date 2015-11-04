@@ -18,9 +18,11 @@
 package org.apache.spark.ui
 
 import java.text.SimpleDateFormat
-import java.util.{Locale, Date}
+import java.util.{Date, Locale}
 
-import scala.xml.{Node, Text, Unparsed}
+import scala.util.control.NonFatal
+import scala.xml._
+import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
@@ -29,6 +31,7 @@ import org.apache.spark.ui.scope.RDDOperationGraph
 private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
+  val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -395,4 +398,60 @@ private[spark] object UIUtils extends Logging {
     </script>
   }
 
+  /**
+   * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
+   * and make sure that it only contains anchors with root-relative links. Otherwise,
+   * the whole string will rendered as a simple escaped text.
+   *
+   * Note: In terms of security, only anchor tags with root relative links are supported. So any
+   * attempts to embed links outside Spark UI, or other tags like <script> will cause in the whole
+   * description to be treated as plain text.
+   */
+  def makeDescription(desc: String, basePathUri: String): NodeSeq = {
+    import scala.language.postfixOps
+
+    // If the description can be parsed as HTML and has only relative links, then render
+    // as HTML, otherwise render as escaped string
+    try {
+      // Try to load the description as unescaped HTML
+      val xml = XML.loadString(s"""<span class="description-input">$desc</span>""")
+
+      // Verify that this has only anchors and span (we are wrapping in span)
+      val allowedNodeLabels = Set("a", "span")
+      val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
+        allowedNodeLabels.contains(node.label)
+      }
+      if (illegalNodes.nonEmpty) {
+        throw new IllegalArgumentException(
+          "Only HTML anchors allowed in job descriptions\n" +
+            illegalNodes.map { n => s"${n.label} in $n"}.mkString("\n\t"))
+      }
+
+      // Verify that all links are relative links starting with "/"
+      val allLinks =
+        xml \\ "a" flatMap { _.attributes } filter { _.key == "href" } map { _.value.toString }
+      if (allLinks.exists { ! _.startsWith ("/") }) {
+        throw new IllegalArgumentException(
+          "Links in job descriptions must be root-relative:\n" + allLinks.mkString("\n\t"))
+      }
+
+      // Prepend the relative links with basePathUri
+      val rule = new RewriteRule() {
+        override def transform(n: Node): Seq[Node] = {
+          n match {
+            case e: Elem if e \ "@href" nonEmpty =>
+              val relativePath = e.attribute("href").get.toString
+              val fullUri = s"${basePathUri.stripSuffix("/")}/${relativePath.stripPrefix("/")}"
+              e % Attribute(null, "href", fullUri, Null)
+            case _ => n
+          }
+        }
+      }
+      new RuleTransformer(rule).transform(xml)
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Invalid job description: $desc ", e)
+        <span class="description-input">{desc}</span>
+    }
+  }
 }

@@ -165,6 +165,11 @@ sealed trait Partitioning {
    * produced by `A` could have also been produced by `B`.
    */
   def guarantees(other: Partitioning): Boolean = this == other
+
+  def withNumPartitions(newNumPartitions: Int): Partitioning = {
+    throw new IllegalStateException(
+      s"It is not allowed to call withNumPartitions method of a ${this.getClass.getSimpleName}")
+  }
 }
 
 object Partitioning {
@@ -184,6 +189,22 @@ object Partitioning {
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = false
+
+  override def guarantees(other: Partitioning): Boolean = false
+}
+
+/**
+ * Represents a partitioning where rows are distributed evenly across output partitions
+ * by starting from a random target partition number and distributing rows in a round-robin
+ * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
+ */
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case _ => false
@@ -233,6 +254,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case _ => false
   }
 
+  override def withNumPartitions(newNumPartitions: Int): HashPartitioning = {
+    HashPartitioning(expressions, newNumPartitions)
+  }
 }
 
 /**

@@ -19,7 +19,7 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
@@ -44,12 +44,9 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
-    val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
-    }.sum
-
-    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.length).toLong
+    val files = listStatus(context).asScala
+    val totalLen = files.map(file => if (file.isDir) 0L else file.getLen).sum
+    val maxSplitSize = Math.ceil(totalLen * 1.0 / files.size).toLong
     super.setMaxSplitSize(maxSplitSize)
   }
 
@@ -134,8 +131,8 @@ private[spark] class StreamInputFormat extends StreamFileInputFormat[PortableDat
  */
 @Experimental
 class PortableDataStream(
-    @transient isplit: CombineFileSplit,
-    @transient context: TaskAttemptContext,
+    isplit: CombineFileSplit,
+    context: TaskAttemptContext,
     index: Integer)
   extends Serializable {
 

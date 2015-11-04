@@ -21,7 +21,7 @@ import java.io._
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.storage._
@@ -40,7 +40,8 @@ import IndexShuffleBlockResolver.NOOP_REDUCE_ID
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
-private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver {
+private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver
+  with Logging {
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
@@ -60,12 +61,16 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
-      file.delete()
+      if (!file.delete()) {
+        logWarning(s"Error deleting data ${file.getPath()}")
+      }
     }
 
     file = getIndexFile(shuffleId, mapId)
     if (file.exists()) {
-      file.delete()
+      if (!file.delete()) {
+        logWarning(s"Error deleting index ${file.getPath()}")
+      }
     }
   }
 
@@ -114,9 +119,8 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 }
 
 private[spark] object IndexShuffleBlockResolver {
-  // No-op reduce ID used in interactions with disk store and DiskBlockObjectWriter.
+  // No-op reduce ID used in interactions with disk store.
   // The disk store currently expects puts to relate to a (map, reduce) pair, but in the sort
   // shuffle outputs for several reduces are glommed into a single file.
-  // TODO: Avoid this entirely by having the DiskBlockObjectWriter not require a BlockId.
   val NOOP_REDUCE_ID = 0
 }

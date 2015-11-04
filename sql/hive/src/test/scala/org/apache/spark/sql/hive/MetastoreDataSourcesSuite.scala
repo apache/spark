@@ -22,27 +22,23 @@ import java.io.{IOException, File}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.util.Utils
 
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
-  with Logging {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import hiveContext.implicits._
 
   var jsonFilePath: String = _
 
@@ -372,7 +368,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
            |)
          """.stripMargin)
 
-      val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
+      val expectedPath = catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
       val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
@@ -477,7 +473,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
           // Drop table will also delete the data.
           sql("DROP TABLE savedJsonTable")
           intercept[IOException] {
-            read.json(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+            read.json(catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
           }
         }
 
@@ -575,7 +571,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation) => // OK
+            case LogicalRelation(p: ParquetRelation, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
           }
@@ -708,7 +704,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
 
         // Manually create a metastore data source table.
         catalog.createDataSourceTable(
-          tableName = "wide_schema",
+          tableIdent = TableIdentifier("wide_schema"),
           userSpecifiedSchema = Some(schema),
           partitionColumns = Array.empty[String],
           provider = "json",
@@ -738,7 +734,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
           "EXTERNAL" -> "FALSE"),
         tableType = ManagedTable,
         serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(tableName)))
+          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))))
 
       catalog.client.createTable(hiveTable)
 
@@ -757,10 +753,15 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
       invalidateTable(tableName)
       val metastoreTable = catalog.client.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
+
+      val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
+      assert(numPartCols == 2)
+
       val actualPartitionColumns =
         StructType(
-          metastoreTable.partitionColumns.map(c =>
-            StructField(c.name, HiveMetastoreTypes.toDataType(c.hiveType))))
+          (0 until numPartCols).map { index =>
+            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.partCol.$index"))
+          })
       // Make sure partition columns are correctly stored in metastore.
       assert(
         expectedPartitionColumns.sameType(actualPartitionColumns),

@@ -83,14 +83,16 @@ private[hive] trait HiveStrategies {
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case CreateTableUsing(
-          tableName, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
-        ExecutedCommand(
-          CreateMetastoreDataSource(
-            tableName, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)) :: Nil
-
-      case CreateTableUsingAsSelect(tableName, provider, false, partitionCols, mode, opts, query) =>
+        tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         val cmd =
-          CreateMetastoreDataSourceAsSelect(tableName, provider, partitionCols, mode, opts, query)
+          CreateMetastoreDataSource(
+            tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
+        ExecutedCommand(cmd) :: Nil
+
+      case CreateTableUsingAsSelect(
+        tableIdent, provider, false, partitionCols, mode, opts, query) =>
+        val cmd =
+          CreateMetastoreDataSourceAsSelect(tableIdent, provider, partitionCols, mode, opts, query)
         ExecutedCommand(cmd) :: Nil
 
       case _ => Nil

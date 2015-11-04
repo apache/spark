@@ -68,6 +68,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Train a model
     val lda = new LDA()
     lda.setK(k)
+      .setOptimizer(new EMLDAOptimizer)
       .setDocConcentration(topicSmoothing)
       .setTopicConcentration(termSmoothing)
       .setMaxIterations(5)
@@ -135,16 +136,33 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     // Top 3 documents per topic
-    model.topDocumentsPerTopic(3).zip(topDocsByTopicDistributions(3)).foreach {case (t1, t2) =>
+    model.topDocumentsPerTopic(3).zip(topDocsByTopicDistributions(3)).foreach { case (t1, t2) =>
       assert(t1._1 === t2._1)
       assert(t1._2 === t2._2)
     }
 
     // All documents per topic
     val q = tinyCorpus.length
-    model.topDocumentsPerTopic(q).zip(topDocsByTopicDistributions(q)).foreach {case (t1, t2) =>
+    model.topDocumentsPerTopic(q).zip(topDocsByTopicDistributions(q)).foreach { case (t1, t2) =>
       assert(t1._1 === t2._1)
       assert(t1._2 === t2._2)
+    }
+
+    // Check: topTopicAssignments
+    // Make sure it assigns a topic to each term appearing in each doc.
+    val topTopicAssignments: Map[Long, (Array[Int], Array[Int])] =
+      model.topicAssignments.collect().map(x => x._1 -> (x._2, x._3)).toMap
+    assert(topTopicAssignments.keys.max < tinyCorpus.length)
+    tinyCorpus.foreach { case (docID: Long, doc: Vector) =>
+      if (topTopicAssignments.contains(docID)) {
+        val (inds, vals) = topTopicAssignments(docID)
+        assert(inds.length === doc.numNonzeros)
+        // For "term" in actual doc,
+        // check that it has a topic assigned.
+        doc.foreachActive((term, wcnt) => assert(wcnt === 0 || inds.contains(term)))
+      } else {
+        assert(doc.numNonzeros === 0)
+      }
     }
   }
 
@@ -406,7 +424,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val k = 2
     val docs = sc.parallelize(toyData)
     val op = new OnlineLDAOptimizer().setMiniBatchFraction(1).setTau0(1024).setKappa(0.51)
-      .setGammaShape(100).setOptimzeAlpha(true).setSampleWithReplacement(false)
+      .setGammaShape(100).setOptimizeDocConcentration(true).setSampleWithReplacement(false)
     val lda = new LDA().setK(k)
       .setDocConcentration(1D / k)
       .setTopicConcentration(0.01)

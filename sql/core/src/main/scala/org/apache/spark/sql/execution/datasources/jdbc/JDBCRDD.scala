@@ -262,7 +262,7 @@ private[sql] class JDBCRDD(
    * Converts value to SQL expression.
    */
   private def compileValue(value: Any): Any = value match {
-    case stringValue: UTF8String => s"'${escapeSql(stringValue.toString)}'"
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
     case _ => value
   }
 
