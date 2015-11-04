@@ -20,8 +20,8 @@
 # more efficient look up (environments use hashmaps).
 PRIMITIVE_TYPES <- as.environment(list(
   "byte"="integer",
-  "smallint"="integer",
   "tinyint"="integer",
+  "smallint"="integer",
   "integer"="integer",
   "bigint"="numeric",
   "float"="numeric",
@@ -34,10 +34,10 @@ PRIMITIVE_TYPES <- as.environment(list(
   "date"="Date"))
 
 # The complex data types. These do not have any direct mapping to R's types.
-COMPLEX_TYPES <- as.environment(list(
+COMPLEX_TYPES <- list(
   "map"=NA,
-  "array"=NA,
-  "struct"=NA))
+  "array"="list",
+  "struct"=NA)
 
 # The full list of data types.
-DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), as.list(COMPLEX_TYPES)))
+DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), COMPLEX_TYPES))
