@@ -360,8 +360,7 @@ class Dataset[T] private(
    * {{{
    *   df.select($"colA", $"colB" + 1)
    * }}}
-   * @group dfops
-   * @since 1.3.0
+   * @since 1.6.0
    */
   // Copied from Dataframe to make sure we don't have invalid overloads.
   @scala.annotation.varargs
@@ -498,6 +497,8 @@ class Dataset[T] private(
    * This type of join can be useful both for preserving type-safety with the original object
    * types as well as working with relational data where either side of the join has column
    * names in common.
+   *
+   * @since 1.6.0
    */
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     val left = this.logicalPlan
@@ -531,10 +532,16 @@ class Dataset[T] private(
    *  Gather to Driver Actions  *
    * ************************** */
 
-  /** Returns the first element in this [[Dataset]]. */
+  /**
+   * Returns the first element in this [[Dataset]].
+   * @since 1.6.0
+   */
   def first(): T = rdd.first()
 
-  /** Collects the elements to an Array. */
+  /**
+   * Collects the elements to an Array.
+   * @since 1.6.0
+   */
   def collect(): Array[T] = rdd.collect()
 
   /**
@@ -544,6 +551,8 @@ class Dataset[T] private(
    * Due to the incompatibility problem between Scala and Java, the return type of [[collect()]] at
    * Java side is `java.lang.Object`, which is not easy to use.  Java user can use this method
    * instead and keep the generic type for result.
+   *
+   * @since 1.6.0
    */
   def collectAsList(): java.util.List[T] =
     rdd.collect().toSeq.asJava
