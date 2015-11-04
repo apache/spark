@@ -10,7 +10,7 @@ _hooks = {
         'HiveServer2Hook',
     ],
     'hdfs_hook': ['HDFSHook'],
-    'hdfscli_hook': ['HDFSCLIHook'],
+    'webhdfs_hook': ['WebHDFSHook'],
     'mysql_hook': ['MySqlHook'],
     'postgres_hook': ['PostgresHook'],
     'presto_hook': ['PrestoHook'],
