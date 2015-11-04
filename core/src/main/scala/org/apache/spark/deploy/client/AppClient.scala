@@ -225,7 +225,7 @@ private[spark] class AppClient(
         context: RpcCallContext,
         msg: T): Unit = {
       // Create a thread to ask a message and reply with the result.  Allow thread to be
-      // interrupted during shutdown, otherwise context must notified of NonFatal errors.
+      // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
       askAndReplyThreadPool.execute(new Runnable {
         override def run(): Unit = {
           try {
