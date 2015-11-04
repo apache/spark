@@ -83,13 +83,8 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("average") {
     checkAnswer(
-      testData2.agg(avg('a)),
-      Row(2.0))
-
-    // Also check mean
-    checkAnswer(
-      testData2.agg(mean('a)),
-      Row(2.0))
+      testData2.agg(avg('a), mean('a)),
+      Row(2.0, 2.0))
 
     checkAnswer(
       testData2.agg(avg('a), sumDistinct('a)), // non-partial
@@ -98,6 +93,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       decimalData.agg(avg('a)),
       Row(new java.math.BigDecimal(2.0)))
+
     checkAnswer(
       decimalData.agg(avg('a), sumDistinct('a)), // non-partial
       Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
@@ -168,44 +164,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-    assert(emptyTableData.count() === 0)
-
     checkAnswer(
       emptyTableData.agg(count('a), sumDistinct('a)), // non-partial
       Row(0, null))
   }
 
   test("stddev") {
-    val testData2ADev = math.sqrt(4/5.0)
-
+    val testData2ADev = math.sqrt(4 / 5.0)
     checkAnswer(
-      testData2.agg(stddev('a)),
-      Row(testData2ADev))
-
-    checkAnswer(
-      testData2.agg(stddev_pop('a)),
-      Row(math.sqrt(4/6.0)))
-
-    checkAnswer(
-      testData2.agg(stddev_samp('a)),
-      Row(testData2ADev))
+      testData2.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
+      Row(testData2ADev, math.sqrt(4 / 6.0), testData2ADev))
   }
 
   test("zero stddev") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-    assert(emptyTableData.count() == 0)
-
     checkAnswer(
-    emptyTableData.agg(stddev('a)),
-    Row(null))
-
-    checkAnswer(
-    emptyTableData.agg(stddev_pop('a)),
-    Row(null))
-
-    checkAnswer(
-    emptyTableData.agg(stddev_samp('a)),
-    Row(null))
+    emptyTableData.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
+    Row(null, null, null))
   }
 
   test("zero sum") {
@@ -227,6 +202,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     val sparkVariance = testData2.agg(variance('a))
     checkAggregatesWithTol(sparkVariance, Row(4.0 / 5.0), absTol)
+
     val sparkVariancePop = testData2.agg(var_pop('a))
     checkAggregatesWithTol(sparkVariancePop, Row(4.0 / 6.0), absTol)
 
@@ -241,52 +217,35 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("zero moments") {
-    val emptyTableData = Seq((1, 2)).toDF("a", "b")
-    assert(emptyTableData.count() === 1)
+    val input = Seq((1, 2)).toDF("a", "b")
+    checkAnswer(
+      input.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
 
     checkAnswer(
-      emptyTableData.agg(variance('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(var_samp('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(var_pop('a)),
-      Row(0.0))
-
-    checkAnswer(
-      emptyTableData.agg(skewness('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(kurtosis('a)),
-      Row(Double.NaN))
+      input.agg(
+        expr("variance(a)"),
+        expr("var_samp(a)"),
+        expr("var_pop(a)"),
+        expr("skewness(a)"),
+        expr("kurtosis(a)")),
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
   }
 
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-    assert(emptyTableData.count() === 0)
 
     checkAnswer(
-      emptyTableData.agg(variance('a)),
-      Row(Double.NaN))
+      emptyTableData.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
+      Row(Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN))
 
     checkAnswer(
-      emptyTableData.agg(var_samp('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(var_pop('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(skewness('a)),
-      Row(Double.NaN))
-
-    checkAnswer(
-      emptyTableData.agg(kurtosis('a)),
-      Row(Double.NaN))
+      emptyTableData.agg(
+        expr("variance(a)"),
+        expr("var_samp(a)"),
+        expr("var_pop(a)"),
+        expr("skewness(a)"),
+        expr("kurtosis(a)")),
+      Row(Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN))
   }
 }
