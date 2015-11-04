@@ -126,7 +126,13 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
     val stageId = stageSubmitted.stageInfo.stageId
     val stageAttemptId = stageSubmitted.stageInfo.attemptId
     // Always override metrics for old stage attempt
-    _stageIdToStageMetrics(stageId) = new SQLStageMetrics(stageAttemptId)
+    if (_stageIdToStageMetrics.contains(stageId)) {
+      _stageIdToStageMetrics(stageId) = new SQLStageMetrics(stageAttemptId)
+    } else {
+      // If a stage belongs to some SQL execution, its stageId will be put in "onJobStart".
+      // Since "_stageIdToStageMetrics" doesn't contain it, it must not belong to any SQL execution.
+      // So we can ignore it. Otherwise, this may lead to memory leaks (SPARK-11126).
+    }
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
@@ -252,7 +258,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   /**
    * Get all accumulator updates from all tasks which belong to this execution and merge them.
    */
-  def getExecutionMetrics(executionId: Long): Map[Long, Any] = synchronized {
+  def getExecutionMetrics(executionId: Long): Map[Long, String] = synchronized {
     _executionIdToData.get(executionId) match {
       case Some(executionUIData) =>
         val accumulatorUpdates = {
@@ -264,8 +270,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).metricParam).
-          mapValues(_.asInstanceOf[SQLMetricValue[_]].value)
+          executionUIData.accumulatorMetrics(accumulatorId).metricParam)
       case None =>
         // This execution has been dropped
         Map.empty
@@ -274,11 +279,11 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 
   private def mergeAccumulatorUpdates(
       accumulatorUpdates: Seq[(Long, Any)],
-      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, Any] = {
+      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, String] = {
     accumulatorUpdates.groupBy(_._1).map { case (accumulatorId, values) =>
       val param = paramFunc(accumulatorId)
       (accumulatorId,
-        values.map(_._2.asInstanceOf[SQLMetricValue[Any]]).foldLeft(param.zero)(param.addInPlace))
+        param.stringValue(values.map(_._2.asInstanceOf[SQLMetricValue[Any]].value)))
     }
   }
 

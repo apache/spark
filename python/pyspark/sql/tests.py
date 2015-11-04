@@ -31,6 +31,10 @@ import time
 import datetime
 
 import py4j
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -172,6 +176,20 @@ class DataTypeTests(unittest.TestCase):
     def test_datetype_equal_zero(self):
         dt = DateType()
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
+
+
+class SQLContextTests(ReusedPySparkTestCase):
+    def test_get_or_create(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        self.assertTrue(SQLContext.getOrCreate(self.sc) is sqlCtx)
+
+    def test_new_session(self):
+        sqlCtx = SQLContext.getOrCreate(self.sc)
+        sqlCtx.setConf("test_key", "a")
+        sqlCtx2 = sqlCtx.newSession()
+        sqlCtx2.setConf("test_key", "b")
+        self.assertEqual(sqlCtx.getConf("test_key", ""), "a")
+        self.assertEqual(sqlCtx2.getConf("test_key", ""), "b")
 
 
 class SQLTests(ReusedPySparkTestCase):
@@ -1061,6 +1079,12 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.sqlCtx.createDataFrame([(1, 2)], ["a", "b"])
         self.assertRaisesRegexp(IllegalArgumentException, "1024 is not in the permitted values",
                                 lambda: df.select(sha2(df.a, 1024)).collect())
+        try:
+            df.select(sha2(df.a, 1024)).collect()
+        except IllegalArgumentException as e:
+            self.assertRegexpMatches(e.desc, "1024 is not in the permitted values")
+            self.assertRegexpMatches(e.stackTrace,
+                                     "org.apache.spark.sql.functions")
 
     def test_with_column_with_existing_name(self):
         keys = self.df.withColumn("key", self.df.key).select("key").collect()
@@ -1208,4 +1232,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()

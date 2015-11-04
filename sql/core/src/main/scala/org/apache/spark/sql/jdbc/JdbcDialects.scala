@@ -84,18 +84,18 @@ abstract class JdbcDialect {
 
   def getCommonJDBCType(dataType: DataType): Option[JdbcType] = {
     dataType match {
-      case IntegerType => Some(JdbcType("INTEGER", java.sql.Types.INTEGER))
-      case LongType => Some(JdbcType("BIGINT", java.sql.Types.BIGINT))
-      case DoubleType => Some(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
-      case FloatType => Some(JdbcType("REAL", java.sql.Types.FLOAT))
-      case ShortType => Some(JdbcType("INTEGER", java.sql.Types.SMALLINT))
-      case ByteType => Some(JdbcType("BYTE", java.sql.Types.TINYINT))
-      case BooleanType => Some(JdbcType("BIT(1)", java.sql.Types.BIT))
-      case StringType => Some(JdbcType("TEXT", java.sql.Types.CLOB))
-      case BinaryType => Some(JdbcType("BLOB", java.sql.Types.BLOB))
-      case TimestampType => Some(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
-      case DateType => Some(JdbcType("DATE", java.sql.Types.DATE))
-      case t: DecimalType => Some(JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
+      case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER))
+      case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT))
+      case DoubleType => Option(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
+      case FloatType => Option(JdbcType("REAL", java.sql.Types.FLOAT))
+      case ShortType => Option(JdbcType("INTEGER", java.sql.Types.SMALLINT))
+      case ByteType => Option(JdbcType("BYTE", java.sql.Types.TINYINT))
+      case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
+      case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
+      case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
+      case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
+      case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
+      case t: DecimalType => Option(JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
     }
   }
@@ -217,32 +217,32 @@ case object PostgresDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
-      Some(BinaryType)
+      Option(BinaryType)
     } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("json")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("uuid")) {
         Some(StringType)
     } else if (sqlType == Types.ARRAY) {
       typeName match {
-        case "_bit" | "_bool" => Some(ArrayType(BooleanType))
-        case "_int2" => Some(ArrayType(ShortType))
-        case "_int4" => Some(ArrayType(IntegerType))
-        case "_int8" | "_oid" => Some(ArrayType(LongType))
-        case "_float4" => Some(ArrayType(FloatType))
-        case "_money" | "_float8" => Some(ArrayType(DoubleType))
-        case "_text" | "_varchar" | "_char" | "_bpchar" | "_name" => Some(ArrayType(StringType))
-        case "_bytea" => Some(ArrayType(BinaryType))
-        case "_timestamp" | "_timestamptz" | "_time" | "_timetz" => Some(ArrayType(TimestampType))
-        case "_date" => Some(ArrayType(DateType))
+        case "_bit" | "_bool" => Option(ArrayType(BooleanType))
+        case "_int2" => Option(ArrayType(ShortType))
+        case "_int4" => Option(ArrayType(IntegerType))
+        case "_int8" | "_oid" => Option(ArrayType(LongType))
+        case "_float4" => Option(ArrayType(FloatType))
+        case "_money" | "_float8" => Option(ArrayType(DoubleType))
+        case "_text" | "_varchar" | "_char" | "_bpchar" | "_name" => Option(ArrayType(StringType))
+        case "_bytea" => Option(ArrayType(BinaryType))
+        case "_timestamp" | "_timestamptz" | "_time" | "_timetz" => Option(ArrayType(TimestampType))
+        case "_date" => Option(ArrayType(DateType))
         case "_numeric"
-          if size != 0 || scale != 0 => Some(ArrayType(DecimalType(size, scale)))
-        case "_numeric" => Some(ArrayType(DecimalType.SYSTEM_DEFAULT))
+          if size != 0 || scale != 0 => Option(ArrayType(DecimalType(size, scale)))
+        case "_numeric" => Option(ArrayType(DecimalType.SYSTEM_DEFAULT))
         case _ => throw new IllegalArgumentException(s"Unhandled postgres array type $typeName")
       }
     } else None
@@ -281,9 +281,9 @@ case object MySQLDialect extends JdbcDialect {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
       md.putLong("binarylong", 1)
-      Some(LongType)
+      Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Some(BooleanType)
+      Option(BooleanType)
     } else None
   }
 
@@ -324,7 +324,7 @@ case object MsSqlServerDialect extends JdbcDialect {
       sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-      Some(StringType)
+      Option(StringType)
     } else None
   }
 

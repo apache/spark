@@ -1281,6 +1281,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.parquet(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.parquet`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from parquet.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+  }
+
   test("correctly parse CREATE VIEW statement") {
     withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt") {
@@ -1395,6 +1408,17 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         sql("DROP VIEW testView")
       }
+    }
+  }
+
+  test("SPARK-10562: partition by column with mixed case name") {
+    withTable("tbl10562") {
+      val df = Seq(2012 -> "a").toDF("Year", "val")
+      df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
     }
   }
 }

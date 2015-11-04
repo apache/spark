@@ -62,10 +62,21 @@ private[spark] class ApplicationMaster(
     .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
 
-  // Default to numExecutors * 2, with minimum of 3
-  private val maxNumExecutorFailures = sparkConf.getInt("spark.yarn.max.executor.failures",
-    sparkConf.getInt("spark.yarn.max.worker.failures",
-      math.max(sparkConf.getInt("spark.executor.instances", 0) *  2, 3)))
+  // Default to twice the number of executors (twice the maximum number of executors if dynamic
+  // allocation is enabled), with a minimum of 3.
+
+  private val maxNumExecutorFailures = {
+    val defaultKey =
+      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+        "spark.dynamicAllocation.maxExecutors"
+      } else {
+        "spark.executor.instances"
+      }
+    val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
+    val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
+
+    sparkConf.getInt("spark.yarn.max.executor.failures", defaultMaxNumExecutorFailures)
+  }
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
@@ -255,7 +266,6 @@ private[spark] class ApplicationMaster(
       driverRef,
       yarnConf,
       _sparkConf,
-      if (sc != null) sc.preferredNodeLocationData else Map(),
       uiAddress,
       historyAddress,
       securityMgr)
@@ -311,7 +321,8 @@ private[spark] class ApplicationMaster(
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
     val port = sparkConf.getInt("spark.yarn.am.port", 0)
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr)
+    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr,
+      clientMode = true)
     val driverRef = waitForSparkDriver()
     addAmIpFilter()
     registerAM(rpcEnv, driverRef, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
@@ -365,7 +376,7 @@ private[spark] class ApplicationMaster(
             }
           }
           try {
-            val numPendingAllocate = allocator.getNumPendingAllocate
+            val numPendingAllocate = allocator.getPendingAllocate.size
             val sleepInterval =
               if (numPendingAllocate > 0) {
                 val currentAllocationInterval =
@@ -564,9 +575,6 @@ private[spark] class ApplicationMaster(
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver.send(x)
-
-      case DriverHello =>
-        // SPARK-10987: no action needed for this message.
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

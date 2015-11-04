@@ -21,6 +21,9 @@ import java.lang.{Long => JLong}
 import java.util
 
 import com.clearspring.analytics.hash.MurmurHash
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -54,37 +57,37 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case _ => DoubleType
   }
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val sum = AttributeReference("sum", sumDataType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentSum :: currentCount :: Nil
+  override val aggBufferAttributes = sum :: count :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Cast(Literal(0), sumDataType),
-    /* currentCount = */ Literal(0L)
+    /* sum = */ Cast(Literal(0), sumDataType),
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
+    /* sum = */
     Add(
-      currentSum,
+      sum,
       Coalesce(Cast(child, sumDataType) :: Cast(Literal(0), sumDataType) :: Nil)),
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentSum = */ currentSum.left + currentSum.right,
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* sum = */ sum.left + sum.right,
+    /* count = */ count.left + count.right
   )
 
-  // If all input are nulls, currentCount will be 0 and we will get null after the division.
+  // If all input are nulls, count will be 0 and we will get null after the division.
   override val evaluateExpression = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)
-      Cast(Cast(currentSum, dt) / Cast(currentCount, dt), resultType)
+      Cast(Cast(sum, dt) / Cast(count, dt), resultType)
     case _ =>
-      Cast(currentSum, resultType) / Cast(currentCount, resultType)
+      Cast(sum, resultType) / Cast(count, resultType)
   }
 }
 
@@ -99,26 +102,42 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val currentCount = AttributeReference("currentCount", LongType)()
+  private val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = currentCount :: Nil
+  override val aggBufferAttributes = count :: Nil
 
   override val initialValues = Seq(
-    /* currentCount = */ Literal(0L)
+    /* count = */ Literal(0L)
   )
 
   override val updateExpressions = Seq(
-    /* currentCount = */ If(IsNull(child), currentCount, currentCount + 1L)
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override val mergeExpressions = Seq(
-    /* currentCount = */ currentCount.left + currentCount.right
+    /* count = */ count.left + count.right
   )
 
-  override val evaluateExpression = Cast(currentCount, LongType)
+  override val evaluateExpression = Cast(count, LongType)
 }
 
-case class First(child: Expression) extends DeclarativeAggregate {
+/**
+ * Returns the first value of `child` for a group of rows. If the first value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -135,24 +154,61 @@ case class First(child: Expression) extends DeclarativeAggregate {
 
   private val first = AttributeReference("first", child.dataType)()
 
-  override val aggBufferAttributes = first :: Nil
+  private val valueSet = AttributeReference("valueSet", BooleanType)()
+
+  override val aggBufferAttributes = first :: valueSet :: Nil
 
   override val initialValues = Seq(
-    /* first = */ Literal.create(null, child.dataType)
+    /* first = */ Literal.create(null, child.dataType),
+    /* valueSet = */ Literal.create(false, BooleanType)
   )
 
-  override val updateExpressions = Seq(
-    /* first = */ If(IsNull(first), child, first)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* first = */ If(Or(valueSet, IsNull(child)), first, child),
+        /* valueSet = */ Or(valueSet, IsNotNull(child))
+      )
+    } else {
+      Seq(
+        /* first = */ If(valueSet, first, child),
+        /* valueSet = */ Literal.create(true, BooleanType)
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* first = */ If(IsNull(first.left), first.right, first.left)
-  )
+  override val mergeExpressions = {
+    // For first, we can just check if valueSet.left is set to true. If it is set
+    // to true, we use first.right. If not, we use first.right (even if valueSet.right is
+    // false, we are safe to do so because first.right will be null in this case).
+    Seq(
+      /* first = */ If(valueSet.left, first.left, first.right),
+      /* valueSet = */ Or(valueSet.left, valueSet.right)
+    )
+  }
 
   override val evaluateExpression = first
+
+  override def toString: String = s"FIRST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
-case class Last(child: Expression) extends DeclarativeAggregate {
+/**
+ * Returns the last value of `child` for a group of rows. If the last value of `child`
+ * is `null`, it returns `null` (respecting nulls). Even if [[Last]] is used on a already
+ * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
+ * is used) its result will not be deterministic (unless the input table is sorted and has
+ * a single partition, and we use a single reducer to do the aggregation.).
+ * @param child
+ */
+case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -175,15 +231,33 @@ case class Last(child: Expression) extends DeclarativeAggregate {
     /* last = */ Literal.create(null, child.dataType)
   )
 
-  override val updateExpressions = Seq(
-    /* last = */ If(IsNull(child), last, child)
-  )
+  override val updateExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(child), last, child)
+      )
+    } else {
+      Seq(
+        /* last = */ child
+      )
+    }
+  }
 
-  override val mergeExpressions = Seq(
-    /* last = */ If(IsNull(last.right), last.left, last.right)
-  )
+  override val mergeExpressions = {
+    if (ignoreNulls) {
+      Seq(
+        /* last = */ If(IsNull(last.right), last.left, last.right)
+      )
+    } else {
+      Seq(
+        /* last = */ last.right
+      )
+    }
+  }
 
   override val evaluateExpression = last
+
+  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
 }
 
 case class Max(child: Expression) extends DeclarativeAggregate {
@@ -298,101 +372,77 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   private val resultType = DoubleType
 
-  private val preCount = AttributeReference("preCount", resultType)()
-  private val currentCount = AttributeReference("currentCount", resultType)()
-  private val preAvg = AttributeReference("preAvg", resultType)()
-  private val currentAvg = AttributeReference("currentAvg", resultType)()
-  private val currentMk = AttributeReference("currentMk", resultType)()
+  private val count = AttributeReference("count", resultType)()
+  private val avg = AttributeReference("avg", resultType)()
+  private val mk = AttributeReference("mk", resultType)()
 
-  override val aggBufferAttributes = preCount :: currentCount :: preAvg ::
-                                  currentAvg :: currentMk :: Nil
+  override val aggBufferAttributes = count :: avg :: mk :: Nil
 
   override val initialValues = Seq(
-    /* preCount = */ Cast(Literal(0), resultType),
-    /* currentCount = */ Cast(Literal(0), resultType),
-    /* preAvg = */ Cast(Literal(0), resultType),
-    /* currentAvg = */ Cast(Literal(0), resultType),
-    /* currentMk = */ Cast(Literal(0), resultType)
+    /* count = */ Cast(Literal(0), resultType),
+    /* avg = */ Cast(Literal(0), resultType),
+    /* mk = */ Cast(Literal(0), resultType)
   )
 
   override val updateExpressions = {
+    val value = Cast(child, resultType)
+    val newCount = count + Cast(Literal(1), resultType)
 
     // update average
     // avg = avg + (value - avg)/count
-    def avgAdd: Expression = {
-      currentAvg + ((Cast(child, resultType) - currentAvg) / currentCount)
-    }
+    val newAvg = avg + (value - avg) / newCount
 
     // update sum of square of difference from mean
     // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    def mkAdd: Expression = {
-      val delta1 = Cast(child, resultType) - preAvg
-      val delta2 = Cast(child, resultType) - currentAvg
-      currentMk + (delta1 * delta2)
-    }
+    val newMk = mk + (value - avg) * (value - newAvg)
 
     Seq(
-      /* preCount = */ If(IsNull(child), preCount, currentCount),
-      /* currentCount = */ If(IsNull(child), currentCount,
-                           Add(currentCount, Cast(Literal(1), resultType))),
-      /* preAvg = */ If(IsNull(child), preAvg, currentAvg),
-      /* currentAvg = */ If(IsNull(child), currentAvg, avgAdd),
-      /* currentMk = */ If(IsNull(child), currentMk, mkAdd)
+      /* count = */ If(IsNull(child), count, newCount),
+      /* avg = */ If(IsNull(child), avg, newAvg),
+      /* mk = */ If(IsNull(child), mk, newMk)
     )
   }
 
   override val mergeExpressions = {
 
     // count merge
-    def countMerge: Expression = {
-      currentCount.left + currentCount.right
-    }
+    val newCount = count.left + count.right
 
     // average merge
-    def avgMerge: Expression = {
-      ((currentAvg.left * preCount) + (currentAvg.right * currentCount.right)) /
-      (preCount + currentCount.right)
-    }
+    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
 
     // update sum of square differences
-    def mkMerge: Expression = {
-      val avgDelta = currentAvg.right - preAvg
-      val mkDelta = (avgDelta * avgDelta) * (preCount * currentCount.right) /
-        (preCount + currentCount.right)
-
-      currentMk.left + currentMk.right + mkDelta
+    val newMk = {
+      val avgDelta = avg.right - avg.left
+      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
+      mk.left + mk.right + mkDelta
     }
 
     Seq(
-      /* preCount = */ If(IsNull(currentCount.left),
-                         Cast(Literal(0), resultType), currentCount.left),
-      /* currentCount = */ If(IsNull(currentCount.left), currentCount.right,
-                             If(IsNull(currentCount.right), currentCount.left, countMerge)),
-      /* preAvg = */ If(IsNull(currentAvg.left), Cast(Literal(0), resultType), currentAvg.left),
-      /* currentAvg = */ If(IsNull(currentAvg.left), currentAvg.right,
-                           If(IsNull(currentAvg.right), currentAvg.left, avgMerge)),
-      /* currentMk = */ If(IsNull(currentMk.left), currentMk.right,
-                          If(IsNull(currentMk.right), currentMk.left, mkMerge))
+      /* count = */ If(IsNull(count.left), count.right,
+                       If(IsNull(count.right), count.left, newCount)),
+      /* avg = */ If(IsNull(avg.left), avg.right,
+                     If(IsNull(avg.right), avg.left, newAvg)),
+      /* mk = */ If(IsNull(mk.left), mk.right,
+                    If(IsNull(mk.right), mk.left, newMk))
     )
   }
 
   override val evaluateExpression = {
-    // when currentCount == 0, return null
-    // when currentCount == 1, return 0
-    // when currentCount >1
-    // stddev_samp = sqrt (currentMk/(currentCount -1))
-    // stddev_pop = sqrt (currentMk/currentCount)
-    val varCol = {
+    // when count == 0, return null
+    // when count == 1, return 0
+    // when count >1
+    // stddev_samp = sqrt (mk/(count -1))
+    // stddev_pop = sqrt (mk/count)
+    val varCol =
       if (isSample) {
-        currentMk / Cast((currentCount - Cast(Literal(1), resultType)), resultType)
+        mk / Cast((count - Cast(Literal(1), resultType)), resultType)
+      } else {
+        mk / count
       }
-      else {
-        currentMk / currentCount
-      }
-    }
 
-    If(EqualTo(currentCount, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-      If(EqualTo(currentCount, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
+    If(EqualTo(count, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
+      If(EqualTo(count, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
         Cast(Sqrt(varCol), resultType)))
   }
 }
@@ -425,30 +475,188 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   private val sumDataType = resultType
 
-  private val currentSum = AttributeReference("currentSum", sumDataType)()
+  private val sum = AttributeReference("sum", sumDataType)()
 
   private val zero = Cast(Literal(0), sumDataType)
 
-  override val aggBufferAttributes = currentSum :: Nil
+  override val aggBufferAttributes = sum :: Nil
 
   override val initialValues = Seq(
-    /* currentSum = */ Literal.create(null, sumDataType)
+    /* sum = */ Literal.create(null, sumDataType)
   )
 
   override val updateExpressions = Seq(
-    /* currentSum = */
-    Coalesce(Seq(Add(Coalesce(Seq(currentSum, zero)), Cast(child, sumDataType)), currentSum))
+    /* sum = */
+    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
   )
 
   override val mergeExpressions = {
-    val add = Add(Coalesce(Seq(currentSum.left, zero)), Cast(currentSum.right, sumDataType))
+    val add = Add(Coalesce(Seq(sum.left, zero)), Cast(sum.right, sumDataType))
     Seq(
-      /* currentSum = */
-      Coalesce(Seq(add, currentSum.left))
+      /* sum = */
+      Coalesce(Seq(add, sum.left))
     )
   }
 
-  override val evaluateExpression = Cast(currentSum, resultType)
+  override val evaluateExpression = Cast(sum, resultType)
+}
+
+/**
+ * Compute Pearson correlation between two expressions.
+ * When applied on empty data (i.e., count is zero), it returns NULL.
+ *
+ * Definition of Pearson correlation can be found at
+ * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
+ *
+ * @param left one of the expressions to compute correlation with.
+ * @param right another expression to compute correlation with.
+ */
+case class Corr(
+    left: Expression,
+    right: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate {
+
+  def children: Seq[Expression] = Seq(left, right)
+
+  def nullable: Boolean = false
+
+  def dataType: DataType = DoubleType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+
+  def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  def inputAggBufferAttributes: Seq[AttributeReference] = aggBufferAttributes.map(_.newInstance())
+
+  val aggBufferAttributes: Seq[AttributeReference] = Seq(
+    AttributeReference("xAvg", DoubleType)(),
+    AttributeReference("yAvg", DoubleType)(),
+    AttributeReference("Ck", DoubleType)(),
+    AttributeReference("MkX", DoubleType)(),
+    AttributeReference("MkY", DoubleType)(),
+    AttributeReference("count", LongType)())
+
+  // Local cache of mutableAggBufferOffset(s) that will be used in update and merge
+  private[this] val mutableAggBufferOffsetPlus1 = mutableAggBufferOffset + 1
+  private[this] val mutableAggBufferOffsetPlus2 = mutableAggBufferOffset + 2
+  private[this] val mutableAggBufferOffsetPlus3 = mutableAggBufferOffset + 3
+  private[this] val mutableAggBufferOffsetPlus4 = mutableAggBufferOffset + 4
+  private[this] val mutableAggBufferOffsetPlus5 = mutableAggBufferOffset + 5
+
+  // Local cache of inputAggBufferOffset(s) that will be used in update and merge
+  private[this] val inputAggBufferOffsetPlus1 = inputAggBufferOffset + 1
+  private[this] val inputAggBufferOffsetPlus2 = inputAggBufferOffset + 2
+  private[this] val inputAggBufferOffsetPlus3 = inputAggBufferOffset + 3
+  private[this] val inputAggBufferOffsetPlus4 = inputAggBufferOffset + 4
+  private[this] val inputAggBufferOffsetPlus5 = inputAggBufferOffset + 5
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def initialize(buffer: MutableRow): Unit = {
+    buffer.setDouble(mutableAggBufferOffset, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus1, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus2, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus3, 0.0)
+    buffer.setDouble(mutableAggBufferOffsetPlus4, 0.0)
+    buffer.setLong(mutableAggBufferOffsetPlus5, 0L)
+  }
+
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val leftEval = left.eval(input)
+    val rightEval = right.eval(input)
+
+    if (leftEval != null && rightEval != null) {
+      val x = leftEval.asInstanceOf[Double]
+      val y = rightEval.asInstanceOf[Double]
+
+      var xAvg = buffer.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer.getLong(mutableAggBufferOffsetPlus5)
+
+      val deltaX = x - xAvg
+      val deltaY = y - yAvg
+      count += 1
+      xAvg += deltaX / count
+      yAvg += deltaY / count
+      Ck += deltaX * (y - yAvg)
+      MkX += deltaX * (x - xAvg)
+      MkY += deltaY * (y - yAvg)
+
+      buffer.setDouble(mutableAggBufferOffset, xAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  // Merge counters from other partitions. Formula can be found at:
+  // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val count2 = buffer2.getLong(inputAggBufferOffsetPlus5)
+
+    // We only go to merge two buffers if there is at least one record aggregated in buffer2.
+    // We don't need to check count in buffer1 because if count2 is more than zero, totalCount
+    // is more than zero too, then we won't get a divide by zero exception.
+    if (count2 > 0) {
+      var xAvg = buffer1.getDouble(mutableAggBufferOffset)
+      var yAvg = buffer1.getDouble(mutableAggBufferOffsetPlus1)
+      var Ck = buffer1.getDouble(mutableAggBufferOffsetPlus2)
+      var MkX = buffer1.getDouble(mutableAggBufferOffsetPlus3)
+      var MkY = buffer1.getDouble(mutableAggBufferOffsetPlus4)
+      var count = buffer1.getLong(mutableAggBufferOffsetPlus5)
+
+      val xAvg2 = buffer2.getDouble(inputAggBufferOffset)
+      val yAvg2 = buffer2.getDouble(inputAggBufferOffsetPlus1)
+      val Ck2 = buffer2.getDouble(inputAggBufferOffsetPlus2)
+      val MkX2 = buffer2.getDouble(inputAggBufferOffsetPlus3)
+      val MkY2 = buffer2.getDouble(inputAggBufferOffsetPlus4)
+
+      val totalCount = count + count2
+      val deltaX = xAvg - xAvg2
+      val deltaY = yAvg - yAvg2
+      Ck += Ck2 + deltaX * deltaY * count / totalCount * count2
+      xAvg = (xAvg * count + xAvg2 * count2) / totalCount
+      yAvg = (yAvg * count + yAvg2 * count2) / totalCount
+      MkX += MkX2 + deltaX * deltaX * count / totalCount * count2
+      MkY += MkY2 + deltaY * deltaY * count / totalCount * count2
+      count = totalCount
+
+      buffer1.setDouble(mutableAggBufferOffset, xAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus1, yAvg)
+      buffer1.setDouble(mutableAggBufferOffsetPlus2, Ck)
+      buffer1.setDouble(mutableAggBufferOffsetPlus3, MkX)
+      buffer1.setDouble(mutableAggBufferOffsetPlus4, MkY)
+      buffer1.setLong(mutableAggBufferOffsetPlus5, count)
+    }
+  }
+
+  override def eval(buffer: InternalRow): Any = {
+    val count = buffer.getLong(mutableAggBufferOffsetPlus5)
+    if (count > 0) {
+      val Ck = buffer.getDouble(mutableAggBufferOffsetPlus2)
+      val MkX = buffer.getDouble(mutableAggBufferOffsetPlus3)
+      val MkY = buffer.getDouble(mutableAggBufferOffsetPlus4)
+      val corr = Ck / math.sqrt(MkX * MkY)
+      if (corr.isNaN) {
+        null
+      } else {
+        corr
+      }
+    } else {
+      null
+    }
+  }
 }
 
 // scalastyle:off
@@ -856,4 +1064,333 @@ object HyperLogLogPlusPlus {
     Array(189083, 185696.913, 182348.774, 179035.946, 175762.762, 172526.444, 169329.754, 166166.099, 163043.269, 159958.91, 156907.912, 153906.845, 150924.199, 147996.568, 145093.457, 142239.233, 139421.475, 136632.27, 133889.588, 131174.2, 128511.619, 125868.621, 123265.385, 120721.061, 118181.769, 115709.456, 113252.446, 110840.198, 108465.099, 106126.164, 103823.469, 101556.618, 99308.004, 97124.508, 94937.803, 92833.731, 90745.061, 88677.627, 86617.47, 84650.442, 82697.833, 80769.132, 78879.629, 77014.432, 75215.626, 73384.587, 71652.482, 69895.93, 68209.301, 66553.669, 64921.981, 63310.323, 61742.115, 60205.018, 58698.658, 57190.657, 55760.865, 54331.169, 52908.167, 51550.273, 50225.254, 48922.421, 47614.533, 46362.049, 45098.569, 43926.083, 42736.03, 41593.473, 40425.26, 39316.237, 38243.651, 37170.617, 36114.609, 35084.19, 34117.233, 33206.509, 32231.505, 31318.728, 30403.404, 29540.0550000001, 28679.236, 27825.862, 26965.216, 26179.148, 25462.08, 24645.952, 23922.523, 23198.144, 22529.128, 21762.4179999999, 21134.779, 20459.117, 19840.818, 19187.04, 18636.3689999999, 17982.831, 17439.7389999999, 16874.547, 16358.2169999999, 15835.684, 15352.914, 14823.681, 14329.313, 13816.897, 13342.874, 12880.882, 12491.648, 12021.254, 11625.392, 11293.7610000001, 10813.697, 10456.209, 10099.074, 9755.39000000001, 9393.18500000006, 9047.57900000003, 8657.98499999999, 8395.85900000005, 8033, 7736.95900000003, 7430.59699999995, 7258.47699999996, 6924.58200000005, 6691.29399999999, 6357.92500000005, 6202.05700000003, 5921.19700000004, 5628.28399999999, 5404.96799999999, 5226.71100000001, 4990.75600000005, 4799.77399999998, 4622.93099999998, 4472.478, 4171.78700000001, 3957.46299999999, 3868.95200000005, 3691.14300000004, 3474.63100000005, 3341.67200000002, 3109.14000000001, 3071.97400000005, 2796.40399999998, 2756.17799999996, 2611.46999999997, 2471.93000000005, 2382.26399999997, 2209.22400000005, 2142.28399999999, 2013.96100000001, 1911.18999999994, 1818.27099999995, 1668.47900000005, 1519.65800000005, 1469.67599999998, 1367.13800000004, 1248.52899999998, 1181.23600000003, 1022.71900000004, 1088.20700000005, 959.03600000008, 876.095999999903, 791.183999999892, 703.337000000058, 731.949999999953, 586.86400000006, 526.024999999907, 323.004999999888, 320.448000000091, 340.672999999952, 309.638999999966, 216.601999999955, 102.922999999952, 19.2399999999907, -0.114000000059605, -32.6240000000689, -89.3179999999702, -153.497999999905, -64.2970000000205, -143.695999999996, -259.497999999905, -253.017999999924, -213.948000000091, -397.590000000084, -434.006000000052, -403.475000000093, -297.958000000101, -404.317000000039, -528.898999999976, -506.621000000043, -513.205000000075, -479.351000000024, -596.139999999898, -527.016999999993, -664.681000000099, -680.306000000099, -704.050000000047, -850.486000000034, -757.43200000003, -713.308999999892)
   )
   // scalastyle:on
+}
+
+/**
+ * A central moment is the expected value of a specified power of the deviation of a random
+ * variable from the mean. Central moments are often used to characterize the properties of about
+ * the shape of a distribution.
+ *
+ * This class implements online, one-pass algorithms for computing the central moments of a set of
+ * points.
+ *
+ * Behavior:
+ *  - null values are ignored
+ *  - returns `Double.NaN` when the column contains `Double.NaN` values
+ *
+ * References:
+ *  - Xiangrui Meng.  "Simpler Online Updates for Arbitrary-Order Central Moments."
+ *      2015. http://arxiv.org/abs/1510.04923
+ *
+ * @see [[https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+ *     Algorithms for calculating variance (Wikipedia)]]
+ *
+ * @param child to compute central moments of.
+ */
+abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate with Serializable {
+
+  /**
+   * The central moment order to be computed.
+   */
+  protected def momentOrder: Int
+
+  override def children: Seq[Expression] = Seq(child)
+
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = DoubleType
+
+  // Expected input data type.
+  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
+  // new version at planning time (after analysis phase). For now, NullType is added at here
+  // to make it resolved when we have cases like `select avg(null)`.
+  // We can use our analyzer to cast NullType to the default data type of the NumericType once
+  // we remove the old aggregate functions. Then, we will not need NullType at here.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+
+  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+
+  /**
+   * Size of aggregation buffer.
+   */
+  private[this] val bufferSize = 5
+
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq.tabulate(bufferSize) { i =>
+    AttributeReference(s"M$i", DoubleType)()
+  }
+
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
+
+  // buffer offsets
+  private[this] val nOffset = mutableAggBufferOffset
+  private[this] val meanOffset = mutableAggBufferOffset + 1
+  private[this] val secondMomentOffset = mutableAggBufferOffset + 2
+  private[this] val thirdMomentOffset = mutableAggBufferOffset + 3
+  private[this] val fourthMomentOffset = mutableAggBufferOffset + 4
+
+  // frequently used values for online updates
+  private[this] var delta = 0.0
+  private[this] var deltaN = 0.0
+  private[this] var delta2 = 0.0
+  private[this] var deltaN2 = 0.0
+  private[this] var n = 0.0
+  private[this] var mean = 0.0
+  private[this] var m2 = 0.0
+  private[this] var m3 = 0.0
+  private[this] var m4 = 0.0
+
+  /**
+   * Initialize all moments to zero.
+   */
+  override def initialize(buffer: MutableRow): Unit = {
+    for (aggIndex <- 0 until bufferSize) {
+      buffer.setDouble(mutableAggBufferOffset + aggIndex, 0.0)
+    }
+  }
+
+  /**
+   * Update the central moments buffer.
+   */
+  override def update(buffer: MutableRow, input: InternalRow): Unit = {
+    val v = Cast(child, DoubleType).eval(input)
+    if (v != null) {
+      val updateValue = v match {
+        case d: Double => d
+      }
+
+      n = buffer.getDouble(nOffset)
+      mean = buffer.getDouble(meanOffset)
+
+      n += 1.0
+      buffer.setDouble(nOffset, n)
+      delta = updateValue - mean
+      deltaN = delta / n
+      mean += deltaN
+      buffer.setDouble(meanOffset, mean)
+
+      if (momentOrder >= 2) {
+        m2 = buffer.getDouble(secondMomentOffset)
+        m2 += delta * (delta - deltaN)
+        buffer.setDouble(secondMomentOffset, m2)
+      }
+
+      if (momentOrder >= 3) {
+        delta2 = delta * delta
+        deltaN2 = deltaN * deltaN
+        m3 = buffer.getDouble(thirdMomentOffset)
+        m3 += -3.0 * deltaN * m2 + delta * (delta2 - deltaN2)
+        buffer.setDouble(thirdMomentOffset, m3)
+      }
+
+      if (momentOrder >= 4) {
+        m4 = buffer.getDouble(fourthMomentOffset)
+        m4 += -4.0 * deltaN * m3 - 6.0 * deltaN2 * m2 +
+          delta * (delta * delta2 - deltaN * deltaN2)
+        buffer.setDouble(fourthMomentOffset, m4)
+      }
+    }
+  }
+
+  /**
+   * Merge two central moment buffers.
+   */
+  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
+    val n1 = buffer1.getDouble(nOffset)
+    val n2 = buffer2.getDouble(inputAggBufferOffset)
+    val mean1 = buffer1.getDouble(meanOffset)
+    val mean2 = buffer2.getDouble(inputAggBufferOffset + 1)
+
+    var secondMoment1 = 0.0
+    var secondMoment2 = 0.0
+
+    var thirdMoment1 = 0.0
+    var thirdMoment2 = 0.0
+
+    var fourthMoment1 = 0.0
+    var fourthMoment2 = 0.0
+
+    n = n1 + n2
+    buffer1.setDouble(nOffset, n)
+    delta = mean2 - mean1
+    deltaN = if (n == 0.0) 0.0 else delta / n
+    mean = mean1 + deltaN * n2
+    buffer1.setDouble(mutableAggBufferOffset + 1, mean)
+
+    // higher order moments computed according to:
+    // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
+    if (momentOrder >= 2) {
+      secondMoment1 = buffer1.getDouble(secondMomentOffset)
+      secondMoment2 = buffer2.getDouble(inputAggBufferOffset + 2)
+      m2 = secondMoment1 + secondMoment2 + delta * deltaN * n1 * n2
+      buffer1.setDouble(secondMomentOffset, m2)
+    }
+
+    if (momentOrder >= 3) {
+      thirdMoment1 = buffer1.getDouble(thirdMomentOffset)
+      thirdMoment2 = buffer2.getDouble(inputAggBufferOffset + 3)
+      m3 = thirdMoment1 + thirdMoment2 + deltaN * deltaN * delta * n1 * n2 *
+        (n1 - n2) + 3.0 * deltaN * (n1 * secondMoment2 - n2 * secondMoment1)
+      buffer1.setDouble(thirdMomentOffset, m3)
+    }
+
+    if (momentOrder >= 4) {
+      fourthMoment1 = buffer1.getDouble(fourthMomentOffset)
+      fourthMoment2 = buffer2.getDouble(inputAggBufferOffset + 4)
+      m4 = fourthMoment1 + fourthMoment2 + deltaN * deltaN * deltaN * delta * n1 *
+        n2 * (n1 * n1 - n1 * n2 + n2 * n2) + deltaN * deltaN * 6.0 *
+        (n1 * n1 * secondMoment2 + n2 * n2 * secondMoment1) +
+        4.0 * deltaN * (n1 * thirdMoment2 - n2 * thirdMoment1)
+      buffer1.setDouble(fourthMomentOffset, m4)
+    }
+  }
+
+  /**
+   * Compute aggregate statistic from sufficient moments.
+   * @param centralMoments Length `momentOrder + 1` array of central moments (un-normalized)
+   *                       needed to compute the aggregate stat.
+   */
+  def getStatistic(n: Double, mean: Double, centralMoments: Array[Double]): Double
+
+  override final def eval(buffer: InternalRow): Any = {
+    val n = buffer.getDouble(nOffset)
+    val mean = buffer.getDouble(meanOffset)
+    val moments = Array.ofDim[Double](momentOrder + 1)
+    moments(0) = 1.0
+    moments(1) = 0.0
+    if (momentOrder >= 2) {
+      moments(2) = buffer.getDouble(secondMomentOffset)
+    }
+    if (momentOrder >= 3) {
+      moments(3) = buffer.getDouble(thirdMomentOffset)
+    }
+    if (momentOrder >= 4) {
+      moments(4) = buffer.getDouble(fourthMomentOffset)
+    }
+
+    getStatistic(n, mean, moments)
+  }
+}
+
+case class Variance(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "variance"
+
+  override protected val momentOrder = 2
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+
+    if (n == 0.0) Double.NaN else moments(2) / n
+  }
+}
+
+case class VarianceSamp(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "variance_samp"
+
+  override protected val momentOrder = 2
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+  }
+}
+
+case class VariancePop(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "variance_pop"
+
+  override protected val momentOrder = 2
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0) Double.NaN else moments(2) / n
+  }
+}
+
+case class Skewness(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "skewness"
+
+  override protected val momentOrder = 3
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+    val m2 = moments(2)
+    val m3 = moments(3)
+    if (n == 0.0 || m2 == 0.0) {
+      Double.NaN
+    } else {
+      math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
+    }
+  }
+}
+
+case class Kurtosis(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "kurtosis"
+
+  override protected val momentOrder = 4
+
+  // NOTE: this is the formula for excess kurtosis, which is default for R and SciPy
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+    val m2 = moments(2)
+    val m4 = moments(4)
+    if (n == 0.0 || m2 == 0.0) {
+      Double.NaN
+    } else {
+      n * m4 / (m2 * m2) - 3.0
+    }
+  }
 }

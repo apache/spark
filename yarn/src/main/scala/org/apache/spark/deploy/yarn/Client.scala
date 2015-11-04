@@ -497,6 +497,19 @@ private[spark] class Client(
    */
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
+
+    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
+    // the executors will use the latest configurations instead of the default values. This is
+    // required when user changes log4j.properties directly to set the log configurations. If
+    // configuration file is provided through --files then executors will be taking configurations
+    // from --files instead of $SPARK_CONF_DIR/log4j.properties.
+    val log4jFileName = "log4j.properties"
+    Option(Utils.getContextOrSparkClassLoader.getResource(log4jFileName)).foreach { url =>
+      if (url.getProtocol == "file") {
+        hadoopConfFiles(log4jFileName) = new File(url.getPath)
+      }
+    }
+
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
@@ -1008,9 +1021,9 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           "pyspark.zip not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.8.2.1-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.9-src.zip")
         require(py4jFile.exists(),
-          "py4j-0.8.2.1-src.zip not found; cannot run pyspark application in YARN mode.")
+          "py4j-0.9-src.zip not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
       }
   }
@@ -1324,55 +1337,8 @@ object Client extends Logging {
       conf: Configuration,
       credentials: Credentials) {
     if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      val mirror = universe.runtimeMirror(getClass.getClassLoader)
-
-      try {
-        val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-        val hive = hiveClass.getMethod("get").invoke(null)
-
-        val hiveConf = hiveClass.getMethod("getConf").invoke(hive)
-        val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-
-        val hiveConfGet = (param: String) => Option(hiveConfClass
-          .getMethod("get", classOf[java.lang.String])
-          .invoke(hiveConf, param))
-
-        val metastore_uri = hiveConfGet("hive.metastore.uris")
-
-        // Check for local metastore
-        if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
-          val metastore_kerberos_principal_conf_var = mirror.classLoader
-            .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
-            .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
-
-          val principal = hiveConfGet(metastore_kerberos_principal_conf_var)
-
-          val username = Option(UserGroupInformation.getCurrentUser().getUserName)
-          if (principal != None && username != None) {
-            val tokenStr = hiveClass.getMethod("getDelegationToken",
-              classOf[java.lang.String], classOf[java.lang.String])
-              .invoke(hive, username.get, principal.get).asInstanceOf[java.lang.String]
-
-            val hive2Token = new Token[DelegationTokenIdentifier]()
-            hive2Token.decodeFromUrlString(tokenStr)
-            credentials.addToken(new Text("hive.server2.delegation.token"), hive2Token)
-            logDebug("Added hive.Server2.delegation.token to conf.")
-            hiveClass.getMethod("closeCurrent").invoke(null)
-          } else {
-            logError("Username or principal == NULL")
-            logError(s"""username=${username.getOrElse("(NULL)")}""")
-            logError(s"""principal=${principal.getOrElse("(NULL)")}""")
-            throw new IllegalArgumentException("username and/or principal is equal to null!")
-          }
-        } else {
-          logDebug("HiveMetaStore configured in localmode")
-        }
-      } catch {
-        case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
-        case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
-        case e: Exception => { logError("Unexpected Exception " + e)
-          throw new RuntimeException("Unexpected exception", e)
-        }
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
+        credentials.addToken(new Text("hive.server2.delegation.token"), _)
       }
     }
   }
