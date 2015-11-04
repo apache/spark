@@ -33,6 +33,7 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.util.Utils
 
 /**
  * Trait for [[Saver]] and [[Loader]].
@@ -241,7 +242,7 @@ private[ml] class DefaultParamsLoader[T] extends Loader[T] {
     val metadataPath = new Path(path, "metadata").toString
     val metadataStr = sc.textFile(metadataPath, 1).first()
     val metadata = parse(metadataStr)
-    val cls = Class.forName((metadata \ "class").extract[String])
+    val cls = Utils.classForName((metadata \ "class").extract[String])
     val uid = (metadata \ "uid").extract[String]
     val instance = cls.getConstructor(classOf[String]).newInstance(uid).asInstanceOf[Params]
     (metadata \ "paramMap") match {
