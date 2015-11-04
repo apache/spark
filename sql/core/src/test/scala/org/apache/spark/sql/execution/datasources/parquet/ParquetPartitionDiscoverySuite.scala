@@ -88,6 +88,22 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
     }
     assert(exception.getMessage().contains("Conflicting directory structures detected"))
+
+    // Invalid
+    // Conflicting directory structure:
+    // "hdfs://host:9000/tmp/tables/partitionedTable"
+    // "hdfs://host:9000/tmp/tables/nonPartitionedTable1"
+    // "hdfs://host:9000/tmp/tables/nonPartitionedTable2"
+    paths = Seq(
+      "hdfs://host:9000/tmp/tables/partitionedTable",
+      "hdfs://host:9000/tmp/tables/partitionedTable/p=1/",
+      "hdfs://host:9000/tmp/tables/nonPartitionedTable1",
+      "hdfs://host:9000/tmp/tables/nonPartitionedTable2")
+
+    exception = intercept[AssertionError] {
+      parsePartitions(paths.map(new Path(_)), defaultPartitionName, true)
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
   }
 
   test("parse partition") {
