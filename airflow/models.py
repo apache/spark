@@ -543,7 +543,6 @@ class TaskInstance(Base):
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
-        dag = self.task.dag
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
         pickle = "--pickle {0}".format(pickle_id) if pickle_id else ""
@@ -555,12 +554,8 @@ class TaskInstance(Base):
             "-s " + task_start_date.isoformat() if task_start_date else ""
         raw = "--raw" if raw else ""
         subdir = ""
-        if not pickle and dag and dag.full_filepath:
-            if dag.full_filepath.startswith('/'):
-                subdir = "-sd {0}"
-            else:
-                subdir = "-sd DAGS_FOLDER/{0}"
-            subdir = subdir.format(dag.filepath)
+        if not pickle and self.task.dag and self.task.dag.full_filepath:
+            subdir = "-sd DAGS_FOLDER/{0}".format(self.task.dag.filepath)
         return (
             "airflow run "
             "{self.dag_id} {self.task_id} {iso} "
