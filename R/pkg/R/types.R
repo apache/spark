@@ -21,7 +21,7 @@
 PRIMITIVE_TYPES <- as.environment(list(
   "smallint"="integer",
   "tinyint"="integer",
-  "int"="integer",
+  "integer"="integer",
   "bigint"="numeric",
   "float"="numeric",
   "double"="numeric",
