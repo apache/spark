@@ -411,5 +411,17 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     sqlContext.uncacheTable("t2")
     sqlContext.dropTempTable("t1")
     sqlContext.dropTempTable("t2")
+
+    // One side of join is not partitioned in the desired way. Need to shuffle.
+    testData.repartition(6, $"value").registerTempTable("t1")
+    testData2.repartition(6, $"a").registerTempTable("t2")
+    sqlContext.cacheTable("t1")
+    sqlContext.cacheTable("t2")
+
+    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 2)
+    sqlContext.uncacheTable("t1")
+    sqlContext.uncacheTable("t2")
+    sqlContext.dropTempTable("t1")
+    sqlContext.dropTempTable("t2")
   }
 }

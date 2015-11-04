@@ -609,6 +609,9 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   *
+   * This is the same operation as "SORT BY" in SQL (Hive QL).
+   *
    * @group dfops
    * @since 1.6.0
    */
@@ -619,6 +622,9 @@ class DataFrame private[sql](
 
   /**
    * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
+   *
+   * This is the same operation as "SORT BY" in SQL (Hive QL).
+   *
    * @group dfops
    * @since 1.6.0
    */
@@ -1504,22 +1510,28 @@ class DataFrame private[sql](
   }
 
   /**
-    * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
-    * `numPartitions`. The resulting DataFrame is hash partitioned.
-    * @group dfops
-    * @since 1.6.0
-    */
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions into
+   * `numPartitions`. The resulting DataFrame is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
   @scala.annotation.varargs
   def repartition(numPartitions: Int, partitionExprs: Column*): DataFrame = {
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, Some(numPartitions))
   }
 
   /**
-    * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
-    * the existing number of partitions. The resulting DataFrame is hash partitioned.
-    * @group dfops
-    * @since 1.6.0
-    */
+   * Returns a new [[DataFrame]] partitioned by the given partitioning expressions preserving
+   * the existing number of partitions. The resulting DataFrame is hash partitioned.
+   *
+   * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
+   *
+   * @group dfops
+   * @since 1.6.0
+   */
   @scala.annotation.varargs
   def repartition(partitionExprs: Column*): DataFrame = {
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions = None)
