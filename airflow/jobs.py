@@ -483,20 +483,21 @@ class SchedulerJob(BaseJob):
                     except:
                         logging.error("Queued task {} seems gone".format(ti))
                         session.delete(ti)
-                    if task:
-                        ti.task = task
+                        continue
+                    ti.task = task
 
-                        # picklin'
-                        dag = dagbag.dags[ti.dag_id]
-                        pickle_id = None
-                        if self.do_pickle and self.executor.__class__ not in (
-                            executors.LocalExecutor, executors.SequentialExecutor):
-                            pickle_id = dag.pickle(session).id
+                    # picklin'
+                    dag = dagbag.dags[ti.dag_id]
+                    pickle_id = None
+                    if self.do_pickle and self.executor.__class__ not in (
+                        executors.LocalExecutor, executors.SequentialExecutor):
+                        pickle_id = dag.pickle(session).id
 
-                        if ti.are_dependencies_met():
-                            executor.queue_task_instance(ti, force=True, pickle_id=pickle_id)
-                        else:
-                            session.delete(ti)
+                    if ti.are_dependencies_met():
+                        executor.queue_task_instance(
+                            ti, force=True, pickle_id=pickle_id)
+                    else:
+                        session.delete(ti)
                     session.commit()
 
     def _execute(self):
@@ -597,6 +598,7 @@ class BackfillJob(BaseJob):
             include_adhoc=False,
             donot_pickle=False,
             ignore_dependencies=False,
+            pool=None,
             *args, **kwargs):
         self.dag = dag
         dag.override_start_date(start_date)
@@ -607,6 +609,7 @@ class BackfillJob(BaseJob):
         self.include_adhoc = include_adhoc
         self.donot_pickle = donot_pickle
         self.ignore_dependencies = ignore_dependencies
+        self.pool = pool
         super(BackfillJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
@@ -655,13 +658,16 @@ class BackfillJob(BaseJob):
                         State.SUCCESS, State.SKIPPED) and key in tasks_to_run:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                elif ti.state in (State.RUNNING, State.QUEUED):
+                    continue
                 elif ti.is_runnable(flag_upstream_failed=True):
                     executor.queue_task_instance(
                         ti,
                         mark_success=self.mark_success,
                         task_start_date=self.bf_start_date,
                         pickle_id=pickle_id,
-                        ignore_dependencies=self.ignore_dependencies)
+                        ignore_dependencies=self.ignore_dependencies,
+                        pool=self.pool)
                     ti.state = State.RUNNING
                     if key not in started:
                         started.append(key)
@@ -675,8 +681,10 @@ class BackfillJob(BaseJob):
                     continue
                 ti = tasks_to_run[key]
                 ti.refresh_from_db()
-                if ti.state in (State.FAILED, State.SKIPPED):
-                    if ti.state == State.FAILED:
+                if (
+                        ti.state in (State.FAILED, State.SKIPPED) or
+                        state == State.FAILED):
+                    if ti.state == State.FAILED or state == State.FAILED:
                         failed.append(key)
                         logging.error("Task instance " + str(key) + " failed")
                     elif ti.state == State.SKIPPED:
@@ -690,9 +698,14 @@ class BackfillJob(BaseJob):
                         if key in tasks_to_run:
                             wont_run.append(key)
                             tasks_to_run.pop(key)
-                elif ti.state == State.SUCCESS:
+                elif ti.state == State.SUCCESS and state == State.SUCCESS:
                     succeeded.append(key)
                     tasks_to_run.pop(key)
+                elif ti.state != State.SUCCESS and state == State.SUCCESS:
+                    logging.error(
+                        "The airflow run command failed "
+                        "at reporting an error. This should not occur "
+                        "in normal circustances. State is {}".format(ti.state))
 
             msg = (
                 "[backfill progress] "
@@ -711,8 +724,11 @@ class BackfillJob(BaseJob):
         executor.end()
         session.close()
         if failed:
-            raise AirflowException(
-                "Some tasks instances failed, here's the list:\n"+str(failed))
+            logging.error(
+                "------------------------------------------\n"
+                "Some tasks instances failed, "
+                "here's the list:\n{}".format(failed))
+            sys.exit(1)
         logging.info("All done. Exiting.")
 
 
@@ -730,10 +746,12 @@ class LocalTaskJob(BaseJob):
             mark_success=False,
             pickle_id=None,
             task_start_date=None,
+            pool=None,
             *args, **kwargs):
         self.task_instance = task_instance
         self.ignore_dependencies = ignore_dependencies
         self.force = force
+        self.pool = pool
         self.pickle_id = pickle_id
         self.mark_success = mark_success
         self.task_start_date = task_start_date
@@ -748,6 +766,7 @@ class LocalTaskJob(BaseJob):
             mark_success=self.mark_success,
             task_start_date=self.task_start_date,
             job_id=self.id,
+            pool=self.pool,
         )
         self.process = subprocess.Popen(['bash', '-c', command])
         return_code = None

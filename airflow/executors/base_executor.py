@@ -38,13 +38,16 @@ class BaseExecutor(object):
 
     def queue_task_instance(
             self, task_instance, mark_success=False, pickle_id=None,
-            force=False, ignore_dependencies=False, task_start_date=None):
+            force=False, ignore_dependencies=False, task_start_date=None,
+            pool=None):
+        pool = pool or task_instance.pool
         command = task_instance.command(
             local=True,
             mark_success=mark_success,
             force=force,
             ignore_dependencies=ignore_dependencies,
             task_start_date=task_start_date,
+            pool=pool,
             pickle_id=pickle_id)
         self.queue_command(
             task_instance.key,

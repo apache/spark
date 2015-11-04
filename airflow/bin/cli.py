@@ -23,6 +23,20 @@ mark_success_help = "Mark jobs as succeeded without running them"
 subdir_help = "File location or directory from which to look for the dag"
 
 
+def process_subdir(subdir):
+    dags_folder = conf.get("core", "DAGS_FOLDER")
+    dags_folder = os.path.expanduser(dags_folder)
+    if subdir:
+        subdir = os.path.expanduser(subdir)
+        if "DAGS_FOLDER" in subdir:
+            subdir = subdir.replace("DAGS_FOLDER", dags_folder)
+        if dags_folder not in subdir:
+            raise AirflowException(
+                "subdir has to be part of your DAGS_FOLDER as defined in your "
+                "airflow.cfg")
+        return subdir
+
+
 def log_to_stdout():
     log = logging.getLogger()
     log.setLevel(settings.LOGGING_LEVEL)
@@ -37,7 +51,7 @@ def backfill(args):
     logging.basicConfig(
         level=settings.LOGGING_LEVEL,
         format=settings.SIMPLE_LOG_FORMAT)
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
         raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
@@ -71,7 +85,8 @@ def backfill(args):
             include_adhoc=args.include_adhoc,
             local=args.local,
             donot_pickle=(args.donot_pickle or conf.getboolean('core', 'donot_pickle')),
-            ignore_dependencies=args.ignore_dependencies)
+            ignore_dependencies=args.ignore_dependencies,
+            pool=args.pool)
 
 
 def run(args):
@@ -93,11 +108,7 @@ def run(args):
     else:
         old_log = None
 
-    subdir = None
-    if args.subdir:
-        subdir = args.subdir.replace(
-            "DAGS_FOLDER", conf.get("core", "DAGS_FOLDER"))
-        subdir = os.path.expanduser(subdir)
+    subdir = process_subdir(args.subdir)
     logging.basicConfig(
         filename=filename,
         level=settings.LOGGING_LEVEL,
@@ -134,7 +145,8 @@ def run(args):
             force=args.force,
             pickle_id=args.pickle,
             task_start_date=task_start_date,
-            ignore_dependencies=args.ignore_dependencies)
+            ignore_dependencies=args.ignore_dependencies,
+            pool=args.pool)
         run_job.run()
     elif args.raw:
         ti.run(
@@ -142,6 +154,7 @@ def run(args):
             force=args.force,
             ignore_dependencies=args.ignore_dependencies,
             job_id=args.job_id,
+            pool=args.pool,
         )
     else:
         pickle_id = None
@@ -210,7 +223,7 @@ def task_state(args):
     success
     """
     args.execution_date = dateutil.parser.parse(args.execution_date)
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
         raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
@@ -220,12 +233,12 @@ def task_state(args):
 
 
 def list_dags(args):
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
     print("\n".join(sorted(dagbag.dags)))
 
 
 def list_tasks(args):
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
         raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
@@ -239,7 +252,7 @@ def list_tasks(args):
 def test(args):
     log_to_stdout()
     args.execution_date = dateutil.parser.parse(args.execution_date)
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
         raise AirflowException('dag_id could not be found')
     dag = dagbag.dags[args.dag_id]
@@ -256,7 +269,7 @@ def clear(args):
     logging.basicConfig(
         level=settings.LOGGING_LEVEL,
         format=settings.SIMPLE_LOG_FORMAT)
-    dagbag = DagBag(args.subdir)
+    dagbag = DagBag(process_subdir(args.subdir))
 
     if args.dag_id not in dagbag.dags:
         raise AirflowException('dag_id could not be found')
@@ -309,7 +322,7 @@ def scheduler(args):
     log_to_stdout()
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
-        subdir=args.subdir,
+        subdir=process_subdir(args.subdir),
         num_runs=args.num_runs,
         do_pickle=args.do_pickle)
     job.run()
@@ -440,6 +453,8 @@ def get_parser():
         "-sd", "--subdir", help=subdir_help,
         default=DAGS_FOLDER)
     parser_backfill.add_argument(
+        "-p", "--pool", help="Pool to use to run the backfill")
+    parser_backfill.add_argument(
         "-dr", "--dry_run", help="Perform a dry run", action="store_true")
     parser_backfill.set_defaults(func=backfill)
 
@@ -498,6 +513,8 @@ def get_parser():
         "-r", "--raw",
         help=argparse.SUPPRESS,
         action="store_true")
+    parser_run.add_argument(
+        "--pool", help="Pool to use to run the task instance")
     parser_run.add_argument(
         "-i", "--ignore_dependencies",
         help="Ignore upstream and depends_on_past dependencies",
