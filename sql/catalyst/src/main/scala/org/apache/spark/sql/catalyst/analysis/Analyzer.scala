@@ -1020,15 +1020,14 @@ class Analyzer(
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case Project(projectList, child: Subquery) => {
+    case Project(projectList, child: Subquery) =>
       Project(
-        projectList.flatMap {
+        projectList.map {
           case ar: AttributeReference if ar.qualifiers.contains(child.alias) =>
-            ar.withQualifiers(ar.qualifiers.filter(_!=child.alias)) :: Nil
-          case o => o :: Nil
+            ar.withQualifiers(ar.qualifiers.filter(_!=child.alias))
+          case o => o
         },
         child)
-    }
     case Subquery(_, child) => child
   }
 }
