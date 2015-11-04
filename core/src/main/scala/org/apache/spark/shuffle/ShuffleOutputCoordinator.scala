@@ -41,7 +41,7 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
    *
    * Note that this will write to all destination files.  If the tmp file is missing, then a
    * zero-length destination file will be created.  This is so the ShuffleOutputCoordinator can work
-   * even when there is a non-determinstic data, where the output exists in one attempt, but is
+   * even when there is non-determinstic data, where the output exists in one attempt, but is
    * empty in another attempt.
    *
    * @param tmpToDest  Seq of (temporary, destination) file pairs
@@ -101,7 +101,7 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
     } else {
       logInfo(s"shuffle output for shuffle $shuffleId, partition $partitionId already exists, " +
         s"not overwriting.  Another task must have created this shuffle output.")
-      tmpToDest.foreach{ tmpAndDest => tmpAndDest.tmpFile.delete()}
+      tmpToDest.foreach { tmpAndDest => tmpAndDest.tmpFile.delete() }
       val in = serializer.deserializeStream(new FileInputStream(mapStatusFile))
       Utils.tryWithSafeFinally {
         (false, in.readObject[MapStatus]())
