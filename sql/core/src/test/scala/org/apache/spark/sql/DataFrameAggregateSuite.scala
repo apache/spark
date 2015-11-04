@@ -226,23 +226,18 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val absTol = 1e-8
 
     val sparkVariance = testData2.agg(variance('a))
-    val expectedVariance = Row(4.0 / 6.0)
-    checkAggregatesWithTol(sparkVariance, expectedVariance, absTol)
+    checkAggregatesWithTol(sparkVariance, Row(4.0 / 5.0), absTol)
     val sparkVariancePop = testData2.agg(var_pop('a))
-    checkAggregatesWithTol(sparkVariancePop, expectedVariance, absTol)
+    checkAggregatesWithTol(sparkVariancePop, Row(4.0 / 6.0), absTol)
 
     val sparkVarianceSamp = testData2.agg(var_samp('a))
-    val expectedVarianceSamp = Row(4.0 / 5.0)
-    checkAggregatesWithTol(sparkVarianceSamp, expectedVarianceSamp, absTol)
+    checkAggregatesWithTol(sparkVarianceSamp, Row(4.0 / 5.0), absTol)
 
     val sparkSkewness = testData2.agg(skewness('a))
-    val expectedSkewness = Row(0.0)
-    checkAggregatesWithTol(sparkSkewness, expectedSkewness, absTol)
+    checkAggregatesWithTol(sparkSkewness, Row(0.0), absTol)
 
     val sparkKurtosis = testData2.agg(kurtosis('a))
-    val expectedKurtosis = Row(-1.5)
-    checkAggregatesWithTol(sparkKurtosis, expectedKurtosis, absTol)
-
+    checkAggregatesWithTol(sparkKurtosis, Row(-1.5), absTol)
   }
 
   test("zero moments") {
@@ -251,7 +246,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(variance('a)),
-      Row(0.0))
+      Row(Double.NaN))
 
     checkAnswer(
       emptyTableData.agg(var_samp('a)),
