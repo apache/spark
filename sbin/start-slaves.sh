@@ -51,7 +51,7 @@ if [ "$SPARK_MASTER_IP" = "" ]; then
 fi
 
 if [ "$START_TACHYON" == "true" ]; then
-  "${SPARK_HOME}/sbin/slaves.sh" cd "$SPARK_HOME" \; "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon bootstrap-conf "$SPARK_MASTER_IP"
+  "${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon bootstrap-conf "$SPARK_MASTER_IP"
 
   # set -t so we can call sudo
   SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
