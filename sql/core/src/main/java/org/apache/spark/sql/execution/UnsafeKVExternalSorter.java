@@ -124,9 +124,9 @@ public final class UnsafeKVExternalSorter {
         inMemSorter);
 
       sorter.spill();
+      // this sorter will not used to insert new records.
+      sorter.freeImMemorySorter();
       map.free();
-      // counting the memory used UnsafeInMemorySorter
-      taskMemoryManager.acquireExecutionMemory(inMemSorter.getMemoryUsage(), sorter);
     }
   }
 

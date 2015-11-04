@@ -528,6 +528,7 @@ class TungstenAggregationIterator(
             externalSorter.merge(sorter)
           }
           i = 0
+          // hashMap is freed in getAggregationBufferFromUnsafeRow
           hashMap = createHashMap()
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           assert(buffer != null)
@@ -539,6 +540,7 @@ class TungstenAggregationIterator(
       if (externalSorter != null) {
         val sorter = hashMap.destructAndCreateExternalSorter()
         externalSorter.merge(sorter)
+        // hashMap is freed in getAggregationBufferFromUnsafeRow
 
         switchToSortBasedAggregation()
       }

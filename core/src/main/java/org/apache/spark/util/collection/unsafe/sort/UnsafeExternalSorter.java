@@ -235,6 +235,15 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
+   * Free the borrowed in-memory sorter.
+   *
+   * Note: This should only be used when this is created with existing in-memory sorter.
+   */
+  public void freeImMemorySorter() {
+    inMemSorter = null;
+  }
+
+  /**
    * Free this sorter's data pages.
    *
    * @return the number of bytes freed.
@@ -403,20 +412,20 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
-    assert(inMemSorter != null);
-    readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
-    int numIteratorsToMerge = spillWriters.size() + (readingIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {
+      assert(inMemSorter != null);
+      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
       return readingIterator;
     } else {
       final UnsafeSorterSpillMerger spillMerger =
-        new UnsafeSorterSpillMerger(recordComparator, prefixComparator, numIteratorsToMerge);
+        new UnsafeSorterSpillMerger(recordComparator, prefixComparator, spillWriters.size());
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         spillMerger.addSpillIfNotEmpty(spillWriter.getReader(blockManager));
       }
-      spillWriters.clear();
-      spillMerger.addSpillIfNotEmpty(readingIterator);
-
+      if (inMemSorter != null) {
+        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+        spillMerger.addSpillIfNotEmpty(readingIterator);
+      }
       return spillMerger.getSortedIterator();
     }
   }
