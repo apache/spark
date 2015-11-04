@@ -22,7 +22,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
-abstract class KinesisBackedBlockRDDTests extends KinesisFunSuite with BeforeAndAfterAll {
+abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
+  extends KinesisFunSuite with BeforeAndAfterAll {
 
   private val testData = 1 to 8
 
@@ -36,8 +37,6 @@ abstract class KinesisBackedBlockRDDTests extends KinesisFunSuite with BeforeAnd
 
   private var sc: SparkContext = null
   private var blockManager: BlockManager = null
-
-  protected val aggregateTestData: Boolean
 
   override def beforeAll(): Unit = {
     runIfTestsEnabled("Prepare KinesisTestUtils") {
@@ -249,10 +248,8 @@ abstract class KinesisBackedBlockRDDTests extends KinesisFunSuite with BeforeAnd
   }
 }
 
-class WithAggregationKinesisBackedBlockRDDSuite extends KinesisBackedBlockRDDTests {
-  override protected val aggregateTestData: Boolean = true
-}
+class WithAggregationKinesisBackedBlockRDDSuite
+  extends KinesisBackedBlockRDDTests(aggregateTestData = true)
 
-class WithoutAggregationKinesisBackedBlockRDDSuite extends KinesisBackedBlockRDDTests {
-  override protected val aggregateTestData: Boolean = false
-}
+class WithoutAggregationKinesisBackedBlockRDDSuite
+  extends KinesisBackedBlockRDDTests(aggregateTestData = false)

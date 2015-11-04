@@ -68,7 +68,7 @@ private[kinesis] class KinesisTestUtils extends Logging {
 
   private lazy val kinesisProducer: KinesisProducer = {
     val conf = new KinesisProducerConfiguration()
-      .setRecordMaxBufferedTime(2000)
+      .setRecordMaxBufferedTime(1000)
       .setMaxConnections(1)
       .setRegion(regionName)
       .setMetricsLevel("none")

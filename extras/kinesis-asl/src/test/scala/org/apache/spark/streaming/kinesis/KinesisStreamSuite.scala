@@ -39,7 +39,7 @@ import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext}
 
-abstract class KinesisStreamTests extends KinesisFunSuite
+abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
 
   // This is the name that KCL will use to save metadata to DynamoDB
@@ -55,8 +55,6 @@ abstract class KinesisStreamTests extends KinesisFunSuite
   private var testUtils: KinesisTestUtils = null
   private var ssc: StreamingContext = null
   private var sc: SparkContext = null
-
-  protected val aggregateTestData: Boolean
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf()
@@ -289,10 +287,6 @@ abstract class KinesisStreamTests extends KinesisFunSuite
   }
 }
 
-class WithAggregationKinesisStreamSuite extends KinesisStreamTests {
-  override protected val aggregateTestData: Boolean = true
-}
+class WithAggregationKinesisStreamSuite extends KinesisStreamTests(aggregateTestData = true)
 
-class WithoutAggregationKinesisStreamSuite extends KinesisStreamTests {
-  override protected val aggregateTestData: Boolean = false
-}
+class WithoutAggregationKinesisStreamSuite extends KinesisStreamTests(aggregateTestData = false)
