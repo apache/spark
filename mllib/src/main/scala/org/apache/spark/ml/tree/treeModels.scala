@@ -117,7 +117,18 @@ object CodeGenerationDecisionTreeModel {
 
   def NodeToTree(root: Node): universe.Tree = {
     root match {
-      case node: InternalNode => q"if (input(${node.getIndex}) < ${node.getThreshold}) { ${NodeToTree(node.getLeft)} } else {  ${NodeToTree(node.getRight)} }"
+      case node: InternalNode => {
+        val nodeSplit = node.split
+        nodeSplit match {
+          case split: CategoricalSplit => {
+            val isLeft = split.isLeft
+            isLeft match {
+              case True => q"if (categories.contains(input(${split.featureIndex}))) { ${NodeToTree(node.leftChild)} } else {  ${NodeToTree(node.rightChild)} }"
+              case False => q"if (categories.contains(input(${split.featureIndex}))) { ${NodeToTree(node.leftChild)} } else {  ${NodeToTree(node.rightChild)} }"
+          }
+          case split: ContinuousSplit =>
+        }
+      }
       case node: LeafNode => q"${node.prediction}"
     }
   }
