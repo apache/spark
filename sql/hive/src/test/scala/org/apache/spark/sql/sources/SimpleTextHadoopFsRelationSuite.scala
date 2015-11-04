@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PredicateHelper}
@@ -106,6 +107,23 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
   private def partitionedReader =
     sqlContext.read.option("dataSchema", partitionedDataSchema.json).format(dataSourceName)
 
+  /**
+   * Constructs test cases that test column pruning and filter push-down.
+   *
+   * @param projections Projection list of the query
+   * @param filter Filter condition of the query
+   * @param requiredColumns Expected names of required columns
+   * @param pushedFilters Expected data source [[Filter]]s that are pushed down
+   * @param inconvertibleFilters Expected Catalyst filter [[Expression]]s that cannot be converted
+   *        to data source [[Filter]]s
+   * @param unhandledFilters Expected Catalyst flter [[Expression]]s that can be converted to data
+   *        source [[Filter]]s but cannot be handled by the data source relation
+   * @param partitioningFilters Expected Catalyst filter [[Expression]]s that reference partition
+   *        columns
+   * @param expectedRawScanAnswer Expected query result of the raw table scan returned by the data
+   *        source relation
+   * @param expectedAnswer Expected query result of the full query
+   */
   def testPruningAndFiltering(
       projections: Seq[Column],
       filter: Column,
