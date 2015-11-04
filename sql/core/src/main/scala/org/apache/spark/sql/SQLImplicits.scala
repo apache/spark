@@ -53,7 +53,7 @@ abstract class SQLImplicits {
   }
 
   /**
-   * Creates a [[Dataset]] from a local Seq of Product.
+   * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
   implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
