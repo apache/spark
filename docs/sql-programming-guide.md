@@ -882,6 +882,44 @@ saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 </div>
 </div>
 
+### Run SQL on files directly
+
+Instead of using read API to load a file into DataFrame and query it, you can also query that
+file directly with SQL.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+DataFrame df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+df <- sql(sqlContext, "SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+</div>
+
 ### Save Modes
 
 Save operations can optionally take a `SaveMode`, that specifies how to handle existing data if

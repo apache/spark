@@ -1155,29 +1155,6 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
   }
 }
 
-case class Stddev(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def prettyName: String = "stddev"
-
-  override protected val momentOrder = 2
-
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-
-    if (n == 0.0) null else math.sqrt(moments(2) / n)
-  }
-}
-
-
 case class StddevPop(child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
@@ -1219,28 +1196,6 @@ case class StddevSamp(child: Expression,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
 
     if (n == 0.0 || n == 1.0) null else math.sqrt(moments(2) / (n - 1.0))
-  }
-}
-
-case class Variance(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def prettyName: String = "variance"
-
-  override protected val momentOrder = 2
-
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-
-    if (n == 0.0) null else moments(2) / n
   }
 }
 

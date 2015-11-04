@@ -27,7 +27,8 @@ public interface Message extends Encodable {
   /** Preceding every serialized Message is its type, which allows us to deserialize it. */
   public static enum Type implements Encodable {
     ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
-    RpcRequest(3), RpcResponse(4), RpcFailure(5);
+    RpcRequest(3), RpcResponse(4), RpcFailure(5),
+    StreamRequest(6), StreamResponse(7), StreamFailure(8);
 
     private final byte id;
 
@@ -51,6 +52,9 @@ public interface Message extends Encodable {
         case 3: return RpcRequest;
         case 4: return RpcResponse;
         case 5: return RpcFailure;
+        case 6: return StreamRequest;
+        case 7: return StreamResponse;
+        case 8: return StreamFailure;
         default: throw new IllegalArgumentException("Unknown message type: " + id);
       }
     }
