@@ -189,6 +189,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
  * @param oldModel A [[org.apache.spark.mllib.regression.IsotonicRegressionModel]]
  *                 model trained by [[org.apache.spark.mllib.regression.IsotonicRegression]].
  */
+@Since("1.5.0")
 @Experimental
 class IsotonicRegressionModel private[ml] (
     override val uid: String,
@@ -196,27 +197,34 @@ class IsotonicRegressionModel private[ml] (
   extends Model[IsotonicRegressionModel] with IsotonicRegressionBase {
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeatureIndex(value: Int): this.type = set(featureIndex, value)
 
   /** Boundaries in increasing order for which predictions are known. */
+  @Since("1.5.0")
   def boundaries: Vector = Vectors.dense(oldModel.boundaries)
 
   /**
    * Predictions associated with the boundaries at the same index, monotone because of isotonic
    * regression.
    */
+  @Since("1.5.0")
   def predictions: Vector = Vectors.dense(oldModel.predictions)
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegressionModel = {
     copyValues(new IsotonicRegressionModel(uid, oldModel), extra).setParent(parent)
   }
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
@@ -228,6 +236,7 @@ class IsotonicRegressionModel private[ml] (
     dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false)
   }

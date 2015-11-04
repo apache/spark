@@ -136,6 +136,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Default is empty, so all instances have weight one.
    * @group setParam
    */
+  @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
@@ -146,6 +147,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * selected automatically.
    * @group setParam
    */
+  @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "auto")
 
@@ -329,7 +331,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     model.setSummary(trainingSummary)
   }
 
-  @Since("1.3.0")
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
@@ -337,6 +339,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
  * :: Experimental ::
  * Model produced by [[LinearRegression]].
  */
+@Since("1.3.0")
 @Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
@@ -353,6 +356,7 @@ class LinearRegressionModel private[ml] (
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
+  @Since("1.5.0")
   def summary: LinearRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
@@ -367,6 +371,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /** Indicates whether a training summary exists for this model instance. */
+  @Since("1.5.0")
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
@@ -399,6 +404,7 @@ class LinearRegressionModel private[ml] (
     dot(features, weights) + intercept
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = copyValues(new LinearRegressionModel(uid, weights, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
@@ -413,6 +419,7 @@ class LinearRegressionModel private[ml] (
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
+@Since("1.5.0")
 @Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
@@ -432,6 +439,7 @@ class LinearRegressionTrainingSummary private[regression] (
  * Linear regression results evaluated on a dataset.
  * @param predictions predictions outputted by the model's `transform` method.
  */
+@Since("1.5.0")
 @Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,

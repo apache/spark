@@ -124,6 +124,7 @@ object RandomForestRegressor {
  * @param _trees  Decision trees in the ensemble.
  * @param numFeatures  Number of features used by this model
  */
+@Since("1.4.0")
 @Experimental
 final class RandomForestRegressionModel private[ml] (
     override val uid: String,
@@ -141,11 +142,13 @@ final class RandomForestRegressionModel private[ml] (
   private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
 
+  @Since("1.4.0")
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
+  @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
@@ -163,10 +166,12 @@ final class RandomForestRegressionModel private[ml] (
     _trees.map(_.rootNode.predictImpl(features).prediction).sum / numTrees
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
     copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"RandomForestRegressionModel (uid=$uid) with $numTrees trees"
   }

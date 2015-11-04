@@ -169,6 +169,7 @@ object GBTRegressor {
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
+@Since("1.4.0")
 @Experimental
 final class GBTRegressionModel private[ml](
     override val uid: String,
@@ -187,11 +188,14 @@ final class GBTRegressionModel private[ml](
    * @param _trees  Decision trees in the ensemble.
    * @param _treeWeights  Weights for the decision trees in the ensemble.
    */
+  @Since("1.4.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
     this(uid, _trees, _treeWeights, -1)
 
+  @Since("1.4.0")
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
+  @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
@@ -209,11 +213,13 @@ final class GBTRegressionModel private[ml](
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
     copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures),
       extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }

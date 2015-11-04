@@ -104,6 +104,7 @@ object DecisionTreeRegressor {
  * It supports both continuous and categorical features.
  * @param rootNode  Root of the decision tree
  */
+@Since("1.4.0")
 @Experimental
 final class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
@@ -126,10 +127,12 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
     copyValues(new DecisionTreeRegressionModel(uid, rootNode, numFeatures), extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
