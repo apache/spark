@@ -19,6 +19,10 @@ package org.apache.spark.ml.tree
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
+import scala.language.experimental.macros
+import scala.reflect.runtime.currentMirror
+import scala.tools.reflect.ToolBox
+
 /**
  * Abstraction for Decision Tree models.
  *
@@ -100,4 +104,24 @@ private[ml] trait TreeEnsembleModel {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
+}
+
+private[spark] class CodeGenerationDecisionTreeModel {
+
+}
+
+object CodeGenerationDecisionTreeModel {
+  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+
+  import universe._
+
+  def NodeToTree(root: Node): universe.Tree = {
+    root match {
+      case node: InternalNode => q"if (input(${node.getIndex}) < ${node.getThreshold}) { ${NodeToTree(node.getLeft)} } else {  ${NodeToTree(node.getRight)} }"
+      case node: LeafNode => q"${node.prediction}"
+    }
+  }
+
+  def apply(model: DecisionTreeModel): CodeGenerationDecisionTreeModel = {
+  }
 }
