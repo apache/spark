@@ -187,7 +187,8 @@ private[spark] class BlockManager(
       blockManagerId
     }
 
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(
+      blockManagerId, maxMemory, diskBlockManager.getLocalDirsPath(), slaveEndpoint)
 
     // Register Executors' configuration with the local shuffle service, if one should exist.
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
@@ -250,7 +251,8 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo("BlockManager re-registering with master")
-    master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
+    master.registerBlockManager(
+      blockManagerId, maxMemory, diskBlockManager.getLocalDirsPath(), slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -288,7 +290,7 @@ private[spark] class BlockManager(
    */
   override def getBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+      getShuffleBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
         .asInstanceOf[Option[ByteBuffer]]
@@ -299,6 +301,12 @@ private[spark] class BlockManager(
         throw new BlockNotFoundException(blockId.toString)
       }
     }
+  }
+
+  override def getShuffleBlockData(
+    blockId: ShuffleBlockId, blockManagerId: BlockManagerId)
+    : ManagedBuffer = {
+    shuffleManager.shuffleBlockResolver.getBlockData(blockId, blockManagerId)
   }
 
   /**
@@ -432,7 +440,8 @@ private[spark] class BlockManager(
       // TODO: This should gracefully handle case where local block is not available. Currently
       // downstream code will throw an exception.
       Option(
-        shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
+        shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+          .nioByteBuffer())
     } else {
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }

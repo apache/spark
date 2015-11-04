@@ -86,6 +86,18 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(groups.map(_._2).sum === 2000)
   }
 
+  test("bypass remote access") {
+    val conf = new SparkConf().set("spark.shuffle.bypassNetworkAccess", "true")
+    Seq("hash", "sort", "tungsten-sort").map { shuffle =>
+      sc = new SparkContext(clusterUrl, "test", conf.clone.set("spark.shuffle.manager", shuffle))
+      val rdd = sc.parallelize((0 until 1000).map(x => (x % 4, 1)), 5)
+      val groups = rdd.reduceByKey(_ + _).collect
+      assert(groups.size === 4)
+      assert(groups.forall(_._2 == 250))
+      resetSparkContext()
+    }
+  }
+
   test("accumulators") {
     sc = new SparkContext(clusterUrl, "test")
     val accum = sc.accumulator(0)

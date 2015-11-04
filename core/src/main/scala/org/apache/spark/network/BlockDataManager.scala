@@ -18,7 +18,7 @@
 package org.apache.spark.network
 
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.storage.{ShuffleBlockId, BlockManagerId, BlockId, StorageLevel}
 
 private[spark]
 trait BlockDataManager {
@@ -28,6 +28,13 @@ trait BlockDataManager {
    * cannot be read successfully.
    */
   def getBlockData(blockId: BlockId): ManagedBuffer
+
+  /**
+   * Interface to get the shuffle block data that block manager with given blockManagerId
+   * holds in a local host. Throws an exception if the block cannot be found or
+   * cannot be read successfully.
+   */
+  def getShuffleBlockData(blockId: ShuffleBlockId, blockManagerId: BlockManagerId): ManagedBuffer
 
   /**
    * Put the block locally, using the given storage level.

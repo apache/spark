@@ -50,6 +50,7 @@ private[spark] object BlockManagerMessages {
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
       maxMemSize: Long,
+      localDirsPath: Array[String],
       sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
@@ -109,4 +110,6 @@ private[spark] object BlockManagerMessages {
   case class BlockManagerHeartbeat(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
   case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
+
+  case class GetLocalDirsPath(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 }

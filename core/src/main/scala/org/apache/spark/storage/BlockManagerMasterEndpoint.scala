@@ -19,17 +19,16 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.immutable.HashSet
-import scala.collection.mutable
-import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{Logging, SparkConf}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
@@ -56,8 +55,8 @@ class BlockManagerMasterEndpoint(
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint) =>
-      register(blockManagerId, maxMemSize, slaveEndpoint)
+    case RegisterBlockManager(blockManagerId, maxMemSize, localDirsPath, slaveEndpoint) =>
+      register(blockManagerId, maxMemSize, localDirsPath, slaveEndpoint)
       context.reply(true)
 
     case _updateBlockInfo @ UpdateBlockInfo(
@@ -80,6 +79,9 @@ class BlockManagerMasterEndpoint(
 
     case GetMemoryStatus =>
       context.reply(memoryStatus)
+
+    case GetLocalDirsPath(blockManagerId) =>
+      context.reply(getLocalDirsPath(blockManagerId))
 
     case GetStorageStatus =>
       context.reply(storageStatus)
@@ -240,6 +242,15 @@ class BlockManagerMasterEndpoint(
     }.toMap
   }
 
+  // Return the local dirs of a block manager with the given blockManagerId
+  private def getLocalDirsPath(blockManagerId: BlockManagerId)
+    : Map[BlockManagerId, Array[String]] = {
+    blockManagerInfo
+      .filter { case(id, _) => id != blockManagerId && id.host == blockManagerId.host }
+      .mapValues { info => info.localDirsPath }
+      .toMap
+  }
+
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case (blockManagerId, info) =>
       new StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala)
@@ -299,7 +310,11 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef) {
+  private def register(
+      id: BlockManagerId,
+      maxMemSize: Long,
+      localDirsPath: Array[String],
+      slaveEndpoint: RpcEndpointRef) {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -316,7 +331,7 @@ class BlockManagerMasterEndpoint(
       blockManagerIdByExecutor(id.executorId) = id
 
       blockManagerInfo(id) = new BlockManagerInfo(
-        id, System.currentTimeMillis(), maxMemSize, slaveEndpoint)
+        id, System.currentTimeMillis(), maxMemSize, localDirsPath, slaveEndpoint)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxMemSize))
   }
@@ -423,6 +438,7 @@ private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
     val maxMem: Long,
+    val localDirsPath: Array[String],
     val slaveEndpoint: RpcEndpointRef)
   extends Logging {
 
