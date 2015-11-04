@@ -29,12 +29,12 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
 private case class BigData(s: String)
 
-class CachedTableSuite extends QueryTest with SharedSQLContext {
+class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
   import testImplicits._
 
   def rddIdOf(tableName: String): Int = {
@@ -375,53 +375,98 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
       sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
       sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
     sqlContext.uncacheTable("orderedTable")
+    sqlContext.dropTempTable("orderedTable")
 
     // Set up two tables distributed in the same way. Try this with the data distributed into
     // different number of partitions.
     for (numPartitions <- 1 until 10 by 4) {
-      testData.repartition(numPartitions, $"key").registerTempTable("t1")
-      testData2.repartition(numPartitions, $"a").registerTempTable("t2")
+      withTempTable("t1", "t2") {
+        testData.repartition(numPartitions, $"key").registerTempTable("t1")
+        testData2.repartition(numPartitions, $"a").registerTempTable("t2")
+        sqlContext.cacheTable("t1")
+        sqlContext.cacheTable("t2")
+
+        // Joining them should result in no exchanges.
+        verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
+        checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
+          sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
+
+        // Grouping on the partition key should result in no exchanges
+        verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
+        checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
+          sql("SELECT count(*) FROM testData GROUP BY key"))
+
+        sqlContext.uncacheTable("t1")
+        sqlContext.uncacheTable("t2")
+      }
+    }
+
+    // Distribute the tables into non-matching number of partitions. Need to shuffle one side.
+    withTempTable("t1", "t2") {
+      testData.repartition(6, $"key").registerTempTable("t1")
+      testData2.repartition(3, $"a").registerTempTable("t2")
       sqlContext.cacheTable("t1")
       sqlContext.cacheTable("t2")
 
-      // Joining them should result in no exchanges.
-      verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 0)
-      checkAnswer(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"),
-        sql("SELECT * FROM testData t1 JOIN testData2 t2 ON t1.key = t2.a"))
-
-      // Grouping on the partition key should result in no exchanges
-      verifyNumExchanges(sql("SELECT count(*) FROM t1 GROUP BY key"), 0)
-      checkAnswer(sql("SELECT count(*) FROM t1 GROUP BY key"),
-        sql("SELECT count(*) FROM testData GROUP BY key"))
-
+      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+      verifyNumExchanges(query, 1)
+      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      checkAnswer(
+        query,
+        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
       sqlContext.uncacheTable("t1")
       sqlContext.uncacheTable("t2")
-      sqlContext.dropTempTable("t1")
-      sqlContext.dropTempTable("t2")
     }
 
-    // Distribute the tables into non-matching number of partitions. Need to shuffle.
-    testData.repartition(6, $"key").registerTempTable("t1")
-    testData2.repartition(3, $"a").registerTempTable("t2")
-    sqlContext.cacheTable("t1")
-    sqlContext.cacheTable("t2")
+    // One side of join is not partitioned in the desired way. Need to shuffle one side.
+    withTempTable("t1", "t2") {
+      testData.repartition(6, $"value").registerTempTable("t1")
+      testData2.repartition(6, $"a").registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
 
-    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 2)
-    sqlContext.uncacheTable("t1")
-    sqlContext.uncacheTable("t2")
-    sqlContext.dropTempTable("t1")
-    sqlContext.dropTempTable("t2")
+      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+      verifyNumExchanges(query, 1)
+      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      checkAnswer(
+        query,
+        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+    }
 
-    // One side of join is not partitioned in the desired way. Need to shuffle.
-    testData.repartition(6, $"value").registerTempTable("t1")
-    testData2.repartition(6, $"a").registerTempTable("t2")
-    sqlContext.cacheTable("t1")
-    sqlContext.cacheTable("t2")
+    withTempTable("t1", "t2") {
+      testData.repartition(6, $"value").registerTempTable("t1")
+      testData2.repartition(12, $"a").registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
 
-    verifyNumExchanges(sql("SELECT * FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a"), 2)
-    sqlContext.uncacheTable("t1")
-    sqlContext.uncacheTable("t2")
-    sqlContext.dropTempTable("t1")
-    sqlContext.dropTempTable("t2")
+      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+      verifyNumExchanges(query, 1)
+      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 12)
+      checkAnswer(
+        query,
+        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+    }
+
+    // One side of join is not partitioned in the desired way. Since the number of partitions of
+    // the side that has already partitioned is smaller than the side that is not partitioned,
+    // we shuffle both side.
+    withTempTable("t1", "t2") {
+      testData.repartition(6, $"value").registerTempTable("t1")
+      testData2.repartition(3, $"a").registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
+
+      val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
+      verifyNumExchanges(query, 2)
+      checkAnswer(
+        query,
+        testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+    }
   }
 }

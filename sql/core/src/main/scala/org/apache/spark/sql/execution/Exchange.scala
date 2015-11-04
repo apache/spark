@@ -419,25 +419,48 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // TODO: this should be a cost based decision. For example, a big relation should probably
       // maintain its existing number of partitions and smaller partitions should be shuffled.
       // defaultPartitions is arbitrary.
-      val numPartitions = children.head.outputPartitioning.numPartitions
+      val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
       val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
         case (child, distribution) => {
           child.outputPartitioning.guarantees(
-            createPartitioning(distribution, numPartitions))
+            createPartitioning(distribution, maxChildrenNumPartitions))
         }
       }
 
       children = if (useExistingPartitioning) {
+        // We do not need to shuffle any child's output.
         children
       } else {
+        // We need to shuffle at least one child's output.
+        // Now, we will determine the number of partitions that will be used by created
+        // partitioning schemes.
+        val numPartitions = {
+          // Let's see if we need to shuffle all child's outputs when we use
+          // maxChildrenNumPartitions.
+          val shufflesAllChildren = children.zip(requiredChildDistributions).forall {
+            case (child, distribution) => {
+              !child.outputPartitioning.guarantees(
+                createPartitioning(distribution, maxChildrenNumPartitions))
+            }
+          }
+          // If we need to shuffle all children, we use defaultNumPreShufflePartitions as the
+          // number of partitions. Otherwise, we use maxChildrenNumPartitions.
+          if (shufflesAllChildren) defaultNumPreShufflePartitions else maxChildrenNumPartitions
+        }
+
         children.zip(requiredChildDistributions).map {
           case (child, distribution) => {
             val targetPartitioning =
-              createPartitioning(distribution, defaultNumPreShufflePartitions)
+              createPartitioning(distribution, numPartitions)
             if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
             } else {
-              Exchange(targetPartitioning, child)
+              child match {
+                // If child is an exchange, we replace it with
+                // a new one having targetPartitioning.
+                case Exchange(_, c, _) => Exchange(targetPartitioning, c)
+                case _ => Exchange(targetPartitioning, child)
+              }
             }
           }
         }
