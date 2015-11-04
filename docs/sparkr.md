@@ -29,13 +29,65 @@ All of the examples on this page use sample data included in R or the Spark dist
 The entry point into SparkR is the `SparkContext` which connects your R program to a Spark cluster.
 You can create a `SparkContext` using `sparkR.init` and pass in options such as the application name
 , any spark packages depended on, etc. Further, to work with DataFrames we will need a `SQLContext`,
-which can be created from the  SparkContext. If you are working from the SparkR shell, the
-`SQLContext` and `SparkContext` should already be created for you.
+which can be created from the  SparkContext. If you are working from the `sparkR` shell, the
+`SQLContext` and `SparkContext` should already be created for you, and you would not need to call
+`sparkR.init`.
 
+<div data-lang="r" markdown="1">
 {% highlight r %}
 sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
+</div>
+
+## Starting Up from RStudio
+
+You can also start SparkR from RStudio. You can connect your R program to a Spark cluster from
+RStudio, R shell, Rscript or other R IDEs. To start, make sure SPARK_HOME is set in environment
+(you can check [Sys.getenv](https://stat.ethz.ch/R-manual/R-devel/library/base/html/Sys.getenv.html)),
+load the SparkR package, and call `sparkR.init` as below. In addition to calling `sparkR.init`, you
+could also specify certain Spark driver properties. Normally these
+[Application properties](configuration.html#application-properties) and
+[Runtime Environment](configuration.html#runtime-environment) cannot be set programmatically, as the
+driver JVM process would have been started, in this case SparkR takes care of this for you. To set
+them, pass them as you would other configuration properties in the `sparkEnvir` argument to
+`sparkR.init()`.
+
+<div data-lang="r" markdown="1">
+{% highlight r %}
+if (nchar(Sys.getenv("SPARK_HOME")) < 1) {
+  Sys.setenv(SPARK_HOME = "/home/spark")
+}
+library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
+sc <- sparkR.init(master = "local[*]", sparkEnvir = list(spark.driver.memory="2g"))
+{% endhighlight %}
+</div>
+
+The following options can be set in `sparkEnvir` with `sparkR.init` from RStudio:
+
+<table class="table">
+  <tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr>
+  <tr>
+    <td><code>spark.driver.memory</code></td>
+    <td>Application Properties</td>
+    <td><code>--driver-memory</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraClassPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-class-path</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraJavaOptions</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-java-options</code></td>
+  </tr>
+  <tr>
+    <td><code>spark.driver.extraLibraryPath</code></td>
+    <td>Runtime Environment</td>
+    <td><code>--driver-library-path</code></td>
+  </tr>
+</table>
 
 </div>
 
@@ -43,11 +95,11 @@ sqlContext <- sparkRSQL.init(sc)
 With a `SQLContext`, applications can create `DataFrame`s from a local R data frame, from a [Hive table](sql-programming-guide.html#hive-tables), or from other [data sources](sql-programming-guide.html#data-sources).
 
 ### From local data frames
-The simplest way to create a data frame is to convert a local R data frame into a SparkR DataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a SparkR DataFrame. As an example, the following creates a `DataFrame` based using the `faithful` dataset from R. 
+The simplest way to create a data frame is to convert a local R data frame into a SparkR DataFrame. Specifically we can use `createDataFrame` and pass in the local R data frame to create a SparkR DataFrame. As an example, the following creates a `DataFrame` based using the `faithful` dataset from R.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
-df <- createDataFrame(sqlContext, faithful) 
+df <- createDataFrame(sqlContext, faithful)
 
 # Displays the content of the DataFrame to stdout
 head(df)
@@ -96,7 +148,7 @@ printSchema(people)
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df` 
+to a Parquet file using `write.df`
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -139,7 +191,7 @@ Here we include some basic examples and a complete list can be found in the [API
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the DataFrame
-df <- createDataFrame(sqlContext, faithful) 
+df <- createDataFrame(sqlContext, faithful)
 
 # Get basic information about the DataFrame
 df
@@ -152,7 +204,7 @@ head(select(df, df$eruptions))
 ##2     1.800
 ##3     3.333
 
-# You can also pass in column name as strings 
+# You can also pass in column name as strings
 head(select(df, "eruptions"))
 
 # Filter the DataFrame to only retain rows with wait times shorter than 50 mins
@@ -166,7 +218,7 @@ head(filter(df, df$waiting < 50))
 
 </div>
 
-### Grouping, Aggregation 
+### Grouping, Aggregation
 
 SparkR data frames support a number of commonly used functions to aggregate data after grouping. For example we can compute a histogram of the `waiting` time in the `faithful` dataset as shown below
 
@@ -194,7 +246,7 @@ head(arrange(waiting_counts, desc(waiting_counts$count)))
 
 ### Operating on Columns
 
-SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions. 
+SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
