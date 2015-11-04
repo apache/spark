@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -647,7 +648,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert(bitset != null);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY || !canGrowArray) {
+      if (numElements == MAX_CAPACITY || numElements > growthThreshold && !canGrowArray) {
         return false;
       }
 
@@ -741,9 +742,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Free the memory used by longArray.
+   * Free all allocated memory associated with this map, including the storage for keys and values
+   * as well as the hash map array itself.
+   *
+   * This method is idempotent and can be called multiple times.
    */
-  public void freeArray() {
+  public void free() {
     updatePeakMemoryUsed();
     if (longArray != null) {
       long used = longArray.memoryBlock().size();
@@ -751,16 +755,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       releaseMemory(used);
       bitset = null;
     }
-  }
-
-  /**
-   * Free all allocated memory associated with this map, including the storage for keys and values
-   * as well as the hash map array itself.
-   *
-   * This method is idempotent and can be called multiple times.
-   */
-  public void free() {
-    freeArray();
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
@@ -845,6 +839,29 @@ public final class BytesToBytesMap extends MemoryConsumer {
   @VisibleForTesting
   public int getNumDataPages() {
     return dataPages.size();
+  }
+
+  /**
+   * Returns the underline long[] of longArray.
+   */
+  public long[] getArray() {
+    assert(longArray != null);
+    return (long[]) longArray.memoryBlock().getBaseObject();
+  }
+
+  /**
+   * Reset this map to initialized state.
+   */
+  public void reset() {
+    numElements = 0;
+    Arrays.fill(getArray(), 0);
+    Arrays.fill((long[]) bitset.memoryBlock().getBaseObject(), 0);
+    while (dataPages.size() > 0) {
+      MemoryBlock dataPage = dataPages.removeLast();
+      freePage(dataPage);
+    }
+    currentPage = null;
+    pageCursor = 0;
   }
 
   /**

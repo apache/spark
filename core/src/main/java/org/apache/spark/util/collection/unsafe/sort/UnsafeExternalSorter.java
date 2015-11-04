@@ -79,9 +79,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      UnsafeInMemorySorter inMemorySorter) {
-    return new UnsafeExternalSorter(taskMemoryManager, blockManager,
+      UnsafeInMemorySorter inMemorySorter) throws IOException {
+    UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, inMemorySorter);
+    sorter.spill(Long.MAX_VALUE, sorter);
+    sorter.inMemSorter = null;
+    return sorter;
   }
 
   public static UnsafeExternalSorter create(
@@ -120,17 +123,17 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter =
-        new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator, initialSize);
+        new UnsafeInMemorySorter(taskMemoryManager, recordComparator, prefixComparator,
+          initialSize);
       acquireMemory(inMemSorter.getMemoryUsage());
     } else {
       this.inMemSorter = existingInMemorySorter;
-      // will acquire after free the map
     }
     this.peakMemoryUsedBytes = getMemoryUsage();
 
     // Register a cleanup task with TaskContext to ensure that memory is guaranteed to be freed at
-    // the end of the task. This is necessary to avoid memory leaks in when the downstream operator
-    // does not fully consume the sorter's output (e.g. sort followed by limit).
+    // the end of the task. This is necessary to avoid memory leaks in when the downstream
+    // operator does not fully consume the sorter's output (e.g. sort followed by limit).
     taskContext.addTaskCompletionListener(
       new TaskCompletionListener() {
         @Override
@@ -232,15 +235,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   public int getNumberOfAllocatedPages() {
     return allocatedPages.size();
-  }
-
-  /**
-   * Free the borrowed in-memory sorter.
-   *
-   * Note: This should only be used when this is created with existing in-memory sorter.
-   */
-  public void freeImMemorySorter() {
-    inMemSorter = null;
   }
 
   /**

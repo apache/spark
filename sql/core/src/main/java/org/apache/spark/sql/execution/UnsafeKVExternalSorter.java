@@ -83,11 +83,8 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes);
     } else {
-      // The memory needed for UnsafeInMemorySorter should be less than longArray in map.
-      map.freeArray();
-      // The memory used by UnsafeInMemorySorter will be counted later (end of this block)
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, Math.max(1, map.numElements()));
+        taskMemoryManager, recordComparator, prefixComparator, map.getArray());
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
@@ -122,11 +119,7 @@ public final class UnsafeKVExternalSorter {
         /* initialSize */ 4096,
         pageSizeBytes,
         inMemSorter);
-
-      sorter.spill();
-      // this sorter will not used to insert new records.
-      sorter.freeImMemorySorter();
-      map.free();
+      map.reset();
     }
   }
 

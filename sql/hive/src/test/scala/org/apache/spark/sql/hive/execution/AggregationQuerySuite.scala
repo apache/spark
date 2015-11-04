@@ -588,7 +588,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     }
   }
 
-  test("no aggregation function") {
+  test("no aggregation function (SPARK-11486)") {
     val df = sqlContext.range(20).selectExpr("id", "repeat(id, 1) as s")
       .groupBy("s").count()
       .groupBy().count()

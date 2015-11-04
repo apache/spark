@@ -170,7 +170,7 @@ class UnsafeFixedWidthAggregationMapSuite
   }
 
   testWithMemoryLeakDetection("test external sorting") {
-    def createMap(): UnsafeFixedWidthAggregationMap = new UnsafeFixedWidthAggregationMap(
+    val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
@@ -180,7 +180,6 @@ class UnsafeFixedWidthAggregationMapSuite
       false // disable perf metrics
     )
 
-    var map = createMap()
     val keys = randomStrings(1024).take(512)
     keys.foreach { keyString =>
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(keyString)))
@@ -191,7 +190,6 @@ class UnsafeFixedWidthAggregationMapSuite
 
     // Add more keys to the sorter and make sure the results come out sorted.
     val additionalKeys = randomStrings(1024)
-    map = createMap()
     additionalKeys.zipWithIndex.foreach { case (str, i) =>
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
       buf.setInt(0, str.length)
@@ -199,7 +197,6 @@ class UnsafeFixedWidthAggregationMapSuite
       if ((i % 100) == 0) {
         val sorter2 = map.destructAndCreateExternalSorter()
         sorter.merge(sorter2)
-        map = createMap()
       }
     }
     val sorter2 = map.destructAndCreateExternalSorter()
@@ -213,11 +210,12 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     assert(out === (keys ++ additionalKeys).sorted)
+    map.free()
   }
 
   testWithMemoryLeakDetection("test external sorting with an empty map") {
 
-    def createMap(): UnsafeFixedWidthAggregationMap = new UnsafeFixedWidthAggregationMap(
+    val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       aggBufferSchema,
       groupKeySchema,
@@ -226,13 +224,10 @@ class UnsafeFixedWidthAggregationMapSuite
       PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
-
-    var map = createMap()
     val sorter = map.destructAndCreateExternalSorter()
 
     // Add more keys to the sorter and make sure the results come out sorted.
     val additionalKeys = randomStrings(1024)
-    map = createMap()
     additionalKeys.zipWithIndex.foreach { case (str, i) =>
       val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
       buf.setInt(0, str.length)
@@ -240,7 +235,6 @@ class UnsafeFixedWidthAggregationMapSuite
       if ((i % 100) == 0) {
         val sorter2 = map.destructAndCreateExternalSorter()
         sorter.merge(sorter2)
-        map = createMap()
       }
     }
     val sorter2 = map.destructAndCreateExternalSorter()
@@ -254,11 +248,12 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     assert(out === additionalKeys.sorted)
+    map.free()
   }
 
   testWithMemoryLeakDetection("test external sorting with empty records") {
 
-    def createMap(): UnsafeFixedWidthAggregationMap = new UnsafeFixedWidthAggregationMap(
+    val map = new UnsafeFixedWidthAggregationMap(
       emptyAggregationBuffer,
       StructType(Nil),
       StructType(Nil),
@@ -267,8 +262,6 @@ class UnsafeFixedWidthAggregationMapSuite
       PAGE_SIZE_BYTES,
       false // disable perf metrics
     )
-
-    var map = createMap()
     (1 to 10).foreach { i =>
       val buf = map.getAggregationBuffer(UnsafeRow.createFromByteArray(0, 0))
       assert(buf != null)
@@ -278,14 +271,12 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     // Add more keys to the sorter and make sure the results come out sorted.
-    map = createMap()
     (1 to 4096).foreach { i =>
       map.getAggregationBufferFromUnsafeRow(UnsafeRow.createFromByteArray(0, 0))
 
       if ((i % 100) == 0) {
         val sorter2 = map.destructAndCreateExternalSorter()
         sorter.merge(sorter2)
-        map = createMap()
       }
     }
     val sorter2 = map.destructAndCreateExternalSorter()
@@ -302,6 +293,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
     // 1 record per map, spilled 42 times.
     assert(count === 42)
+    map.free()
   }
 
   testWithMemoryLeakDetection("convert to external sorter under memory pressure (SPARK-10474)") {
@@ -334,6 +326,7 @@ class UnsafeFixedWidthAggregationMapSuite
     var sorter: UnsafeKVExternalSorter = null
     try {
       sorter = map.destructAndCreateExternalSorter()
+      map.free()
     } finally {
       if (sorter != null) {
         sorter.cleanupResources()

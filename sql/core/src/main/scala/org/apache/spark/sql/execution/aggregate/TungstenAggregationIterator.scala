@@ -477,22 +477,18 @@ class TungstenAggregationIterator(
   // Part 3: Methods and fields used by hash-based aggregation.
   ///////////////////////////////////////////////////////////////////////////
 
-  private def createHashMap(): UnsafeFixedWidthAggregationMap = {
-    new UnsafeFixedWidthAggregationMap(
-      initialAggregationBuffer,
-      StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
-      StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
-      TaskContext.get().taskMemoryManager(),
-      1024 * 16, // initial capacity
-      TaskContext.get().taskMemoryManager().pageSizeBytes,
-      false // disable tracking of performance metrics
-    )
-  }
-
   // This is the hash map used for hash-based aggregation. It is backed by an
   // UnsafeFixedWidthAggregationMap and it is used to store
   // all groups and their corresponding aggregation buffers for hash-based aggregation.
-  private[this] var hashMap = createHashMap()
+  private[this] val hashMap = new UnsafeFixedWidthAggregationMap(
+    initialAggregationBuffer,
+    StructType.fromAttributes(allAggregateFunctions.flatMap(_.aggBufferAttributes)),
+    StructType.fromAttributes(groupingExpressions.map(_.toAttribute)),
+    TaskContext.get().taskMemoryManager(),
+    1024 * 16, // initial capacity
+    TaskContext.get().taskMemoryManager().pageSizeBytes,
+    false // disable tracking of performance metrics
+  )
 
   // The function used to read and process input rows. When processing input rows,
   // it first uses hash-based aggregation by putting groups and their buffers in
@@ -528,8 +524,6 @@ class TungstenAggregationIterator(
             externalSorter.merge(sorter)
           }
           i = 0
-          // hashMap is freed in getAggregationBufferFromUnsafeRow
-          hashMap = createHashMap()
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           assert(buffer != null)
         }
@@ -540,7 +534,7 @@ class TungstenAggregationIterator(
       if (externalSorter != null) {
         val sorter = hashMap.destructAndCreateExternalSorter()
         externalSorter.merge(sorter)
-        // hashMap is freed in getAggregationBufferFromUnsafeRow
+        hashMap.free()
 
         switchToSortBasedAggregation()
       }

@@ -243,9 +243,8 @@ public final class UnsafeFixedWidthAggregationMap {
    * Note that this destroys the map, and as a result, the map cannot be used anymore after this.
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
-    UnsafeKVExternalSorter sorter = new UnsafeKVExternalSorter(
+    return new UnsafeKVExternalSorter(
       groupingKeySchema, aggregationBufferSchema,
       SparkEnv.get().blockManager(), map.getPageSizeBytes(), map);
-    return sorter;
   }
 }

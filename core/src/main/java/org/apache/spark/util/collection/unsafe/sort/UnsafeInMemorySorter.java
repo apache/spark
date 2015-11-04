@@ -19,9 +19,9 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.Sorter;
-import org.apache.spark.memory.TaskMemoryManager;
 
 /**
  * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records
@@ -78,12 +78,19 @@ public final class UnsafeInMemorySorter {
   private int pos = 0;
 
   public UnsafeInMemorySorter(
+    final TaskMemoryManager memoryManager,
+    final RecordComparator recordComparator,
+    final PrefixComparator prefixComparator,
+    int initialSize) {
+    this(memoryManager, recordComparator, prefixComparator, new long[initialSize * 2]);
+  }
+
+  public UnsafeInMemorySorter(
       final TaskMemoryManager memoryManager,
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
-      int initialSize) {
-    assert (initialSize > 0);
-    this.array = new long[initialSize * 2];
+      long[] array) {
+    this.array = array;
     this.memoryManager = memoryManager;
     this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
     this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
