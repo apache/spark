@@ -379,8 +379,8 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     // Set up two tables distributed in the same way. Try this with the data distributed into
     // different number of partitions.
     for (numPartitions <- 1 until 10 by 4) {
-      testData.distributeBy(Column("key") :: Nil, numPartitions).registerTempTable("t1")
-      testData2.distributeBy(Column("a") :: Nil, numPartitions).registerTempTable("t2")
+      testData.repartition(numPartitions, $"key").registerTempTable("t1")
+      testData2.repartition(numPartitions, $"a").registerTempTable("t2")
       sqlContext.cacheTable("t1")
       sqlContext.cacheTable("t2")
 
@@ -401,8 +401,8 @@ class CachedTableSuite extends QueryTest with SharedSQLContext {
     }
 
     // Distribute the tables into non-matching number of partitions. Need to shuffle.
-    testData.distributeBy(Column("key") :: Nil, 6).registerTempTable("t1")
-    testData2.distributeBy(Column("a") :: Nil, 3).registerTempTable("t2")
+    testData.repartition(6, $"key").registerTempTable("t1")
+    testData2.repartition(3, $"a").registerTempTable("t2")
     sqlContext.cacheTable("t1")
     sqlContext.cacheTable("t2")
 
