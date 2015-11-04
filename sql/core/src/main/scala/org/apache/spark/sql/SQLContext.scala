@@ -499,6 +499,15 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
+  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
+    val enc = encoderFor[T]
+    val attributes = enc.schema.toAttributes
+    val encoded = data.map(d => enc.toRow(d))
+    val plan = LogicalRDD(attributes, encoded)(self)
+
+    new Dataset[T](this, plan)
+  }
+
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }

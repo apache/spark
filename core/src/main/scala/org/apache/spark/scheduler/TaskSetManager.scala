@@ -802,8 +802,8 @@ private[spark] class TaskSetManager(
         case exited: ExecutorExited => exited.exitCausedByApp
         case _ => true
       }
-      handleFailedTask(
-        tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp))
+      handleFailedTask(tid, TaskState.FAILED, ExecutorLostFailure(info.executorId, exitCausedByApp,
+        Some(reason.toString)))
     }
     // recalculate valid locality levels and waits when executor is lost
     recomputeLocality()
