@@ -111,6 +111,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
    * (default = squared)
    * @group param
    */
+  @Since("1.4.0")
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressor.supportedLossTypes.mkString(", ")}",
@@ -157,6 +158,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
 object GBTRegressor {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  @Since("1.4.0")
   final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
 }
 

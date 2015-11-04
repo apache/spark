@@ -110,9 +110,11 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
 @Experimental
 object RandomForestRegressor {
   /** Accessor for supported impurity settings: variance */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
 }

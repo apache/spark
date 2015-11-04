@@ -430,6 +430,7 @@ class LinearRegressionTrainingSummary private[regression] (
   extends LinearRegressionSummary(predictions, predictionCol, labelCol) {
 
   /** Number of training iterations until termination */
+  @Since("1.5.0")
   val totalIterations = objectiveHistory.length
 
 }
@@ -456,33 +457,39 @@ class LinearRegressionSummary private[regression] (
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    */
+  @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
 
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    */
+  @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
 
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    */
+  @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
 
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    */
+  @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
 
   /**
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
+  @Since("1.5.0")
   val r2: Double = metrics.r2
 
   /** Residuals (label - predicted value) */
+  @Since("1.5.0")
   @transient lazy val residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => label - pred }
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
