@@ -43,7 +43,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
   private var _memoryStore: MemoryStore = _
   def memoryStore: MemoryStore = {
     if (_memoryStore == null) {
-      throw new IllegalArgumentException("memory store not initialized yet")
+      throw new IllegalStateException("memory store not initialized yet")
     }
     _memoryStore
   }
