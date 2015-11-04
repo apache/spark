@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import scala.collection.JavaConverters._
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.{Closeables, ByteStreams}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
@@ -187,7 +187,7 @@ class PortableDataStream(
     try {
       ByteStreams.toByteArray(stream)
     } finally {
-      stream.close()
+      Closeables.close(stream, true)
     }
   }
 
