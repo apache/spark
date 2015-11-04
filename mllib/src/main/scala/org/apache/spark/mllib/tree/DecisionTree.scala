@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
@@ -36,7 +36,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * :: Experimental ::
  * A class which implements a decision tree learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  * @param strategy The configuration parameters for the tree algorithm which specify the type
@@ -44,7 +43,6 @@ import org.apache.spark.util.random.XORShiftRandom
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
 @Since("1.0.0")
-@Experimental
 class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
   extends Serializable with Logging {
 
