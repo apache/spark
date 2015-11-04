@@ -41,7 +41,7 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
+import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
@@ -423,22 +423,16 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   test("provider waits for safe mode to finish before initializing") {
     val clock = new ManualClock()
-    val conf = createTestConf().set("spark.history.testing.skipInitialize", "true")
-    val provider = spy(new FsHistoryProvider(conf, clock))
-    doReturn(true).when(provider).isFsInSafeMode()
-
-    val initThread = provider.initialize(None)
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
+    val initThread = provider.initialize()
     try {
       provider.getConfig().keys should contain ("HDFS State")
 
       clock.setTime(5000)
       provider.getConfig().keys should contain ("HDFS State")
 
-      // Synchronization needed because of mockito.
-      clock.synchronized {
-        doReturn(false).when(provider).isFsInSafeMode()
-        clock.setTime(10000)
-      }
+      provider.inSafeMode = false
+      clock.setTime(10000)
 
       eventually(timeout(1 second), interval(10 millis)) {
         provider.getConfig().keys should not contain ("HDFS State")
@@ -451,18 +445,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("provider reports error after FS leaves safe mode") {
     testDir.delete()
     val clock = new ManualClock()
-    val conf = createTestConf().set("spark.history.testing.skipInitialize", "true")
-    val provider = spy(new FsHistoryProvider(conf, clock))
-    doReturn(true).when(provider).isFsInSafeMode()
-
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
     val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
-    val initThread = provider.initialize(Some(errorHandler))
+    val initThread = provider.startSafeModeCheckThread(Some(errorHandler))
     try {
-      // Synchronization needed because of mockito.
-      clock.synchronized {
-        doReturn(false).when(provider).isFsInSafeMode()
-        clock.setTime(10000)
-      }
+      provider.inSafeMode = false
+      clock.setTime(10000)
 
       eventually(timeout(1 second), interval(10 millis)) {
         verify(errorHandler).uncaughtException(any(), any())
@@ -528,6 +516,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
 
     log
+  }
+
+  private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
+    extends FsHistoryProvider(conf, clock) {
+
+    @volatile var inSafeMode = true
+
+    // Skip initialization so that we can manually start the safe mode check thread.
+    private[history] override def initialize(): Thread = null
+
+    private[history] override def isFsInSafeMode(): Boolean = inSafeMode
+
   }
 
 }
