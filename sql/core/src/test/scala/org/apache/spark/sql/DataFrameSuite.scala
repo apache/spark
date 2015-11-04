@@ -1128,4 +1128,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-10656: completely support special chars") {
+    val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
+    checkAnswer(df.select(df("*")), Row(1, "a"))
+    checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
+  }
 }
