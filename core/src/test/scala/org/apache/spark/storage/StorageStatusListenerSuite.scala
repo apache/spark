@@ -18,16 +18,11 @@
 package org.apache.spark.storage
 
 import org.scalatest.FunSuite
+
+import org.apache.spark.SparkConf
 import org.apache.spark.Success
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.SparkConfSuite
-import org.apache.spark.SparkConf
-
-/**
- * Test the behavior of StorageStatusListener in response to all relevant events.
- */
-
 
 /**
  * Test the behavior of StorageStatusListener in response to all relevant events.
@@ -160,10 +155,10 @@ class StorageStatusListenerSuite extends FunSuite {
   }
   
   test("Killed Executor Entry removed after configurable time") {
-    val localtestconf = new SparkConf().set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR,"5s")
+    val localtestconf = new SparkConf().set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR,"2s")
     val listener = new StorageStatusListener(localtestconf)
     listener.removedExecutorIdToStorageStatus.put("1", new StorageStatus(null, 50))
-    Thread.sleep(5500)
+    Thread.sleep(2001)
     assert(listener.removedExecutorIdToStorageStatus.asMap.get("1") == null)
   }
 }
