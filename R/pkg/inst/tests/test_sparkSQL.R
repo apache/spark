@@ -1494,6 +1494,15 @@ test_that("attach() on a DataFrame", {
   expect_error(age)
 })
 
+test_that("with() on a DataFrame", {
+  df <- createDataFrame(sqlContext, iris)
+  expect_error(Sepal_Length)
+  sum1 <- with(df, list(summary(Sepal_Length), summary(Sepal_Width)))
+  expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
+  sum2 <- with(df, distinct(Sepal_Length))
+  expect_equal(nrow(sum2), 35)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
