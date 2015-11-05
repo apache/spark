@@ -2,8 +2,7 @@ from airflow.hooks.base_hook import BaseHook
 from airflow.configuration import conf
 import logging
 
-from hdfs import InsecureClient
-from hdfs.utils import Hdfserror
+from hdfs import InsecureClient, Hdfserror
 from airflow.utils import AirflowException
 
 
@@ -34,7 +33,7 @@ class WebHDFSHook(BaseHook):
                 logging.debug("Read operation on namenode {nn.host} failed with"
                              " error: {e.messaage}".format(**locals()))
         nn_hosts = [c.host for c in nn_connections]
-        no_nn_error = "Read operations failed the namenodes below:\n{}".format("\n".join(nn_hosts))
+        no_nn_error = "Read operations failed on the namenodes below:\n{}".format("\n".join(nn_hosts))
         raise WebHDFSHookException(no_nn_error)
 
     def check_for_path(self, hdfs_path):
