@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.xbean.asm5._
+import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
@@ -516,7 +516,7 @@ private class BoxingFinder(
     method: MethodIdentifier[_] = null,
     val boxingInvokes: mutable.Set[String] = mutable.Set.empty,
     visitedMethods: mutable.Set[MethodIdentifier[_]] = mutable.Set.empty)
-  extends ClassVisitor(ASM4) {
+  extends ClassVisitor(ASM5) {
 
   private val primitiveBoxingClassName =
     Set("java/lang/Long",
@@ -533,11 +533,12 @@ private class BoxingFinder(
     MethodVisitor = {
     if (method != null && (method.name != name || method.desc != desc)) {
       // If method is specified, skip other methods.
-      return new MethodVisitor(ASM4) {}
+      return new MethodVisitor(ASM5) {}
     }
 
-    new MethodVisitor(ASM4) {
-      override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+    new MethodVisitor(ASM5) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         if (op == INVOKESPECIAL && name == "<init>" || op == INVOKESTATIC && name == "valueOf") {
           if (primitiveBoxingClassName.contains(owner)) {
             // Find boxing methods, e.g, new java.lang.Long(l) or java.lang.Long.valueOf(l)
@@ -572,15 +573,7 @@ private object BoxingFinder {
     // Copy data over, before delegating to ClassReader -
     // else we can run out of open file handles.
     Utils.copyStream(resourceStream, baos, true)
-    // ASM4 doesn't support Java 8 classes, which requires ASM5.
-    // So if the class is ASM5 (E.g., java.lang.Long when using JDK8 runtime to run these codes),
-    // then ClassReader will throw IllegalArgumentException,
-    // However, since this is only for testing, it's safe to skip these classes.
-    try {
-      Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
+    Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
   }
 
 }
