@@ -309,7 +309,8 @@ class HiveContext private[hive](
           .map(_.toURI.toURL)
 
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using $jars")
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
+          s"using ${jars.mkString(":")}")
       new IsolatedClientLoader(
         version = metaVersion,
         execJars = jars.toSeq,
