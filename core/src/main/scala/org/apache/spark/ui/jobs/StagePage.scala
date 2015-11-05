@@ -29,7 +29,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.{InternalAccumulator, SparkConf}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
+import org.apache.spark.scheduler.{TaskLocality, AccumulableInfo, TaskInfo}
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
@@ -73,12 +73,28 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   private def getLocalitySummaryString(stageData: StageUIData): String = {
     val localityCounts = new HashMap[String, Long]
+    localityCounts.put("Process local", 0L);
+    localityCounts.put("Node local", 0L);
+    localityCounts.put("Rack local", 0L);
+    localityCounts.put("Any", 0L);
     stageData.taskData.values.foreach( taskUIData => {
-      val locality = taskUIData.taskInfo.taskLocality.toString
-      localityCounts.put(locality, localityCounts.getOrElse(locality, 0L) + 1)
+      taskUIData.taskInfo.taskLocality match {
+        case TaskLocality.PROCESS_LOCAL => {
+          localityCounts.put("Process local", localityCounts.getOrElse("Process local", 0L) + 1)
+        }
+        case TaskLocality.NODE_LOCAL => {
+          localityCounts.put("Node local", localityCounts.getOrElse("Node local", 0L) + 1)
+        }
+        case TaskLocality.RACK_LOCAL => {
+          localityCounts.put("Rack local", localityCounts.getOrElse("Rack local", 0L) + 1)
+        }
+        case TaskLocality.ANY => {
+          localityCounts.put("Any", localityCounts.getOrElse("Any", 0L) + 1)
+        }
+      }
     })
     return localityCounts.map { _ match {
-      case (localityLevel, count) => s"$localityLevel ($count)"
+      case (localityLevel, count) => s"$localityLevel: $count task(s)"
     }}.mkString("; ")
   }
 
@@ -141,10 +157,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
-            <li>
-              <strong>Locality Level Summary: </strong>
-              {getLocalitySummaryString(stageData)}
-            </li>
             {if (stageData.hasInput) {
               <li>
                 <strong>Input Size / Records: </strong>
@@ -192,6 +204,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </span>
           <div class="additional-metrics collapsed">
             <ul>
+              <li>
+                <strong>Locality Level Summary: </strong>
+                {getLocalitySummaryString(stageData)}
+              </li>
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
                   <span class="additional-metric-title"><em>(De)select All</em></span>
