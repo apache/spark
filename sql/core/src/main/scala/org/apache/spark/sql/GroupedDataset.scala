@@ -35,13 +35,13 @@ class GroupedDataset[K, T] private[sql](
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
   private implicit val kEnc = kEncoder match {
-    case e: ExpressionEncoder[K] => e.resolve(groupingAttributes)
+    case e: ExpressionEncoder[K] => e
     case other =>
       throw new UnsupportedOperationException("Only expression encoders are currently supported")
   }
 
   private implicit val tEnc = tEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(dataAttributes)
+    case e: ExpressionEncoder[T] => e
     case other =>
       throw new UnsupportedOperationException("Only expression encoders are currently supported")
   }
@@ -67,8 +67,7 @@ class GroupedDataset[K, T] private[sql](
   def keys: Dataset[K] = {
     new Dataset[K](
       sqlContext,
-      Distinct(
-        Project(groupingAttributes, logicalPlan)))
+      Distinct(Project(groupingAttributes, logicalPlan)))
   }
 
   /**

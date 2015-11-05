@@ -75,7 +75,7 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  private def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /**
    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
@@ -98,22 +98,8 @@ trait ScalaReflection {
       val className: String = tpe.erasure.typeSymbol.asClass.fullName
       className match {
         case "scala.Array" =>
-          val TypeRef(_, _, Seq(arrayType)) = tpe
-          val cls = arrayType match {
-            case t if t <:< definitions.IntTpe => classOf[Array[Int]]
-            case t if t <:< definitions.LongTpe => classOf[Array[Long]]
-            case t if t <:< definitions.DoubleTpe => classOf[Array[Double]]
-            case t if t <:< definitions.FloatTpe => classOf[Array[Float]]
-            case t if t <:< definitions.ShortTpe => classOf[Array[Short]]
-            case t if t <:< definitions.ByteTpe => classOf[Array[Byte]]
-            case t if t <:< definitions.BooleanTpe => classOf[Array[Boolean]]
-            case other =>
-              // There is probably a better way to do this, but I couldn't find it...
-              val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
-              java.lang.reflect.Array.newInstance(elementType, 1).getClass
-
-          }
-          ObjectType(cls)
+          val TypeRef(_, _, Seq(elementType)) = tpe
+          arrayClassFor(elementType)
         case other => ObjectType(Utils.classForName(className))
       }
   }

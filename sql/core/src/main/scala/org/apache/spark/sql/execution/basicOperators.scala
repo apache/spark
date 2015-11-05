@@ -326,8 +326,7 @@ case class MapPartitions[T, U](
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      val tBoundEncoder = tEncoder.bind(child.output)
-      func(iter.map(tBoundEncoder.fromRow)).map(uEncoder.toRow)
+      func(iter.map(tEncoder.fromRow)).map(uEncoder.toRow)
     }
   }
 }
@@ -346,10 +345,9 @@ case class AppendColumns[T, U](
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
-      val tBoundEncoder = tEncoder.bind(child.output)
       val combiner = GenerateUnsafeRowJoiner.create(tEncoder.schema, uEncoder.schema)
       iter.map { row =>
-        val newColumns = uEncoder.toRow(func(tBoundEncoder.fromRow(row)))
+        val newColumns = uEncoder.toRow(func(tEncoder.fromRow(row)))
         combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
       }
     }
@@ -379,11 +377,10 @@ case class MapGroups[K, T, U](
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
-      val groupKeyEncoder = kEncoder.bind(groupingAttributes)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
-          groupKeyEncoder.fromRow(key),
+          kEncoder.fromRow(key),
           rowIter.map(tEncoder.fromRow))
         result.map(uEncoder.toRow)
       }
@@ -418,12 +415,11 @@ case class CoGroup[K, Left, Right, R](
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val groupKeyEncoder = kEncoder.bind(leftGroup)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>
           val result = func(
-            groupKeyEncoder.fromRow(key),
+            kEncoder.fromRow(key),
             leftResult.map(leftEnc.fromRow),
             rightResult.map(rightEnc.fromRow))
           result.map(rEncoder.toRow)
