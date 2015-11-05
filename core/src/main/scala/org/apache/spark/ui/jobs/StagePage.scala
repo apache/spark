@@ -72,30 +72,18 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
 
   private def getLocalitySummaryString(stageData: StageUIData): String = {
-    val localityCounts = new HashMap[String, Long]
-    localityCounts.put("Process local", 0L);
-    localityCounts.put("Node local", 0L);
-    localityCounts.put("Rack local", 0L);
-    localityCounts.put("Any", 0L);
-    stageData.taskData.values.foreach( taskUIData => {
-      taskUIData.taskInfo.taskLocality match {
-        case TaskLocality.PROCESS_LOCAL => {
-          localityCounts.put("Process local", localityCounts.getOrElse("Process local", 0L) + 1)
-        }
-        case TaskLocality.NODE_LOCAL => {
-          localityCounts.put("Node local", localityCounts.getOrElse("Node local", 0L) + 1)
-        }
-        case TaskLocality.RACK_LOCAL => {
-          localityCounts.put("Rack local", localityCounts.getOrElse("Rack local", 0L) + 1)
-        }
-        case TaskLocality.ANY => {
-          localityCounts.put("Any", localityCounts.getOrElse("Any", 0L) + 1)
-        }
+    val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
+    val localityCounts = localities.groupBy(identity).mapValues(_.size)
+    val localityNamesAndCounts = localityCounts.toSeq.map { case (locality, count) =>
+      val localityName = locality match {
+        case TaskLocality.PROCESS_LOCAL => "Process local"
+        case TaskLocality.NODE_LOCAL => "Node local"
+        case TaskLocality.RACK_LOCAL => "Rack local"
+        case TaskLocality.ANY => "Any"
       }
-    })
-    return localityCounts.map { _ match {
-      case (localityLevel, count) => s"$localityLevel: $count task(s)"
-    }}.mkString("; ")
+      (localityName, count)
+    }
+    localityNamesAndCounts.sorted.mkString("; ")
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
