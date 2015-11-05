@@ -536,7 +536,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       .toString(view.getTokenStartIndex, view.getTokenStopIndex)
 
     val childPlan = nodeToPlan(query, context)
-    val withUDFs = childPlan.collect {
+    val withUDFs = childPlan.flatMap {
         case p =>
           p.expressions.collect {
             case _: UnresolvedFunction => true
