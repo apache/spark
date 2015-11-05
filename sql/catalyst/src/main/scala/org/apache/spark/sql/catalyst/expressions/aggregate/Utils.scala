@@ -244,6 +244,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     }
 
     // Extract distinct aggregate expressions.
+    // TODO try to get the distinct group as small
     val distinctAggGroups = aggExpressions
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
@@ -280,12 +281,9 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
           val id = Literal(i + 1)
 
           // Expand projection
-          val projection = distinctAggChildren.map { e =>
-            if (group.contains(e)) {
-              e
-            } else {
-              nullify(e)
-            }
+          val projection = distinctAggChildren.map {
+            case e if group.contains(e) => e
+            case e => nullify(e)
           } :+ id
 
           // Final aggregate
@@ -304,26 +302,28 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair).toMap
 
       // Setup aggregates for 'regular' aggregate expressions.
+      val regularGroupId = Literal(0)
       val regularAggOperatorMap = regularAggExprs.map { e =>
-        val id = Literal(0)
-
         // Perform the actual aggregation in the initial aggregate.
-        val af = patchAggregateFunctionChildren(e.aggregateFunction, id, regularAggChildAttrMap)
+        val af = patchAggregateFunctionChildren(
+          e.aggregateFunction,
+          regularGroupId,
+          regularAggChildAttrMap)
         val a = Alias(e.copy(aggregateFunction = af), e.toString)()
 
         // Get the result of the first aggregate in the last aggregate.
         val b = AggregateExpression2(
-          aggregate.First(evalWithinGroup(id, a.toAttribute), Literal(true)),
+          aggregate.First(evalWithinGroup(regularGroupId, a.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
         (e, a, b)
       }
 
-      // Construct the regular aggregate input projection only when we need one.
+      // Construct the regular aggregate input projection only if we need one.
       val regularAggProjection = if (regularAggExprs.nonEmpty) {
         Seq(a.groupingExpressions ++
           distinctAggChildren.map(nullify) ++
-          Seq(Literal(0)) ++
+          Seq(regularGroupId) ++
           regularAggChildren)
       } else {
         Seq.empty[Seq[Expression]]
@@ -353,11 +353,21 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
         expand)
 
       // Construct the second aggregate
-      val transformations = (groupByMap ++
-        distinctAggOperatorMap.flatMap(_._2) ++
-        regularAggOperatorMap.map(e => (e._1, e._3))).toMap
+      val transformations: Map[Expression, Expression] =
+        (distinctAggOperatorMap.flatMap(_._2) ++
+          regularAggOperatorMap.map(e => (e._1, e._3))).toMap
+
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
-        e.transformDown(transformations).asInstanceOf[NamedExpression]
+        e.transformDown {
+          case e: Expression =>
+            // GROUP BY can different in form (name) but must be semantically equal. This makes
+            // a map lookup tricky. So we do a linear search for a semantically equal group by
+            // expression.
+            groupByMap
+              .find(ge => e.semanticEquals(ge._1))
+              .map(_._2)
+              .getOrElse(transformations.getOrElse(e, e))
+        }.asInstanceOf[NamedExpression]
       }
       Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
@@ -368,7 +378,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
   private def nullify(e: Expression) = Literal.create(null, e.dataType)
 
   private def expressionAttributePair(e: Expression) =
-    // We are creating a new reference here instead of reusing a reference in case of a
+    // We are creating a new reference here instead of reusing the attribute in case of a
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
