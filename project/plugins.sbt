@@ -32,3 +32,5 @@ addSbtPlugin("io.spray" % "sbt-revolver" % "0.7.2")
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.0.3"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.0.3"
+
+addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.0.4" exclude("org.vafer", "jdeb"))

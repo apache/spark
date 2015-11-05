@@ -1,0 +1,6 @@
+#!/bin/sh
+
+userdel apache-spark
+groupdel apache-spark
+
+exit 0

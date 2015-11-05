@@ -27,6 +27,7 @@
 #   SPARK_PID_DIR   The pid files are stored. /tmp by default.
 #   SPARK_IDENT_STRING   A string representing this instance of spark. $USER by default
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
+#   SPARK_DONT_DAEMONIZE Doesn't fork and writes logs to stdout/err.
 ##
 
 usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|status) <spark-command> <spark-instance-number> <args...>"
@@ -72,19 +73,19 @@ shift
 
 spark_rotate_log ()
 {
-    log=$1;
-    num=5;
-    if [ -n "$2" ]; then
-	num=$2
-    fi
-    if [ -f "$log" ]; then # rotate logs
-	while [ $num -gt 1 ]; do
-	    prev=`expr $num - 1`
-	    [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
-	    num=$prev
-	done
-	mv "$log" "$log.$num";
-    fi
+  log=$1;
+  num=5;
+  if [ -n "$2" ]; then
+      num=$2
+  fi
+  if [ -f "$log" ]; then # rotate logs
+    while [ $num -gt 1 ]; do
+      (( prev = num - 1 ))
+      [ -f "$log.$prev" ] && mv "$log.$prev" "$log.$num"
+      num=$prev
+    done
+    mv "$log" "$log.$num";
+  fi
 }
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
@@ -146,12 +147,20 @@ run_command() {
 
   case "$mode" in
     (class)
-      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+      if [[ -n $SPARK_DONT_DAEMONIZE ]]; then
+        nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class "$command" "$@"
+      else
+        disown nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class "$command" "$@" >> "$log" 2>&1 </dev/null &
+      fi 
       newpid="$!"
       ;;
 
     (submit)
-      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
+      if [[ -n $SPARK_DONT_DAEMONIZE ]]; then
+        nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-submit --class "$command" "$@"
+      else
+        disown nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-submit --class "$command" "$@" >> "$log" 2>&1 < /dev/null &
+      fi 
       newpid="$!"
       ;;
 
@@ -160,14 +169,15 @@ run_command() {
       exit 1
       ;;
   esac
-
-  echo "$newpid" > "$pid"
-  sleep 2
-  # Check if the process has died; in that case we'll tail the log so the user can see
-  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
-    echo "failed to launch $command:"
-    tail -2 "$log" | sed 's/^/  /'
-    echo "full log in $log"
+  if [[ -z $SPARK_DONT_DAEMONIZE ]]; then
+    echo "$newpid" > "$pid"
+    sleep 2
+    # Check if the process has died; in that case we'll tail the log so the user can see
+    if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+      echo "failed to launch $command:"
+      tail -2 "$log" | sed 's/^/  /'
+      echo "full log in $log"
+    fi
   fi
 }
 

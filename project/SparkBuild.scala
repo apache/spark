@@ -28,6 +28,12 @@ import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 import spray.revolver.RevolverPlugin._
+import com.typesafe.sbt.packager._
+import com.typesafe.sbt.packager.archetypes._
+import com.typesafe.sbt.packager.debian._
+import com.typesafe.sbt.packager.linux._
+import com.typesafe.sbt.packager.linux.LinuxPlugin.autoImport._
+import com.typesafe.sbt._
 
 object BuildCommons {
 
@@ -273,8 +279,15 @@ object SparkBuild extends PomBuild {
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
     super.projectDefinitions(baseDirectory).map { x =>
-      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
-      else x.settings(Seq[Setting[_]](): _*)
+      if (projectsMap.exists(_._1 == x.id)) {
+        val p = if((assemblyProjects).map(_.project).contains(x.id)) {
+          x.enablePlugins(SbtNativePackager, DebianPlugin, JavaServerAppPackaging)
+            .settings(NativePackage.settings: _*)
+        } else x
+        p.settings(projectsMap(x.id): _*)
+      } else {
+        x.settings(Seq[Setting[_]](): _*)
+      }
     } ++ Seq[Project](OldDeps.project)
   }
 
@@ -629,4 +642,92 @@ object TestSettings {
     )
   )
 
+}
+
+object NativePackage {
+  import com.typesafe.sbt.packager.Keys._
+  import com.typesafe.sbt.packager.debian.DebianPlugin._
+  import com.typesafe.sbt.SbtNativePackager._
+
+  import sbtassembly.AssemblyUtils._
+  import sbtassembly.Plugin._
+  import AssemblyKeys._
+
+  val bins = Seq("spark-class", "spark-shell", "spark-sql", "spark-submit", "sparkR", "pyspark")
+  val sbins = Seq("spark-daemon.sh", "start-instance.sh", "start-master.sh", "spark-config.sh")
+  val confs = Seq("spark-defaults.conf")
+  val services = Seq("spark-master", "spark-slave@")
+  def shim(path: String) = s"""#!/bin/bash
+
+exec "${path}/bin/$$(basename "$$0")" "$$@"
+"""
+
+  lazy val defaultEnv = taskKey[File]("Generates the spark-env.sh")
+  lazy val binShim = taskKey[File]("The shim file for spark bins")
+
+  lazy val settings = Seq(
+    defaultEnv := {
+      // TODO: correctly determine path
+      val baseDir = baseDirectory.value / ".."
+      val tmpdir = IO.createTemporaryDirectory
+      val tmpfile = tmpdir / "spark-env.sh"
+      IO.write(tmpfile, IO.read(baseDir / "conf" / "spark-env.sh.template"))
+      IO.append(tmpfile, IO.read(baseDir / "project" / "packaging" / "linux" / "default-env.sh"))
+      tmpfile
+    },
+    binShim := {
+      val tmpdir = IO.createTemporaryDirectory
+      val tmpfile = tmpdir / "shim"
+      IO.write(tmpfile, shim("/usr/share/" + packageName.value))
+      tmpfile
+    },
+    maintainer := "Apache Spark <dev@spark.apache.org>",
+    // Spark is already taken.
+    name in Linux := name.value.replace("-assembly", "").replace("spark", "apache-spark"),
+    packageName := name.value.replace("-assembly", "").replace("spark", "apache-spark"),
+    packageSummary := "Apache Spark™ is a fast and general engine for large-scale data processing.",
+    packageDescription := "Apache Spark™ is a fast and general engine for large-scale data processing.",
+    debianPackageDependencies := Seq("openjdk-8-jre-headless", "systemd"),
+    linuxPackageMappings ++= {
+      // TODO: correctly determine path
+      val baseDir = baseDirectory.value / ".." 
+      ("load-spark-env.sh" +: bins).flatMap({ bin =>
+        Seq(
+          packageMapping((baseDir / "bin" / bin, s"/usr/share/${packageName.value}/bin/" + bin )),
+          packageMapping((binShim.value, "/usr/bin/" + bin)).withPerms("0755")
+        )
+      }) ++ confs.map({ conf =>
+        packageMapping((baseDir / "conf" / (conf + ".template") , s"/usr/share/${packageName.value}/conf/" + conf )).withConfig()
+      }) ++ sbins.map({ sbin =>
+        packageMapping((baseDir / "sbin" / sbin, s"/usr/share/${packageName.value}/sbin/" + sbin))
+      }) ++ services.map({ service =>
+        packageMapping((baseDir / "project" / "packaging" / "linux" / "systemd" / (service + ".service"), s"/lib/systemd/system/${service}.service"))
+      }) ++ Seq(
+        // TODO: Put something useful in here.
+        packageMapping(file("/dev/null") -> s"/usr/share/${packageName.value}/RELEASE" ),
+        packageMapping((defaultEnv.value, s"/usr/share/${packageName.value}/conf/spark-env.sh")),
+        packageTemplateMapping(s"/var/lib/${packageName.value}")().withUser(packageName.value).withGroup(packageName.value)
+      )
+    },
+    linuxPackageSymlinks ++= {
+      ("spark-env.sh" +: confs).map({ conf =>
+        LinuxSymlink(s"/etc/${packageName.value}/" + conf, s"/usr/share/${packageName.value}/conf/" + conf)
+      }) ++ Seq(
+        LinuxSymlink(s"/usr/share/${packageName.value}/work", s"/var/lib/${packageName.value}")
+      )
+    },
+
+    // This is not the correct way to do it, debian java requires each
+    // dependency to be packaged separately.
+    mappings in Universal := {
+      val universalMappings = (mappings in Universal).value
+      val fatJar = (assembly in Compile).value
+      // removing means filtering
+      val filtered = universalMappings filter {
+        case (file, name) =>  ! name.endsWith(".jar")
+      }
+      // add the fat jar
+      filtered :+ (fatJar -> ("lib/" + fatJar.getName))
+    }
+  )
 }
