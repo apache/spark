@@ -70,29 +70,29 @@ def limit_sql(sql, limit, conn_type):
     return sql
 
 
-def action_logging(action):
+def action_logging(f):
     '''
     Decorator to log user actions
     '''
-    def decorator(f):
-        @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            session = settings.Session()
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        session = settings.Session()
 
-            if hasattr(login.current_user, 'username'):
-                user = login.current_user.username
-            else:
-                user = 'anonymous'
+        if hasattr(login.current_user, 'username'):
+            user = login.current_user.username
+        else:
+            user = 'anonymous'
 
-            session.add(
-                models.Log(
-                    event=action,
-                    task_instance=None,
-                    owner=user))
-            session.commit()
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
+        session.add(
+            models.Log(
+                event=f.func_name,
+                task_instance=None,
+                owner=user,
+                extra=request.get_json()))
+        session.commit()
+        return f(*args, **kwargs)
+    return wrapper
+
 
 
 def gzipped(f):
