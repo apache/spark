@@ -118,7 +118,9 @@ setMethod("summarize",
           })
 
 # sum/mean/avg/min/max
-methods <- c("sum", "mean", "avg", "min", "max")
+methods <- c("sum", "mean", "avg", "min", "max",
+             "stddev", "stddev_samp", "stddev_pop",
+             "variance", "var_samp", "var_pop", "skewness", "kurtosis")
 
 createMethod <- function(name) {
   setMethod(name,
