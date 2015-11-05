@@ -27,7 +27,6 @@ setOldClass("jobj")
 #' @slot env An R environment that stores bookkeeping states of the RDD
 #' @slot jrdd Java object reference to the backing JavaRDD
 #' to an RDD
-#' @export
 #' @noRd
 setClass("RDD",
          slots = list(env = "environment",
@@ -112,7 +111,6 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 })
 
 #' @rdname RDD
-#' @export
 #' @noRd
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serializedMode Use "byte" if the RDD stores data serialized in R, "string" if the RDD
@@ -416,7 +414,6 @@ setMethod("count",
           })
 
 #' Return the number of elements in the RDD
-#' @export
 #' @rdname count
 #' @noRd
 setMethod("length",
@@ -795,7 +792,6 @@ setMethod("take",
 #' Return the first element of an RDD
 #'
 #' @rdname first
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1201,7 +1197,6 @@ setMethod("takeOrdered",
 #' @param num Number of elements to return.
 #' @return The top N elements from the RDD.
 #' @rdname top
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1227,7 +1222,6 @@ setMethod("top",
 #' @return The folding result.
 #' @rdname fold
 #' @seealso reduce
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1255,7 +1249,6 @@ setMethod("fold",
 #' @return The aggregation result.
 #' @rdname aggregateRDD
 #' @seealso reduce
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1288,7 +1281,6 @@ setMethod("aggregateRDD",
 #' @param env A named list to set environment variables of the external process.
 #' @return A new RDD created by piping all elements to a forked external process.
 #' @rdname pipeRDD
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1317,7 +1309,6 @@ setMethod("pipeRDD",
 #'
 #' @param x The RDD whose name is returned.
 #' @rdname name
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1338,7 +1329,6 @@ setMethod("name",
 #' @param name The RDD name to be set.
 #' @return a new RDD renamed.
 #' @rdname setName
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()

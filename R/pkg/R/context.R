@@ -37,7 +37,6 @@ getMinPartitions <- function(sc, minPartitions) {
 #'  value is chosen based on available parallelism.
 #' @return RDD where each item is of type \code{character}
 #' @noRd
-#' @export
 #' @examples
 #'\dontrun{
 #'  sc <- sparkR.init()
@@ -65,7 +64,6 @@ textFile <- function(sc, path, minPartitions = NULL) {
 #'  value is chosen based on available parallelism.
 #' @return RDD containing serialized R objects.
 #' @seealso saveAsObjectFile
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -93,7 +91,6 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
 #' @return an RDD created from this collection
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -146,7 +143,6 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'
 #' @param sc SparkContext to use
 #' @param pkg Package name
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -182,7 +178,6 @@ includePackage <- function(sc, pkg) {
 #'
 #' @param sc Spark Context to use
 #' @param object Object to be broadcast
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -216,7 +211,6 @@ broadcast <- function(sc, object) {
 #'
 #' @param sc Spark Context to use
 #' @param dirName Directory path
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{

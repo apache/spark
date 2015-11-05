@@ -166,7 +166,6 @@ as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
 #' @param x An RDD
 #'
 #' @rdname DataFrame
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -225,7 +224,6 @@ jsonFile <- function(sqlContext, path) {
 #' @param schema A StructType object to use as schema
 #' @param samplingRatio The ratio of simpling used to infer the schema
 #' @return A DataFrame
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{

@@ -465,7 +465,6 @@ setMethod("repartition",
 #' @return A StringRRDD of JSON objects
 #' @family DataFrame functions
 #' @rdname tojson
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -845,7 +844,6 @@ setMethod("first",
 #'
 #' @family DataFrame functions
 #' @rdname DataFrame
-#' @export
 #' @noRd
 #' @examples
 #'\dontrun{
