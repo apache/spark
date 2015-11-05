@@ -77,6 +77,9 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
+        // SPARK-11401 Superseded by generic ClassificationPMMLModelExport
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.mllib.pmml.export.BinaryClassificationPMMLModelExport")
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.regression.LeastSquaresAggregator.add"),
