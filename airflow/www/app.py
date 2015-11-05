@@ -23,10 +23,6 @@ def create_app(config=None):
 
     #app.config = config
     airflow.load_login()
-    airflow.login.login_manager = flask_login.LoginManager()
-    airflow.login.login_manager.login_view = 'airflow.login'
-    airflow.login.login_manager.login_message = None
-
     airflow.login.login_manager.init_app(app)
 
     cache = Cache(

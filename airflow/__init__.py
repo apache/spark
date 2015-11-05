@@ -39,7 +39,7 @@ def load_login():
     try:
         global login
         login = import_module(auth_backend)
-    except ImportError, err:
+    except ImportError as err:
         logging.critical(
             "Cannot import authentication module %s. "
             "Please correct your authentication backend or disable authentication: %s",

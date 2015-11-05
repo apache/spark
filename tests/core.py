@@ -458,7 +458,7 @@ class WebLdapAuthTest(unittest.TestCase):
             configuration.conf.add_section("ldap")
         except:
             pass
-        configuration.conf.set("ldap", "uri", "ldap://localhost")
+        configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
         configuration.conf.set("ldap", "user_filter", "objectClass=*")
         configuration.conf.set("ldap", "user_name_attr", "True")
         configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
@@ -483,23 +483,21 @@ class WebLdapAuthTest(unittest.TestCase):
     def test_login_logout_ldap(self):
         assert configuration.conf.getboolean('webserver', 'authenticate') is True
 
-        #response = self.login('user1', 'userx')
-        #print(response.data)
-        #assert 'Incorrect login details' in response.data
+        response = self.login('user1', 'userx')
+        assert 'Incorrect login details' in response.data
 
-        #response = self.login('userz', 'user1')
-        #assert 'Incorrect login details' in response.data
+        response = self.login('userz', 'user1')
+        assert 'Incorrect login details' in response.data
 
-        #response = self.login('user1', 'user1')
-        #assert 'Data Profiling' in response.data
+        response = self.login('user1', 'user1')
+        assert 'Data Profiling' in response.data
 
-        #response = self.logout()
-        #assert 'form-signin' in response.data
+        response = self.logout()
+        assert 'form-signin' in response.data
 
     def test_unauthorized(self):
-        response = self.app.get("/")
-        print response.data
-        assert '403 Forbidden' in response.data
+        response = self.app.get("/admin/airflow/landing_times")
+        self.assertEqual(response.status_code, 302)
 
     def tearDown(self):
         configuration.test_mode()
