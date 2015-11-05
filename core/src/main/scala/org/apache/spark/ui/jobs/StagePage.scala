@@ -21,6 +21,7 @@ import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.{Elem, Node, Unparsed}
 
@@ -69,6 +70,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
   private val displayPeakExecutionMemory = parent.conf.getBoolean("spark.sql.unsafe.enabled", true)
+
+  private def getLocalitySummaryString(stageData: StageUIData): String = {
+    val localityCounts = new HashMap[String, Long]
+    stageData.taskData.values.foreach( taskUIData => {
+      val locality = taskUIData.taskInfo.taskLocality.toString
+      localityCounts.put(locality, localityCounts.getOrElse(locality, 0L) + 1)
+    })
+    return localityCounts.map { _ match {
+      case (localityLevel, count) => s"$localityLevel ($count)"
+    }}.mkString("; ")
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     progressListener.synchronized {
@@ -128,6 +140,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             <li>
               <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
+            </li>
+            <li>
+              <strong>Locality Level Summary: </strong>
+              {getLocalitySummaryString(stageData)}
             </li>
             {if (stageData.hasInput) {
               <li>
