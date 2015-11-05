@@ -511,8 +511,7 @@ class LinearRegressionSummary private[regression] (
   }
 
   /**
-   * Standard error of estimated coefficients.
-   * Note that standard error of estimated intercept is not supported currently.
+   * Standard error of estimated coefficients and intercept.
    */
   lazy val coefficientStandardErrors: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -532,21 +531,26 @@ class LinearRegressionSummary private[regression] (
     }
   }
 
-  /** T-statistic of estimated coefficients.
-    * Note that t-statistic of estimated intercept is not supported currently.
-    */
+  /**
+   * T-statistic of estimated coefficients and intercept.
+   */
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
         "No t-statistic available for this LinearRegressionModel")
     } else {
-      model.coefficients.toArray.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
+      val estimate = if (model.getFitIntercept) {
+        Array.concat(model.coefficients.toArray, Array(model.intercept))
+      } else {
+        model.coefficients.toArray
+      }
+      estimate.zip(coefficientStandardErrors).map { x => x._1 / x._2 }
     }
   }
 
-  /** Two-sided p-value of estimated coefficients.
-    * Note that p-value of estimated intercept is not supported currently.
-    */
+  /**
+   * Two-sided p-value of estimated coefficients and intercept.
+   */
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
       throw new UnsupportedOperationException(
