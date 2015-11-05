@@ -31,7 +31,9 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
   var tempDir: File = _
   var mapStatusFile: File = _
   // use the "port" as a way to distinguish mapstatuses, just for the test
-  def mapStatus(attemptId: Int): MapStatus = MapStatus(BlockManagerId("1", "a.b.c", attemptId), Array(0L, 1L))
+  def mapStatus(attemptId: Int): MapStatus = {
+    MapStatus(BlockManagerId("1", "a.b.c", attemptId), Array(0L, 1L))
+  }
   def ser: SerializerInstance = new JavaSerializer(new SparkConf()).newInstance()
 
   override def beforeEach(): Unit = {
