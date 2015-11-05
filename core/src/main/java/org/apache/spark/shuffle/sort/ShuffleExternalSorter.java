@@ -115,7 +115,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.writeMetrics = writeMetrics;
-    this.inMemSorter = new ShuffleInMemorySorter(this, taskMemoryManager, initialSize);
+    this.inMemSorter = new ShuffleInMemorySorter(this, initialSize);
     this.peakMemoryUsedBytes = getMemoryUsage();
   }
 
@@ -320,10 +320,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
-      MemoryBlock page;
+      LongArray array;
       try {
         // could trigger spilling
-        page = taskMemoryManager.allocatePage(used * 2, this);
+        array = allocateArray(used / 8 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
@@ -331,9 +331,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
-        freePage(page);
+        freeArray(array);
       } else {
-        inMemSorter.expandPointerArray(new LongArray(page));
+        inMemSorter.expandPointerArray(array);
       }
     }
   }

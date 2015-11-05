@@ -65,6 +65,9 @@ public final class LongArray {
     return length;
   }
 
+  /**
+   * Fill this all with 0L.
+   */
   public void zeroOut() {
     for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
       Platform.putLong(baseObj, off, 0);

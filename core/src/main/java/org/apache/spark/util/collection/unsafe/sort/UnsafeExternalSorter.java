@@ -292,10 +292,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
-      MemoryBlock page;
+      LongArray array;
       try {
         // could trigger spilling
-        page = taskMemoryManager.allocatePage(used * 2, this);
+        array = allocateArray(used / 16 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
@@ -303,9 +303,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
-        freePage(page);
+        freeArray(array);
       } else {
-        inMemSorter.expandPointerArray(new LongArray(page));
+        inMemSorter.expandPointerArray(array);
       }
     }
   }

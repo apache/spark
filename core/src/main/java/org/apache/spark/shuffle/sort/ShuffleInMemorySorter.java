@@ -20,10 +20,8 @@ package org.apache.spark.shuffle.sort;
 import java.util.Comparator;
 
 import org.apache.spark.memory.MemoryConsumer;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 final class ShuffleInMemorySorter {
@@ -38,7 +36,6 @@ final class ShuffleInMemorySorter {
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
 
   private final MemoryConsumer consumer;
-  private final TaskMemoryManager memoryManager;
 
   /**
    * An array of record pointers and partition ids that have been encoded by
@@ -52,20 +49,16 @@ final class ShuffleInMemorySorter {
    */
   private int pos = 0;
 
-  public ShuffleInMemorySorter(
-      MemoryConsumer consumer,
-      TaskMemoryManager memoryManager,
-      int initialSize) {
+  public ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
     this.consumer = consumer;
-    this.memoryManager = memoryManager;
     assert (initialSize > 0);
-    this.array = new LongArray(memoryManager.allocatePage(initialSize * 8L, consumer));
+    this.array = consumer.allocateArray(initialSize);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
 
   public void free() {
     if (array != null) {
-      memoryManager.freePage(array.memoryBlock(), consumer);
+      consumer.freeArray(array);
       array = null;
     }
   }
@@ -87,7 +80,7 @@ final class ShuffleInMemorySorter {
       newArray.getBaseOffset(),
       array.size() * 8L
     );
-    memoryManager.freePage(array.memoryBlock(), consumer);
+    consumer.freeArray(array);
     array = newArray;
   }
 
@@ -111,10 +104,7 @@ final class ShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      // for testing
-      LongArray newArray =
-        new LongArray(memoryManager.allocatePage(array.size() * 8 * 2, consumer));
-      expandPointerArray(newArray);
+      expandPointerArray(consumer.allocateArray(array.size() * 2));
     }
     array.set(pos, PackedRecordPointer.packPointer(recordPointer, partitionId));
     pos++;

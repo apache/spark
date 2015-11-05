@@ -87,7 +87,7 @@ public final class UnsafeInMemorySorter {
     final PrefixComparator prefixComparator,
     int initialSize) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      new LongArray(memoryManager.allocatePage(initialSize * 2 * 8L, consumer)));
+      consumer.allocateArray(initialSize * 2));
   }
 
   public UnsafeInMemorySorter(
@@ -107,7 +107,7 @@ public final class UnsafeInMemorySorter {
    * Free the memory used by pointer array.
    */
   public void free() {
-    memoryManager.freePage(array.memoryBlock(), consumer);
+    consumer.freeArray(array);
   }
 
   public void reset() {
@@ -139,7 +139,7 @@ public final class UnsafeInMemorySorter {
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
       array.size() * 8L);
-    memoryManager.freePage(array.memoryBlock(), consumer);
+    consumer.freeArray(array);
     array = newArray;
   }
 
@@ -152,8 +152,7 @@ public final class UnsafeInMemorySorter {
    */
   public void insertRecord(long recordPointer, long keyPrefix) {
     if (!hasSpaceForAnotherRecord()) {
-      // for testing
-      expandPointerArray(new LongArray(memoryManager.allocatePage(array.size() * 2 * 8, consumer)));
+      expandPointerArray(consumer.allocateArray(array.size() * 2));
     }
     array.set(pos, recordPointer);
     pos++;

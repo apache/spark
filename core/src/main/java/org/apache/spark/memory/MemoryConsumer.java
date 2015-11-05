@@ -20,6 +20,7 @@ package org.apache.spark.memory;
 
 import java.io.IOException;
 
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 
@@ -94,6 +95,32 @@ public abstract class MemoryConsumer {
   protected void releaseMemory(long size) {
     used -= size;
     taskMemoryManager.releaseExecutionMemory(size, this);
+  }
+
+  /**
+   * Allocate a LongArray with `size`.
+   */
+  public LongArray allocateArray(long size) {
+    long required = size * 8L;
+    MemoryBlock page = taskMemoryManager.allocatePage(required, this);
+    if (page == null || page.size() < required) {
+      long got = 0;
+      if (page != null) {
+        got = page.size();
+        freePage(page);
+      }
+      taskMemoryManager.showMemoryUsage();
+      throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
+    }
+    used += required;
+    return new LongArray(page);
+  }
+
+  /**
+   * Frees a LongArray.
+   */
+  public void freeArray(LongArray array) {
+    freePage(array.memoryBlock());
   }
 
   /**

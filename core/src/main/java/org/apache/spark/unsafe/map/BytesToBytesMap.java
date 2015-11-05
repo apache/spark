@@ -723,14 +723,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
-    capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
+    capacity = (int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity));
     assert (capacity <= MAX_CAPACITY);
-    MemoryBlock page = taskMemoryManager.allocatePage(capacity * 2 * 8, this);
-    if (page == null || page.size() < capacity * 2 * 8) {
-      throw new OutOfMemoryError("not enough memory for array");
-    }
-    longArray = new LongArray(page);
+    longArray = allocateArray(capacity * 2);
     longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
@@ -746,7 +741,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void free() {
     updatePeakMemoryUsed();
     if (longArray != null) {
-      freePage(longArray.memoryBlock());
+      freeArray(longArray);
       longArray = null;
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
@@ -890,7 +885,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       longArray.set(newPos * 2, keyPointer);
       longArray.set(newPos * 2 + 1, hashcode);
     }
-    freePage(oldLongArray.memoryBlock());
+    freeArray(oldLongArray);
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
