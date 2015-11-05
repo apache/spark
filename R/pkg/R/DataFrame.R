@@ -1935,25 +1935,12 @@ setMethod("coltypes",
               type <- PRIMITIVE_TYPES[[x]]
               if (is.null(type)) {
                 # Check for complex types
-                for (t in names(COMPLEX_TYPES)) {
-                  if (substring(x, 1, nchar(t)) == t) {
-                    type <- COMPLEX_TYPES[[t]]
-                    break
-                  }
-                }
-
-                if (is.null(type)) {
+                typeName <- Filter(function(t) { substring(x, 1, nchar(t)) == t}, names(COMPLEX_TYPES))
+                if (length(typeName) > 0) {
+                  type <- COMPLEX_TYPES[[typeName]]
+                } else {
                   stop(paste("Unsupported data type: ", x))
                 }
               }
               type
             })
-
-            # Find which types don't have mapping to R
-            naIndices <- which(is.na(rTypes))
-
-            # Assign the original scala data types to the unmatched ones
-            rTypes[naIndices] <- types[naIndices]
-
-            rTypes
-          })
