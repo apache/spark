@@ -147,8 +147,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       cores: Int,
       appId: String,
       workerUrl: Option[String],
-      userClassPath: Seq[URL],
-      rpcFramework: Option[String]) {
+      userClassPath: Seq[URL]) {
 
     SignalLogger.register(log)
 
@@ -159,9 +158,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val port = executorConf.getInt("spark.executor.port", 0)
-      if(rpcFramework.isDefined) {
-        executorConf.set("spark.rpc", rpcFramework.get)
-      }
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
         hostname,
@@ -216,7 +212,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
-    var rpcFramework: Option[String] = None
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -243,9 +238,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         case ("--user-class-path") :: value :: tail =>
           userClassPath += new URL(value)
           argv = tail
-        case ("--rpc-framework") :: value :: tail =>
-          rpcFramework = Some(value)
-          argv = tail
         case Nil =>
         case tail =>
           // scalastyle:off println
@@ -260,7 +252,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       printUsageAndExit()
     }
 
-    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath, rpcFramework)
+    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
   }
 
   private def printUsageAndExit() = {
@@ -277,7 +269,6 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       |   --app-id <appid>
       |   --worker-url <workerUrl>
       |   --user-class-path <url>
-      |   --rpc-framework <rpcFramework>
       |""".stripMargin)
     // scalastyle:on println
     System.exit(1)
