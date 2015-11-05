@@ -400,6 +400,11 @@ object SparkSubmit {
       printErrorAndExit("Distributing R packages with standalone cluster is not supported.")
     }
 
+    // TODO: Support SparkR with mesos cluster
+    if (args.isR && clusterManager == MESOS) {
+      printErrorAndExit("SparkR is not supported for Mesos cluster.")
+    }
+
     // If we're running a R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
