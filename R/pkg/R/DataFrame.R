@@ -2188,7 +2188,8 @@ setMethod("coltypes",
               type <- PRIMITIVE_TYPES[[x]]
               if (is.null(type)) {
                 # Check for complex types
-                typeName <- Filter(function(t) { substring(x, 1, nchar(t)) == t}, names(COMPLEX_TYPES))
+                typeName <- Filter(function(t) { substring(x, 1, nchar(t)) == t}, 
+                                   names(COMPLEX_TYPES))
                 if (length(typeName) > 0) {
                   type <- COMPLEX_TYPES[[typeName]]
                 } else {
