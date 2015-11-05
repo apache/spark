@@ -137,12 +137,27 @@ private[spark] object CodeGenerationDecisionTreeModel {
           case split: CategoricalSplit => {
             val isLeft = split.isLeft
             isLeft match {
-              case true => q"if (categories.contains(input(${split.featureIndex}))) { ${NodeToTree(node.leftChild)} } else { ${NodeToTree(node.rightChild)} }"
-              case false => q"if (categories.contains(input(${split.featureIndex}))) { ${NodeToTree(node.leftChild)} } else { ${NodeToTree(node.rightChild)} }"
+              case true => q"""
+                              if (categories.contains(input(${split.featureIndex}))) {
+                                ${NodeToTree(node.leftChild)}
+                              } else {
+                                ${NodeToTree(node.rightChild)}
+                              }"""
+              case false => q"""
+                               if (categories.contains(input(${split.featureIndex}))) {
+                                 ${NodeToTree(node.leftChild)}
+                               } else {
+                                 ${NodeToTree(node.rightChild)}
+                               }"""
             }
           }
           case split: ContinuousSplit => {
-            q"if (input(${split.featureIndex}) <= ${split.threshold}) { ${NodeToTree(node.leftChild)} } else { ${NodeToTree(node.rightChild)} }"
+            q"""
+               if (input(${split.featureIndex}) <= ${split.threshold}) {
+                 ${NodeToTree(node.leftChild)}
+                } else {
+                 ${NodeToTree(node.rightChild)}
+                }"""
           }
         }
       }
