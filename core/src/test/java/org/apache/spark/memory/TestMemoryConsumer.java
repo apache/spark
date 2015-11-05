@@ -27,16 +27,18 @@ public class TestMemoryConsumer extends MemoryConsumer {
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
     long used = getUsed();
-    releaseMemory(used);
+    free(used);
     return used;
   }
 
   void use(long size) {
-    acquireMemory(size);
+    long got = taskMemoryManager.acquireExecutionMemory(size, this);
+    used += got;
   }
 
   void free(long size) {
-    releaseMemory(size);
+    used -= size;
+    taskMemoryManager.releaseExecutionMemory(size, this);
   }
 }
 
