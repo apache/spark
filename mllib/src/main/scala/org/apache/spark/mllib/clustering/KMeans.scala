@@ -238,6 +238,9 @@ class KMeans private (
       runs
     }
 
+    // Centers initialization (random, ||)
+    // Array of Arrays of VectorWithNorms
+    // there is one array of centers per run (if more than one model is trained)
     val centers = initialModel match {
       case Some(kMeansCenters) => {
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
@@ -254,52 +257,96 @@ class KMeans private (
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
       " seconds.")
 
+    // Initially all runs are active (active == true means the according run has not yet converged)
+    // Also Array of Arrays
     val active = Array.fill(numRuns)(true)
+    // Initially the costs are 0.0 for all runs
+    // Also Array of Arrays
     val costs = Array.fill(numRuns)(0.0)
 
+    // 0, 1, 2, .... nunRuns-1 - ArrayBuffer containing the remaining active runs
+    // Initially it contains all the runs
     var activeRuns = new ArrayBuffer[Int] ++ (0 until numRuns)
     var iteration = 0
 
     val iterationStartTime = System.nanoTime()
 
+    // Stop condition is given by
+    // - no more active runs (all runs converged)
+    // - maximum number of iterations reached
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
+
       type WeightedPoint = (Vector, Long)
+      // this is the function that will be used in the reduce phase
       def mergeContribs(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
+        // y += a * x
+        // - in this case y += x
         axpy(1.0, x._1, y._1)
         (y._1, x._2 + y._2)
       }
 
+      // the centers for each run still active
       val activeCenters = activeRuns.map(r => centers(r)).toArray
+      // the cost for each run - one accumulator per run
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
+      // broadcast the centers
       val bcActiveCenters = sc.broadcast(activeCenters)
 
+      // mapPartitions - Return a new RDD by applying a function to each partition of this RDD
+      // reduceByKey - Merge the values for each key using an associative reduce function
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>
+
+        // we're inside the Spark magic now
+        // one Array of centers per each active run
         val thisActiveCenters = bcActiveCenters.value
+        // how many runs are still active
         val runs = thisActiveCenters.length
+        // how many clusters are needed (k)
         val k = thisActiveCenters(0).length
+        // the space dimension (munber of coordinates)
         val dims = thisActiveCenters(0)(0).vector.size
 
+        // sums are zero (per runs per each dimension)
         val sums = Array.fill(runs, k)(Vectors.zeros(dims))
+        // counts are zero  (per run per each dimension)
         val counts = Array.fill(runs, k)(0L)
+
+        // ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        // Here we assign points to clusters
+        // Compute the total cost (sum of distances), sum and count
 
         points.foreach { point =>
           (0 until runs).foreach { i =>
+            // WE ARE IN THE CONTEXT OF A SPECIFIC RUN HERE
+            // Returns the index of the closest center to the given point, as well as the squared distance.
+            // TODO - here we need something different for CMeans
             val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
+            // the total cost increases
             costAccums(i) += cost
+            // add the current point to the cluster sum
             val sum = sums(i)(bestCenter)
             axpy(1.0, point.vector, sum)
+            // increase point count for current cluster
             counts(i)(bestCenter) += 1
           }
         }
 
+        // ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        // For every run and every cluster the sum and count are emitted
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
           ((i, j), (sums(i)(j), counts(i)(j)))
         }
         contribs.iterator
+        // The key is a combination of run and cluster
+        // reduceByKey computes the values accross clusters (sum and count)
       }.reduceByKey(mergeContribs).collectAsMap()
+
+      // At this point, for each run, each cluster,
+      // we know the sum of vectors and the number of points
 
       // Update the cluster centers and costs for each active run
       for ((run, i) <- activeRuns.zipWithIndex) {
@@ -308,8 +355,11 @@ class KMeans private (
         while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
+            // x = a * x - multiplies a vector with a scalar
+            // Compute new center
             scal(1.0 / count, sum)
             val newCenter = new VectorWithNorm(sum)
+            // Changed - (distance greater than epsilon squared)
             if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
               changed = true
             }
@@ -318,13 +368,17 @@ class KMeans private (
           j += 1
         }
         if (!changed) {
+          // Kill the run that converged already
           active(run) = false
           logInfo("Run " + run + " finished in " + (iteration + 1) + " iterations")
         }
         costs(run) = costAccums(i).value
       }
 
+      // remove runs no longer active (active switches to false if there are no changes
+      // between 2 successive iterations)
       activeRuns = activeRuns.filter(active(_))
+      // increase number of iterations
       iteration += 1
     }
 
