@@ -21,6 +21,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -143,6 +144,26 @@ final class GBTClassifier @Since("1.4.0") (
     }
   }
 
+//  override protected def train(dataset: DataFrame): GBTClassificationModel = {
+//    val categoricalFeatures: Map[Int, Int] =
+//      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+//    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
+//      case Some(n: Int) => n
+//      case None => throw new IllegalArgumentException("GBTClassifier was given input" +
+//        s" with invalid label column ${$(labelCol)}, without the number of classes" +
+//        " specified. See StringIndexer.")
+//      // TODO: Automatically index labels: SPARK-7126
+//    }
+//    require(numClasses == 2,
+//      s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
+//    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+//    val numFeatures = oldDataset.first().features.size
+//    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
+//    val oldGBT = new OldGBT(boostingStrategy)
+//    val oldModel = oldGBT.run(oldDataset)
+//    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
+//  }
+
   override protected def train(dataset: DataFrame): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
@@ -158,9 +179,10 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val oldGBT = new OldGBT(boostingStrategy)
-    val oldModel = oldGBT.run(oldDataset)
-    GBTClassificationModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    // TODO: uid not implemented properly
+    val uid = Identifiable.randomUID("gbtr")
+    new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
   @Since("1.4.1")

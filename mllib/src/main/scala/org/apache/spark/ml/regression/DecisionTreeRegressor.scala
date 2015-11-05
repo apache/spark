@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 
+import org.apache.spark.mllib.tree.configuration.Strategy
+
 /**
  * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] learning algorithm
@@ -87,6 +89,15 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
+  // added so we can train from an rdd and not dataframe
+  // alternatively we could just convert the rdd to a dataframe
+  private[ml] def trainOld(data: RDD[LabeledPoint],
+      oldStrategy: Strategy): DecisionTreeRegressionModel = {
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
+      seed = 0L, parentUID = Some(uid))
+    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+  }
+
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(categoricalFeatures: Map[Int, Int]): OldStrategy = {
     super.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, getOldImpurity,
@@ -132,7 +143,8 @@ final class DecisionTreeRegressionModel private[ml] (
   private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
-  override protected def predict(features: Vector): Double = {
+  // TODO: removed protected keyword
+  override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 

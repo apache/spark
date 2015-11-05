@@ -59,7 +59,8 @@ case class BoostingStrategy @Since("1.4.0") (
    * Check validity of parameters.
    * Throws exception if invalid.
    */
-  private[tree] def assertValid(): Unit = {
+  // TODO: changed scope
+  private[spark] def assertValid(): Unit = {
     treeStrategy.algo match {
       case Classification =>
         require(treeStrategy.numClasses == 2,
