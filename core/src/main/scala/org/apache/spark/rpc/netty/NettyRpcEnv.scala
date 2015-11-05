@@ -22,25 +22,63 @@ import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy
+import javax.annotation.Nullable
 
-import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
 
-import com.google.common.base.Preconditions
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server._
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance}
 import org.apache.spark.util.{ThreadUtils, Utils}
+
+/**
+ * To make the user control shuffle and RPC separately, this class creates a new SparkConf that
+ * removes all shuffle configurations and convert RPC configurations to shuffle configurations.
+ */
+private[netty] class RPCConfAdapter(conf: SparkConf) {
+
+  private val _conf = conf.clone
+
+  private val mappings = Map(
+    "spark.rpc.io.mode" -> "spark.shuffle.io.mode",
+    "spark.rpc.io.preferDirectBufs" -> "spark.shuffle.io.preferDirectBufs",
+    "spark.rpc.io.connectionTimeout" -> "spark.shuffle.io.connectionTimeout",
+    "spark.rpc.io.backLog" -> "spark.shuffle.io.backLog",
+    "spark.rpc.io.serverThreads" -> "spark.shuffle.io.serverThreads",
+    "spark.rpc.io.clientThreads" -> "spark.shuffle.io.clientThreads",
+    "spark.rpc.io.receiveBuffer" -> "spark.shuffle.io.receiveBuffer",
+    "spark.rpc.io.sendBuffer" -> "spark.shuffle.io.sendBuffer",
+    "spark.rpc.sasl.timeout" -> "spark.shuffle.sasl.timeout",
+    "spark.rpc.io.maxRetries" -> "spark.shuffle.io.maxRetries",
+    "spark.rpc.io.retryWait" -> "spark.shuffle.io.retryWait"
+  )
+
+  // Clear shuffle configurations
+  mappings.values.foreach(_conf.remove)
+
+  // Convert RPC configurations to shuffle configurations
+  mappings.foreach { case (rpcConfKey, networkConfKey) =>
+    _conf.getOption(rpcConfKey).foreach { value =>
+      _conf.set(networkConfKey, value)
+    }
+  }
+
+  // Always use one connection for RPC
+  _conf.clone.set("spark.shuffle.io.numConnectionsPerPeer", "1")
+
+  def toTransportConf: TransportConf = {
+    SparkTransportConf.fromSparkConf(_conf, _conf.getInt("spark.rpc.io.threads", 0))
+  }
+}
 
 private[netty] class NettyRpcEnv(
     val conf: SparkConf,
@@ -48,9 +86,7 @@ private[netty] class NettyRpcEnv(
     host: String,
     securityManager: SecurityManager) extends RpcEnv(conf) with Logging {
 
-  private val transportConf = SparkTransportConf.fromSparkConf(
-    conf.clone.set("spark.shuffle.io.numConnectionsPerPeer", "1"),
-    conf.getInt("spark.rpc.io.threads", 0))
+  private val transportConf = new RPCConfAdapter(conf).toTransportConf
 
   private val dispatcher: Dispatcher = new Dispatcher(this)
 
