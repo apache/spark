@@ -32,6 +32,10 @@ import org.apache.spark.memory.TaskMemoryManager;
 
 public class ShuffleInMemorySorterSuite {
 
+  final TestMemoryManager memoryManager =
+    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+  final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
@@ -40,7 +44,7 @@ public class ShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingEmptyInput() {
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(100);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(null, taskMemoryManager, 100);
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     assert(!iter.hasNext());
   }
@@ -63,7 +67,7 @@ public class ShuffleInMemorySorterSuite {
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
     final Object baseObject = dataPage.getBaseObject();
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(null, taskMemoryManager, 4);
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 
     // Write the records into the data page and store pointers into the sorter
@@ -104,7 +108,7 @@ public class ShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingManyNumbers() throws Exception {
-    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(4);
+    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(null, taskMemoryManager, 4);
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {

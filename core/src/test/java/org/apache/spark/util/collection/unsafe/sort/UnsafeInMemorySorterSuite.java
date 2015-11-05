@@ -44,7 +44,7 @@ public class UnsafeInMemorySorterSuite {
 
   @Test
   public void testSortingEmptyInput() {
-    final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(
+    final UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(null,
       new TaskMemoryManager(
         new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0),
       mock(RecordComparator.class),
@@ -102,7 +102,7 @@ public class UnsafeInMemorySorterSuite {
         return (int) prefix1 - (int) prefix2;
       }
     };
-    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(memoryManager, recordComparator,
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(null, memoryManager, recordComparator,
       prefixComparator, dataToSort.length);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
