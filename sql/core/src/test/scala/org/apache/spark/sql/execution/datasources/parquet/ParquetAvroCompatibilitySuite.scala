@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.File
 import java.nio.ByteBuffer
 import java.util.{List => JList, Map => JMap}
 
@@ -27,6 +26,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.avro.AvroParquetWriter
+import org.apache.parquet.hadoop.ParquetWriter
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.parquet.test.avro._
@@ -35,14 +35,14 @@ import org.apache.spark.sql.test.SharedSQLContext
 class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with SharedSQLContext {
   private def withWriter[T <: IndexedRecord]
       (path: String, schema: Schema)
-      (f: AvroParquetWriter[T] => Unit): Unit = {
+      (f: ParquetWriter[T] => Unit): Unit = {
     logInfo(
       s"""Writing Avro records with the following Avro schema into Parquet file:
          |
          |${schema.toString(true)}
        """.stripMargin)
 
-    val writer = new AvroParquetWriter[T](new Path(path), schema)
+    val writer = AvroParquetWriter.builder[T](new Path(path)).withSchema(schema).build()
     try f(writer) finally writer.close()
   }
 
@@ -163,8 +163,56 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     }
   }
 
-  ignore("nullable arrays (parquet-avro 1.7.0 does not properly support this)") {
-    // TODO Complete this test case after upgrading to parquet-mr 1.8+
+  test("nullable arrays") {
+    withTempPath { dir =>
+      import ParquetCompatibilityTest._
+
+      // This Parquet schema is translated from the following Avro schema, with Hadoop configuration
+      // `parquet.avro.write-old-list-structure` set to `false`:
+      //
+      //   record AvroArrayOfOptionalInts {
+      //     array<union { null, int }> f;
+      //   }
+      val schema =
+        """message AvroArrayOfOptionalInts {
+          |  required group f (LIST) {
+          |    repeated group list {
+          |      optional int32 element;
+          |    }
+          |  }
+          |}
+        """.stripMargin
+
+      writeDirect(dir.getCanonicalPath, schema, { rc =>
+        rc.message {
+          rc.field("f", 0) {
+            rc.group {
+              rc.field("list", 0) {
+                rc.group {
+                  rc.field("element", 0) {
+                    rc.addInteger(0)
+                  }
+                }
+
+                rc.group { /* null */ }
+
+                rc.group {
+                  rc.field("element", 0) {
+                    rc.addInteger(1)
+                  }
+                }
+
+                rc.group { /* null */ }
+              }
+            }
+          }
+        }
+      })
+
+      checkAnswer(
+        sqlContext.read.parquet(dir.getCanonicalPath),
+        Row(Array(0: Integer, null, 1: Integer, null)))
+    }
   }
 
   test("SPARK-10136 array of primitive array") {

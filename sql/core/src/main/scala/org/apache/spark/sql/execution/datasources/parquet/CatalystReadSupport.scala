@@ -25,11 +25,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.hadoop.api.ReadSupport.ReadContext
 import org.apache.parquet.hadoop.api.{InitContext, ReadSupport}
 import org.apache.parquet.io.api.RecordMaterializer
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32
 import org.apache.parquet.schema.Type.Repetition
 import org.apache.parquet.schema._
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
@@ -112,10 +112,30 @@ private[parquet] object CatalystReadSupport {
    */
   def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema)
-    Types
-      .buildMessage()
-      .addFields(clippedParquetFields: _*)
-      .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+
+    if (clippedParquetFields.isEmpty) {
+      // !! HACK ALERT !!
+      //
+      // PARQUET-363 & PARQUET-278: parquet-mr 1.8.1 doesn't allow constructing empty GroupType,
+      // which prevents us to avoid selecting any columns for queries like `SELECT COUNT(*) FROM t`.
+      // This issue has been fixed in parquet-mr 1.8.2-SNAPSHOT.
+      //
+      // To workaround this problem, here we first construct a `MessageType` with a single dummy
+      // field, and then remove the field to obtain an empty `MessageType`.
+      //
+      // TODO Reverts this change after upgrading parquet-mr to 1.8.2+
+      val messageType = Types
+        .buildMessage()
+        .addField(Types.required(INT32).named("dummy"))
+        .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+      messageType.getFields.clear()
+      messageType
+    } else {
+      Types
+        .buildMessage()
+        .addFields(clippedParquetFields: _*)
+        .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+    }
   }
 
   private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {
