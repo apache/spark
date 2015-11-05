@@ -696,7 +696,7 @@ class DataFrame private[sql](
    */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(schema.fieldNames.map(resolve)))
+      Column(ResolvedStar(schema.fieldNames.map(name => resolve(s"`$name`"))))
     case _ =>
       val expr = resolve(colName)
       Column(expr)
@@ -1241,11 +1241,14 @@ class DataFrame private[sql](
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldRename = schema.exists(f => resolver(f.name, existingName))
+    // use parseAttributeName here to drop backtick if it exists in the user input existingName.
+    val resolvedExistingName = UnresolvedAttribute.parseAttributeName(existingName).iterator.next()
+    val shouldRename = schema.exists(f => resolver(f.name, resolvedExistingName))
     if (shouldRename) {
       val colNames = schema.map { field =>
         val name = field.name
-        if (resolver(name, existingName)) Column(name).as(newName) else Column(name)
+        if (resolver(name, resolvedExistingName)) Column(s"`$name`").as(newName)
+        else Column(s"`$name`")
       }
       select(colNames : _*)
     } else {
