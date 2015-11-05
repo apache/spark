@@ -62,11 +62,6 @@ setMethod("show", "GroupedData",
 #' \dontrun{
 #'   count(groupBy(df, "name"))
 #' }
-setMethod("count",
-          signature(x = "GroupedData"),
-          function(x) {
-            dataFrame(callJMethod(x@sgd, "count"))
-          })
 
 #' Agg
 #'
@@ -79,6 +74,7 @@ setMethod("count",
 #' @param x a GroupedData
 #' @return a DataFrame
 #' @rdname agg
+#' @family agg_funcs
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -117,10 +113,10 @@ setMethod("summarize",
             agg(x, ...)
           })
 
-# sum/mean/avg/min/max
-methods <- c("sum", "mean", "avg", "min", "max",
-             "stddev", "stddev_samp", "stddev_pop",
-             "variance", "var_samp", "var_pop", "skewness", "kurtosis")
+# Aggregate Functions by name
+methods <- c("approxCountDistinct", "avg", "corr", "count", "countDistinct", "first", "kurtosis",
+             "last", "max", "mean", "min", "skewness", "stddev", "stddev_samp", "stddev_pop",
+             "sum", "sumDistinct", "variance", "var_samp", "var_pop")
 
 createMethod <- function(name) {
   setMethod(name,
