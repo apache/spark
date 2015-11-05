@@ -393,7 +393,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the microseconds since year zero (-17999).
+   * Returns the microseconds since year zero (-17999) from microseconds since epoch.
    */
   def absoluteMicroSeconds(us: SQLTimestamp): SQLTimestamp = {
     us + toYearZero * MICROS_PER_DAY
