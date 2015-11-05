@@ -21,6 +21,8 @@ import java.net.ServerSocket
 import java.sql.Connection
 
 import scala.collection.JavaConverters._
+import scala.sys.process._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
@@ -94,7 +96,7 @@ abstract class DockerJDBCIntegrationSuite
         sock.close()
         port
       }
-      val dockerIp = sys.env.getOrElse("DOCKER_IP", Utils.localHostName())
+      val dockerIp = getDockerIp()
       val hostConfig: HostConfig = HostConfig.builder()
         .networkMode("bridge")
         .portBindings(
@@ -142,6 +144,19 @@ abstract class DockerJDBCIntegrationSuite
     } finally {
       super.afterAll()
     }
+  }
+
+  private def getDockerIp(): String = {
+    /** If docker-machine is setup on this box, attempts to find the ip from it. */
+    def findFromDockerMachine(): Option[String] = {
+      sys.env.get("DOCKER_MACHINE_NAME").flatMap { name =>
+        Try(Seq("/bin/bash", "-c", s"docker-machine ip $name 2>/dev/null").!!.trim).toOption
+      }
+    }
+    sys.env.get("DOCKER_IP")
+      .orElse(findFromDockerMachine())
+      .orElse(Try(Seq("/bin/bash", "-c", "boot2docker ip 2>/dev/null").!!.trim).toOption)
+      .getOrElse(Utils.localHostName())
   }
 
   /**
