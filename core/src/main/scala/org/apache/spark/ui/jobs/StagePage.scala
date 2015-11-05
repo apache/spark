@@ -21,7 +21,6 @@ import java.net.URLEncoder
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.{Elem, Node, Unparsed}
 
