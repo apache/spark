@@ -40,8 +40,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     intercept[IOException] {
       instance.write.to(path)
     }
-    instance.write.options("overwrite" -> "true").to(path)
-
+    instance.write.overwrite().to(path)
     val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[Reader[T]]
     val newInstance = loader.from(path)
 

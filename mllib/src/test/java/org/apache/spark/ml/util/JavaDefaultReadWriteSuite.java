@@ -63,7 +63,7 @@ public class JavaDefaultReadWriteSuite {
     } catch (IOException e) {
       // expected
     }
-    instance.write().options("overwrite", "true").to(outputPath);
+    instance.write().overwrite().to(outputPath);
     MyParams newInstance = MyParams.load().from(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
     Assert.assertEquals("Params should be preserved.",

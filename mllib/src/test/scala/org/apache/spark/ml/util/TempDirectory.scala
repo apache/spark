@@ -19,8 +19,9 @@ package org.apache.spark.ml.util
 
 import java.io.File
 
-import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfterAll, Suite}
+
+import org.apache.spark.util.Utils
 
 /**
  * Trait that creates a temporary directory before all tests and deletes it after all.

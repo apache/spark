@@ -42,16 +42,6 @@ private[util] sealed trait BaseReadWrite {
   private var optionSQLContext: Option[SQLContext] = None
 
   /**
-   * User-specified options.
-   */
-  protected final val options: mutable.Map[String, String] = mutable.Map.empty
-
-  /**
-   * Java-friendly version of [[options]].
-   */
-  protected final def javaOptions: ju.Map[String, String] = options.asJava
-
-  /**
    * Sets the SQL context to use for saving/loading.
    */
   @Since("1.6.0")
@@ -66,52 +56,6 @@ private[util] sealed trait BaseReadWrite {
   protected final def sqlContext: SQLContext = optionSQLContext.getOrElse {
     SQLContext.getOrCreate(SparkContext.getOrCreate())
   }
-
-  /**
-   * Adds one or more options as (key, value) pairs.
-   */
-  @Since("1.6.0")
-  def options(first: (String, String), others: (String, String)*): this.type = {
-    options += first
-    options ++= others
-    this
-  }
-
-  /**
-   * Adds one or more options with alternating key and value strings.
-   * @param k1 first key
-   * @param v1 first value
-   * @param others other options, must be paired
-   */
-  @varargs
-  @Since("1.6.0")
-  def options(k1: String, v1: String, others: String*): this.type = {
-    options += k1 -> v1
-    require(others.length % 2 == 0,
-      s"Options must be specified in pairs but got: ${others.mkString(",")}.")
-    others.grouped(2).foreach { case Seq(k, v) =>
-      options += k -> v
-    }
-    this
-  }
-
-  /**
-   * Adds options as a Scala map (overwrites if an option already exists).
-   */
-  @Since("1.6.0")
-  def options(options: Map[String, String]): this.type = {
-    this.options ++= options
-    this
-  }
-
-  /**
-   * Adds options as a Java map (overwrites if an option already exists).
-   */
-  @Since("1.6.0")
-  def options(options: ju.Map[String, String]): this.type = {
-    this.options ++= options.asScala
-    this
-  }
 }
 
 /**
@@ -120,7 +64,8 @@ private[util] sealed trait BaseReadWrite {
 @Experimental
 @Since("1.6.0")
 abstract class Writer extends BaseReadWrite {
-  import Writer._
+
+  protected var shouldOverwrite: Boolean = false
 
   /**
    * Saves the ML instance to the input path.
@@ -135,20 +80,14 @@ abstract class Writer extends BaseReadWrite {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = to(path)
-  
-  /**
-   * Tells whether we should overwrite if the output directory exists (default: false).
-   */
-  protected final def shouldOverwrite: Boolean = {
-    options.get(Overwrite).map(_.toBoolean).getOrElse(false)
-  }
-}
 
-@Experimental
-@Since("1.6.0")
-object Writer {
-  /** Option key to control overwrite. */
-  val Overwrite: String = "overwrite"
+  /**
+   * Overwrites if the output path already exists.
+   */
+  def overwrite(): this.type = {
+    shouldOverwrite = true
+    this
+  }
 }
 
 /**
