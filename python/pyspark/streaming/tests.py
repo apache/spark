@@ -596,6 +596,13 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
+    def test_await_termination_or_timeout(self):
+        self._add_input_stream()
+        self.ssc.start()
+        self.assertFalse(self.ssc.awaitTerminationOrTimeout(0.001))
+        self.ssc.stop(False)
+        self.assertTrue(self.ssc.awaitTerminationOrTimeout(0.001))
+
 
 class CheckpointTests(unittest.TestCase):
 
