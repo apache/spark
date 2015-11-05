@@ -91,7 +91,7 @@ public class ExternalShuffleIntegrationSuite {
     dataContext1.create();
     dataContext1.insertHashShuffleData(1, 0, exec1Blocks);
 
-    conf = new TransportConf(new SystemPropertyConfigProvider());
+    conf = new TransportConf(new ShuffleConfigProvider(new SystemPropertyConfigProvider()));
     handler = new ExternalShuffleBlockHandler(conf, null);
     TransportContext transportContext = new TransportContext(conf, handler);
     server = transportContext.createServer();
@@ -260,7 +260,7 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchNoServer() throws Exception {
-    System.setProperty("spark.shuffle.io.maxRetries", "0");
+    System.setProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_MAXRETRIES_KEY, "0");
     try {
       registerExecutor("exec-0", dataContext0.createExecutorInfo(SORT_MANAGER));
       FetchResult execFetch = fetchBlocks("exec-0",
@@ -268,7 +268,7 @@ public class ExternalShuffleIntegrationSuite {
       assertTrue(execFetch.successBlocks.isEmpty());
       assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
     } finally {
-      System.clearProperty("spark.shuffle.io.maxRetries");
+      System.clearProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_MAXRETRIES_KEY);
     }
   }
 

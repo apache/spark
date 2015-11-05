@@ -41,43 +41,58 @@ import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * To make the user control shuffle and RPC separately, this class creates a new SparkConf that
- * removes all shuffle configurations and convert RPC configurations to shuffle configurations.
+ * Convert all RPC configurations to corresponding network configurations.
  */
 private[netty] class RPCConfAdapter(conf: SparkConf) {
 
+  import RPCConfAdapter._
+
   private val _conf = conf.clone
 
-  private val mappings = Map(
-    "spark.rpc.io.mode" -> "spark.shuffle.io.mode",
-    "spark.rpc.io.preferDirectBufs" -> "spark.shuffle.io.preferDirectBufs",
-    "spark.rpc.io.connectionTimeout" -> "spark.shuffle.io.connectionTimeout",
-    "spark.rpc.io.backLog" -> "spark.shuffle.io.backLog",
-    "spark.rpc.io.serverThreads" -> "spark.shuffle.io.serverThreads",
-    "spark.rpc.io.clientThreads" -> "spark.shuffle.io.clientThreads",
-    "spark.rpc.io.receiveBuffer" -> "spark.shuffle.io.receiveBuffer",
-    "spark.rpc.io.sendBuffer" -> "spark.shuffle.io.sendBuffer",
-    "spark.rpc.sasl.timeout" -> "spark.shuffle.sasl.timeout",
-    "spark.rpc.io.maxRetries" -> "spark.shuffle.io.maxRetries",
-    "spark.rpc.io.retryWait" -> "spark.shuffle.io.retryWait"
-  )
-
-  // Clear shuffle configurations
-  mappings.values.foreach(_conf.remove)
-
-  // Convert RPC configurations to shuffle configurations
-  mappings.foreach { case (rpcConfKey, networkConfKey) =>
+  // Convert RPC configurations to corresponding network configurations
+  RPC_TO_NETWORK_CONF_MAPPINGS.foreach { case (rpcConfKey, networkConfKey) =>
     _conf.getOption(rpcConfKey).foreach { value =>
       _conf.set(networkConfKey, value)
     }
   }
 
   // Always use one connection for RPC
-  _conf.clone.set("spark.shuffle.io.numConnectionsPerPeer", "1")
+  _conf.clone.set(TransportConf.SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, "1")
 
   def toTransportConf: TransportConf = {
-    SparkTransportConf.fromSparkConf(_conf, _conf.getInt("spark.rpc.io.threads", 0))
+    SparkTransportConf.fromSparkConf(
+      _conf, _conf.getInt(SPARK_RPC_IO_THREADS_KEY, 0), isShuffle = false)
   }
+}
+
+private[netty] object RPCConfAdapter {
+
+  private val SPARK_RPC_IO_MODE_KEY = "spark.rpc.io.mode"
+  private val SPARK_RPC_IO_PREFERDIRECTBUFS_KEY = "spark.rpc.io.preferDirectBufs"
+  private val SPARK_RPC_IO_CONNECTIONTIMEOUT_KEY = "spark.rpc.io.connectionTimeout"
+  private val SPARK_RPC_IO_BACKLOG_KEY = "spark.rpc.io.backLog"
+  private val SPARK_RPC_IO_THREADS_KEY = "spark.rpc.io.threads"
+  private val SPARK_RPC_IO_SERVERTHREADS_KEY = "spark.rpc.io.serverThreads"
+  private val SPARK_RPC_IO_CLIENTTHREADS_KEY = "spark.rpc.io.clientThreads"
+  private val SPARK_RPC_IO_RECEIVEBUFFER_KEY = "spark.rpc.io.receiveBuffer"
+  private val SPARK_RPC_IO_SENDBUFFER_KEY = "spark.rpc.io.sendBuffer"
+  private val SPARK_RPC_SASL_TIMEOUT_KEY = "spark.rpc.sasl.timeout"
+  private val SPARK_RPC_IO_MAXRETRIES_KEY = "spark.rpc.io.maxRetries"
+  private val SPARK_RPC_IO_RETRYWAIT_KEY = "spark.rpc.io.retryWait"
+
+  private val RPC_TO_NETWORK_CONF_MAPPINGS = Map(
+    SPARK_RPC_IO_MODE_KEY -> TransportConf.SPARK_NETWORK_IO_MODE_KEY,
+    SPARK_RPC_IO_PREFERDIRECTBUFS_KEY -> TransportConf.SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY,
+    SPARK_RPC_IO_CONNECTIONTIMEOUT_KEY -> TransportConf.SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY,
+    SPARK_RPC_IO_BACKLOG_KEY -> TransportConf.SPARK_NETWORK_IO_BACKLOG_KEY,
+    SPARK_RPC_IO_SERVERTHREADS_KEY -> TransportConf.SPARK_NETWORK_IO_SERVERTHREADS_KEY,
+    SPARK_RPC_IO_CLIENTTHREADS_KEY -> TransportConf.SPARK_NETWORK_IO_CLIENTTHREADS_KEY,
+    SPARK_RPC_IO_RECEIVEBUFFER_KEY -> TransportConf.SPARK_NETWORK_IO_RECEIVEBUFFER_KEY,
+    SPARK_RPC_IO_SENDBUFFER_KEY -> TransportConf.SPARK_NETWORK_IO_SENDBUFFER_KEY,
+    SPARK_RPC_SASL_TIMEOUT_KEY -> TransportConf.SPARK_NETWORK_SASL_TIMEOUT_KEY,
+    SPARK_RPC_IO_MAXRETRIES_KEY -> TransportConf.SPARK_NETWORK_IO_MAXRETRIES_KEY,
+    SPARK_RPC_IO_RETRYWAIT_KEY -> TransportConf.SPARK_NETWORK_IO_RETRYWAIT_KEY
+  )
 }
 
 private[netty] class NettyRpcEnv(

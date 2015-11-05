@@ -59,7 +59,7 @@ public class RequestTimeoutIntegrationSuite {
   @Before
   public void setUp() throws Exception {
     Map<String, String> configMap = Maps.newHashMap();
-    configMap.put("spark.shuffle.io.connectionTimeout", "2s");
+    configMap.put(TransportConf.SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, "2s");
     conf = new TransportConf(new MapConfigProvider(configMap));
 
     defaultManager = new StreamManager() {

@@ -55,14 +55,14 @@ public class RetryingBlockFetcherSuite {
 
   @Before
   public void beforeEach() {
-    System.setProperty("spark.shuffle.io.maxRetries", "2");
-    System.setProperty("spark.shuffle.io.retryWait", "0");
+    System.setProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_MAXRETRIES_KEY, "2");
+    System.setProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_RETRYWAIT_KEY, "0");
   }
 
   @After
   public void afterEach() {
-    System.clearProperty("spark.shuffle.io.maxRetries");
-    System.clearProperty("spark.shuffle.io.retryWait");
+    System.clearProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_MAXRETRIES_KEY);
+    System.clearProperty(ShuffleConfigProvider.SPARK_SHUFFLE_IO_RETRYWAIT_KEY);
   }
 
   @Test
@@ -254,7 +254,8 @@ public class RetryingBlockFetcherSuite {
                                           BlockFetchingListener listener)
     throws IOException {
 
-    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    TransportConf conf =
+      new TransportConf(new ShuffleConfigProvider(new SystemPropertyConfigProvider()));
     BlockFetchStarter fetchStarter = mock(BlockFetchStarter.class);
 
     Stubber stub = null;

@@ -73,7 +73,8 @@ public class TransportClientFactorySuite {
     throws IOException, InterruptedException {
 
     Map<String, String> configMap = Maps.newHashMap();
-    configMap.put("spark.shuffle.io.numConnectionsPerPeer", Integer.toString(maxConnections));
+    configMap.put(
+      TransportConf.SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, Integer.toString(maxConnections));
     TransportConf conf = new TransportConf(new MapConfigProvider(configMap));
 
     RpcHandler rpcHandler = new NoOpRpcHandler();
