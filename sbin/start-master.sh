@@ -23,9 +23,6 @@ if [ -z "${SPARK_HOME}" ]; then
   export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-# Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
-
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.
 CLASS="org.apache.spark.deploy.master.Master"
@@ -36,12 +33,9 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   pattern+="\|Using Spark's default log4j profile:"
   pattern+="\|Registered signal handlers for"
 
-  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
   exit 1
 fi
-
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
 
 ORIGINAL_ARGS="$@"
 
@@ -50,7 +44,7 @@ START_TACHYON=false
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
-      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
+      if [ ! -e "${SPARK_HOME}"/../tachyon/bin/tachyon ]; then
         echo "Error: --with-tachyon specified, but tachyon not found."
         exit -1
       fi
