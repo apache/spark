@@ -672,6 +672,7 @@ class Airflow(BaseView):
 
     @expose('/rendered')
     @login_required
+    @wwwutils.action_logging
     def rendered(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -706,6 +707,7 @@ class Airflow(BaseView):
 
     @expose('/log')
     @login_required
+    @wwwutils.action_logging
     def log(self):
         BASE_LOG_FOLDER = os.path.expanduser(
             conf.get('core', 'BASE_LOG_FOLDER'))
@@ -785,6 +787,7 @@ class Airflow(BaseView):
 
     @expose('/task')
     @login_required
+    @wwwutils.action_logging
     def task(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -829,10 +832,40 @@ class Airflow(BaseView):
             form=form,
             dag=dag, title=title)
 
-    @expose('/action')
+    @expose('/run')
     @login_required
-    def action(self):
-        action = request.args.get('action')
+    @wwwutils.action_logging
+    def run(self):
+        dag_id = request.args.get('dag_id')
+        task_id = request.args.get('task_id')
+        origin = request.args.get('origin')
+        dag = dagbag.get_dag(dag_id)
+        task = dag.get_task(task_id)
+
+        execution_date = request.args.get('execution_date')
+        execution_date = dateutil.parser.parse(execution_date)
+        force = request.args.get('force') == "true"
+        deps = request.args.get('deps') == "true"
+
+        from airflow.executors import DEFAULT_EXECUTOR as executor
+        from airflow.executors import CeleryExecutor
+        if not isinstance(executor, CeleryExecutor):
+            flash("Only works with the CeleryExecutor, sorry", "error")
+            return redirect(origin)
+        ti = models.TaskInstance(task=task, execution_date=execution_date)
+        executor.start()
+        executor.queue_task_instance(
+            ti, force=force, ignore_dependencies=deps)
+        executor.heartbeat()
+        flash(
+            "Sent {} to the message queue, "
+            "it should start any moment now.".format(ti))
+        return redirect(origin)
+
+    @expose('/clear')
+    @login_required
+    @wwwutils.action_logging
+    def clear(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         origin = request.args.get('origin')
@@ -847,157 +880,156 @@ class Airflow(BaseView):
         future = request.args.get('future') == "true"
         past = request.args.get('past') == "true"
 
-        if action == "run":
-            from airflow.executors import DEFAULT_EXECUTOR as executor
-            from airflow.executors import CeleryExecutor
-            if not isinstance(executor, CeleryExecutor):
-                flash("Only works with the CeleryExecutor, sorry", "error")
-                return redirect(origin)
-            force = request.args.get('force') == "true"
-            deps = request.args.get('deps') == "true"
-            ti = models.TaskInstance(task=task, execution_date=execution_date)
-            executor.start()
-            executor.queue_task_instance(
-                ti, force=force, ignore_dependencies=deps)
-            executor.heartbeat()
-            flash(
-                "Sent {} to the message queue, "
-                "it should start any moment now.".format(ti))
+        dag = dag.sub_dag(
+            task_regex=r"^{0}$".format(task_id),
+            include_downstream=downstream,
+            include_upstream=upstream)
+
+        end_date = execution_date if not future else None
+        start_date = execution_date if not past else None
+        if confirmed:
+            count = dag.clear(
+                start_date=start_date,
+                end_date=end_date)
+
+            flash("{0} task instances have been cleared".format(count))
+            return redirect(origin)
+        else:
+            tis = dag.clear(
+                start_date=start_date,
+                end_date=end_date,
+                dry_run=True)
+            if not tis:
+                flash("No task instances to clear", 'error')
+                response = redirect(origin)
+            else:
+                details = "\n".join([str(t) for t in tis])
+
+                response = self.render(
+                    'airflow/confirm.html',
+                    message=(
+                        "Here's the list of task instances you are about "
+                        "to clear:"),
+                    details=details,)
+
+            return response
+
+    @expose('/success')
+    @login_required
+    @wwwutils.action_logging
+    def success(self):
+        dag_id = request.args.get('dag_id')
+        task_id = request.args.get('task_id')
+        origin = request.args.get('origin')
+        dag = dagbag.get_dag(dag_id)
+        task = dag.get_task(task_id)
+
+        execution_date = request.args.get('execution_date')
+        execution_date = dateutil.parser.parse(execution_date)
+        confirmed = request.args.get('confirmed') == "true"
+        upstream = request.args.get('upstream') == "true"
+        downstream = request.args.get('downstream') == "true"
+        future = request.args.get('future') == "true"
+        past = request.args.get('past') == "true"
+
+        MAX_PERIODS = 1000
+
+        # Flagging tasks as successful
+        session = settings.Session()
+        task_ids = [task_id]
+        end_date = ((dag.latest_execution_date or datetime.now())
+                    if future else execution_date)
+
+        if 'start_date' in dag.default_args:
+            start_date = dag.default_args['start_date']
+        elif dag.start_date:
+            start_date = dag.start_date
+        else:
+            start_date = execution_date
+
+        if execution_date < start_date or end_date < start_date:
+            flash("Selected date before DAG start date", 'error')
             return redirect(origin)
 
-        elif action == 'clear':
-            dag = dag.sub_dag(
-                task_regex=r"^{0}$".format(task_id),
-                include_downstream=downstream,
-                include_upstream=upstream)
+        start_date = execution_date if not past else start_date
 
-            end_date = execution_date if not future else None
-            start_date = execution_date if not past else None
-            if confirmed:
+        if downstream:
+            task_ids += [
+                t.task_id
+                for t in task.get_flat_relatives(upstream=False)]
+        if upstream:
+            task_ids += [
+                t.task_id
+                for t in task.get_flat_relatives(upstream=True)]
+        TI = models.TaskInstance
+        dates = utils.date_range(start_date, end_date)
+        tis = session.query(TI).filter(
+            TI.dag_id == dag_id,
+            TI.execution_date.in_(dates),
+            TI.task_id.in_(task_ids)).all()
+        tis_to_change = session.query(TI).filter(
+            TI.dag_id == dag_id,
+            TI.execution_date.in_(dates),
+            TI.task_id.in_(task_ids),
+            TI.state != State.SUCCESS).all()
+        tasks = list(product(task_ids, dates))
+        tis_to_create = list(
+            set(tasks) -
+            set([(ti.task_id, ti.execution_date) for ti in tis]))
 
-                count = dag.clear(
-                    start_date=start_date,
-                    end_date=end_date)
+        tis_all_altered = list(chain(
+            [(ti.task_id, ti.execution_date) for ti in tis_to_change],
+            tis_to_create))
 
-                flash("{0} task instances have been cleared".format(count))
-                return redirect(origin)
-            else:
-                tis = dag.clear(
-                    start_date=start_date,
-                    end_date=end_date,
-                    dry_run=True)
-                if not tis:
-                    flash("No task instances to clear", 'error')
-                    response = redirect(origin)
-                else:
-                    details = "\n".join([str(t) for t in tis])
+        if len(tis_all_altered) > MAX_PERIODS:
+            flash("Too many tasks at once (>{0})".format(
+                MAX_PERIODS), 'error')
+            return redirect(origin)
 
-                    response = self.render(
-                        'airflow/confirm.html',
-                        message=(
-                            "Here's the list of task instances you are about "
-                            "to clear:"),
-                        details=details,)
+        if confirmed:
+            for ti in tis_to_change:
+                ti.state = State.SUCCESS
+            session.commit()
 
-                return response
-        elif action == 'success':
-            MAX_PERIODS = 1000
-
-            # Flagging tasks as successful
-            session = settings.Session()
-            task_ids = [task_id]
-            end_date = ((dag.latest_execution_date or datetime.now())
-                        if future else execution_date)
-
-            if 'start_date' in dag.default_args:
-                start_date = dag.default_args['start_date']
-            elif dag.start_date:
-                start_date = dag.start_date
-            else:
-                start_date = execution_date
-
-            if execution_date < start_date or end_date < start_date:
-                flash("Selected date before DAG start date", 'error')
-                return redirect(origin)
-
-            start_date = execution_date if not past else start_date
-
-            if downstream:
-                task_ids += [
-                    t.task_id
-                    for t in task.get_flat_relatives(upstream=False)]
-            if upstream:
-                task_ids += [
-                    t.task_id
-                    for t in task.get_flat_relatives(upstream=True)]
-            TI = models.TaskInstance
-            dates = utils.date_range(start_date, end_date)
-            tis = session.query(TI).filter(
-                TI.dag_id == dag_id,
-                TI.execution_date.in_(dates),
-                TI.task_id.in_(task_ids)).all()
-            tis_to_change = session.query(TI).filter(
-                TI.dag_id == dag_id,
-                TI.execution_date.in_(dates),
-                TI.task_id.in_(task_ids),
-                TI.state != State.SUCCESS).all()
-            tasks = list(product(task_ids, dates))
-            tis_to_create = list(
-                set(tasks) -
-                set([(ti.task_id, ti.execution_date) for ti in tis]))
-
-            tis_all_altered = list(chain(
-                [(ti.task_id, ti.execution_date) for ti in tis_to_change],
-                tis_to_create))
-
-            if len(tis_all_altered) > MAX_PERIODS:
-                flash("Too many tasks at once (>{0})".format(
-                    MAX_PERIODS), 'error')
-                return redirect(origin)
-
-            if confirmed:
-                for ti in tis_to_change:
-                    ti.state = State.SUCCESS
+            for task_id, task_execution_date in tis_to_create:
+                ti = TI(
+                    task=dag.get_task(task_id),
+                    execution_date=task_execution_date,
+                    state=State.SUCCESS)
+                session.add(ti)
                 session.commit()
 
-                for task_id, task_execution_date in tis_to_create:
-                    ti = TI(
+            session.commit()
+            session.close()
+            flash("Marked success on {} task instances".format(
+                len(tis_all_altered)))
+
+            return redirect(origin)
+        else:
+            if not tis_all_altered:
+                flash("No task instances to mark as successful", 'error')
+                response = redirect(origin)
+            else:
+                tis = []
+                for task_id, task_execution_date in tis_all_altered:
+                    tis.append(TI(
                         task=dag.get_task(task_id),
                         execution_date=task_execution_date,
-                        state=State.SUCCESS)
-                    session.add(ti)
-                    session.commit()
+                        state=State.SUCCESS))
+                details = "\n".join([str(t) for t in tis])
 
-                session.commit()
-                session.close()
-                flash("Marked success on {} task instances".format(
-                    len(tis_all_altered)))
-
-                return redirect(origin)
-            else:
-                if not tis_all_altered:
-                    flash("No task instances to mark as successful", 'error')
-                    response = redirect(origin)
-                else:
-                    tis = []
-                    for task_id, task_execution_date in tis_all_altered:
-                        tis.append(TI(
-                            task=dag.get_task(task_id),
-                            execution_date=task_execution_date,
-                            state=State.SUCCESS))
-                    details = "\n".join([str(t) for t in tis])
-
-                    response = self.render(
-                        'airflow/confirm.html',
-                        message=(
-                            "Here's the list of task instances you are about "
-                            "to mark as successful:"),
-                        details=details,)
-                return response
+                response = self.render(
+                    'airflow/confirm.html',
+                    message=(
+                        "Here's the list of task instances you are about "
+                        "to mark as successful:"),
+                    details=details,)
+            return response
 
     @expose('/tree')
     @login_required
     @wwwutils.gzipped
+    @wwwutils.action_logging
     def tree(self):
         dag_id = request.args.get('dag_id')
         blur = conf.getboolean('webserver', 'demo_mode')
@@ -1125,6 +1157,7 @@ class Airflow(BaseView):
     @expose('/graph')
     @login_required
     @wwwutils.gzipped
+    @wwwutils.action_logging
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1212,6 +1245,7 @@ class Airflow(BaseView):
 
     @expose('/duration')
     @login_required
+    @wwwutils.action_logging
     def duration(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1254,6 +1288,7 @@ class Airflow(BaseView):
 
     @expose('/landing_times')
     @login_required
+    @wwwutils.action_logging
     def landing_times(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1297,6 +1332,7 @@ class Airflow(BaseView):
 
     @expose('/paused')
     @login_required
+    @wwwutils.action_logging
     def paused(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1316,6 +1352,7 @@ class Airflow(BaseView):
 
     @expose('/refresh')
     @login_required
+    @wwwutils.action_logging
     def refresh(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1335,6 +1372,7 @@ class Airflow(BaseView):
 
     @expose('/refresh_all')
     @login_required
+    @wwwutils.action_logging
     def refresh_all(self):
         dagbag.collect_dags(only_if_updated=False)
         flash("All DAGs are now up to date")
@@ -1342,6 +1380,7 @@ class Airflow(BaseView):
 
     @expose('/gantt')
     @login_required
+    @wwwutils.action_logging
     def gantt(self):
 
         session = settings.Session()
@@ -1422,6 +1461,7 @@ class Airflow(BaseView):
 
     @expose('/variables/<form>', methods=["GET", "POST"])
     @login_required
+    @wwwutils.action_logging
     def variables(self, form):
         try:
             if request.method == 'POST':

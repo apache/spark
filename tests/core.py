@@ -394,14 +394,14 @@ class WebUiTests(unittest.TestCase):
             '/admin/airflow/dag_stats')
         assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
-            '/admin/airflow/action?action=clear&task_id=run_this_last&'
+            '/admin/airflow/clear?task_id=run_this_last&'
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
             'execution_date=2015-01-01T00:00:00&'
             'origin=/admin')
         assert "Wait a minute" in response.data.decode('utf-8')
         url = (
-            "/admin/airflow/action?action=success&task_id=run_this_last&"
+            "/admin/airflow/success?task_id=run_this_last&"
             "dag_id=example_bash_operator&upstream=false&downstream=false&"
             "future=false&past=false&execution_date=2017-01-12T00:00:00&"
             "origin=/admin")
@@ -409,7 +409,7 @@ class WebUiTests(unittest.TestCase):
         assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(url + "&confirmed=true")
         url = (
-            "/admin/airflow/action?action=clear&task_id=runme_1&"
+            "/admin/airflow/clear?task_id=runme_1&"
             "dag_id=example_bash_operator&future=false&past=false&"
             "upstream=false&downstream=true&"
             "execution_date=2017-01-12T00:00:00&"
@@ -418,7 +418,7 @@ class WebUiTests(unittest.TestCase):
         assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(url + "&confirmed=true")
         url = (
-            "/admin/airflow/action?action=run&task_id=runme_0&"
+            "/admin/airflow/run?task_id=runme_0&"
             "dag_id=example_bash_operator&force=true&deps=true&"
             "execution_date=2015-08-12T00:00:00&origin=/admin")
         response = self.app.get(url)
