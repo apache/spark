@@ -854,7 +854,7 @@ test_that("column functions", {
 
   expect_true(abs(collect(select(df, stddev(df$age)))[1, 1] - 7.778175) < 1e-6)
 
-  expect_equal(collect(select(df, variance(df$age)))[1, 1], 30.25)
+  expect_equal(collect(select(df, var_pop(df$age)))[1, 1], 30.25)
 
   df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
