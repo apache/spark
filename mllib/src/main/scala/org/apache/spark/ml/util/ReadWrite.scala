@@ -126,12 +126,14 @@ abstract class Writer extends BaseReadWrite {
    * Saves the ML instance to the input path.
    */
   @Since("1.6.0")
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def to(path: String): Unit
 
   /**
    * Saves the ML instances to the input path, the same as [[to()]].
    */
   @Since("1.6.0")
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = to(path)
   
   /**
