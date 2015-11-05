@@ -33,6 +33,15 @@ private[ml] trait DecisionTreeModel {
   /** Root of the decision tree */
   def rootNode: Node
 
+  /** Returns a predictor based on the root node optionally using codegen. */
+  def predictor(codeGen: Boolean): Vector => Double = {
+    if (codeGen) {
+      CodeGenerationDecisionTreeModel.getScorer(rootNode)
+    } else {
+      ((f: Vector) => rootNode.predictImpl(f).prediction)
+    }
+  }
+
   /** Number of nodes in tree, including leaf nodes. */
   def numNodes: Int = {
     1 + rootNode.numDescendants
@@ -106,15 +115,20 @@ private[ml] trait TreeEnsembleModel {
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 }
 
-private[spark] class CodeGenerationDecisionTreeModel {
-
-}
-
-object CodeGenerationDecisionTreeModel {
+/**
+ * An object for creating a code generated decision tree model.
+ * NodeToTree is used to convert a node to a series if code gen
+ * if/else statements conditions returning the predicition for a
+ * given vector.
+ * getScorer wraps this and provides a function we can use to get
+ * the prediction.
+ */
+private[spark] object CodeGenerationDecisionTreeModel {
   val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
 
   import universe._
 
+  // Convert a node to code gened if/else statements
   def NodeToTree(root: Node): universe.Tree = {
     root match {
       case node: InternalNode => {
@@ -134,5 +148,17 @@ object CodeGenerationDecisionTreeModel {
       }
       case node: LeafNode => q"${node.prediction}"
     }
+  }
+
+  // Create a codegened scorer for a given node
+  def getScorer(root: Node): Vector => Double = {
+    val toolbox = currentMirror.mkToolBox()
+    val code =
+      q"""
+         (input: Vector) => {
+            ${NodeToTree(root)}
+         }
+       """
+    toolbox.eval(code).asInstanceOf[Vector => Double]
   }
 }

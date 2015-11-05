@@ -179,6 +179,9 @@ final class GBTRegressionModel private[ml](
 
   override def treeWeights: Array[Double] = _treeWeights
 
+  val useCodeGen = numTrees < 400
+  val treePredictors = _trees.map(_.predictor(useCodeGen))
+
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
@@ -187,10 +190,11 @@ final class GBTRegressionModel private[ml](
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
+
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = _trees.map(_.rootNode.predictImpl(features).prediction)
+    val treePredictions = treePredictors.map(_(features))
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
