@@ -39,7 +39,6 @@ from pygments.formatters import HtmlFormatter
 import airflow
 from airflow import models
 from airflow.settings import Session
-from airflow import login
 from airflow import configuration
 from airflow import utils
 from airflow.utils import AirflowException
@@ -54,9 +53,9 @@ CHART_LIMIT = 200000
 
 dagbag = models.DagBag(os.path.expanduser(configuration.conf.get('core', 'DAGS_FOLDER')))
 
-login_required = login.login_required
-current_user = login.current_user
-logout_user = login.logout_user
+login_required = airflow.login.login_required
+current_user = airflow.login.current_user
+logout_user = airflow.login.logout_user
 
 AUTHENTICATE = configuration.conf.getboolean('webserver', 'AUTHENTICATE')
 if AUTHENTICATE is False:
@@ -663,7 +662,7 @@ class Airflow(BaseView):
 
     @expose('/login', methods=['GET', 'POST'])
     def login(self):
-        return login.login(self, request)
+        return airflow.login.login(self, request)
 
     @expose('/logout')
     def logout(self):

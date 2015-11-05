@@ -4,7 +4,7 @@ from flask import Flask
 from flask.ext.admin import Admin, base
 from flask.ext.cache import Cache
 
-from airflow import login
+import airflow
 from airflow import models
 from airflow.settings import Session
 
@@ -18,7 +18,8 @@ def create_app(config=None):
     app = Flask(__name__)
     app.secret_key = configuration.conf.get('webserver', 'SECRET_KEY')
     #app.config = config
-    login.login_manager.init_app(app)
+    airflow.load_login()
+    airflow.login.login_manager.init_app(app)
 
     cache = Cache(
         app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})

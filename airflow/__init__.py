@@ -22,25 +22,30 @@ DAGS_FOLDER = os.path.expanduser(configuration.conf.get('core', 'DAGS_FOLDER'))
 if DAGS_FOLDER not in sys.path:
     sys.path.append(DAGS_FOLDER)
 
-auth_backend = 'airflow.default_login'
-try:
-    auth_backend = configuration.conf.get('webserver', 'auth_backend')
-except configuration.AirflowConfigException:
-    if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
-        logging.warning("auth_backend not found in webserver config reverting to *deprecated*"
-                        " behavior of importing airflow_login")
-        auth_backend = "airflow_login"
+login = None
 
-try:
-    login = import_module(auth_backend)
-except ImportError:
-    logging.critical(
-        "Cannot import authentication module %s. "
-        "Please correct your authentication backend or disable authentication",
-        auth_backend
-    )
-    if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
-        raise AirflowException("Failed to import authentication backend")
+
+def load_login():
+    auth_backend = 'airflow.default_login'
+    try:
+        auth_backend = configuration.conf.get('webserver', 'auth_backend')
+    except configuration.AirflowConfigException:
+        if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
+            logging.warning("auth_backend not found in webserver config reverting to *deprecated*"
+                            " behavior of importing airflow_login")
+            auth_backend = "airflow_login"
+
+    try:
+        global login
+        login = import_module(auth_backend)
+    except ImportError:
+        logging.critical(
+            "Cannot import authentication module %s. "
+            "Please correct your authentication backend or disable authentication",
+            auth_backend
+        )
+        if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
+            raise AirflowException("Failed to import authentication backend")
 
 
 class AirflowViewPlugin(BaseView):
