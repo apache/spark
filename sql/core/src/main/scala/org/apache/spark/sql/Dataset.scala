@@ -107,13 +107,16 @@ class Dataset[T] private(
    * strongly typed objects that Dataset operations work on, a Dataframe returns generic [[Row]]
    * objects that allow fields to be accessed by ordinal or name.
    */
+  // This is declared with parentheses to prevent the Scala compiler from treating
+  // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
   def toDF(): DataFrame = DataFrame(sqlContext, logicalPlan)
-
 
   /**
    * Returns this Dataset.
    * @since 1.6.0
    */
+  // This is declared with parentheses to prevent the Scala compiler from treating
+  // `ds.toDS("1")` as invoking this toDF and then apply on the returned Dataset.
   def toDS(): Dataset[T] = this
 
   /**
