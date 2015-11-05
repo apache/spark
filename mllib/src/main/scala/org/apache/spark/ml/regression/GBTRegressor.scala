@@ -20,7 +20,7 @@ package org.apache.spark.ml.regression
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeEnsembleModel, TreeRegressorParams}
@@ -42,54 +42,65 @@ import org.apache.spark.sql.types.DoubleType
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
+@Since("1.4.0")
 @Experimental
-final class GBTRegressor(override val uid: String)
+final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTParams with TreeRegressorParams with Logging {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("gbtr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
-
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
   /**
    * The impurity setting is ignored for GBT models.
    * Individual trees are built using impurity "Variance."
    */
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = {
     logWarning("GBTRegressor.setImpurity should NOT be used")
     this
   }
 
   // Parameters from TreeEnsembleParams:
-
+  @Since("1.4.0")
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
+  @Since("1.4.0")
   override def setSeed(value: Long): this.type = {
     logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
     super.setSeed(value)
   }
 
   // Parameters from GBTParams:
-
+  @Since("1.4.0")
   override def setMaxIter(value: Int): this.type = super.setMaxIter(value)
 
+  @Since("1.4.0")
   override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
   // Parameters for GBTRegressor:
@@ -100,6 +111,7 @@ final class GBTRegressor(override val uid: String)
    * (default = squared)
    * @group param
    */
+  @Since("1.4.0")
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressor.supportedLossTypes.mkString(", ")}",
@@ -108,9 +120,11 @@ final class GBTRegressor(override val uid: String)
   setDefault(lossType -> "squared")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setLossType(value: String): this.type = set(lossType, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getLossType: String = $(lossType).toLowerCase
 
   /** (private[ml]) Convert new loss to old loss. */
@@ -135,13 +149,16 @@ final class GBTRegressor(override val uid: String)
     GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object GBTRegressor {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  @Since("1.4.0")
   final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
 }
 
@@ -154,6 +171,7 @@ object GBTRegressor {
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
+@Since("1.4.0")
 @Experimental
 final class GBTRegressionModel private[ml](
     override val uid: String,
@@ -172,11 +190,14 @@ final class GBTRegressionModel private[ml](
    * @param _trees  Decision trees in the ensemble.
    * @param _treeWeights  Weights for the decision trees in the ensemble.
    */
+  @Since("1.4.0")
   def this(uid: String, _trees: Array[DecisionTreeRegressionModel], _treeWeights: Array[Double]) =
     this(uid, _trees, _treeWeights, -1)
 
+  @Since("1.4.0")
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
+  @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
@@ -194,11 +215,13 @@ final class GBTRegressionModel private[ml](
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): GBTRegressionModel = {
     copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures),
       extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
   }

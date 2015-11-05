@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeEnsembleModel, TreeRegressorParams}
@@ -37,44 +37,55 @@ import org.apache.spark.sql.functions._
  * [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]] learning algorithm for regression.
  * It supports both continuous and categorical features.
  */
+@Since("1.4.0")
 @Experimental
-final class RandomForestRegressor(override val uid: String)
+final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, RandomForestRegressor, RandomForestRegressionModel]
   with RandomForestParams with TreeRegressorParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("rfr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
-
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
   // Parameters from TreeEnsembleParams:
-
+  @Since("1.4.0")
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
+  @Since("1.4.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from RandomForestParams:
-
+  @Since("1.4.0")
   override def setNumTrees(value: Int): this.type = super.setNumTrees(value)
 
+  @Since("1.4.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
 
@@ -91,15 +102,19 @@ final class RandomForestRegressor(override val uid: String)
     new RandomForestRegressionModel(trees, numFeatures)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object RandomForestRegressor {
   /** Accessor for supported impurity settings: variance */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeRegressorParams.supportedImpurities
 
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
 }
@@ -111,6 +126,7 @@ object RandomForestRegressor {
  * @param _trees  Decision trees in the ensemble.
  * @param numFeatures  Number of features used by this model
  */
+@Since("1.4.0")
 @Experimental
 final class RandomForestRegressionModel private[ml] (
     override val uid: String,
@@ -128,11 +144,13 @@ final class RandomForestRegressionModel private[ml] (
   private[ml] def this(trees: Array[DecisionTreeRegressionModel], numFeatures: Int) =
     this(Identifiable.randomUID("rfr"), trees, numFeatures)
 
+  @Since("1.4.0")
   override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
 
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](numTrees)(1.0)
 
+  @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
@@ -150,10 +168,12 @@ final class RandomForestRegressionModel private[ml] (
     _trees.map(_.rootNode.predictImpl(features).prediction).sum / numTrees
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): RandomForestRegressionModel = {
     copyValues(new RandomForestRegressionModel(uid, _trees, numFeatures), extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"RandomForestRegressionModel (uid=$uid) with $numTrees trees"
   }
