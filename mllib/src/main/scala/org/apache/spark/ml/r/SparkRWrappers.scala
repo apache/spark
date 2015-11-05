@@ -66,9 +66,10 @@ private[r] object SparkRWrappers {
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
-      case _: LogisticRegressionModel =>
-        throw new UnsupportedOperationException(
-          "No features names available for LogisticRegressionModel")  // SPARK-9492
+      case m: LogisticRegressionModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
+        Array("(Intercept)") ++ attrs.attributes.get.map(_.name.get)
     }
   }
 }

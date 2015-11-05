@@ -329,13 +329,12 @@ object functions {
   def skewness(e: Column): Column = Skewness(e.expr)
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
-   * the expression in a group.
+   * Aggregate function: alias for [[stddev_samp]].
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = Stddev(e.expr)
+  def stddev(e: Column): Column = StddevSamp(e.expr)
 
   /**
    * Aggregate function: returns the unbiased sample standard deviation of
@@ -388,12 +387,12 @@ object functions {
   def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
 
   /**
-   * Aggregate function: returns the population variance of the values in a group.
+   * Aggregate function: alias for [[var_samp]].
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def variance(e: Column): Column = Variance(e.expr)
+  def variance(e: Column): Column = VarianceSamp(e.expr)
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.

@@ -81,6 +81,8 @@ private[sql] object PartitioningUtils {
       parsePartition(path, defaultPartitionName, typeInference)
     }.unzip
 
+    // We create pairs of (path -> path's partition value) here
+    // If the corresponding partition value is None, the pair will be skiped
     val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
 
     if (pathsWithPartitionValues.isEmpty) {
@@ -89,11 +91,21 @@ private[sql] object PartitioningUtils {
     } else {
       // This dataset is partitioned. We need to check whether all partitions have the same
       // partition columns and resolve potential type conflicts.
+
+      // Check if there is conflicting directory structure.
+      // For the paths such as:
+      // var paths = Seq(
+      //   "hdfs://host:9000/invalidPath",
+      //   "hdfs://host:9000/path/a=10/b=20",
+      //   "hdfs://host:9000/path/a=10.5/b=hello")
+      // It will be recognised as conflicting directory structure:
+      //   "hdfs://host:9000/invalidPath"
+      //   "hdfs://host:9000/path"
       val basePaths = optBasePaths.flatMap(x => x)
       assert(
         basePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
-          basePaths.mkString("\n\t", "\n\t", "\n\n"))
+          basePaths.distinct.mkString("\n\t", "\n\t", "\n\n"))
 
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
@@ -287,10 +299,11 @@ private[sql] object PartitioningUtils {
 
   def validatePartitionColumnDataTypes(
       schema: StructType,
-      partitionColumns: Array[String]): Unit = {
+      partitionColumns: Array[String],
+      caseSensitive: Boolean): Unit = {
 
-    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns).foreach { field =>
-      field.dataType match {
+    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
+      field => field.dataType match {
         case _: AtomicType => // OK
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }

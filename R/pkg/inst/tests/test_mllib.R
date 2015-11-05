@@ -67,3 +67,20 @@ test_that("summary coefficients match with native glm", {
     as.character(stats$features) ==
     c("(Intercept)", "Sepal_Length", "Species_versicolor", "Species_virginica")))
 })
+
+test_that("summary coefficients match with native glm of family 'binomial'", {
+  df <- createDataFrame(sqlContext, iris)
+  training <- filter(df, df$Species != "setosa")
+  stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
+    family = "binomial"))
+  coefs <- as.vector(stats$coefficients)
+
+  rTraining <- iris[iris$Species %in% c("versicolor","virginica"),]
+  rCoefs <- as.vector(coef(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
+    family = binomial(link = "logit"))))
+
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(all(
+    as.character(stats$features) ==
+    c("(Intercept)", "Sepal_Length", "Sepal_Width")))
+})

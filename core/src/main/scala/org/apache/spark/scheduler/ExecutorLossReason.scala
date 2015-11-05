@@ -40,6 +40,15 @@ private[spark] object ExecutorExited {
   }
 }
 
+/**
+ * A loss reason that means we don't yet know why the executor exited.
+ *
+ * This is used by the task scheduler to remove state associated with the executor, but
+ * not yet fail any tasks that were running in the executor before the real loss reason
+ * is known.
+ */
+private [spark] object LossReasonPending extends ExecutorLossReason("Pending loss reason.")
+
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
   extends ExecutorLossReason(_message)
