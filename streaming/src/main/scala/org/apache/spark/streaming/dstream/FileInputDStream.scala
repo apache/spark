@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import java.io.{IOException, ObjectInputStream}
+import java.io.{FileNotFoundException, IOException, ObjectInputStream}
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
@@ -36,8 +36,9 @@ import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Uti
  * files and creates a stream out of them. The way it works as follows.
  *
  * At each batch interval, the file system is queried for files in the given directory and
- * detected new files are selected for that batch. In this case "new" means files that
- * became visible to readers during that time period. Some extra care is needed to deal
+ * detected new files are selected for that batch. It can also monitor files in subdirectories by
+ * setting the optional `depth` parameter to a value greater than 1. In this case "new" means
+ * files that became visible to readers during that time period. Some extra care is needed to deal
  * with the fact that files may become visible after they are created. For this purpose, this
  * class remembers the information about the files selected in past batches for
  * a certain duration (say, "remember window") as shown in the figure below.
@@ -72,6 +73,7 @@ private[streaming]
 class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     ssc_ : StreamingContext,
     directory: String,
+    depth: Int = 1,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
@@ -94,6 +96,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
 
+  require(depth >= 1, "nested directories depth must >= 1")
   // Data to be saved as part of the streaming checkpoints
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
@@ -119,6 +122,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
 
+  // Set of directories that were found from the beginning to the present
+  @transient private var lastFoundDirs = new mutable.HashSet[Path]()
+
   // Read-through cache of file mod times, used to speed up mod time lookups
   @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
 
@@ -126,6 +132,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   @transient private var lastNewFileFindingTime = 0L
 
   @transient private var path_ : Path = null
+  @transient private var directoryDepth_ : Int = -1
   @transient private var fs_ : FileSystem = null
 
   override def start() { }
@@ -172,7 +179,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   /**
-   * Find new files for the batch of `currentTime`. This is done by first calculating the
+   * Find new files for the batch of `currentTime` in nested directories.
+   * This is done by first calculating the
    * ignore threshold for file mod times, and then getting a list of files filtered based on
    * the current batch time and the ignore threshold. The ignore threshold is the max of
    * initial ignore threshold and the trailing end of the remember window (that is, which ever
@@ -189,10 +197,55 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
-      val filter = new PathFilter {
+      val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val rootDirectoryDepth = directoryDepth
+
+      // Search nested directories to find new files.
+      def searchFilesRecursively(status: FileStatus, files: mutable.ArrayBuffer[String]): Unit = {
+        val path = status.getPath
+        if (status.isDir) {
+          // Note: A user may set depth = Int.MaxValue to search all nested directories.
+          if (depth > path.depth() - rootDirectoryDepth) {
+            if (lastFoundDirs.contains(path)) {
+              if (status.getModificationTime > modTimeIgnoreThreshold) {
+                fs.listStatus(path).foreach(searchFilesRecursively(_, files))
+              }
+            } else {
+              lastFoundDirs += path
+              fs.listStatus(path).foreach(searchFilesRecursively(_, files))
+            }
+          }
+        } else {
+          if (newFileFilter.accept(path)) {
+            files += path.toString
+          }
+        }
+      }
+
+      val validDirs: Iterable[Path] =
+        if (lastFoundDirs.isEmpty) {
+          Seq(directoryPath)
+        }
+        else {
+          lastFoundDirs.filter { path =>
+            // If the mod time of directory is more than ignore time, no new files in this directory
+            try {
+              val status = fs.getFileStatus(path)
+              status != null && status.getModificationTime > modTimeIgnoreThreshold
+            } catch {
+              // If the directory don't find, remove the directory from `lastFoundDirs`
+              case e: FileNotFoundException =>
+                lastFoundDirs.remove(path)
+                false
+            }
+          }
+        }
+
+      val newFiles = mutable.ArrayBuffer[String]()
+      validDirs.flatMap(fs.listStatus(_)). // Get sub dirs and files
+        foreach(searchFilesRecursively(_, newFiles))
       val timeTaken = clock.getTimeMillis() - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -203,7 +256,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
             "files in the monitored directory."
         )
       }
-      newFiles
+      newFiles.toArray
     } catch {
       case e: Exception =>
         logWarning("Error finding new files", e)
@@ -286,17 +339,32 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   }
 
   private def directoryPath: Path = {
-    if (path_ == null) path_ = new Path(directory)
+    if (fs_ == null) init()
     path_
   }
 
+  private def directoryDepth: Int = {
+    if (fs_ == null) init()
+    directoryDepth_
+  }
+
   private def fs: FileSystem = {
-    if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    if (fs_ == null) init()
     fs_
   }
 
-  private def reset()  {
+  private def init(): Unit = {
+    val originPath = new Path(directory)
+    fs_ = originPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    // Get the absolute path
+    path_ = fs_.getFileStatus(originPath).getPath
+    directoryDepth_ = path_.depth()
+  }
+
+  private def reset() {
     fs_ = null
+    path_ = null
+    directoryDepth_ = -1
   }
 
   @throws(classOf[IOException])
@@ -308,6 +376,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
+    lastFoundDirs = new mutable.HashSet[Path]()
   }
 
   /**

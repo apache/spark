@@ -191,12 +191,40 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  test("file input stream - newFilesOnly = true") {
+  test("file input stream - newFilesOnly = true and depth = 1") {
     testFileStream(newFilesOnly = true)
   }
 
-  test("file input stream - newFilesOnly = false") {
+  test("file input stream - newFilesOnly = false and depth = 1") {
     testFileStream(newFilesOnly = false)
+  }
+
+  test("file input stream - newFilesOnly = true and depth = 2") {
+    testFileStream(newFilesOnly = true, 2)
+  }
+
+  test("file input stream - newFilesOnly = false and depth = 2") {
+    testFileStream(newFilesOnly = false, 2)
+  }
+
+  test("file input stream - newFilesOnly = true and depth = 3") {
+    testFileStream(newFilesOnly = true, 3)
+  }
+
+  test("file input stream - newFilesOnly = false and depth = 3") {
+    testFileStream(newFilesOnly = false, 3)
+  }
+
+  test("file input stream - newFilesOnly = false and depth is too small") {
+    testFileStream(newFilesOnly = false, 3, 2)
+  }
+
+  test("file input stream - newFilesOnly = true and depth = Int.MaxValue") {
+    testFileStream(newFilesOnly = true, 3, Int.MaxValue)
+  }
+
+  test("file input stream - newFilesOnly = false and depth = Int.MaxValue") {
+    testFileStream(newFilesOnly = false, 3, Int.MaxValue)
   }
 
   test("multi-thread receiver") {
@@ -355,11 +383,18 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     }
   }
 
-  def testFileStream(newFilesOnly: Boolean) {
-    val testDir: File = null
+  def testFileStream(newFilesOnly: Boolean, depth: Int = 1): Unit = {
+    testFileStream(newFilesOnly, depth, depth)
+  }
+
+  def testFileStream(newFilesOnly: Boolean, createDepth: Int, searchDepth: Int) {
+    val rootDir = Utils.createTempDir()
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      var testDir = rootDir
+      for (i <- 1 until createDepth) {
+        testDir = Utils.createTempDir(testDir.toString)
+      }
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charset.forName("UTF-8"))
@@ -372,7 +407,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
         val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
-          testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
+          rootDir.toString, (x: Path) => true,
+          newFilesOnly = newFilesOnly, searchDepth).map(_._2.toString)
         val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
         val outputStream = new TestOutputStream(fileStream, outputBuffer)
         outputStream.register()
@@ -399,15 +435,18 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
 
         // Verify that all the files have been read
-        val expectedOutput = if (newFilesOnly) {
-          input.map(_.toString).toSet
-        } else {
-          (Seq(0) ++ input).map(_.toString).toSet
-        }
+        val expectedOutput =
+          if (createDepth > searchDepth) {
+            Set()
+          } else if (newFilesOnly) {
+            input.map(_.toString).toSet
+          } else {
+            (Seq(0) ++ input).map(_.toString).toSet
+          }
         assert(outputBuffer.flatten.toSet === expectedOutput)
       }
     } finally {
-      if (testDir != null) Utils.deleteRecursively(testDir)
+      Utils.deleteRecursively(rootDir)
     }
   }
 }
