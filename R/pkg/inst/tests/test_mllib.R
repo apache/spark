@@ -33,6 +33,20 @@ test_that("glm and predict", {
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
 })
 
+test_that("glm should work with long formula", {
+  training <- createDataFrame(sqlContext, iris)
+  training$LongLongLongLongLongName <- training$Sepal_Width
+  training$VeryLongLongLongLongLongLongLongLongLongLongLongLongName <- training$Sepal_Length
+  training$AnotherVeryLongLongLongLongLongLongLongLongLongLongLongName <- training$Species
+  model <- glm(LongLongLongLongLongName ~
+               VeryLongLongLongLongLongLongLongLongLongLongLongLongName +
+               AnotherVeryLongLongLongLongLongLongLongLongLongLongLongName,
+               data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+})
+
 test_that("predictions match with native glm", {
   training <- createDataFrame(sqlContext, iris)
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
