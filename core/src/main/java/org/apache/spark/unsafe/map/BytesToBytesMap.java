@@ -20,6 +20,7 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -638,7 +639,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (valueLength % 8 == 0);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY || !canGrowArray) {
+
+      if (numElements == MAX_CAPACITY
+        // The map could be reused from last spill (because of no enough memory to grow),
+        // then we don't try to grow again if hit the `growthThreshold`.
+        || !canGrowArray && numElements > growthThreshold) {
         return false;
       }
 
@@ -730,25 +735,18 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Free the memory used by longArray.
-   */
-  public void freeArray() {
-    updatePeakMemoryUsed();
-    if (longArray != null) {
-      long used = longArray.memoryBlock().size();
-      longArray = null;
-      releaseMemory(used);
-    }
-  }
-
-  /**
    * Free all allocated memory associated with this map, including the storage for keys and values
    * as well as the hash map array itself.
    *
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
-    freeArray();
+    updatePeakMemoryUsed();
+    if (longArray != null) {
+      long used = longArray.memoryBlock().size();
+      longArray = null;
+      releaseMemory(used);
+    }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
@@ -831,6 +829,28 @@ public final class BytesToBytesMap extends MemoryConsumer {
   @VisibleForTesting
   public int getNumDataPages() {
     return dataPages.size();
+  }
+
+  /**
+   * Returns the underline long[] of longArray.
+   */
+  public long[] getArray() {
+    assert(longArray != null);
+    return (long[]) longArray.memoryBlock().getBaseObject();
+  }
+
+  /**
+   * Reset this map to initialized state.
+   */
+  public void reset() {
+    numElements = 0;
+    Arrays.fill(getArray(), 0);
+    while (dataPages.size() > 0) {
+      MemoryBlock dataPage = dataPages.removeLast();
+      freePage(dataPage);
+    }
+    currentPage = null;
+    pageCursor = 0;
   }
 
   /**
