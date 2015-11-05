@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql
 
-
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
 
 
@@ -60,7 +60,10 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") => UnresolvedStar(Some(name.substring(0, name.length - 2)))
+    case _ if name.endsWith(".*") => {
+      val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
+      UnresolvedStar(Some(parts))
+    }
     case _ => UnresolvedAttribute.quotedString(name)
   })
 

@@ -34,7 +34,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
 /**
  * An helper class to update the fields of UnsafeRow, used by ColumnAccessor
  *
- * WARNNING: These setter MUST be called in increasing order of ordinals.
+ * WARNING: These setter MUST be called in increasing order of ordinals.
  */
 class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
 
@@ -140,7 +140,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private int numRowsInBatch = 0;
 
         private scala.collection.Iterator input = null;
-        private MutableRow mutableRow = null;
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
@@ -156,7 +155,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
           this.input = input;
-          this.mutableRow = mutableRow;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
         }

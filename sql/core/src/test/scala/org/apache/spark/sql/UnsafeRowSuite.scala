@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import java.io.ByteArrayOutputStream
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.serializer.{KryoSerializer, JavaSerializer}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryAllocator

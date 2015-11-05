@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -31,13 +31,14 @@ import org.apache.spark.unsafe.types.UTF8String
  * internal binary representation.
  */
 object RowEncoder {
-  def apply(schema: StructType): ClassEncoder[Row] = {
+  def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val extractExpressions = extractorsFor(inputObject, schema)
     val constructExpression = constructorFor(schema)
-    new ClassEncoder[Row](
+    new ExpressionEncoder[Row](
       schema,
+      flat = false,
       extractExpressions.asInstanceOf[CreateStruct].children,
       constructExpression,
       ClassTag(cls))
