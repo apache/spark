@@ -447,6 +447,7 @@ class WebUiTests(unittest.TestCase):
     def tearDown(self):
         pass
 
+
 class WebLdapAuthTest(unittest.TestCase):
 
     def setUp(self):
@@ -499,7 +500,7 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
-        configuration.conf.set("webserver", "authenticate", "True")
+        configuration.conf.set("webserver", "authenticate", "False")
 
 
 if 'MySqlOperator' in dir(operators):

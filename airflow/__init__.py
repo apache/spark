@@ -28,7 +28,8 @@ login = None
 def load_login():
     auth_backend = 'airflow.default_login'
     try:
-        auth_backend = configuration.conf.get('webserver', 'auth_backend')
+        if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
+            auth_backend = configuration.conf.get('webserver', 'auth_backend')
     except configuration.AirflowConfigException:
         if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
             logging.warning("auth_backend not found in webserver config reverting to *deprecated*"
