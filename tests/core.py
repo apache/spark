@@ -498,7 +498,8 @@ class WebLdapAuthTest(unittest.TestCase):
         assert '403 Forbidden' in response.data
 
     def tearDown(self):
-        pass
+        configuration.test_mode()
+        configuration.conf.set("webserver", "authenticate", "True")
 
 
 if 'MySqlOperator' in dir(operators):
