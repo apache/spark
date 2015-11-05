@@ -470,6 +470,7 @@ class WebLdapAuthTest(unittest.TestCase):
         app.config['TESTING'] = True
         self.app = app.test_client()
 
+
     def login(self, username, password):
         return self.app.post('/admin/airflow/login', data=dict(
             username=username,
@@ -496,7 +497,8 @@ class WebLdapAuthTest(unittest.TestCase):
         #assert 'form-signin' in response.data
 
     def test_unauthorized(self):
-        response = self.app.get("/admin/connection/")
+        response = self.app.get("/")
+        print response.data
         assert '403 Forbidden' in response.data
 
     def tearDown(self):

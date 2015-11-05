@@ -39,11 +39,11 @@ def load_login():
     try:
         global login
         login = import_module(auth_backend)
-    except ImportError:
+    except ImportError, err:
         logging.critical(
             "Cannot import authentication module %s. "
-            "Please correct your authentication backend or disable authentication",
-            auth_backend
+            "Please correct your authentication backend or disable authentication: %s",
+            auth_backend, err
         )
         if configuration.conf.getboolean('webserver', 'AUTHENTICATE'):
             raise AirflowException("Failed to import authentication backend")

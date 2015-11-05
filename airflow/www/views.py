@@ -57,14 +57,10 @@ login_required = airflow.login.login_required
 current_user = airflow.login.current_user
 logout_user = airflow.login.logout_user
 
-AUTHENTICATE = configuration.conf.getboolean('webserver', 'AUTHENTICATE')
-if AUTHENTICATE is False:
-    login_required = lambda x: x
-
 FILTER_BY_OWNER = False
 if configuration.conf.getboolean('webserver', 'FILTER_BY_OWNER'):
     # filter_by_owner if authentication is enabled and filter_by_owner is true
-    FILTER_BY_OWNER = AUTHENTICATE
+    FILTER_BY_OWNER = not current_app.config['LOGIN_DISABLED']
 
 
 def dag_link(v, c, m, p):
@@ -198,7 +194,7 @@ def data_profiling_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if (
-                    not AUTHENTICATE or
+                    current_app.config['LOGIN_DISABLED'] or
                     (not current_user.is_anonymous() and current_user.data_profiling())
         ):
             return f(*args, **kwargs)
@@ -1731,7 +1727,7 @@ class ChartModelView(wwwutils.DataProfilingMixin, AirflowModelView):
             model.iteration_no = 0
         else:
             model.iteration_no += 1
-        if AUTHENTICATE and not model.user_id and current_user:
+        if not current_app['LOGIN_DISABLED'] and not model.user_id and current_user:
             model.user_id = current_user.id
         model.last_modified = datetime.now()
 

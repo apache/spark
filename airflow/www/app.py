@@ -4,6 +4,8 @@ from flask import Flask
 from flask.ext.admin import Admin, base
 from flask.ext.cache import Cache
 
+import flask_login
+
 import airflow
 from airflow import models
 from airflow.settings import Session
@@ -17,8 +19,14 @@ from airflow import configuration
 def create_app(config=None):
     app = Flask(__name__)
     app.secret_key = configuration.conf.get('webserver', 'SECRET_KEY')
+    app.config['LOGIN_DISABLED'] = not configuration.conf.getboolean('webserver', 'AUTHENTICATE')
+
     #app.config = config
     airflow.load_login()
+    airflow.login.login_manager = flask_login.LoginManager()
+    airflow.login.login_manager.login_view = 'airflow.login'
+    airflow.login.login_manager.login_message = None
+
     airflow.login.login_manager.init_app(app)
 
     cache = Cache(
@@ -29,15 +37,15 @@ def create_app(config=None):
     app.jinja_env.add_extension("chartkick.ext.charts")
 
     with app.app_context():
-        from airflow.www.views import HomeView
+        from airflow.www import views
+
         admin = Admin(
             app, name='Airflow',
             static_url_path='/admin',
-            index_view=HomeView(endpoint='', url='/admin'),
+            index_view=views.HomeView(endpoint='', url='/admin'),
             template_mode='bootstrap3',
         )
 
-        from airflow.www import views
         admin.add_view(views.Airflow(name='DAGs'))
 
         admin.add_view(views.SlaMissModelView(models.SlaMiss, Session, name="SLA Misses", category="Browse"))
