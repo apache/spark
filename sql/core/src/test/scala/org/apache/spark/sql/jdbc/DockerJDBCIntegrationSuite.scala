@@ -73,6 +73,14 @@ abstract class DockerJDBCIntegrationSuite
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
+      // Check that Docker is actually up
+      try {
+        docker.ping()
+      } catch {
+        case NonFatal(e) =>
+          log.error("Exception while connecting to Docker. Check whether Docker is running.")
+          throw e
+      }
       // Ensure that the Docker image is installed:
       try {
         docker.inspectImage(db.imageName)
