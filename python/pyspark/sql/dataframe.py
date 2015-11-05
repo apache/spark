@@ -422,6 +422,20 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
+    @since(1.6)
+    def repartition(numPartitions, partitionExprs):
+        """Returns a new :class:`DataFrame` partitioned by the given partitioning expressions into
+        `numPartitions`. The resulting DataFrame is hash partitioned.
+        """
+        return DataFrame(self._jdf.repartition(numPartitions, partitionExprs), self.sql_ctx)
+
+    @since(1.6)
+    def repartition(partitionExprs):
+        """Returns a new :class:`DataFrame`  partitioned by the given partitioning expressions
+        preserving the existing number of partitions. The resulting DataFrame is hash partitioned.
+        """
+        return DataFrame(self._jdf.repartition(partitionExprs), self.sql_ctx)
+
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
