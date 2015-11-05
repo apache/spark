@@ -21,11 +21,13 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions.collectionAsScalaIterable
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
+import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
 
 /**
@@ -41,6 +43,12 @@ object StorageStatusListener {
 
 @DeveloperApi
 class StorageStatusListener(conf: SparkConf) extends SparkListener {
+  var ticker = Ticker.systemTicker()
+  
+  private [storage] def this(conf: SparkConf, ticker: Ticker) = {
+    this(conf)
+    this.ticker = ticker
+  }
   
   import StorageStatusListener._
   
@@ -48,7 +56,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
   private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder().
     expireAfterWrite(conf.getTimeAsSeconds(TIME_TO_EXPIRE_KILLED_EXECUTOR, "0"), TimeUnit.SECONDS).
-    build[String, StorageStatus]()
+    ticker(ticker).build[String, StorageStatus]()
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
