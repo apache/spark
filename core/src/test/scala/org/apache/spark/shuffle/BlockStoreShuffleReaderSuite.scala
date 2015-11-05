@@ -77,6 +77,8 @@ class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext 
     // can ensure retain() and release() are properly called.
     val blockManager = mock(classOf[BlockManager])
 
+    when(blockManager.conf).thenReturn(testConf)
+
     // Create a return function to use for the mocked wrapForCompression method that just returns
     // the original input stream.
     val dummyCompressionFunction = new Answer[InputStream] {
