@@ -82,6 +82,10 @@ class SqlLexical extends StdLexical {
     override def toString: String = chars
   }
 
+  case class DecimalLit(chars: String) extends Token {
+    override def toString: String = chars
+  }
+
   /* This is a work around to support the lazy setting */
   def initialize(keywords: Seq[String]): Unit = {
     reserved.clear()
@@ -102,8 +106,12 @@ class SqlLexical extends StdLexical {
   }
 
   override lazy val token: Parser[Token] =
-    ( identChar ~ (identChar | digit).* ^^
-      { case first ~ rest => processIdent((first :: rest).mkString) }
+    ( rep1(digit) ~ ('.' ~> digit.*).? ~ (exp ~> sign.? ~ rep1(digit)) ^^ {
+        case i ~ None ~ (sig ~ rest) =>
+          DecimalLit(i.mkString + "e" + sig.mkString + rest.mkString)
+        case i ~ Some(d) ~ (sig ~ rest) =>
+          DecimalLit(i.mkString + "." + d.mkString + "e" + sig.mkString + rest.mkString)
+      }
     | digit.* ~ identChar ~ (identChar | digit).* ^^
       { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
@@ -124,6 +132,9 @@ class SqlLexical extends StdLexical {
     )
 
   override def identChar: Parser[Elem] = letter | elem('_')
+
+  private lazy val sign: Parser[Elem] = elem("s", c => c == '+' || c == '-')
+  private lazy val exp: Parser[Elem] = elem("e", c => c == 'E' || c == 'e')
 
   override def whitespace: Parser[Any] =
     ( whitespaceChar

@@ -243,7 +243,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       ExceptionFailure("Exception", "description", null, null, None, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure("0"),
+      ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {
