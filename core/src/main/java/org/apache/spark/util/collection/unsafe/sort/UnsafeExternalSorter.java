@@ -295,7 +295,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       LongArray array;
       try {
         // could trigger spilling
-        array = allocateArray(used / 16 * 2);
+        array = allocateArray(used / 8 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
