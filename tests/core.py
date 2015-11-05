@@ -7,8 +7,7 @@ from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.bin import cli
-from airflow.configuration import conf
-from airflow.www.app import create_app
+from airflow.www import app as application
 from airflow.settings import Session
 
 NUM_EXAMPLE_DAGS = 7
@@ -273,7 +272,7 @@ class CliTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        app = create_app()
+        app = application.create_app()
         app.config['TESTING'] = True
         self.parser = cli.get_parser()
         self.dagbag = models.DagBag(
@@ -331,7 +330,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        app = create_app()
+        app = application.create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
 
@@ -447,6 +446,60 @@ class WebUiTests(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+class WebLdapAuthTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.conf.set("webserver", "authenticate", "True")
+        configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
+        try:
+            configuration.conf.add_section("ldap")
+        except:
+            pass
+        configuration.conf.set("ldap", "uri", "ldap://localhost")
+        configuration.conf.set("ldap", "user_filter", "objectClass=*")
+        configuration.conf.set("ldap", "user_name_attr", "True")
+        configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
+        configuration.conf.set("ldap", "bind_password", "insecure")
+        configuration.conf.set("ldap", "basedn", "dc=example,dc=com")
+        configuration.conf.set("ldap", "cacert", "")
+
+        app = application.create_app()
+        app.config['TESTING'] = True
+        self.app = app.test_client()
+
+    def login(self, username, password):
+        return self.app.post('/admin/airflow/login', data=dict(
+            username=username,
+            password=password
+        ), follow_redirects=True)
+
+    def logout(self):
+        return self.app.get('/admin/airflow/logout', follow_redirects=True)
+
+    def test_login_logout_ldap(self):
+        assert configuration.conf.getboolean('webserver', 'authenticate') is True
+
+        #response = self.login('user1', 'userx')
+        #print(response.data)
+        #assert 'Incorrect login details' in response.data
+
+        #response = self.login('userz', 'user1')
+        #assert 'Incorrect login details' in response.data
+
+        #response = self.login('user1', 'user1')
+        #assert 'Data Profiling' in response.data
+
+        #response = self.logout()
+        #assert 'form-signin' in response.data
+
+    def test_unauthorized(self):
+        response = self.app.get("/admin/connection/")
+        assert '403 Forbidden' in response.data
+
+    def tearDown(self):
+        pass
+
 
 if 'MySqlOperator' in dir(operators):
     # Only testing if the operator is installed

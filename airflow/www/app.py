@@ -11,12 +11,12 @@ from airflow.settings import Session
 from airflow.www.blueprints import ck, routes
 from airflow import jobs
 from airflow import settings
-from airflow.configuration import conf
+from airflow import configuration
 
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.secret_key = conf.get('webserver', 'SECRET_KEY')
+    app.secret_key = configuration.conf.get('webserver', 'SECRET_KEY')
     #app.config = config
     login.login_manager.init_app(app)
 
