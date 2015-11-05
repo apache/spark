@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 final class Binarizer(override val uid: String)
-  extends Transformer with Saveable with HasInputCol with HasOutputCol {
+  extends Transformer with Writable with HasInputCol with HasOutputCol {
 
   def this() = this(Identifiable.randomUID("binarizer"))
 
@@ -87,10 +87,10 @@ final class Binarizer(override val uid: String)
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
 
-  override def save: Saver = new DefaultParamsSaver(this)
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-object Binarizer extends Loadable[Binarizer] {
+object Binarizer extends Readable[Binarizer] {
 
-  override def load: Loader[Binarizer] = new DefaultParamsLoader[Binarizer]
+  override def read: Reader[Binarizer] = new DefaultParamsReader[Binarizer]
 }

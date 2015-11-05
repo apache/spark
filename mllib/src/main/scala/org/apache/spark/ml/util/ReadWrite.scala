@@ -36,9 +36,9 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 /**
- * Trait for [[Saver]] and [[Loader]].
+ * Trait for [[Writer]] and [[Reader]].
  */
-private[util] sealed trait BaseSaveLoad {
+private[util] sealed trait BaseReadWrite {
   private var optionSQLContext: Option[SQLContext] = None
 
   /**
@@ -119,8 +119,8 @@ private[util] sealed trait BaseSaveLoad {
  */
 @Experimental
 @Since("1.6.0")
-abstract class Saver extends BaseSaveLoad {
-  import Saver._
+abstract class Writer extends BaseReadWrite {
+  import Writer._
 
   /**
    * Saves the ML instance to the input path.
@@ -128,6 +128,12 @@ abstract class Saver extends BaseSaveLoad {
   @Since("1.6.0")
   def to(path: String): Unit
 
+  /**
+   * Saves the ML instances to the input path, the same as [[to()]].
+   */
+  @Since("1.6.0")
+  def save(path: String): Unit = to(path)
+  
   /**
    * Tells whether we should overwrite if the output directory exists (default: false).
    */
@@ -138,22 +144,22 @@ abstract class Saver extends BaseSaveLoad {
 
 @Experimental
 @Since("1.6.0")
-object Saver {
+object Writer {
   /** Option key to control overwrite. */
   val Overwrite: String = "overwrite"
 }
 
 /**
- * Trait for classes that provide [[Saver]].
+ * Trait for classes that provide [[Writer]].
  */
 @Since("1.6.0")
-trait Saveable {
+trait Writable {
 
   /**
-   * Returns a [[Saver]] instance for this ML instance.
+   * Returns a [[Writer]] instance for this ML instance.
    */
   @Since("1.6.0")
-  def save: Saver
+  def write: Writer
 }
 
 /**
@@ -162,35 +168,40 @@ trait Saveable {
  */
 @Experimental
 @Since("1.6.0")
-abstract class Loader[T] extends BaseSaveLoad {
+abstract class Reader[T] extends BaseReadWrite {
 
   /**
    * Loads the ML component from the input path.
    */
   @Since("1.6.0")
   def from(path: String): T
+
+  /**
+   * Loads the ML component from the input path, the same as [[from()]].
+   */
+  def load(path: String): T = from(path)
 }
 
 /**
- * Trait for objects that provide [[Loader]].
+ * Trait for objects that provide [[Reader]].
  * @tparam T ML instance type
  */
 @Experimental
 @Since("1.6.0")
-trait Loadable[T] {
-
+trait Readable[T] {
+  
   /**
-   * Returns a [[Loader]] instance for this class.
+   * Returns a [[Reader]] instance for this class.
    */
   @Since("1.6.0")
-  def load: Loader[T]
+  def read: Reader[T]
 }
 
 /**
- * Default [[Saver]] implementation for non-meta transformers and estimators.
+ * Default [[Writer]] implementation for non-meta transformers and estimators.
  * @param instance object to save
  */
-private[ml] class DefaultParamsSaver(instance: Params) extends Saver with Logging {
+private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logging {
 
   /**
    * Saves the ML component to the input path.
@@ -228,10 +239,10 @@ private[ml] class DefaultParamsSaver(instance: Params) extends Saver with Loggin
 }
 
 /**
- * Default [[Loader]] implementation for non-meta transformers and estimators.
+ * Default [[Reader]] implementation for non-meta transformers and estimators.
  * @tparam T ML instance type
  */
-private[ml] class DefaultParamsLoader[T] extends Loader[T] {
+private[ml] class DefaultParamsReader[T] extends Reader[T] {
 
   /**
    * Loads the ML component from the input path.

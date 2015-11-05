@@ -25,24 +25,24 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-trait DefaultSaveLoadTest extends TempDirectory { self: Suite =>
+trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
   /**
    * Checks "overwrite" option and params.
    * @param instance ML instance to test saving/loading
    * @tparam T ML instance type
    */
-  def testDefaultSaveLoad[T <: Params with Saveable](instance: T): Unit = {
+  def testDefaultReadWrite[T <: Params with Writable](instance: T): Unit = {
     val uid = instance.uid
     val path = new File(tempDir, uid).getPath
 
-    instance.save.to(path)
+    instance.write.to(path)
     intercept[IOException] {
-      instance.save.to(path)
+      instance.write.to(path)
     }
-    instance.save.options("overwrite" -> "true").to(path)
+    instance.write.options("overwrite" -> "true").to(path)
 
-    val loader = instance.getClass.getMethod("load").invoke(null).asInstanceOf[Loader[T]]
+    val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[Reader[T]]
     val newInstance = loader.from(path)
 
     assert(newInstance.uid === instance.uid)
@@ -61,7 +61,7 @@ trait DefaultSaveLoadTest extends TempDirectory { self: Suite =>
   }
 }
 
-class MyParams(override val uid: String) extends Params with Saveable {
+class MyParams(override val uid: String) extends Params with Writable {
 
   final val intParamWithDefault: IntParam = new IntParam(this, "intParamWithDefault", "doc")
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
@@ -87,18 +87,18 @@ class MyParams(override val uid: String) extends Params with Saveable {
 
   override def copy(extra: ParamMap): Params = defaultCopy(extra)
 
-  override def save: Saver = new DefaultParamsSaver(this)
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 object MyParams {
-  def load: Loader[MyParams] = new DefaultParamsLoader[MyParams]
+  def load: Reader[MyParams] = new DefaultParamsReader[MyParams]
 }
 
-class DefaultSaveLoadSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultSaveLoadTest {
+class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
 
-  test("default save/load") {
+  test("default read/write") {
     val myParams = new MyParams("my_params")
-    testDefaultSaveLoad(myParams)
+    testDefaultReadWrite(myParams)
   }
 }
