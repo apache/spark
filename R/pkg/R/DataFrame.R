@@ -2037,12 +2037,7 @@ setMethod("as.data.frame",
 setMethod("attach",
           signature(what = "DataFrame"),
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            cols <- columns(what)
-            stopifnot(length(cols) > 0)
-            newEnv <- new.env()
-            for (i in 1:length(cols)) {
-              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
-            }
+            newEnv <- assignNewEnv(what)
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
 
@@ -2065,12 +2060,6 @@ setMethod("attach",
 setMethod("with",
           signature(data = "DataFrame"),
           function(data, expr, ...) {
-            cols <- columns(data)
-            stopifnot(length(cols) > 0)
-
-            newEnv <- new.env()
-            for (i in 1:length(cols)) {
-              assign(x = cols[i], value = data[, cols[i]], envir = newEnv)
-            }
+            newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
