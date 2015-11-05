@@ -320,7 +320,7 @@ case object DerbyDialect extends JdbcDialect {
  * :: DeveloperApi ::
  * Default Oracle dialect, mapping a nonspecific 
  * numeric type to a general decimal type.
- * Solution by @bdolbeare (github.com)
+ * Solution by @cloud-fan and @bdolbeare (github.com)
  */
 @DeveloperApi
 case object OracleDialect extends JdbcDialect {
