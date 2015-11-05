@@ -55,7 +55,7 @@ abstract class DatabaseOnDocker {
   def getJdbcUrl(ip: String, port: Int): String
 }
 
-abstract class DatabaseIntegrationSuite
+abstract class DockerJDBCIntegrationSuite
   extends SparkFunSuite
   with BeforeAndAfterAll
   with Eventually

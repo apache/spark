@@ -21,9 +21,9 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
-  val db = new DatabaseOnDocker {
-    override val imageName = "mysql:latest"
+class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
+  override val db = new DatabaseOnDocker {
+    override val imageName = "mysql:5.7.9"
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )

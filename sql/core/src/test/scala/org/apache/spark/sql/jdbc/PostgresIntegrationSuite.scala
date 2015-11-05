@@ -20,9 +20,9 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
-class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
-  val db = new DatabaseOnDocker {
-    override val imageName = "postgres:latest"
+class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
+  override val db = new DatabaseOnDocker {
+    override val imageName = "postgres:9.4.5"
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
