@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions.collectionAsScalaIterable
+import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -63,7 +63,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
   }
   
   def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized{
-    removedExecutorIdToStorageStatus.asMap().values().toSeq
+    removedExecutorIdToStorageStatus.asMap().values().asScala.toSeq
   }
  
   /** Update storage status list to reflect updated block statuses */
