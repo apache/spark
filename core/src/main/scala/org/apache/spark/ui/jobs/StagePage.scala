@@ -28,7 +28,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.{InternalAccumulator, SparkConf}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{TaskLocality, AccumulableInfo, TaskInfo}
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Utils, Distribution}
