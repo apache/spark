@@ -321,18 +321,22 @@ class DagBag(object):
         return dag_ids
 
 
-class BaseUser(Base):
+class User(Base):
     __tablename__ = "user"
 
     id = Column(Integer, primary_key=True)
     username = Column(String(ID_LEN), unique=True)
     email = Column(String(500))
+    superuser = False
 
     def __repr__(self):
         return self.username
 
     def get_id(self):
         return str(self.id)
+
+    def is_superuser(self):
+        return self.superuser
 
 
 class Connection(Base):
