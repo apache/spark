@@ -378,8 +378,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[(Boolean, MapStatus)] = {
+        writer: ShuffleWriter[Int, Int])(
+        iter: Iterator[(Int, Int)]): Option[(Boolean, MapStatus)] = {
       val files = writer.write(iter)
       val output = writer.stop(true)
       output.map(ShuffleOutputCoordinator.commitOutputs(0, 0, files, _, SparkEnv.get))

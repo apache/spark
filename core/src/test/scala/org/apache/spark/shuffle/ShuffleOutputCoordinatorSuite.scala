@@ -31,7 +31,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
   var tempDir: File = _
   var mapStatusFile: File = _
   // use the "port" as a way to distinguish mapstatuses, just for the test
-  def mapStatus(id: Int): MapStatus = MapStatus(BlockManagerId("1", "a.b.c", id), Array(0L, 1L))
+  def mapStatus(attemptId: Int): MapStatus = MapStatus(BlockManagerId("1", "a.b.c", attemptId), Array(0L, 1L))
   def ser: SerializerInstance = new JavaSerializer(new SparkConf()).newInstance()
 
   override def beforeEach(): Unit = {
@@ -73,14 +73,15 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
-  private def commit(files: Seq[TmpDestShuffleFile], id: Int): (Boolean, MapStatus) = {
-    ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus(id), mapStatusFile, ser)
+  private def commit(files: Seq[TmpDestShuffleFile], attemptId: Int): (Boolean, MapStatus) = {
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus(attemptId), mapStatusFile, ser)
   }
 
   test("move files if dest missing") {
     val firstAttempt = generateAttempt(0)
     val firstCommit = commit(firstAttempt, 1)
     assert(firstCommit._1)
+    // "port" is just our holder for the attempt that succeeded in this test setup
     assert(firstCommit._2.location.port === 1)
     verifyFiles(0)
     firstAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
@@ -100,6 +101,7 @@ class ShuffleOutputCoordinatorSuite extends SparkFunSuite with BeforeAndAfterEac
     val firstAttempt = generateAttempt(0)
     val firstCommit = commit(firstAttempt, 1)
     assert(firstCommit._1)
+    // "port" is just our holder for the attempt that succeeded in this test setup
     assert(firstCommit._2.location.port === 1)
     verifyFiles(0)
     firstAttempt.foreach{ case TmpDestShuffleFile(t, d) => assert(!t.exists())}
