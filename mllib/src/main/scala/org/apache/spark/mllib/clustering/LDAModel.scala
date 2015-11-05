@@ -367,6 +367,34 @@ class LocalLDAModel private[clustering] (
   }
 
   /**
+   * Predicts the topic mixture distribution for a document (often called "theta" in the
+   * literature).  Returns a vector of zeros for an empty document.
+   *
+   * Note this means to allow quick query for single document. For batch documents, please refer
+   * to [[topicDistributions(documents: RDD[(Long, Vector)])]] to avoid overhead.
+   *
+   * @param document document to predict topic mixture distributions for
+   * @return (document ID, topic mixture distribution for document)
+   */
+  @Since("1.6.0")
+  def topicDistributions(document: (Long, Vector)): (Long, Vector) = {
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val id = document._1
+    val termCounts = document._2
+    if (termCounts.numNonzeros == 0) {
+      (id, Vectors.zeros(this.k))
+    } else {
+      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        termCounts,
+        expElogbeta,
+        this.docConcentration.toBreeze,
+        gammaShape,
+        this.k)
+      (id, Vectors.dense(normalize(gamma, 1.0).toArray))
+    }
+  }
+
+  /**
    * Java-friendly version of [[topicDistributions]]
    */
   @Since("1.4.1")

@@ -374,9 +374,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       .values
       .collect()
 
-    expectedPredictions.zip(actualPredictions).forall { case (expected, actual) =>
-      expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D)
+    expectedPredictions.zip(actualPredictions).foreach { case (expected, actual) =>
+      assert(expected._1 === actual._1 && (expected._2 ~== actual._2 relTol 1E-3D))
     }
+
+    val topicsBz = ldaModel.topicDistributions(docs.first())._2.toBreeze.toDenseVector
+    val singlePrediction = (argmax(topicsBz), max(topicsBz))
+    assert(expectedPredictions(0)._1 === singlePrediction._1
+      && (expectedPredictions(0)._2 ~== singlePrediction._2 relTol 1E-3D))
   }
 
   test("OnlineLDAOptimizer with asymmetric prior") {
