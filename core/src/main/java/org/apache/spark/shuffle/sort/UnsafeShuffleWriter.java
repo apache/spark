@@ -254,8 +254,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
       sparkConf.getBoolean("spark.shuffle.unsafe.fastMergeEnabled", true);
-    final boolean fastMergeIsSupported =
-      !compressionEnabled || compressionCodec instanceof LZFCompressionCodec;
+    final boolean fastMergeIsSupported = !compressionEnabled ||
+      CompressionCodec$.MODULE$.supportsConcatenationOfSerializedStreams(compressionCodec);
     try {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
