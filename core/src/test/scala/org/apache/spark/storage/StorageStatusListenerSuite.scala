@@ -20,13 +20,13 @@ package org.apache.spark.storage
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
+import com.google.common.base.Ticker
+import org.scalatest.FunSuite
+
 import org.apache.spark.SparkConf
 import org.apache.spark.Success
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.scalatest.FunSuite
-
-import com.google.common.base.Ticker
 
 /**
  * Test the behavior of StorageStatusListener in response to all relevant events.
