@@ -156,7 +156,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sqlContext: SQLContext) => {
         val value =
           try {
-            sqlContext.getConf(key)
+            if (key == SQLConf.DIALECT.key) {
+              sqlContext.conf.dialect
+            } else {
+              sqlContext.getConf(key)
+            }
           } catch {
             case _: NoSuchElementException => "<undefined>"
           }

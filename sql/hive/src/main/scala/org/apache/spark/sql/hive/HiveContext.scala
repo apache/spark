@@ -555,12 +555,6 @@ class HiveContext private[hive](
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  protected[sql] override def dialectClassName = if (conf.dialect == "hiveql") {
-    classOf[HiveQLDialect].getCanonicalName
-  } else {
-    super.dialectClassName
-  }
-
   protected[sql] override def getSQLDialect(): ParserDialect = {
     if (conf.dialect == "hiveql") {
       new HiveQLDialect(this)

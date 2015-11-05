@@ -335,6 +335,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SQL dialect at the start of HiveContext") {
+    val hiveContext = new HiveContext(sqlContext.sparkContext)
+    val dialectConf = "spark.sql.dialect"
+    checkAnswer(hiveContext.sql(s"set $dialectConf"), Row(dialectConf, "hiveql"))
+    assert(hiveContext.getSQLDialect().getClass === classOf[HiveQLDialect])
+  }
+
   test("SQL Dialect Switching") {
     assert(getSQLDialect().getClass === classOf[HiveQLDialect])
     setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
