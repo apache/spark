@@ -272,7 +272,8 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1, Set("c"))
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1, Set("c"))
 
-  // Columns only referenced by UDF filter must be required, as UDF filters can't be pushed down.
+  // Filters referencing multiple columns are not convertible, all referenced columns must be
+  // required.
   testPushDown("SELECT c FROM oneToTenFiltered WHERE A + b > 9", 10, Set("a", "b", "c"))
 
   // A query with an inconvertible filter, an unhandled filter, and a handled filter.

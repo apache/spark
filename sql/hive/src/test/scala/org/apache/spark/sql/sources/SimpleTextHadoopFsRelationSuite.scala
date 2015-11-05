@@ -110,6 +110,22 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
   /**
    * Constructs test cases that test column pruning and filter push-down.
    *
+   * For filter push-down, the following filters are not pushed-down.
+   *
+   * 1. Partitioning filters don't participate filter push-down, they are handled separately in
+   *    `DataSourceStrategy`
+   *
+   * 2. Catalyst filter `Expression`s that cannot be converted to data source `Filter`s are not
+   *    pushed down (e.g. UDF and filters referencing multiple columns).
+   *
+   * 3. Catalyst filter `Expression`s that can be converted to data source `Filter`s but cannot be
+   *    handled by the underlying data source are not pushed down (e.g. returned from
+   *    `BaseRelation.unhandledFilters()`).
+   *
+   *    Note that for [[SimpleTextRelation]], all data source [[Filter]]s other than [[GreaterThan]]
+   *    are unhandled.  We made this assumption in [[SimpleTextRelation.unhandledFilters()]] only
+   *    for testing purposes.
+   *
    * @param projections Projection list of the query
    * @param filter Filter condition of the query
    * @param requiredColumns Expected names of required columns
@@ -166,6 +182,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
           case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
         }
 
+        // Unbound these bound filters so that we can easily compare them with expected results.
         boundFilters.map {
           _.transform { case a: AttributeReference => UnresolvedAttribute(a.name) }
         }.toSet
@@ -180,6 +197,8 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
 
       markup("Checking unhandled, inconvertible, and partitioning filters")
       assert(expectedInconvertibleFilters ++ expectedUnhandledFilters === nonPushedFilters)
+      // Partitioning filters are handled separately and don't participate filter push-down. So they
+      // shouldn't be part of non-pushed filters.
       assert(expectedPartitioningFilters.intersect(nonPushedFilters).isEmpty)
     }
   }
@@ -328,6 +347,26 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       Row(18, 1, 9))
   } {
     Seq(
+      Row(16, 1))
+  }
+
+  testPruningAndFiltering(
+    projections = Seq('b, 'p),
+    filter = 'a > 7 && 'a < 9,
+    requiredColumns = Seq("b", "a"),
+    pushedFilters = Seq(GreaterThan("a", 7)),
+    inconvertibleFilters = Nil,
+    unhandledFilters = Seq('a < 9),
+    partitioningFilters = Nil
+  ) {
+    Seq(
+      Row(16, 0, 8),
+      Row(16, 1, 8),
+      Row(18, 0, 9),
+      Row(18, 1, 9))
+  } {
+    Seq(
+      Row(16, 0),
       Row(16, 1))
   }
 }
