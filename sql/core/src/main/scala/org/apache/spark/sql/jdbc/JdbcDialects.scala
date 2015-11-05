@@ -139,6 +139,7 @@ object JdbcDialects {
   registerDialect(DB2Dialect)
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
+  registerDialect(OracleDialect)
 
 
   /**
@@ -323,6 +324,7 @@ case object DerbyDialect extends JdbcDialect {
  */
 @DeveloperApi
 case object OracleDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     // Handle NUMBER fields that have no precision/scale in special way
