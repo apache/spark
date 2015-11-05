@@ -168,7 +168,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
    */
   def getMaxInputStreamRememberDuration(): Duration = {
     // If an InputDStream is not used, its `rememberDuration` will be null and we can ignore them
-    inputStreams.filter(_.rememberDuration != null).map(_.rememberDuration).maxBy(_.milliseconds)
+    inputStreams.map(_.rememberDuration).filter(_ != null).maxBy(_.milliseconds)
   }
 
   @throws(classOf[IOException])
