@@ -177,8 +177,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
         parCols.contains(attr.name)
       }
-      val projectList = inputDataCols ++ inputPartCols.map(c => UnresolvedAttribute(c.name))
-      Project(projectList, df.logicalPlan)
+      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
     }.getOrElse(df.logicalPlan)
 
     df.sqlContext.executePlan(
@@ -195,8 +194,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       df.logicalPlan.output
         .map(_.name)
         .find(df.queryExecution.analyzer.resolver(_, col))
-        .getOrElse(throw new AnalysisException(
-          s"Partition column $col not found in schema ${df.logicalPlan.schema}"))
+        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
+          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
     }
   }
 
