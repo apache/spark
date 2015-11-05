@@ -438,7 +438,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
-      nonEmptyDocs.zipWithIndex.foreach { case ((_, termCounts: Vector), idx: Int) =>
+      nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         val ids: List[Int] = termCounts match {
           case v: DenseVector => (0 until v.size).toList
           case v: SparseVector => v.indices.toList
