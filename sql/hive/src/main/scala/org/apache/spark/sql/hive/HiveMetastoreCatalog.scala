@@ -543,7 +543,7 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
+      case CreateViewAsSelect(table, child, allowExisting, replace, sql, withUDFs) =>
         if (conf.nativeView) {
           if (allowExisting && replace) {
             throw new AnalysisException(
@@ -560,6 +560,12 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
             allowExisting,
             replace)
         } else {
+          // Spark UDFs can't be used in HiveNativeCommand
+          if (withUDFs) {
+            throw new AnalysisException(
+              "Cannot use Spark UDFs when using Hive native commands to" +
+                " handle CREATE VIEW (i.e., spark.sql.nativeView = false).")
+          }
           HiveNativeCommand(sql)
         }
 
