@@ -824,6 +824,30 @@ class AFTSurvivalRegressionModel(JavaModel):
     .. versionadded:: 1.6.0
     """
 
+    @property
+    @since("1.6.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("1.6.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("1.6.0")
+    def scale(self):
+        """
+        Model scale paramter.
+        """
+        return self._call_java("scale")
+
     def predictQuantiles(self, features):
         """
         Predicted Quantiles
