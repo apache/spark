@@ -1884,6 +1884,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select * from json.invalid_file")
     }
     assert(e3.message.contains("Input paths do not exist or are empty directories"))
+
+    val e4 = intercept[AnalysisException] {
+      sql("select * from text.invalid_file")
+    }
+    assert(e4.message.contains("Input paths do not exist or are empty directories"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
