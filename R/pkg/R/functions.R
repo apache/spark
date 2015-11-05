@@ -1006,7 +1006,7 @@ setMethod("soundex",
             column(jc)
           })
 
-#' var_samp
+#' stddev
 #'
 #' Aggregate function: alias for \link{stddev_samp}
 #'
