@@ -1221,10 +1221,12 @@ class Log(Base):
     event = Column(String(30))
     execution_date = Column(DateTime)
     owner = Column(String(500))
+    extra = Column(Text)
 
-    def __init__(self, event, task_instance, owner=None):
+    def __init__(self, event, task_instance, owner=None, extra=None):
         self.dttm = datetime.now()
         self.event = event
+        self.extra = extra
         self.owner = owner or task_instance.task.owner
 
         if task_instance:
