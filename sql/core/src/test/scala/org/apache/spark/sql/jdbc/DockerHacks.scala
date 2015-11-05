@@ -132,6 +132,9 @@ abstract class DatabaseIntegrationSuite
             docker.killContainer(containerId)
             docker.removeContainer(containerId)
           }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Could not stop container $containerId", e)
         } finally {
           docker.close()
         }
