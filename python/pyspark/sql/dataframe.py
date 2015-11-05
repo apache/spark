@@ -422,6 +422,20 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
+    @since(1.6)
+    def repartition(self, numPartitions, partitionExprs):
+        """Returns a new :class:`DataFrame` partitioned by the given partitioning expressions into
+        `numPartitions`. The resulting DataFrame is hash partitioned.
+        """
+        return DataFrame(self._jdf.repartition(numPartitions, partitionExprs), self.sql_ctx)
+
+    @since(1.6)
+    def repartition(self, partitionExprs):
+        """Returns a new :class:`DataFrame` partitioned by the given partitioning expressions
+        preserving the existing number of partitions. The resulting DataFrame is hash partitioned.
+        """
+        return DataFrame(self._jdf.repartition(partitionExprs), self.sql_ctx)
+
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
@@ -649,6 +663,20 @@ class DataFrame(object):
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
+
+    @since(1.6)
+    def sortWithinPartitions(self, sortExprs):
+        """Returns a new :class:`DataFrame` with each partition sorted by the
+        given expressions.
+        """
+        return DataFrame(self._jdf.sortWithinPartitions(sortExprs), self.sql_ctx)
+
+    @since(1.6)
+    def sortWithinPartitions(self, sortCol, sortCols):
+        """Returns a new :class:`DataFrame` with each partition sorted by the
+        given expressions.
+        """
+        return DataFrame(self._jdf.sortWithinPartitions(sortCol, sortCols), self.sql_ctx)
 
     @since("1.3.1")
     def describe(self, *cols):
