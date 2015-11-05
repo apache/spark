@@ -315,3 +315,25 @@ case object DerbyDialect extends JdbcDialect {
 
 }
 
+/**
+ * :: DeveloperApi ::
+ * Default Oracle dialect, mapping a nonspecific 
+ * numeric type to a general decimal type.
+ * Solution by @bdolbeare (github.com)
+ */
+@DeveloperApi
+case object OracleDialect extends JdbcDialect {
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    // Handle NUMBER fields that have no precision/scale in special way
+    // because JDBC ResultSetMetaData converts this to 0 procision and -127 scale
+    if (sqlType == Types.NUMERIC && size == 0) {
+      // This is sub-optimal as we have to pick a precision/scale in advance whereas the data in Oracle is allowed 
+      //  to have different precision/scale for each value.  This conversion works in our domain for now though we 
+      //  need a more durable solution.  Look into changing JDBCRDD (line 406):
+      //    FROM:  mutableRow.update(i, Decimal(decimalVal, p, s))
+      //    TO:  mutableRow.update(i, Decimal(decimalVal))
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10))
+    } else None
+  }
+}
