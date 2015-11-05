@@ -155,6 +155,7 @@ private[spark] object CodeGenerationDecisionTreeModel {
     val toolbox = currentMirror.mkToolBox()
     val code =
       q"""
+         import org.apache.spark.mllib.linalg.{Vectors, Vector}
          (input: Vector) => {
             ${NodeToTree(root)}
          }
