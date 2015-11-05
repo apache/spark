@@ -58,12 +58,16 @@ final class ShuffleBlockFetcherIterator(
 
   import ShuffleBlockFetcherIterator._
 
+  private[this] val enableExternalShuffleService =
+    blockManager.conf.getBoolean("spark.shuffle.service.enabled", false)
+
   /**
    * If this option enabled, bypass unnecessary network interaction
    * if multiple block managers work in a single host.
    */
   private[this] val enableBypassNetworkAccess =
-    blockManager.conf.getBoolean("spark.shuffle.bypassNetworkAccess", false)
+    blockManager.conf.getBoolean("spark.shuffle.bypassNetworkAccess", false) &&
+      !enableExternalShuffleService
 
   /**
    * Total number of blocks to fetch. This can be smaller than the total number of blocks
@@ -199,8 +203,7 @@ final class ShuffleBlockFetcherIterator(
     var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
       totalBlocks += blockInfos.size
-      // if (blockManager.blockManagerId.shareHost(address)) {
-      if (blockManager.blockManagerId == address ||
+      if (address.executorId == blockManager.blockManagerId.executorId ||
           (enableBypassNetworkAccess && blockManager.blockManagerId.shareHost(address))) {
         // Filter out zero-sized blocks
         val blocks = blockInfos.filter(_._2 != 0).map(_._1)
@@ -253,8 +256,11 @@ final class ShuffleBlockFetcherIterator(
         val blockId = blockIter.next()
         assert(blockId.isShuffle)
         try {
-          val buf = blockManager.getShuffleBlockData(
-            blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+          val buf = if (!enableExternalShuffleService) {
+            blockManager.getShuffleBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+          } else {
+            blockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+          }
           shuffleMetrics.incLocalBlocksFetched(1)
           shuffleMetrics.incLocalBytesRead(buf.size)
           buf.retain()
