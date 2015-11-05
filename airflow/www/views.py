@@ -677,6 +677,7 @@ class Airflow(BaseView):
 
     @expose('/rendered')
     @login_required
+    @wwwutils.action_logging
     def rendered(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -711,6 +712,7 @@ class Airflow(BaseView):
 
     @expose('/log')
     @login_required
+    @wwwutils.action_logging
     def log(self):
         BASE_LOG_FOLDER = os.path.expanduser(
             conf.get('core', 'BASE_LOG_FOLDER'))
@@ -790,6 +792,7 @@ class Airflow(BaseView):
 
     @expose('/task')
     @login_required
+    @wwwutils.action_logging
     def task(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -836,7 +839,7 @@ class Airflow(BaseView):
 
     @expose('/run')
     @login_required
-    @wwwutils.action_logging('run')
+    @wwwutils.action_logging
     def run(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -866,7 +869,7 @@ class Airflow(BaseView):
 
     @expose('/clear')
     @login_required
-    @wwwutils.action_logging('clear')
+    @wwwutils.action_logging
     def clear(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -918,7 +921,7 @@ class Airflow(BaseView):
 
     @expose('/success')
     @login_required
-    @wwwutils.action_logging('mark_success')
+    @wwwutils.action_logging
     def success(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -1031,6 +1034,7 @@ class Airflow(BaseView):
     @expose('/tree')
     @login_required
     @wwwutils.gzipped
+    @wwwutils.action_logging
     def tree(self):
         dag_id = request.args.get('dag_id')
         blur = conf.getboolean('webserver', 'demo_mode')
@@ -1158,6 +1162,7 @@ class Airflow(BaseView):
     @expose('/graph')
     @login_required
     @wwwutils.gzipped
+    @wwwutils.action_logging
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1247,6 +1252,7 @@ class Airflow(BaseView):
 
     @expose('/duration')
     @login_required
+    @wwwutils.action_logging
     def duration(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1289,6 +1295,7 @@ class Airflow(BaseView):
 
     @expose('/landing_times')
     @login_required
+    @wwwutils.action_logging
     def landing_times(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
@@ -1332,6 +1339,7 @@ class Airflow(BaseView):
 
     @expose('/paused')
     @login_required
+    @wwwutils.action_logging
     def paused(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1351,6 +1359,7 @@ class Airflow(BaseView):
 
     @expose('/refresh')
     @login_required
+    @wwwutils.action_logging
     def refresh(self):
         DagModel = models.DagModel
         dag_id = request.args.get('dag_id')
@@ -1370,6 +1379,7 @@ class Airflow(BaseView):
 
     @expose('/refresh_all')
     @login_required
+    @wwwutils.action_logging
     def refresh_all(self):
         dagbag.collect_dags(only_if_updated=False)
         flash("All DAGs are now up to date")
@@ -1377,6 +1387,7 @@ class Airflow(BaseView):
 
     @expose('/gantt')
     @login_required
+    @wwwutils.action_logging
     def gantt(self):
 
         session = settings.Session()
@@ -1457,6 +1468,7 @@ class Airflow(BaseView):
 
     @expose('/variables/<form>', methods=["GET", "POST"])
     @login_required
+    @wwwutils.action_logging
     def variables(self, form):
         try:
             if request.method == 'POST':
