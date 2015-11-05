@@ -422,6 +422,49 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
+    @since(1.6)
+    def repartitionBy(self, *cols, **kwargs):
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
+        resulting DataFrame is hash partitioned.
+
+        :param numPartitions: int
+            If specified, the number of partitions to partition into. If not specified, preserves
+            the current number of partitions.
+
+        >>> data = df.unionAll(df).repartitionBy("age")
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  2|Alice|
+        |  5|  Bob|
+        |  5|  Bob|
+        +---+-----+
+        >>> data.rdd.getNumPartitions()
+        200
+        >>> data = data.repartitionBy("age", numPartitions=7)
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
+        +---+-----+
+        >>> data.rdd.getNumPartitions()
+        7
+        """
+        numPartitions = kwargs.get('numPartitions', -1)
+        if not isinstance(numPartitions, int):
+            raise TypeError("numPartitions can only be int, but got %s" % type(numPartitions))
+        if numPartitions == -1:
+          return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
+        else:
+          return DataFrame(self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
+
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
@@ -590,6 +633,29 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
+    @since(1.6)
+    def sortWithinPartitions(self, *cols, **kwargs):
+        """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
+
+        :param cols: list of :class:`Column` or column names to sort by.
+        :param ascending: boolean or list of boolean (default True).
+            Sort ascending vs. descending. Specify list for multiple sort orders.
+            If a list is specified, length of the list must equal length of the `cols`.
+
+        >>> df.rdd.getNumPartitions()
+        4
+        >>> df.sortWithinPartitions("age", ascending=False).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        """
+        jdf = self._jdf.sortWithinPartitions(self._sort_cols(cols, kwargs))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @ignore_unicode_prefix
     @since(1.3)
     def sort(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` sorted by the specified column(s).
@@ -613,22 +679,7 @@ class DataFrame(object):
         >>> df.orderBy(["age", "name"], ascending=[0, 1]).collect()
         [Row(age=5, name=u'Bob'), Row(age=2, name=u'Alice')]
         """
-        if not cols:
-            raise ValueError("should sort by at least one column")
-        if len(cols) == 1 and isinstance(cols[0], list):
-            cols = cols[0]
-        jcols = [_to_java_column(c) for c in cols]
-        ascending = kwargs.get('ascending', True)
-        if isinstance(ascending, (bool, int)):
-            if not ascending:
-                jcols = [jc.desc() for jc in jcols]
-        elif isinstance(ascending, list):
-            jcols = [jc if asc else jc.desc()
-                     for asc, jc in zip(ascending, jcols)]
-        else:
-            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
-
-        jdf = self._jdf.sort(self._jseq(jcols))
+        jdf = self._jdf.sort(self._sort_cols(cols, kwargs))
         return DataFrame(jdf, self.sql_ctx)
 
     orderBy = sort
@@ -649,6 +700,25 @@ class DataFrame(object):
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         return self._jseq(cols, _to_java_column)
+
+    def _sort_cols(self, cols, kwargs):
+        """ Return a JVM Seq of Columns that describes the sort order
+        """
+        if not cols:
+            raise ValueError("should sort by at least one column")
+        if len(cols) == 1 and isinstance(cols[0], list):
+            cols = cols[0]
+        jcols = [_to_java_column(c) for c in cols]
+        ascending = kwargs.get('ascending', True)
+        if isinstance(ascending, (bool, int)):
+            if not ascending:
+                jcols = [jc.desc() for jc in jcols]
+        elif isinstance(ascending, list):
+            jcols = [jc if asc else jc.desc()
+                     for asc, jc in zip(ascending, jcols)]
+        else:
+            raise TypeError("ascending can only be boolean or list, but got %s" % type(ascending))
+        return self._jseq(jcols)
 
     @since("1.3.1")
     def describe(self, *cols):
