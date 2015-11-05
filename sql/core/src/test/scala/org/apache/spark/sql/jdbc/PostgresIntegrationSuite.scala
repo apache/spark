@@ -22,12 +22,13 @@ import java.util.Properties
 
 class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
   val db = new DatabaseOnDocker {
-    val imageName = "postgres:latest"
-    val env = Map(
+    override val imageName = "postgres:latest"
+    override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
-    override def getJdbcUrl(ip: String): String =
-      s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
+    override val jdbcPort = 5432
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
   }
 
   override def dataPreparation(conn: Connection): Unit = {

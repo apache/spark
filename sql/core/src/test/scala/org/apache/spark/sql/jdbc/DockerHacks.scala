@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.net.ServerSocket
 import java.sql.Connection
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import com.spotify.docker.client.messages.ContainerConfig
+import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import com.spotify.docker.client._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -30,6 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
 
 abstract class DatabaseOnDocker {
   /**
@@ -43,9 +45,14 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
-   * Return a JDBC URL that connects to the database running at the given IP address.
+   * The container-internal JDBC port that the database listens on.
    */
-  def getJdbcUrl(ip: String): String
+  val jdbcPort: Int
+
+  /**
+   * Return a JDBC URL that connects to the database running at the given IP address and port.
+   */
+  def getJdbcUrl(ip: String, port: Int): String
 }
 
 abstract class DatabaseIntegrationSuite
@@ -72,15 +79,30 @@ abstract class DatabaseIntegrationSuite
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
       }
-      // Launch the container:
+      // Create the database container:
       val config = ContainerConfig.builder()
         .image(db.imageName)
+        .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
+        .exposedPorts(s"${db.jdbcPort}/tcp")
         .build()
       containerId = docker.createContainer(config).id
-      docker.startContainer(containerId)
-      // Wait until the database has started and is accepting JDBC connections:
-      jdbcUrl = db.getJdbcUrl(ip = docker.inspectContainer(containerId).networkSettings.ipAddress)
+      // Configure networking (necessary for boot2docker / Docker Machine)
+      val externalPort: Int = {
+        val sock = new ServerSocket(0)
+        val port = sock.getLocalPort
+        sock.close()
+        port
+      }
+      val dockerIp = sys.env.getOrElse("DOCKER_IP", Utils.localHostName())
+      val hostConfig: HostConfig = HostConfig.builder()
+        .networkMode("bridge")
+        .portBindings(
+          Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
+        .build()
+      // Start the container and wait until the database can accept JDBC connections:
+      docker.startContainer(containerId, hostConfig)
+      jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       eventually(timeout(60.seconds), interval(1.seconds)) {
         val conn = java.sql.DriverManager.getConnection(jdbcUrl)
         conn.close()

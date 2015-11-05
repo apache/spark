@@ -23,11 +23,13 @@ import java.util.Properties
 
 class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   val db = new DatabaseOnDocker {
-    val imageName = "mysql:latest"
-    val env = Map(
+    override val imageName = "mysql:latest"
+    override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
-    def getJdbcUrl(ip: String) = s"jdbc:mysql://$ip:3306/mysql?user=root&password=rootpass"
+    override val jdbcPort: Int = 3306
+    override def getJdbcUrl(ip: String, port: Int): String =
+      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
   }
 
   override def dataPreparation(conn: Connection): Unit = {
