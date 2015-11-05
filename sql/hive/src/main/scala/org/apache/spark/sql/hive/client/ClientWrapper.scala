@@ -154,9 +154,9 @@ private[hive] class ClientWrapper(
     Thread.currentThread().setContextClassLoader(initClassLoader)
 
     val sparkConf = new SparkConf
-    val principalName = sparkConf.get("spark.yarn.principal")
-    val keytabFileName = sparkConf.get("spark.yarn.keytab")
-    if (principalName != null && keytabFileName != null) {
+    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
+      val principalName = sparkConf.get("spark.yarn.principal")
+      val keytabFileName = sparkConf.get("spark.yarn.keytab")
       if (!new File(keytabFileName).exists()) {
         throw new SparkException(s"Keytab file: ${keytabFileName}" +
           " specified in spark.yarn.keytab does not exist")
