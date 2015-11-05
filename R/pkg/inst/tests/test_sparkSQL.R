@@ -826,12 +826,13 @@ test_that("column functions", {
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
   c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c)
-  c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
+  c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
-  c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
-  c13 <- cumeDist() + ntile(1)
-  c14 <- denseRank() + percentRank() + rank() + rowNumber()
+  c12 <- variance(c)
+  c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
+  c14 <- cumeDist() + ntile(1)
+  c15 <- denseRank() + percentRank() + rank() + rowNumber()
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
@@ -848,6 +849,12 @@ test_that("column functions", {
   expect_equal(collect(df3)[[1, 1]], TRUE)
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
+
+  expect_equal(collect(select(df, sum(df$age)))[1, 1], 49)
+
+  expect_true(abs(collect(select(df, stddev(df$age)))[1, 1] - 7.778175) < 1e-6)
+
+  expect_equal(collect(select(df, variance(df$age)))[1, 1], 30.25)
 
   df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
@@ -997,20 +1004,42 @@ test_that("group by", {
   expect_is(df_summarized, "DataFrame")
   expect_equal(3, count(df_summarized))
 
-  df3 <- agg(gd, age = "sum")
+  df3 <- agg(gd, age = "stddev")
   expect_is(df3, "DataFrame")
-  expect_equal(3, count(df3))
+  df3_local <- collect(df3)
+  expect_equal(0, df3_local[df3_local$name == "Andy",][1, 2])
 
-  df3 <- agg(gd, age = sum(df$age))
-  expect_is(df3, "DataFrame")
-  expect_equal(3, count(df3))
-  expect_equal(columns(df3), c("name", "age"))
-
-  df4 <- sum(gd, "age")
+  df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "DataFrame")
   expect_equal(3, count(df4))
-  expect_equal(3, count(mean(gd, "age")))
-  expect_equal(3, count(max(gd, "age")))
+  expect_equal(columns(df4), c("name", "sumAge"))
+
+  df5 <- sum(gd, "age")
+  expect_is(df5, "DataFrame")
+  expect_equal(3, count(df5))
+
+  expect_equal(3, count(mean(gd)))
+  expect_equal(3, count(max(gd)))
+  expect_equal(30, collect(max(gd))[1,2])
+  expect_equal(1, collect(count(gd))[1,2])
+
+  mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
+                  "{\"name\":\"ID1\", \"value\": \"10\"}",
+                  "{\"name\":\"ID1\", \"value\": \"22\"}",
+                  "{\"name\":\"ID2\", \"value\": \"-3\"}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines2, jsonPath2)
+  gd2 <- groupBy(jsonFile(sqlContext, jsonPath2), "name")
+  df6 <- agg(gd2, value = "sum")
+  df6_local <- collect(df6)
+  expect_equal(42, df6_local[df6_local$name == "ID1",][1, 2])
+  expect_equal(-3, df6_local[df6_local$name == "ID2",][1, 2])
+
+  df7 <- agg(gd2, value = "stddev")
+  df7_local <- collect(df7)
+
+  expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
+  expect_equal(0, df7_local[df7_local$name == "ID2",][1, 2])
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {

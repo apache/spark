@@ -62,6 +62,11 @@ setMethod("show", "GroupedData",
 #' \dontrun{
 #'   count(groupBy(df, "name"))
 #' }
+setMethod("count",
+          signature(x = "GroupedData"),
+          function(x) {
+            dataFrame(callJMethod(x@sgd, "count"))
+          })
 
 #' Agg
 #'
@@ -114,9 +119,10 @@ setMethod("summarize",
           })
 
 # Aggregate Functions by name
-methods <- c("approxCountDistinct", "avg", "corr", "count", "countDistinct", "first", "kurtosis",
-             "last", "max", "mean", "min", "skewness", "stddev", "stddev_samp", "stddev_pop",
-             "sum", "sumDistinct", "variance", "var_samp", "var_pop")
+methods <- c("avg", "max", "mean", "min", "sum")
+
+# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
+# "variance", "var_samp", "var_pop"
 
 createMethod <- function(name) {
   setMethod(name,
