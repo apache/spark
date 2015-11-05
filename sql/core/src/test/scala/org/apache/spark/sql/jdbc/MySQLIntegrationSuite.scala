@@ -27,10 +27,10 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
     val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
-    lazy val jdbcUrl = s"jdbc:mysql://$ip:3306/mysql?user=root&password=rootpass"
+    def getJdbcUrl(ip: String) = s"jdbc:mysql://$ip:3306/mysql?user=root&password=rootpass"
   }
 
-  override def dataPreparation(conn: Connection) {
+  override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
@@ -57,7 +57,7 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Basic test") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "tbl", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()
     assert(rows.length == 2)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -67,7 +67,7 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Numeric types") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "numbers", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -94,7 +94,7 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Date types") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "dates", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -112,7 +112,7 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("String types") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "strings", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -138,11 +138,11 @@ class MySQLIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Basic write test") {
-    val df1 = sqlContext.read.jdbc(db.jdbcUrl, "numbers", new Properties)
-    val df2 = sqlContext.read.jdbc(db.jdbcUrl, "dates", new Properties)
-    val df3 = sqlContext.read.jdbc(db.jdbcUrl, "strings", new Properties)
-    df1.write.jdbc(db.jdbcUrl, "numberscopy", new Properties)
-    df2.write.jdbc(db.jdbcUrl, "datescopy", new Properties)
-    df3.write.jdbc(db.jdbcUrl, "stringscopy", new Properties)
+    val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
+    val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+    val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
+    df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
+    df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 }

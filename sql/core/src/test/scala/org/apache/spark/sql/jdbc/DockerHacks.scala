@@ -25,6 +25,8 @@ import scala.util.control.NonFatal
 import com.spotify.docker.client.messages.ContainerConfig
 import com.spotify.docker.client._
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
@@ -33,100 +35,63 @@ abstract class DatabaseOnDocker {
   /**
    * The docker image to be pulled.
    */
-  def imageName: String
+  val imageName: String
 
   /**
-   * Environment variables to set inside of the Docker container while lauching it.
+   * Environment variables to set inside of the Docker container while launching it.
    */
-  def env: Map[String, String]
+  val env: Map[String, String]
 
   /**
-   * jdbcUrl should be a lazy val or a function since `ip` it relies on is only available after
-   * the docker container starts
+   * Return a JDBC URL that connects to the database running at the given IP address.
    */
-  def jdbcUrl: String
-
-  private val docker: DockerClient = DockerClientFactory.get()
-  private var containerId: String = null
-
-  lazy val ip = docker.inspectContainer(containerId).networkSettings.ipAddress
-
-  def start(): Unit = {
-    while (true) {
-      try {
-        val config = ContainerConfig.builder()
-          .image(imageName)
-          .env(env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-          .build()
-        containerId = docker.createContainer(config).id
-        docker.startContainer(containerId)
-        return
-      } catch {
-        case e: ImageNotFoundException => retry(5)(docker.pull(imageName))
-      }
-    }
-  }
-
-  private def retry[T](n: Int)(fn: => T): T = {
-    try {
-      fn
-    } catch {
-      case e if n > 1 =>
-        retry(n - 1)(fn)
-    }
-  }
-
-  def close(): Unit = {
-    docker.killContainer(containerId)
-    docker.removeContainer(containerId)
-    DockerClientFactory.close(docker)
-  }
+  def getJdbcUrl(ip: String): String
 }
 
-abstract class DatabaseIntegrationSuite extends SparkFunSuite
-  with BeforeAndAfterAll with SharedSQLContext {
+abstract class DatabaseIntegrationSuite
+  extends SparkFunSuite
+  with BeforeAndAfterAll
+  with Eventually
+  with SharedSQLContext {
 
-  def db: DatabaseOnDocker
+  val db: DatabaseOnDocker
 
-  def waitForDatabase(ip: String, maxMillis: Long) {
-    val before = System.currentTimeMillis()
-    var lastException: java.sql.SQLException = null
-    while (true) {
-      if (System.currentTimeMillis() > before + maxMillis) {
-        throw new java.sql.SQLException(s"Database not up after $maxMillis ms.", lastException)
-      }
-      try {
-        val conn = java.sql.DriverManager.getConnection(db.jdbcUrl)
-        conn.close()
-        return
-      } catch {
-        case e: java.sql.SQLException =>
-          lastException = e
-          java.lang.Thread.sleep(250)
-      }
-    }
-  }
-
-  def setupDatabase(ip: String): Unit = {
-    val conn: Connection = java.sql.DriverManager.getConnection(db.jdbcUrl)
-    try {
-      dataPreparation(conn)
-    } finally {
-      conn.close()
-    }
-  }
-
-  /**
-   * Prepare databases and tables for testing
-   */
-  def dataPreparation(connection: Connection)
+  private var docker: DockerClient = _
+  private var containerId: String = _
+  protected var jdbcUrl: String = _
 
   override def beforeAll() {
     super.beforeAll()
     try {
-      db.start()
-      waitForDatabase(db.ip, 60000)
-      setupDatabase(db.ip)
+      docker = DefaultDockerClient.fromEnv.build()
+      // Ensure that the Docker image is installed:
+      try {
+        docker.inspectImage(db.imageName)
+      } catch {
+        case e: ImageNotFoundException =>
+          log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
+          docker.pull(db.imageName)
+      }
+      // Launch the container:
+      val config = ContainerConfig.builder()
+        .image(db.imageName)
+        .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
+        .build()
+      containerId = docker.createContainer(config).id
+      docker.startContainer(containerId)
+      // Wait until the database has started and is accepting JDBC connections:
+      jdbcUrl = db.getJdbcUrl(ip = docker.inspectContainer(containerId).networkSettings.ipAddress)
+      eventually(timeout(60.seconds), interval(1.seconds)) {
+        val conn = java.sql.DriverManager.getConnection(jdbcUrl)
+        conn.close()
+      }
+      // Run any setup queries:
+      val conn: Connection = java.sql.DriverManager.getConnection(jdbcUrl)
+      try {
+        dataPreparation(conn)
+      } finally {
+        conn.close()
+      }
     } catch {
       case NonFatal(e) =>
         try {
@@ -134,44 +99,28 @@ abstract class DatabaseIntegrationSuite extends SparkFunSuite
         } finally {
           throw e
         }
-     }
-
+    }
   }
 
   override def afterAll() {
     try {
-      db.close()
+      if (docker != null) {
+        try {
+          if (containerId != null) {
+            docker.killContainer(containerId)
+            docker.removeContainer(containerId)
+          }
+        } finally {
+          docker.close()
+        }
+      }
     } finally {
       super.afterAll()
     }
   }
-}
 
-/**
- * A factory and morgue for DockerClient objects.  In the DockerClient we use,
- * calling close() closes the desired DockerClient but also renders all other
- * DockerClients inoperable.  This is inconvenient if we have more than one
- * open, such as during tests.
- */
-object DockerClientFactory {
-  var numClients: Int = 0
-  val zombies = new MutableList[DockerClient]()
-
-  def get(): DockerClient = {
-    this.synchronized {
-      numClients = numClients + 1
-      DefaultDockerClient.fromEnv.build()
-    }
-  }
-
-  def close(dc: DockerClient) {
-    this.synchronized {
-      numClients = numClients - 1
-      zombies += dc
-      if (numClients == 0) {
-        zombies.foreach(_.close())
-        zombies.clear()
-      }
-    }
-  }
+  /**
+   * Prepare databases and tables for testing.
+   */
+  def dataPreparation(connection: Connection): Unit
 }

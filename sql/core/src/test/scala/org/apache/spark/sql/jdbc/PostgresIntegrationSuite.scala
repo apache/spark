@@ -26,10 +26,11 @@ class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
     val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
-    lazy val jdbcUrl = s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
+    override def getJdbcUrl(ip: String): String =
+      s"jdbc:postgresql://$ip:5432/postgres?user=postgres&password=rootpass"
   }
 
-  override def dataPreparation(conn: Connection) {
+  override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.setCatalog("foo")
     conn.prepareStatement("CREATE TABLE bar (a text, b integer, c double precision, d bigint, "
@@ -39,7 +40,7 @@ class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Type mapping for various types") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "bar", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
@@ -70,8 +71,8 @@ class PostgresIntegrationSuite extends DatabaseIntegrationSuite {
   }
 
   test("Basic write test") {
-    val df = sqlContext.read.jdbc(db.jdbcUrl, "bar", new Properties)
-    df.write.jdbc(db.jdbcUrl, "public.barcopy", new Properties)
-    // Test only that it doesn't bomb out.
+    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
+    df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
+    // Test only that it doesn't crash.
   }
 }
