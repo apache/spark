@@ -85,10 +85,10 @@ def action_logging(f):
 
         session.add(
             models.Log(
-                event=f.func_name,
+                event=f.__name__,
                 task_instance=None,
                 owner=user,
-                extra=request.get_json()))
+                extra=str(request.args.items())))
         session.commit()
         return f(*args, **kwargs)
     return wrapper
