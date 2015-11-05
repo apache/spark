@@ -36,11 +36,9 @@ test_that("glm and predict", {
 test_that("glm should work with long formula", {
   training <- createDataFrame(sqlContext, iris)
   training$LongLongLongLongLongName <- training$Sepal_Width
-  training$VeryLongLongLongLongLongLongLongLongLongLongLongLongName <- training$Sepal_Length
-  training$AnotherVeryLongLongLongLongLongLongLongLongLongLongLongName <- training$Species
-  model <- glm(LongLongLongLongLongName ~
-               VeryLongLongLongLongLongLongLongLongLongLongLongLongName +
-               AnotherVeryLongLongLongLongLongLongLongLongLongLongLongName,
+  training$VeryLongLongLongLonLongName <- training$Sepal_Length
+  training$AnotherLongLongLongLongName <- training$Species
+  model <- glm(LongLongLongLongLongName ~ VeryLongLongLongLonLongName + AnotherLongLongLongLongName,
                data = training)
   vals <- collect(select(predict(model, training), "prediction"))
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
