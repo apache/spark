@@ -139,7 +139,6 @@ private[kinesis] class KinesisTestUtils extends Logging {
       }
     }
 
-
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
   }
