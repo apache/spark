@@ -2134,3 +2134,43 @@ setMethod("attach",
             }
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
+
+#' Returns the column types of a DataFrame.
+#' 
+#' @name coltypes
+#' @title Get column types of a DataFrame
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # Get the data types of the DataFrame by invoking dtypes() function
+            types <- sapply(dtypes(x), function(x) {x[[2]]})
+
+            # Map Spark data types into R's data types using DATA_TYPES environment
+            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+
+              # Check for primitive types
+              type <- PRIMITIVE_TYPES[[x]]
+              if (is.null(type)) {
+                # Check for complex types
+                typeName <- Filter(function(t) { substring(x, 1, nchar(t)) == t},
+                                   names(COMPLEX_TYPES))
+                if (length(typeName) > 0) {
+                  type <- COMPLEX_TYPES[[typeName]]
+                } else {
+                  stop(paste("Unsupported data type: ", x))
+                }
+              }
+              type
+            })
+
+            # Find which types don't have mapping to R
+            naIndices <- which(is.na(rTypes))
+
+            # Assign the original scala data types to the unmatched ones
+            rTypes[naIndices] <- types[naIndices]
+
+            rTypes
+          })

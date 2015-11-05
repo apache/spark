@@ -22,10 +22,12 @@ export("setJobGroup",
 
 exportClasses("DataFrame")
 
-exportMethods("arrange",
+exportMethods("as.data.frame",
+              "arrange",
               "attach",
               "cache",
               "collect",
+              "coltypes",
               "columns",
               "count",
               "cov",
@@ -262,5 +264,3 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
-
-export("as.data.frame")

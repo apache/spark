@@ -1027,7 +1027,6 @@ setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
-
 #' @rdname glm
 #' @export
 setGeneric("glm")
@@ -1043,3 +1042,7 @@ setGeneric("as.data.frame")
 #' @rdname attach
 #' @export
 setGeneric("attach")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
