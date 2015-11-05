@@ -723,7 +723,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    capacity = (int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity));
+    capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
     longArray = allocateArray(capacity * 2);
     longArray.zeroOut();
