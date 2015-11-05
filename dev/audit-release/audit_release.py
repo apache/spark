@@ -35,7 +35,7 @@ RELEASE_URL = "http://people.apache.org/~andrewor14/spark-1.1.1-rc1/"
 RELEASE_KEY = "XXXXXXXX" # Your 8-digit hex
 RELEASE_REPOSITORY = "https://repository.apache.org/content/repositories/orgapachespark-1033"
 RELEASE_VERSION = "1.1.1"
-SCALA_VERSION = "2.10.4"
+SCALA_VERSION = "2.10.5"
 SCALA_BINARY_VERSION = "2.10"
 
 # Do not set these

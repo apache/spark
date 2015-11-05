@@ -316,7 +316,7 @@ object OldDeps {
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
-    scalaVersion := "2.10.4",
+    scalaVersion := "2.10.5",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
