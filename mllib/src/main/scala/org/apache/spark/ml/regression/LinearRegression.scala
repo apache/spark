@@ -24,9 +24,9 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import breeze.stats.distributions.StudentsT
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim.WeightedLeastSquares
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
@@ -61,11 +61,13 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *  - L1 (Lasso)
  *  - L2 + L1 (elastic net)
  */
+@Since("1.3.0")
 @Experimental
-class LinearRegression(override val uid: String)
+class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with Logging {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
 
   /**
@@ -73,6 +75,7 @@ class LinearRegression(override val uid: String)
    * Default is 0.0.
    * @group setParam
    */
+  @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -81,6 +84,7 @@ class LinearRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
   setDefault(fitIntercept -> true)
 
@@ -93,6 +97,7 @@ class LinearRegression(override val uid: String)
    * Default is true.
    * @group setParam
    */
+  @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
   setDefault(standardization -> true)
 
@@ -103,6 +108,7 @@ class LinearRegression(override val uid: String)
    * Default is 0.0 which is an L2 penalty.
    * @group setParam
    */
+  @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
   setDefault(elasticNetParam -> 0.0)
 
@@ -111,6 +117,7 @@ class LinearRegression(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
@@ -120,6 +127,7 @@ class LinearRegression(override val uid: String)
    * Default is 1E-6.
    * @group setParam
    */
+  @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
 
@@ -129,6 +137,7 @@ class LinearRegression(override val uid: String)
    * Default is empty, so all instances have weight one.
    * @group setParam
    */
+  @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
@@ -139,6 +148,7 @@ class LinearRegression(override val uid: String)
    * selected automatically.
    * @group setParam
    */
+  @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "auto")
 
@@ -329,6 +339,7 @@ class LinearRegression(override val uid: String)
     model.setSummary(trainingSummary)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 }
 
@@ -336,6 +347,7 @@ class LinearRegression(override val uid: String)
  * :: Experimental ::
  * Model produced by [[LinearRegression]].
  */
+@Since("1.3.0")
 @Experimental
 class LinearRegressionModel private[ml] (
     override val uid: String,
@@ -355,6 +367,7 @@ class LinearRegressionModel private[ml] (
    * Gets summary (e.g. residuals, mse, r-squared ) of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
+  @Since("1.5.0")
   def summary: LinearRegressionTrainingSummary = trainingSummary match {
     case Some(summ) => summ
     case None =>
@@ -369,6 +382,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /** Indicates whether a training summary exists for this model instance. */
+  @Since("1.5.0")
   def hasSummary: Boolean = trainingSummary.isDefined
 
   /**
@@ -402,6 +416,7 @@ class LinearRegressionModel private[ml] (
     dot(features, coefficients) + intercept
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegressionModel = {
     val newModel = copyValues(new LinearRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
@@ -416,6 +431,7 @@ class LinearRegressionModel private[ml] (
  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
+@Since("1.5.0")
 @Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
@@ -428,6 +444,7 @@ class LinearRegressionTrainingSummary private[regression] (
   extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diagInvAtWA) {
 
   /** Number of training iterations until termination */
+  @Since("1.5.0")
   val totalIterations = objectiveHistory.length
 
 }
@@ -437,6 +454,7 @@ class LinearRegressionTrainingSummary private[regression] (
  * Linear regression results evaluated on a dataset.
  * @param predictions predictions outputted by the model's `transform` method.
  */
+@Since("1.5.0")
 @Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
@@ -455,33 +473,39 @@ class LinearRegressionSummary private[regression] (
    * explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
    * Reference: [[http://en.wikipedia.org/wiki/Explained_variation]]
    */
+  @Since("1.5.0")
   val explainedVariance: Double = metrics.explainedVariance
 
   /**
    * Returns the mean absolute error, which is a risk function corresponding to the
    * expected value of the absolute error loss or l1-norm loss.
    */
+  @Since("1.5.0")
   val meanAbsoluteError: Double = metrics.meanAbsoluteError
 
   /**
    * Returns the mean squared error, which is a risk function corresponding to the
    * expected value of the squared error loss or quadratic loss.
    */
+  @Since("1.5.0")
   val meanSquaredError: Double = metrics.meanSquaredError
 
   /**
    * Returns the root mean squared error, which is defined as the square root of
    * the mean squared error.
    */
+  @Since("1.5.0")
   val rootMeanSquaredError: Double = metrics.rootMeanSquaredError
 
   /**
    * Returns R^2^, the coefficient of determination.
    * Reference: [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
    */
+  @Since("1.5.0")
   val r2: Double = metrics.r2
 
   /** Residuals (label - predicted value) */
+  @Since("1.5.0")
   @transient lazy val residuals: DataFrame = {
     val t = udf { (pred: Double, label: Double) => label - pred }
     predictions.select(t(col(predictionCol), col(labelCol)).as("residuals"))
