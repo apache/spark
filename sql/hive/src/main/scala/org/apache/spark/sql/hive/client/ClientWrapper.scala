@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{SparkConf, SparkException, Logging}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -154,10 +154,17 @@ private[hive] class ClientWrapper(
     Thread.currentThread().setContextClassLoader(initClassLoader)
 
     val sparkConf = new SparkConf
-    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-      UserGroupInformation.loginUserFromKeytab(
-        sparkConf.get("spark.yarn.principal"),
-        sparkConf.get("spark.yarn.keytab"))
+    val principalName = sparkConf.get("spark.yarn.principal")
+    val keytabFileName = sparkConf.get("spark.yarn.keytab")
+    if (principalName != null && keytabFileName != null) {
+      if (!new File(keytabFileName).exists()) {
+        throw new SparkException(s"Keytab file: ${keytabFileName}" +
+          " specified in spark.yarn.keytab does not exist")
+      } else {
+        logInfo("Attempting to login to Kerberos" +
+          s" using principal: ${principalName} and keytab: ${keytabFileName}")
+        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+      }
     }
 
     val ret = try {
