@@ -484,16 +484,16 @@ class WebLdapAuthTest(unittest.TestCase):
         assert configuration.conf.getboolean('webserver', 'authenticate') is True
 
         response = self.login('user1', 'userx')
-        assert 'Incorrect login details' in response.data
+        assert 'Incorrect login details' in response.data.decode('utf-8')
 
         response = self.login('userz', 'user1')
-        assert 'Incorrect login details' in response.data
+        assert 'Incorrect login details' in response.data.decode('utf-8')
 
         response = self.login('user1', 'user1')
-        assert 'Data Profiling' in response.data
+        assert 'Data Profiling' in response.data.decode('utf-8')
 
         response = self.logout()
-        assert 'form-signin' in response.data
+        assert 'form-signin' in response.data.decode('utf-8')
 
     def test_unauthorized(self):
         response = self.app.get("/admin/airflow/landing_times")
