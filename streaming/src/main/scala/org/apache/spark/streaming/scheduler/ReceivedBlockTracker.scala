@@ -228,8 +228,10 @@ private[streaming] class ReceivedBlockTracker(
   private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
       logTrace(s"Writing record: $record")
-      writeAheadLogOption.get.write(ByteBuffer.wrap(Utils.serialize(record)),
-        clock.getTimeMillis()) != null
+      val handle = writeAheadLogOption.get.write(ByteBuffer.wrap(Utils.serialize(record)), 
+        clock.getTimeMillis())
+      
+      handle != null
     } else {
       true
     }
