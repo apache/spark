@@ -23,12 +23,12 @@ import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
-
-import com.google.common.base.Ticker
-import com.google.common.cache.CacheBuilder
 
 /**
  * :: DeveloperApi ::
@@ -42,12 +42,9 @@ object StorageStatusListener {
 }
 
 @DeveloperApi
-class StorageStatusListener(conf: SparkConf) extends SparkListener {
-  var ticker = Ticker.systemTicker()
-  
-  private [storage] def this(conf: SparkConf, ticker: Ticker) = {
-    this(conf)
-    this.ticker = ticker
+class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) {
+  def this(conf: SparkConf) = {
+    this(conf, Ticker.systemTicker())
   }
   
   import StorageStatusListener._
@@ -62,7 +59,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
     executorIdToStorageStatus.values.toSeq
   }
   
-  def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized{
+  def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized {
     removedExecutorIdToStorageStatus.asMap().values().asScala.toSeq
   }
  
