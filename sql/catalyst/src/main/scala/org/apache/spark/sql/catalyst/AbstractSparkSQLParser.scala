@@ -82,10 +82,6 @@ class SqlLexical extends StdLexical {
     override def toString: String = chars
   }
 
-  case class DecimalLit(chars: String) extends Token {
-    override def toString: String = chars
-  }
-
   /* This is a work around to support the lazy setting */
   def initialize(keywords: Seq[String]): Unit = {
     reserved.clear()
@@ -106,11 +102,10 @@ class SqlLexical extends StdLexical {
   }
 
   override lazy val token: Parser[Token] =
-    ( rep1(digit) ~ ('.' ~> digit.*).? ~ (exp ~> sign.? ~ rep1(digit)) ^^ {
-        case i ~ None ~ (sig ~ rest) =>
-          DecimalLit(i.mkString + "e" + sig.mkString + rest.mkString)
-        case i ~ Some(d) ~ (sig ~ rest) =>
-          DecimalLit(i.mkString + "." + d.mkString + "e" + sig.mkString + rest.mkString)
+    ( rep1(digit) ~ scientificNotation ^^ { case i ~ s => FloatLit(i.mkString + s) }
+    | '.' ~> (rep1(digit) ~ scientificNotation) ^^ { case i ~ s => FloatLit("0." + i.mkString + s) }
+    | rep1(digit) ~ ('.' ~> digit.*) ~ scientificNotation ^^ {
+        case i1 ~ i2 ~ s => FloatLit(i1.mkString + "." + i2.mkString + s)
       }
     | digit.* ~ identChar ~ (identChar | digit).* ^^
       { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
@@ -133,6 +128,10 @@ class SqlLexical extends StdLexical {
 
   override def identChar: Parser[Elem] = letter | elem('_')
 
+  private lazy val scientificNotation: Parser[String] =
+    exp ~> sign.? ~ rep1(digit) ^^ {
+      case s ~ rest => "e" + s.mkString + rest.mkString
+    }
   private lazy val sign: Parser[Elem] = elem("s", c => c == '+' || c == '-')
   private lazy val exp: Parser[Elem] = elem("e", c => c == 'E' || c == 'e')
 
