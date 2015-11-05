@@ -55,15 +55,15 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal")
     >>> model = lr.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
-    -1.0
-    >>> model.weights
-    DenseVector([1.0])
-    >>> model.intercept
-    0.0
+    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    True
+    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    True
+    >>> abs(model.intercept - 0.0) < 0.001
+    True
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> model.transform(test1).head().prediction
-    1.0
+    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
         ...
