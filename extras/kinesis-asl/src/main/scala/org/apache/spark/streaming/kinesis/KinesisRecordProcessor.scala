@@ -33,23 +33,19 @@ import org.apache.spark.streaming.Duration
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
  * This implementation operates on the Array[Byte] from the KinesisReceiver.
  * The Kinesis Worker creates an instance of this KinesisRecordProcessor for each
- *   shard in the Kinesis stream upon startup.  This is normally done in separate threads,
- *   but the KCLs within the KinesisReceivers will balance themselves out if you create
- *   multiple Receivers.
+ * shard in the Kinesis stream upon startup.  This is normally done in separate threads,
+ * but the KCLs within the KinesisReceivers will balance themselves out if you create
+ * multiple Receivers.
  *
  * @param receiver Kinesis receiver
  * @param workerId for logging purposes
- * @param checkpointInterval The period at which to checkpoint to DynamoDB.
  */
-private[kinesis] class KinesisRecordProcessor[T](
-    receiver: KinesisReceiver[T],
-    workerId: String,
-    checkpointInterval: Duration) extends IRecordProcessor with Logging {
+private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], workerId: String)
+  extends IRecordProcessor with Logging {
 
   // shardId and checkpointState to be populated during initialize()
   @volatile
   private var shardId: String = _
-  private var checkpointState: KinesisCheckpointState[T] = _
 
   /**
    * The Kinesis Client Library calls this method during IRecordProcessor initialization.
@@ -58,7 +54,6 @@ private[kinesis] class KinesisRecordProcessor[T](
    */
   override def initialize(shardId: String) {
     this.shardId = shardId
-    checkpointState = new KinesisCheckpointState[T](receiver, checkpointInterval, workerId, shardId)
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
@@ -74,9 +69,9 @@ private[kinesis] class KinesisRecordProcessor[T](
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
     if (!receiver.isStopped()) {
       try {
-        checkpointState.setCheckpointer(checkpointer)
         receiver.addRecords(shardId, batch)
         logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        receiver.setCheckpointerForShardId(shardId, checkpointer)
       } catch {
         case NonFatal(e) => {
           /*
@@ -135,9 +130,7 @@ private[kinesis] class KinesisRecordProcessor[T](
       case _ =>
         null // return null so that we don't checkpoint
     }
-    if (checkpointState != null) {
-      checkpointState.shutdown(cp)
-    }
+    receiver.removeCheckpointerForShardId(shardId, cp)
   }
 }
 
