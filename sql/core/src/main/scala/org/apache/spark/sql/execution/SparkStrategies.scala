@@ -146,50 +146,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object HashAggregation extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // Aggregations that can be performed in two phases, before and after the shuffle.
-      case PartialAggregation(
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          groupingExpressions,
-          partialComputation,
-          child) if !canBeConvertedToNewAggregation(plan) =>
-        execution.Aggregate(
-          partial = false,
-          namedGroupingAttributes,
-          rewrittenAggregateExpressions,
-          execution.Aggregate(
-            partial = true,
-            groupingExpressions,
-            partialComputation,
-            planLater(child))) :: Nil
-
-      case _ => Nil
-    }
-
-    def canBeConvertedToNewAggregation(plan: LogicalPlan): Boolean = plan match {
-      case a: logical.Aggregate =>
-        if (sqlContext.conf.useSqlAggregate2 && sqlContext.conf.codegenEnabled) {
-          a.newAggregation.isDefined
-        } else {
-          Utils.checkInvalidAggregateFunction2(a)
-          false
-        }
-      case _ => false
-    }
-
-    def allAggregates(exprs: Seq[Expression]): Seq[AggregateExpression1] =
-      exprs.flatMap(_.collect { case a: AggregateExpression1 => a })
-  }
-
   /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case p: logical.Aggregate if sqlContext.conf.useSqlAggregate2 &&
-          sqlContext.conf.codegenEnabled =>
+      case p: logical.Aggregate =>
         val converted = p.newAggregation
         converted match {
           case None => Nil // Cannot convert to new aggregation code path.
@@ -422,18 +384,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
-      case a @ logical.Aggregate(group, agg, child) => {
-        val useNewAggregation = sqlContext.conf.useSqlAggregate2 && sqlContext.conf.codegenEnabled
-        if (useNewAggregation && a.newAggregation.isDefined) {
-          // If this logical.Aggregate can be planned to use new aggregation code path
-          // (i.e. it can be planned by the Strategy Aggregation), we will not use the old
-          // aggregation code path.
-          Nil
-        } else {
-          Utils.checkInvalidAggregateFunction2(a)
-          execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
-        }
-      }
       case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
         execution.Window(
           projectList, windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil

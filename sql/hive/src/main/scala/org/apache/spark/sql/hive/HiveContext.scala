@@ -576,7 +576,6 @@ class HiveContext private[hive](
       HiveTableScans,
       DataSinks,
       Scripts,
-      HashAggregation,
       Aggregation,
       LeftSemiJoin,
       EquiJoinSelection,
