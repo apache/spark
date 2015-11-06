@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.IOException
 import java.math.MathContext
 import java.sql.Timestamp
 
@@ -1881,14 +1882,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e2.message.contains("Table not found"))
 
     val e3 = intercept[AnalysisException] {
+      // exception happens in analysis stage, because need to infer schema from json data
       sql("select * from json.invalid_file")
     }
     assert(e3.message.contains("Input paths do not exist or are empty directories"))
 
-    val e4 = intercept[AnalysisException] {
-      sql("select * from text.invalid_file")
+    val e4 = intercept[IOException] {
+      // exception happens in execution stage, no schema infer happens in analysis stage
+      // for text data
+      sql("select * from text.invalid_file").count()
     }
-    assert(e4.message.contains("Input paths do not exist or are empty directories"))
+    assert(e4.getMessage.contains("Input paths do not exist or are empty directories"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
