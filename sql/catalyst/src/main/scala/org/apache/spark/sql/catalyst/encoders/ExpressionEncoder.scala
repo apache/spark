@@ -59,36 +59,84 @@ object ExpressionEncoder {
       ClassTag[T](cls))
   }
 
-  /**
-   * Given a set of N encoders, constructs a new encoder that produce objects as items in an
-   * N-tuple.  Note that these encoders should first be bound correctly to the combined input
-   * schema.
-   */
+  def tuple[T1, T2](enc1: Encoder[T1], enc2: Encoder[T2]): Encoder[(T1, T2)] = {
+    tuple(Seq(enc1, enc2).map(_.asInstanceOf[ExpressionEncoder[_]]))
+      .asInstanceOf[ExpressionEncoder[(T1, T2)]]
+  }
+
+  def tuple[T1, T2, T3](
+      enc1: Encoder[T1],
+      enc2: Encoder[T2],
+      enc3: Encoder[T3]): Encoder[(T1, T2, T3)] = {
+    tuple(Seq(enc1, enc2, enc3).map(_.asInstanceOf[ExpressionEncoder[_]]))
+      .asInstanceOf[ExpressionEncoder[(T1, T2, T3)]]
+  }
+
+  def tuple[T1, T2, T3, T4](
+      enc1: Encoder[T1],
+      enc2: Encoder[T2],
+      enc3: Encoder[T3],
+      enc4: Encoder[T4]): Encoder[(T1, T2, T3, T4)] = {
+    tuple(Seq(enc1, enc2, enc3, enc4).map(_.asInstanceOf[ExpressionEncoder[_]]))
+      .asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4)]]
+  }
+
+  def tuple[T1, T2, T3, T4, T5](
+      enc1: Encoder[T1],
+      enc2: Encoder[T2],
+      enc3: Encoder[T3],
+      enc4: Encoder[T4],
+      enc5: Encoder[T5]): Encoder[(T1, T2, T3, T4, T5)] = {
+    tuple(Seq(enc1, enc2, enc3, enc4, enc5).map(_.asInstanceOf[ExpressionEncoder[_]]))
+      .asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
+  }
+
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    val schema =
-      StructType(
-        encoders.zipWithIndex.map { case (e, i) => StructField(s"_${i + 1}", e.schema)})
+    assert(encoders.length > 1)
+
+    val schema = StructType(encoders.zipWithIndex.map {
+      case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)
+    })
+
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
+
     val extractExpressions = encoders.map {
       case e if e.flat => e.extractExpressions.head
       case other => CreateStruct(other.extractExpressions)
+    }.zipWithIndex.map { case (expr, index) =>
+      expr.transformUp {
+        case BoundReference(0, t: ObjectType, _) =>
+          Invoke(
+            BoundReference(0, ObjectType(cls), true),
+            s"_${index + 1}",
+            t)
+      }
     }
+
+    val constructExpressions = encoders.zipWithIndex.map { case (enc, index) =>
+      if (enc.flat) {
+        enc.constructExpression.transform {
+          case b: BoundReference => b.copy(ordinal = index)
+        }
+      } else {
+        enc.constructExpression.transformUp {
+          case InputInternalRow(schema) => BoundReference(index, schema, true)
+          case BoundReference(ordinal, dt, _) =>
+            GetInternalRowField(BoundReference(index, enc.schema, true), ordinal, dt)
+        }
+      }
+    }
+
     val constructExpression =
-      NewInstance(cls, encoders.map(_.constructExpression), false, ObjectType(cls))
+      NewInstance(cls, constructExpressions, false, ObjectType(cls))
 
     new ExpressionEncoder[Any](
       schema,
-      false,
+      flat = false,
       extractExpressions,
       constructExpression,
       ClassTag.apply(cls))
   }
-
-  /** A helper for producing encoders of Tuple2 from other encoders. */
-  def tuple[T1, T2](
-      e1: ExpressionEncoder[T1],
-      e2: ExpressionEncoder[T2]): ExpressionEncoder[(T1, T2)] =
-    tuple(e1 :: e2 :: Nil).asInstanceOf[ExpressionEncoder[(T1, T2)]]
 }
 
 /**
@@ -137,81 +185,4 @@ case class ExpressionEncoder[T](
     case e: Exception =>
       throw new RuntimeException(s"Error while decoding: $e\n${constructExpression.treeString}", e)
   }
-
-  /**
-   * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
-   * given schema.
-   */
-  def resolve(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val plan = Project(Alias(constructExpression, "")() :: Nil, LocalRelation(schema))
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    copy(constructExpression = analyzedPlan.expressions.head.children.head)
-  }
-
-  /**
-   * Returns a copy of this encoder where the expressions used to construct an object from an input
-   * row have been bound to the ordinals of the given schema.  Note that you need to first call
-   * resolve before bind.
-   */
-  def bind(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    copy(constructExpression = BindReferences.bindReference(constructExpression, schema))
-  }
-
-  /**
-   * Replaces any bound references in the schema with the attributes at the corresponding ordinal
-   * in the provided schema.  This can be used to "relocate" a given encoder to pull values from
-   * a different schema than it was initially bound to.  It can also be used to assign attributes
-   * to ordinal based extraction (i.e. because the input data was a tuple).
-   */
-  def unbind(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(schema)
-    copy(constructExpression = constructExpression transform {
-      case b: BoundReference => positionToAttribute(b.ordinal)
-    })
-  }
-
-  /**
-   * Given an encoder that has already been bound to a given schema, returns a new encoder
-   * where the positions are mapped from `oldSchema` to `newSchema`.  This can be used, for example,
-   * when you are trying to use an encoder on grouping keys that were originally part of a larger
-   * row, but now you have projected out only the key expressions.
-   */
-  def rebind(oldSchema: Seq[Attribute], newSchema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(oldSchema)
-    val attributeToNewPosition = AttributeMap.byIndex(newSchema)
-    copy(constructExpression = constructExpression transform {
-      case r: BoundReference =>
-        r.copy(ordinal = attributeToNewPosition(positionToAttribute(r.ordinal)))
-    })
-  }
-
-  /**
-   * Returns a copy of this encoder where the expressions used to create an object given an
-   * input row have been modified to pull the object out from a nested struct, instead of the
-   * top level fields.
-   */
-  def nested(input: Expression = BoundReference(0, schema, true)): ExpressionEncoder[T] = {
-    copy(constructExpression = constructExpression transform {
-      case u: Attribute if u != input =>
-        UnresolvedExtractValue(input, Literal(u.name))
-      case b: BoundReference if b != input =>
-        GetStructField(
-          input,
-          StructField(s"i[${b.ordinal}]", b.dataType),
-          b.ordinal)
-    })
-  }
-
-  protected val attrs = extractExpressions.flatMap(_.collect {
-    case _: UnresolvedAttribute => ""
-    case a: Attribute => s"#${a.exprId}"
-    case b: BoundReference => s"[${b.ordinal}]"
-  })
-
-  protected val schemaString =
-    schema
-      .zip(attrs)
-      .map { case(f, a) => s"${f.name}$a: ${f.dataType.simpleString}"}.mkString(", ")
-
-  override def toString: String = s"class[$schemaString]"
 }

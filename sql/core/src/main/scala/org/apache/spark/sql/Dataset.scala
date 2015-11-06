@@ -62,7 +62,7 @@ class Dataset[T] private(
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(queryExecution.analyzed.output)
+    case e: ExpressionEncoder[T] => e
     case _ => throw new IllegalArgumentException("Only expression encoders are currently supported")
   }
 
@@ -124,11 +124,8 @@ class Dataset[T] private(
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
-    val tEnc = encoderFor[T]
-    val input = queryExecution.analyzed.output
     queryExecution.toRdd.mapPartitions { iter =>
-      val bound = tEnc.bind(input)
-      iter.map(bound.fromRow)
+      iter.map(encoder.fromRow)
     }
   }
 
@@ -230,8 +227,8 @@ class Dataset[T] private(
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
-      encoderFor[K].resolve(withGroupingKey.newColumns),
-      encoderFor[T].bind(inputPlan.output),
+      encoderFor[K],
+      encoder,
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
@@ -296,14 +293,8 @@ class Dataset[T] private(
     val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
     val unresolvedPlan = Project(aliases, logicalPlan)
     val execution = new QueryExecution(sqlContext, unresolvedPlan)
-    // Rebind the encoders to the nested schema that will be produced by the select.
-    val encoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
-      case (e: ExpressionEncoder[_], a) if !e.flat =>
-        e.nested(a.toAttribute).resolve(execution.analyzed.output)
-      case (e, a) =>
-        e.unbind(a.toAttribute :: Nil).resolve(execution.analyzed.output)
-    }
-    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
+    val encoder = ExpressionEncoder.tuple(columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]))
+    new Dataset(sqlContext, execution, encoder)
   }
 
   /**
@@ -418,14 +409,8 @@ class Dataset[T] private(
       case e if e.flat => Alias(right.output.head, "_2")()
       case _ => Alias(CreateStruct(right.output), "_2")()
     }
-    val leftEncoder =
-      if (encoder.flat) encoder else encoder.nested(leftData.toAttribute)
-    val rightEncoder =
-      if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(
-        leftEncoder,
-        rightEncoder.rebind(right.output, left.output ++ right.output))
+      ExpressionEncoder.tuple(this.encoder, other.encoder)
 
     withPlan[(T, U)](other) { (left, right) =>
       Project(

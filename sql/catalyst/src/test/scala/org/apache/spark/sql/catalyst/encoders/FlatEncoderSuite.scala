@@ -17,26 +17,21 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.reflect.ClassTag
+import org.apache.spark.SparkFunSuite
 
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.catalyst.InternalRow
+class FlatEncoderSuite extends SparkFunSuite {
 
-/**
- * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
- *
- * Encoders are not intended to be thread-safe and thus they are allowed to avoid internal locking
- * and reuse internal buffers to improve performance.
- */
-trait Encoder[T] extends Serializable {
+  test("a") {
+//    val enc = FlatEncoder[Int]
+//
+//    val row = enc.toRow(1)
+//    val re = enc.fromRow(row)
 
-  /** Returns the schema of encoding this type of object as a Row. */
-  def schema: StructType
+    val enc = FlatEncoder[String]
 
-  /** A ClassTag that can be used to construct and Array to contain a collection of `T`. */
-  def clsTag: ClassTag[T]
+    val row = enc.toRow("abc")
+    val re = enc.fromRow(row)
 
-  def toRow(t: T): InternalRow
-
-  def fromRow(row: InternalRow): T
+    val i = 1
+  }
 }

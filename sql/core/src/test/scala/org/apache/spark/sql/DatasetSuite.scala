@@ -56,7 +56,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.collect().head == ClassData("a", 1))
   }
 
-  test("as case class - reordered fields by name") {
+  ignore("as case class - reordered fields by name") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
     assert(ds.collect() === Array(ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)))
   }
@@ -86,6 +86,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("select 2, primitive and tuple") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
+
     checkAnswer(
       ds.select(
         expr("_1").as[String],
@@ -102,7 +103,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
-  test("select 2, primitive and class, fields reordered") {
+  ignore("select 2, primitive and class, fields reordered") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
     checkDecoding(
       ds.select(

@@ -275,8 +275,7 @@ case class UnwrapOption(
  * @param optionType The datatype to be held inside of the Option.
  * @param child The expression to evaluate and wrap.
  */
-case class WrapOption(optionType: DataType, child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+case class WrapOption(t: DataType, child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
 
@@ -288,14 +287,13 @@ case class WrapOption(optionType: DataType, child: Expression)
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val javaType = ctx.javaType(optionType)
     val inputObject = child.gen(ctx)
 
     s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = false;
-      scala.Option<$javaType> ${ev.value} =
+      scala.Option ${ev.value} =
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
@@ -489,5 +487,40 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
          """
       }.mkString("\n") +
       s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+  }
+}
+
+case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
+  extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val row = child.gen(ctx)
+    s"""
+      ${row.code}
+      final boolean ${ev.isNull} = ${row.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
+      }
+    """
+  }
+}
+
+case class InputInternalRow(dataType: StructType) extends LeafExpression {
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    ev.isNull = "false"
+    ev.value = ctx.INPUT_ROW
+    ""
   }
 }

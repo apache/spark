@@ -137,13 +137,13 @@ object RowEncoder {
       If(
         IsNull(field),
         Literal.create(null, externalDataTypeFor(f.dataType)),
-        constructorFor(BoundReference(i, f.dataType, f.nullable), f.dataType)
+        constructorFor(BoundReference(i, f.dataType, f.nullable))
       )
     }
     CreateExternalRow(fields)
   }
 
-  private def constructorFor(input: Expression, dataType: DataType): Expression = dataType match {
+  private def constructorFor(input: Expression): Expression = input.dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
 
@@ -170,7 +170,7 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(constructorFor(_, et), input, et),
+          MapObjects(constructorFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
@@ -181,10 +181,10 @@ object RowEncoder {
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
-      val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType), keyArrayType)
+      val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType))
 
       val valueArrayType = ArrayType(vt, valueNullable)
-      val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType), valueArrayType)
+      val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType))
 
       StaticInvoke(
         ArrayBasedMapData,
@@ -197,7 +197,7 @@ object RowEncoder {
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, externalDataTypeFor(f.dataType)),
-          constructorFor(getField(input, i, f.dataType), f.dataType))
+          constructorFor(getField(input, i, f.dataType)))
       }
       CreateExternalRow(convertedFields)
   }
