@@ -316,11 +316,11 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
           mode = Complete,
           isDistinct = false)
 
-        // COUNT has the special property that it can return a result without input rows. This is
-        // almost impossible to
-        val c = af match {
-          case _: Count => Coalesce(Seq(b, Literal(0L)))
-          case _ => b
+        // Some aggregate functions (COUNT) have the special property that they can return a
+        // non-null result without any input. We need to make sure we return a result in this case.
+        val c = af.defaultResult match {
+          case Some(lit) => Coalesce(Seq(b, lit))
+          case None => b
         }
 
         (e, a, c)
