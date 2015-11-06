@@ -875,9 +875,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.45, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -0.0111, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1458,8 +1458,8 @@ test_that("sampleBy() on a DataFrame", {
   fractions <- list("0" = 0.1, "1" = 0.2)
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
-  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
 })
 
 test_that("SQL error message is returned from JVM", {

@@ -257,7 +257,9 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
-    Assert.assertArrayEquals(expected, actual);
+    Assert.assertEquals(0, actual[0].getLong(0));
+    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
+    Assert.assertEquals(1, actual[1].getLong(0));
+    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
   }
 }

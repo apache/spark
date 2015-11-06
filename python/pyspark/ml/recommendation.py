@@ -76,11 +76,11 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> test = sqlContext.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
-    Row(user=0, item=2, prediction=0.39...)
+    Row(user=0, item=2, prediction=-0.13807615637779236)
     >>> predictions[1]
-    Row(user=1, item=0, prediction=3.19...)
+    Row(user=1, item=0, prediction=2.6258413791656494)
     >>> predictions[2]
-    Row(user=2, item=0, prediction=-1.15...)
+    Row(user=2, item=0, prediction=-1.5018409490585327)
 
     .. versionadded:: 1.4.0
     """
