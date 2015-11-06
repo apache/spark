@@ -45,15 +45,13 @@ import org.apache.spark.util.Utils
  *
  * All other methods of the WriteAheadLog interface will be passed on to the wrapped WriteAheadLog.
  */
-private[util] class BatchedWriteAheadLog(wrappedLog: WriteAheadLog)
+private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog)
   extends WriteAheadLog with Logging {
 
   import BatchedWriteAheadLog._
 
   // exposed for tests
-  protected val walWriteQueue = new LinkedBlockingQueue[Record]()
-
-  private val WAL_WRITE_STATUS_TIMEOUT = 5000 // 5 seconds
+  private val walWriteQueue = new LinkedBlockingQueue[Record]()
 
   // Whether the writer thread is active
   @volatile private var active: Boolean = true
@@ -162,10 +160,16 @@ private[util] class BatchedWriteAheadLog(wrappedLog: WriteAheadLog)
       buffer.clear()
     }
   }
+
+  /** Method for querying the queue length during tests. */
+  private[util] def getQueueLength(): Int = walWriteQueue.size()
 }
 
 /** Static methods for aggregating and de-aggregating records. */
 private[util] object BatchedWriteAheadLog {
+
+  val WAL_WRITE_STATUS_TIMEOUT = 5000 // 5 seconds
+
   /**
    * Wrapper class for representing the records that we will write to the WriteAheadLog. Coupled
    * with the timestamp for the write request of the record, and the promise that will block the
