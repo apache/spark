@@ -82,16 +82,17 @@ private[spark] class UnifiedMemoryManager private[memory] (
     memoryMode match {
       case MemoryMode.ON_HEAP =>
         if (numBytes > onHeapExecutionMemoryPool.memoryFree) {
+          val extraMemoryNeeded = numBytes - onHeapExecutionMemoryPool.memoryFree
           // There is not enough free memory in the execution pool, so try to reclaim memory from
           // storage. We can reclaim any free memory from the storage pool. If the storage pool
           // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
           // the memory that storage has borrowed from execution.
-          val memoryReclaimableFromStorage = storageMemoryPool.memoryFree +
-            math.max(storageMemoryPool.memoryUsed - storageRegionSize, 0)
+          val memoryReclaimableFromStorage =
+            math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
           if (memoryReclaimableFromStorage > 0) {
             // Only reclaim as much space as is necessary and available:
             val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
-              math.min(numBytes, memoryReclaimableFromStorage))
+              math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
             onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
           }
         }
