@@ -277,6 +277,29 @@ class HdfsSensor(BaseSensorOperator):
         return True
 
 
+class WebHdfsSensor(BaseSensorOperator):
+    """
+    Waits for a file or folder to land in HDFS
+    """
+    template_fields = ('filepath',)
+
+    @apply_defaults
+    def __init__(
+            self,
+            filepath,
+            webhdfs_conn_id='webhdfs_default',
+            *args, **kwargs):
+        super(WebHdfsSensor, self).__init__(*args, **kwargs)
+        self.filepath = filepath
+        self.hdfs_conn_id = webhdfs_conn_id
+
+    def poke(self, context):
+        c = hooks.WebHDFSHook(self.webhdfs_conn_id).get_conn()
+        logging.info(
+            'Poking for file {self.filepath} '.format(**locals()))
+        return c.check_for_path(hdfs_path=self.filepath)
+
+
 class S3KeySensor(BaseSensorOperator):
     """
     Waits for a key (a file-like instance on S3) to be present in a S3 bucket.
