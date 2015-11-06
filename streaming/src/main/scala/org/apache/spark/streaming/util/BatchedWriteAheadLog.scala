@@ -43,6 +43,9 @@ import org.apache.spark.util.Utils
  * a clean up request for timestamp 3, we would clean up the file "log-1", and lose data regarding
  * 5 and 7.
  *
+ * In addition, notice that the write method is still a blocking call. This will ensure that a
+ * receiver will not be able to submit multiple `AddBlock` calls, jeopardizing the ordering of data.
+ *
  * All other methods of the WriteAheadLog interface will be passed on to the wrapped WriteAheadLog.
  */
 private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: SparkConf)
