@@ -19,7 +19,8 @@
 
 # Stops the history server on the machine this script is executed on.
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.history.HistoryServer 1
+"${SPARK_HOME}/sbin/spark-daemon.sh" stop org.apache.spark.deploy.history.HistoryServer 1
