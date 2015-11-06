@@ -182,7 +182,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_list(e: Column): Column = callUdf("collect_list", e)
+  def collect_list(e: Column): Column = callUDF("collect_list", e)
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
@@ -192,7 +192,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_set(e: Column): Column = callUdf("collect_set", e)
+  def collect_set(e: Column): Column = callUDF("collect_set", e)
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
