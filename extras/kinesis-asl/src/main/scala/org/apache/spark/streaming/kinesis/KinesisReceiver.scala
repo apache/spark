@@ -206,6 +206,7 @@ private[kinesis] class KinesisReceiver[T](
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
+      logInfo(s"blockGenerator.multipleDataWithCallback: iterator: $dataIterator, meta: $metadata")
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
 
     }
@@ -231,7 +232,7 @@ private[kinesis] class KinesisReceiver[T](
   private def finalizeRangesForCurrentBlock(blockId: StreamBlockId): Unit = {
     blockIdToSeqNumRanges(blockId) = SequenceNumberRanges(seqNumRangesInCurrentBlock.toArray)
     seqNumRangesInCurrentBlock.clear()
-    logDebug(s"Generated block $blockId has $blockIdToSeqNumRanges")
+    logInfo(s"Generated block $blockId has $blockIdToSeqNumRanges")
   }
 
   /** Store the block along with its associated ranges */

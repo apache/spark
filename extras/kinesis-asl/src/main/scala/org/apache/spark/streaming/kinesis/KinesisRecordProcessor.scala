@@ -70,11 +70,11 @@ private[kinesis] class KinesisRecordProcessor[T](
    *   in the DStream
    */
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
-    logInfo(s"Received batch: $batch")
+    logInfo(s"Received batch: $batch. Is receiver alive: ${!receiver.isStopped()}")
     if (!receiver.isStopped()) {
       try {
         receiver.addRecords(shardId, batch)
-        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        logInfo(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /*
          *
@@ -111,7 +111,7 @@ private[kinesis] class KinesisRecordProcessor[T](
            *     more than once.
            */
           logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
-              " or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
+              s" or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
 
           /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e

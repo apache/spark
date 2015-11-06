@@ -99,7 +99,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
     val blockId = partition.blockId
 
     def getBlockFromBlockManager(): Option[Iterator[T]] = {
-      logDebug(s"Read partition data of $this from block manager, block $blockId")
+      logInfo(s"Read partition data of $this from block manager, block $blockId")
       blockManager.get(blockId).map(_.data.asInstanceOf[Iterator[T]])
     }
 
