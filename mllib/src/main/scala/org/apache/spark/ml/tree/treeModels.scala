@@ -19,10 +19,6 @@ package org.apache.spark.ml.tree
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
-import scala.language.experimental.macros
-import scala.reflect.runtime.currentMirror
-import scala.tools.reflect.ToolBox
-
 /**
  * Abstraction for Decision Tree models.
  *
@@ -113,68 +109,4 @@ private[ml] trait TreeEnsembleModel {
 
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
-}
-
-/**
- * An object for creating a code generated decision tree model.
- * NodeToTree is used to convert a node to a series if code gen
- * if/else statements conditions returning the predicition for a
- * given vector.
- * getScorer wraps this and provides a function we can use to get
- * the prediction.
- */
-private[spark] object CodeGenerationDecisionTreeModel {
-  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
-
-  import universe._
-
-  // Convert a node to code gened if/else statements
-  def NodeToTree(root: Node): universe.Tree = {
-    root match {
-      case node: InternalNode => {
-        val nodeSplit = node.split
-        nodeSplit match {
-          case split: CategoricalSplit => {
-            val isLeft = split.isLeft
-            isLeft match {
-              case true => q"""
-                              if (categories.contains(input(${split.featureIndex}))) {
-                                ${NodeToTree(node.leftChild)}
-                              } else {
-                                ${NodeToTree(node.rightChild)}
-                              }"""
-              case false => q"""
-                               if (categories.contains(input(${split.featureIndex}))) {
-                                 ${NodeToTree(node.leftChild)}
-                               } else {
-                                 ${NodeToTree(node.rightChild)}
-                               }"""
-            }
-          }
-          case split: ContinuousSplit => {
-            q"""
-               if (input(${split.featureIndex}) <= ${split.threshold}) {
-                 ${NodeToTree(node.leftChild)}
-                } else {
-                 ${NodeToTree(node.rightChild)}
-                }"""
-          }
-        }
-      }
-      case node: LeafNode => q"${node.prediction}"
-    }
-  }
-
-  // Create a codegened scorer for a given node
-  def getScorer(root: Node): Vector => Double = {
-    val toolbox = currentMirror.mkToolBox()
-    val code =
-      q"""
-         import org.apache.spark.mllib.linalg.{Vectors, Vector}
-         (input: Vector) => {
-            ${NodeToTree(root)}
-         }
-       """
-    toolbox.eval(code).asInstanceOf[Vector => Double]
-  }
 }
