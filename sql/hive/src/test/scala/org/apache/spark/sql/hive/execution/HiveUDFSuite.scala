@@ -348,6 +348,140 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
 
     sqlContext.dropTempTable("testUDF")
   }
+
+
+  test("SPARK-11522 select input_file_name from non-parquet table"){
+
+    println("======================================")
+    println("EXTERNAL OpenCSVSerde table pointing to LOCATION")
+
+    sql("CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT) " +
+      " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'" +
+      " WITH SERDEPROPERTIES ( " +
+      "   \"separatorChar\" = \",\"," +
+      "   \"quoteChar\"     = \"\\\"\"," +
+      "   \"escapeChar\"    = \"\\\\\") " +
+      " LOCATION 'file:///home/xwu0226/spark-tables/csv_table' ")
+
+    sql("SELECT input_file_name() as file FROM csv_table").show(false)
+    sql("SELECT * FROM csv_table").show()
+    sql("DROP TABLE csv_table")
+
+    println("======================================")
+    println("EXTERNAL pointing to LOCATION")
+    sql("select 1, 2").write.save("file:///home/xwu0226/spark-tables/external_test_t5")
+
+    sql("CREATE EXTERNAL table external_t5 (c1 int, c2 int) " +
+      " row format delimited fields terminated by ',' " +
+      " location 'file:///home/xwu0226/spark-tables/external_test_t5'")
+
+    sql("SELECT input_file_name() as file FROM external_t5").show(false)
+    sql("SELECT * FROM external_t5").show
+    sql("DROP TABLE external_t5")
+
+    println("======================================")
+    println("NON-External pointing to LOCATION")
+
+    sql("select 1, 2").write.save("file:///home/xwu0226/spark-tables/external_test_t4")
+    sql("CREATE table external_t4 (c1 int, c2 int) " +
+      " row format delimited fields terminated by ',' " +
+      " location 'file:///home/xwu0226/spark-tables/external_test_t4'")
+
+    sql("SELECT input_file_name() as file FROM external_t4").show(false)
+    sql("SELECT * FROM external_t4").show
+    sql("DROP TABLE external_t4")
+
+    println("======================================")
+    println("NON-External pointing to /tmp/...")
+
+    sql("CREATE table internal_t1(c1 int, c2 int) " +
+      " row format delimited fields terminated by ',' " +
+      " as select 1, 2")
+
+    sql("SELECT input_file_name() as file FROM internal_t1").show(false)
+    sql("SELECT * FROM internal_t1").show
+    sql("DROP TABLE internal_t1")
+
+    println("======================================")
+    println("External pointing to /tmp/...")
+
+    sql("CREATE EXTERNAL table external_t1(c1 int, c2 int) " +
+      " row format delimited fields terminated by ',' " +
+      " as select 1, 2")
+
+    sql("SELECT input_file_name() as file FROM external_t1").show(false)
+    sql("SELECT * FROM external_t1").show
+    sql("DROP TABLE external_t1")
+
+    println("======================================")
+    println("Non-External parquet pointing to /tmp/...")
+
+    sql("CREATE table internal_parquet_tmp(c1 int, c2 int) " +
+      " stored as parquet " +
+      " as select 1, 2")
+
+    sql("SELECT input_file_name() as file FROM internal_parquet_tmp").show(false)
+    sql("SELECT * FROM internal_parquet_tmp").show
+    sql("DROP TABLE internal_parquet_tmp")
+
+    println("======================================")
+    println("External parquet pointing to /tmp/...")
+
+    sql("CREATE EXTERNAL table external_parquet_tmp(c1 int, c2 int) " +
+      " stored as parquet " +
+      " as select 1, 2")
+
+    sql("SELECT input_file_name() as file FROM external_parquet_tmp").show(false)
+    sql("SELECT * FROM external_parquet_tmp").show
+    sql("DROP TABLE external_parquet_tmp")
+
+    println("======================================")
+    println("External parquet pointing to LOCATION")
+
+    sql("CREATE table internal_parquet(c1 int, c2 int) " +
+      " stored as parquet " +
+      " as select 1, 2")
+
+    val df = sql("SELECT * FROM internal_parquet")
+    df.write.parquet("file:///home/xwu0226/spark-tables/external_parquet")
+
+    sql("CREATE EXTERNAL table external_parquet(c1 int, c2 int) " +
+      " stored as parquet " +
+      " LOCATION 'file:///home/xwu0226/spark-tables/external_parquet'")
+
+    sql("SELECT input_file_name() as file FROM external_parquet").show(false)
+    sql("SELECT * FROM external_parquet").show
+    sql("DROP TABLE external_parquet")
+    sql("DROP TABLE internal_parquet")
+
+    println("======================================")
+    println("Non-External parquet pointing to /tmp/...")
+
+    sql("CREATE table internal_parquet_tmp(c1 int, c2 int) " +
+      " stored as parquet " +
+      " as select 1, 2")
+
+    sql("SELECT input_file_name() as file FROM internal_parquet_tmp").show(false)
+    sql("SELECT * FROM internal_parquet_tmp").show
+    sql("DROP TABLE internal_parquet_tmp")
+
+
+    println("======================================")
+    println("Non-External parquet pointing to LOCATION")
+
+    sql("SELECT 1, 2 ").write.parquet("file:///home/xwu0226/spark-tables/NON_external_parquet")
+
+    sql("CREATE table non_external_parquet(c1 int, c2 int) " +
+      " stored as parquet " +
+      " LOCATION 'file:///home/xwu0226/spark-tables/NON_external_parquet'")
+
+    sql("SELECT input_file_name() as file FROM non_external_parquet").show(false)
+    sql("SELECT * FROM non_external_parquet").show
+    sql("DROP TABLE non_external_parquet")
+
+  }
+
+
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
