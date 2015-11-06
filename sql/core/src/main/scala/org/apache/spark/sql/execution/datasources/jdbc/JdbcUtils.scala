@@ -123,14 +123,17 @@ object JdbcUtils extends Logging {
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                 case ArrayType(elemType, _) =>
-                  val elemDataBaseType = dialect.getJDBCType(elemType).map(_.databaseTypeDefinition).getOrElse(
-                    dialect.getCommonJDBCType(elemType).map(_.databaseTypeDefinition).getOrElse(
-                      throw new IllegalArgumentException(
-                        s"Can't determine array element type for $elemType in field $i")
-                    ))
+                  val elemDataBaseType = dialect.getJDBCType(elemType)
+                    .map(_.databaseTypeDefinition)
+                    .getOrElse(
+                      dialect.getCommonJDBCType(elemType).map(_.databaseTypeDefinition).getOrElse(
+                        throw new IllegalArgumentException(
+                          s"Can't determine array element type for $elemType in field $i")
+                      ))
                   val array: Array[AnyRef] = elemType match {
                     case _: ArrayType =>
-                      throw new IllegalArgumentException(s"Nested array writes to JDBC are not supported for field $i")
+                      throw new IllegalArgumentException(
+                        s"Nested array writes to JDBC are not supported for field $i")
                     case BinaryType => row.getSeq[Array[Byte]](i).toArray
                     case TimestampType => row.getSeq[java.sql.Timestamp](i).toArray
                     case DateType => row.getSeq[java.sql.Date](i).toArray
