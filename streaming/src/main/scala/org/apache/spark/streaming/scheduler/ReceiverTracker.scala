@@ -437,10 +437,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged
     private val submitJobThreadPool = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("submit-job-thead-pool"))
+      ThreadUtils.newDaemonCachedThreadPool("submit-job-thread-pool"))
 
     private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("wal-batching-thead-pool"))
+      ThreadUtils.newDaemonCachedThreadPool("wal-batching-thread-pool"))
 
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages

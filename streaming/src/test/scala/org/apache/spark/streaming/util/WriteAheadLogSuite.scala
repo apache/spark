@@ -44,84 +44,6 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ThreadUtils, ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 
-class WriteAheadLogUtilsSuite extends SparkFunSuite {
-  import WriteAheadLogSuite._
-
-  val logDir = Utils.createTempDir().getAbsolutePath()
-
-  def assertDriverLogClass[T <: WriteAheadLog: ClassTag](
-      conf: SparkConf,
-      isBatched: Boolean = false): WriteAheadLog = {
-    val log = WriteAheadLogUtils.createLogForDriver(conf, logDir, hadoopConf)
-    if (isBatched) {
-      assert(log.isInstanceOf[BatchedWriteAheadLog])
-      val parentLog = log.asInstanceOf[BatchedWriteAheadLog].parent
-      assert(parentLog.getClass === implicitly[ClassTag[T]].runtimeClass)
-    } else {
-      assert(log.getClass === implicitly[ClassTag[T]].runtimeClass)
-    }
-    log
-  }
-
-  def assertReceiverLogClass[T: ClassTag](conf: SparkConf): WriteAheadLog = {
-    val log = WriteAheadLogUtils.createLogForReceiver(conf, logDir, hadoopConf)
-    assert(log.getClass === implicitly[ClassTag[T]].runtimeClass)
-    log
-  }
-
-  test("WriteAheadLogUtils - log selection and creation") {
-
-    val emptyConf = new SparkConf()  // no log configuration
-    assertDriverLogClass[FileBasedWriteAheadLog](emptyConf)
-    assertReceiverLogClass[FileBasedWriteAheadLog](emptyConf)
-
-    // Verify setting driver WAL class
-    val conf1 = new SparkConf().set("spark.streaming.driver.writeAheadLog.class",
-      classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[MockWriteAheadLog0](conf1)
-    assertReceiverLogClass[FileBasedWriteAheadLog](conf1)
-
-    // Verify setting receiver WAL class
-    val receiverWALConf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
-      classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf)
-    assertReceiverLogClass[MockWriteAheadLog0](receiverWALConf)
-
-    // Verify setting receiver WAL class with 1-arg constructor
-    val receiverWALConf2 = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
-      classOf[MockWriteAheadLog1].getName())
-    assertReceiverLogClass[MockWriteAheadLog1](receiverWALConf2)
-
-    // Verify failure setting receiver WAL class with 2-arg constructor
-    intercept[SparkException] {
-      val receiverWALConf3 = new SparkConf().set("spark.streaming.receiver.writeAheadLog.class",
-        classOf[MockWriteAheadLog2].getName())
-      assertReceiverLogClass[MockWriteAheadLog1](receiverWALConf3)
-    }
-  }
-
-  test("WriteAheadLogUtils - wrap WriteAheadLog in BatchedWriteAheadLog when batching is enabled") {
-    def getBatchedSparkConf: SparkConf =
-      new SparkConf().set("spark.streaming.driver.writeAheadLog.allowBatching", "true")
-
-    val emptyConf = getBatchedSparkConf
-    assertDriverLogClass[FileBasedWriteAheadLog](emptyConf, isBatched = true)
-    assertReceiverLogClass[FileBasedWriteAheadLog](emptyConf)
-
-    // Verify setting driver WAL class
-    val conf1 = getBatchedSparkConf.set("spark.streaming.driver.writeAheadLog.class",
-      classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[MockWriteAheadLog0](conf1, isBatched = true)
-    assertReceiverLogClass[FileBasedWriteAheadLog](conf1)
-
-    // Verify receivers are not wrapped
-    val receiverWALConf = getBatchedSparkConf.set("spark.streaming.receiver.writeAheadLog.class",
-      classOf[MockWriteAheadLog0].getName())
-    assertDriverLogClass[FileBasedWriteAheadLog](receiverWALConf, isBatched = true)
-    assertReceiverLogClass[MockWriteAheadLog0](receiverWALConf)
-  }
-}
-
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
     allowBatching: Boolean,
@@ -131,11 +53,11 @@ abstract class CommonWriteAheadLogTests(
 
   import WriteAheadLogSuite._
 
-  val hadoopConf = new Configuration()
-  var tempDir: File = null
-  var testDir: String = null
-  var testFile: String = null
-  var writeAheadLog: WriteAheadLog = null
+  protected val hadoopConf = new Configuration()
+  protected var tempDir: File = null
+  protected var testDir: String = null
+  protected var testFile: String = null
+  protected var writeAheadLog: WriteAheadLog = null
   protected def testPrefix = if (testTag != "") testTag + " - " else testTag
 
   before {
@@ -398,7 +320,7 @@ class BatchedWriteAheadLogUtilsSuite extends SparkFunSuite {
       BatchCleanupEvent(Nil)
     )
 
-    val buffers = events.map(e => RecordBuffer(ByteBuffer.wrap(Utils.serialize(e)), 0L, null))
+    val buffers = events.map(e => Record(ByteBuffer.wrap(Utils.serialize(e)), 0L, null))
     val batched = BatchedWriteAheadLog.aggregate(buffers)
     val deaggregate = BatchedWriteAheadLog.deaggregate(batched).map(buffer =>
       Utils.deserialize[ReceivedBlockTrackerLogEvent](buffer.array()))
@@ -426,9 +348,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       walWriteQueue.drainTo(buffer.asJava)
     }
 
-    def mockWrite(successful: Boolean): Seq[RecordBuffer] = {
+    def mockWrite(successful: Boolean): Seq[Record] = {
       val records = buffer.toSeq
-      buffer.foreach { case RecordBuffer(byteBuffer, time, promise) =>
+      buffer.foreach { case Record(byteBuffer, time, promise) =>
         if (successful) promise.success(mmock[WriteAheadLogRecordHandle]) else promise.success(null)
       }
       buffer.clear()

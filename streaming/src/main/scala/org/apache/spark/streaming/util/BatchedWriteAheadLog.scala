@@ -19,36 +19,34 @@ package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
 import java.util.concurrent.{LinkedBlockingQueue, TimeoutException}
-import java.util.{Iterator => JIterator}
+import java.util.{Iterator => JIterator, ArrayList => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, ExecutionContext, Promise}
+import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.util.{Utils, ThreadUtils}
 
 /**
  * A wrapper for a WriteAheadLog that batches records before writing data. All other methods will
  * be passed on to the wrapped class.
- *
- * Parent exposed for testing.
  */
-private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAheadLog)
+private[streaming] class BatchedWriteAheadLog(wrappedLog: WriteAheadLog)
   extends WriteAheadLog with Logging {
 
   import BatchedWriteAheadLog._
 
   // exposed for tests
-  protected val walWriteQueue = new LinkedBlockingQueue[RecordBuffer]()
+  protected val walWriteQueue = new LinkedBlockingQueue[Record]()
 
   private val WAL_WRITE_STATUS_TIMEOUT = 5000 // 5 seconds
 
   // Whether the writer thread is active
   @volatile private var active: Boolean = true
-  protected val buffer = new ArrayBuffer[RecordBuffer]()
+  protected val buffer = new JList[Record]()
 
   private val batchedWriterThread = startBatchedWriterThread()
 
@@ -58,16 +56,8 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
    */
   override def write(byteBuffer: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
     val promise = Promise[WriteAheadLogRecordHandle]()
-    walWriteQueue.offer(RecordBuffer(byteBuffer, time, promise))
-    try {
-      Await.result(promise.future.recover { case _ => null }(ThreadUtils.sameThread),
-        WAL_WRITE_STATUS_TIMEOUT.milliseconds)
-    } catch {
-      case e: TimeoutException =>
-        logWarning(s"Write to Write Ahead Log promise timed out after " +
-          s"$WAL_WRITE_STATUS_TIMEOUT millis for record.")
-        null
-    }
+    walWriteQueue.offer(Record(byteBuffer, time, promise))
+    Await.result(promise.future, WAL_WRITE_STATUS_TIMEOUT.milliseconds)
   }
 
   /**
@@ -77,7 +67,7 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
    * This method is handled by the parent WriteAheadLog.
    */
   override def read(segment: WriteAheadLogRecordHandle): ByteBuffer = {
-    parent.read(segment)
+    wrappedLog.read(segment)
   }
 
   /**
@@ -86,7 +76,7 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
    * This method is handled by the parent WriteAheadLog.
    */
   override def readAll(): JIterator[ByteBuffer] = {
-    parent.readAll().asScala.flatMap(deaggregate).asJava
+    wrappedLog.readAll().asScala.flatMap(deaggregate).asJava
   }
 
   /**
@@ -95,7 +85,7 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
    * This method is handled by the parent WriteAheadLog.
    */
   override def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
-    parent.clean(threshTime, waitForCompletion)
+    wrappedLog.clean(threshTime, waitForCompletion)
   }
 
 
@@ -107,19 +97,11 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
     active = false
     batchedWriterThread.interrupt()
     batchedWriterThread.join()
-    fulfillPromises()
-    parent.close()
-  }
-
-  /**
-   * Respond to any promises that may have been left in the queue, to unblock receivers during
-   * shutdown.
-   */
-  private def fulfillPromises(): Unit = {
     while (!walWriteQueue.isEmpty) {
-      val RecordBuffer(_, _, promise) = walWriteQueue.poll()
-      promise.success(null)
+      val Record(_, _, promise) = walWriteQueue.poll()
+      promise.failure(new SparkException("close() was called on BatchedWriteAheadLog."))
     }
+    wrappedLog.close()
   }
 
   /** Start the actual log writer on a separate thread. Visible (protected) for testing. */
@@ -145,8 +127,8 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
   /** Write all the records in the buffer to the write ahead log. Visible for testing. */
   protected def flushRecords(): Unit = {
     try {
-      buffer.append(walWriteQueue.take())
-      val numBatched = walWriteQueue.drainTo(buffer.asJava) + 1
+      buffer.add(walWriteQueue.take())
+      val numBatched = walWriteQueue.drainTo(buffer) + 1
       logDebug(s"Received $numBatched records from queue")
     } catch {
       case _: InterruptedException =>
@@ -154,20 +136,21 @@ private[streaming] class BatchedWriteAheadLog(private[util] val parent: WriteAhe
     }
     try {
       var segment: WriteAheadLogRecordHandle = null
-      if (buffer.length > 0) {
-        logDebug(s"Batched ${buffer.length} records for Write Ahead Log write")
+      if (buffer.size() > 0) {
+        logDebug(s"Batched ${buffer.size()} records for Write Ahead Log write")
         // we take the latest record for the time to ensure that we don't clean up files earlier
         // than the expiration date of the records
-        val time = buffer.last.time
-        segment = parent.write(aggregate(buffer), time)
+        val time = buffer.get(buff).time
+        segment = wrappedLog.write(aggregate(buffer), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {
       case NonFatal(e) =>
         logWarning(s"Batch WAL Writer failed to write $buffer", e)
-        buffer.foreach(_.promise.success(null))
+        buffer.foreach(_.promise.failure(e))
+    } finally {
+      buffer.clear()
     }
-    buffer.clear()
   }
 }
 
@@ -178,8 +161,8 @@ private[streaming] object BatchedWriteAheadLog {
    * with the timestamp for the write request of the record, and the promise that will block the
    * write request, while a separate thread is actually performing the write.
    */
-  private[util] case class RecordBuffer(
-      record: ByteBuffer,
+  private[util] case class Record(
+      data: ByteBuffer,
       time: Long,
       promise: Promise[WriteAheadLogRecordHandle])
 
@@ -191,9 +174,9 @@ private[streaming] object BatchedWriteAheadLog {
   }
 
   /** Aggregate multiple serialized ReceivedBlockTrackerLogEvents in a single ByteBuffer. */
-  def aggregate(records: Seq[RecordBuffer]): ByteBuffer = {
+  def aggregate(records: Seq[Record]): ByteBuffer = {
     ByteBuffer.wrap(Utils.serialize[Array[Array[Byte]]](
-      records.map(recordBuffer => getByteArray(recordBuffer.record)).toArray))
+      records.map(record => getByteArray(record.data)).toArray))
   }
 
   /**
