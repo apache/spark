@@ -71,7 +71,7 @@ class CodeGenerationDecisionTreeModelSuite extends SparkFunSuite with MLlibTestS
     val vectorExpectations = List(
       (Vectors.dense(0.0, 0.9), 0.1), // left2
       (Vectors.dense(0.4, 1.2), 0.0), // left
-      (Vectors.dense(0.5, 1.2), 2.0) // right
+      (Vectors.dense(0.6, 1.2), 2.0) // right
     )
 
     val predictor = CodeGenerationDecisionTreeModel.getScorer(grandParent)
