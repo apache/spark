@@ -208,7 +208,6 @@ private[kinesis] class KinesisReceiver[T](
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       logInfo(s"blockGenerator.multipleDataWithCallback: iterator: $dataIterator, meta: $metadata")
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
-
     }
   }
 

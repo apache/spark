@@ -213,8 +213,8 @@ class KinesisSequenceRangeIterator(
       }
     // De-aggregate records, if KPL was used in producing the records. The KCL automatically
     // handles de-aggregation during regular operation. This code path is used during recovery
-    val recordIterator = UserRecord.deaggregate(getRecordsResult.getRecords)
-    (recordIterator.iterator().asScala, getRecordsResult.getNextShardIterator)
+    // val recordIterator = UserRecord.deaggregate()
+    (getRecordsResult.getRecords.iterator().asScala, getRecordsResult.getNextShardIterator)
   }
 
   /**
