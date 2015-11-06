@@ -134,7 +134,7 @@ object StateSpec {
 
 /** Internal implementation of [[org.apache.spark.streaming.StateSpec]] interface. */
 private[streaming]
-case class StateSpecImpl[K, V, S: ClassTag, T: ClassTag](
+case class StateSpecImpl[K, V, S, T](
     function: (K, Option[V], State[S]) => Option[T]) extends StateSpec[K, V, S, T] {
 
   require(function != null)

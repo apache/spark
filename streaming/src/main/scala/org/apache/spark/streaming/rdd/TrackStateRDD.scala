@@ -151,7 +151,7 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
       new TrackStateRDDPartition(i, prevStateRDD, partitionedDataRDD)}
   }
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     prevStateRDD = null
     partitionedDataRDD = null
