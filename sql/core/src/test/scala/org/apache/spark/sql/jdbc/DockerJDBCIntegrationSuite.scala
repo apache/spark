@@ -89,14 +89,6 @@ abstract class DockerJDBCIntegrationSuite
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
       }
-      // Create the database container:
-      val config = ContainerConfig.builder()
-        .image(db.imageName)
-        .networkDisabled(false)
-        .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .exposedPorts(s"${db.jdbcPort}/tcp")
-        .build()
-      containerId = docker.createContainer(config).id
       // Configure networking (necessary for boot2docker / Docker Machine)
       val externalPort: Int = {
         val sock = new ServerSocket(0)
@@ -110,8 +102,17 @@ abstract class DockerJDBCIntegrationSuite
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
         .build()
+      // Create the database container:
+      val config = ContainerConfig.builder()
+        .image(db.imageName)
+        .networkDisabled(false)
+        .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
+        .hostConfig(hostConfig)
+        .exposedPorts(s"${db.jdbcPort}/tcp")
+        .build()
+      containerId = docker.createContainer(config).id
       // Start the container and wait until the database can accept JDBC connections:
-      docker.startContainer(containerId, hostConfig)
+      docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       eventually(timeout(60.seconds), interval(1.seconds)) {
         val conn = java.sql.DriverManager.getConnection(jdbcUrl)
