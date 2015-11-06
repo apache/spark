@@ -29,20 +29,21 @@ import org.apache.spark.sql.SQLContext
  */
 object DatasetKmeans {
 
-  // TODO: now we only support 2-dimension vector
-  type Vector = (Double, Double)
+  case class Point(x: Double, y: Double) {
+    def + (other: Point): Point = Point(x + other.x, y + other.y)
 
-  private def parseVector(line: String): Vector = {
-    val Array(d1, d2) = line.split(' ').map(_.toDouble)
-    d1 -> d2
+    def / (d: Double): Point = Point(x / d, y / d)
+
+    def distance(other: Point): Double =
+      (x - other.x) * (x - other.x) + (y - other.y) * (y - other.y)
   }
 
-  private def closestPoint(p: Vector, centers: Array[Vector]): Int = {
+  private def closestPoint(p: Point, centers: Array[Point]): Int = {
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
     for (i <- 0 until centers.length) {
-      val tempDist = squaredDistance(p, centers(i))
+      val tempDist = p.distance(centers(i))
       if (tempDist < closest) {
         closest = tempDist
         bestIndex = i
@@ -51,14 +52,6 @@ object DatasetKmeans {
 
     bestIndex
   }
-
-  private def squaredDistance(p1: Vector, p2: Vector): Double = {
-    (p1._1 - p2._1) * (p1._1 - p2._1) + (p1._2 - p2._2) * (p1._2 - p2._2)
-  }
-
-  private def add(p1: Vector, p2: Vector): Vector = (p1._1 + p2._1, p1._2 + p2._2)
-
-  private def scale(p: Vector, scale: Double): Vector = (p._1 * scale, p._2 * scale)
 
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
@@ -73,34 +66,37 @@ object DatasetKmeans {
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext.implicits._
 
-    val lines = sc.textFile(args(0))
-    val data = lines.map(parseVector _)
+    val points = sc.textFile(args(0)).map { line =>
+      val Array(x, y) = line.split(' ').map(_.toDouble)
+      Point(x, y)
+    }.toDS()
+    points.rdd.cache()
+
     val K = args(1).toInt
     val convergeDist = args(2).toDouble
 
-    val kPoints = data.takeSample(withReplacement = false, K, 42)
+    val kPoints = points.rdd.takeSample(withReplacement = false, K, 42)
+
     var tempDist = 1.0
 
-    val ds = data.toDS()
-
     while (tempDist > convergeDist) {
-      val closest = ds.map(p => (closestPoint(p, kPoints), (p, 1)))
+      val closest = points.map(p => (closestPoint(p, kPoints), (p, 1)))
 
       val pointStats = closest.groupBy(_._1).mapGroups {
         case (key, data) =>
           val agged = data.map(_._2).reduce {
-            case ((p1, c1), (p2, c2)) => add(p1, p2) -> (c1 + c2)
+            case ((p1, c1), (p2, c2)) => (p1 + p2, c1 + c2)
           }
           Iterator(key -> agged)
       }
 
       val newPoints = pointStats.map {
-        case (key, (point, count)) => (key, scale(point, 1.0 / count))
+        case (centroid, (ptSum, numPts)) => (centroid, ptSum / numPts)
       }.collect().toMap
 
       tempDist = 0.0
       for (i <- 0 until K) {
-        tempDist += squaredDistance(kPoints(i), newPoints(i))
+        tempDist += kPoints(i).distance(newPoints(i))
       }
 
       for (newP <- newPoints) {
@@ -116,4 +112,3 @@ object DatasetKmeans {
 }
 
 // scalastyle:on println
-
