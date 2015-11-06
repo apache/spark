@@ -195,11 +195,18 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       val expectedUnhandledFilters = unhandledFilters.map(_.expr).toSet
       val expectedPartitioningFilters = partitioningFilters.map(_.expr).toSet
 
-      markup("Checking unhandled, inconvertible, and partitioning filters")
+      markup("Checking unhandled and inconvertible filters")
       assert(expectedInconvertibleFilters ++ expectedUnhandledFilters === nonPushedFilters)
+
+      markup("Checking partitioning filters")
+      val actualPartitioningFilters = splitConjunctivePredicates(filter.expr).filter {
+        _.references.contains(UnresolvedAttribute("p"))
+      }.toSet
+
       // Partitioning filters are handled separately and don't participate filter push-down. So they
       // shouldn't be part of non-pushed filters.
       assert(expectedPartitioningFilters.intersect(nonPushedFilters).isEmpty)
+      assert(expectedPartitioningFilters === actualPartitioningFilters)
     }
   }
 
@@ -210,7 +217,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     pushedFilters = Nil,
     inconvertibleFilters = Nil,
     unhandledFilters = Nil,
-    partitioningFilters = Nil
+    partitioningFilters = Seq('p > 0)
   ) {
     Seq(
       Row(0, 0, "val_0", 1),
@@ -244,7 +251,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     pushedFilters = Nil,
     inconvertibleFilters = Nil,
     unhandledFilters = Seq('a < 3),
-    partitioningFilters = Nil
+    partitioningFilters = Seq('p > 0)
   ) {
     Seq(
       Row("val_0", 1, 0),
