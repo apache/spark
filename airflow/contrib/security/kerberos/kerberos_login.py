@@ -14,7 +14,7 @@ from flask import url_for, redirect
 
 from airflow import settings
 from airflow import models
-from airflow.configuration import conf
+from airflow import configuration
 
 import logging
 
@@ -31,8 +31,8 @@ class AuthenticationError(Exception):
 class User(models.BaseUser):
     @staticmethod
     def authenticate(username, password):
-        service_principal = "%s/%s" % (conf.get('kerberos', 'principal'), utils.get_fqdn())
-        realm = conf.get("kerberos", "default_realm")
+        service_principal = "%s/%s" % (configuration.get('kerberos', 'principal'), utils.get_fqdn())
+        realm = configuration.get("kerberos", "default_realm")
         user_principal = utils.principal_from_username(username)
 
         try:

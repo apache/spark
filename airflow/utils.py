@@ -36,7 +36,7 @@ from sqlalchemy.pool import Pool
 import numpy as np
 
 from airflow import settings
-from airflow.configuration import conf
+from airflow import configuration
 
 
 class AirflowException(Exception):
@@ -250,7 +250,7 @@ def upgradedb():
     config = Config(os.path.join(package_dir, 'alembic.ini'))
     config.set_main_option('script_location', directory)
     config.set_main_option('sqlalchemy.url',
-                           conf.get('core', 'SQL_ALCHEMY_CONN'))
+                           configuration.get('core', 'SQL_ALCHEMY_CONN'))
     command.upgrade(config, 'head')
 
 
@@ -403,7 +403,7 @@ def send_email(to, subject, html_content, files=None, dryrun=False):
 
     >>> send_email('test@example.com', 'foo', '<b>Foo</b> bar', ['/dev/null'], dryrun=True)
     """
-    SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
+    SMTP_MAIL_FROM = configuration.get('smtp', 'SMTP_MAIL_FROM')
 
     if isinstance(to, basestring):
         if ',' in to:
@@ -433,11 +433,11 @@ def send_email(to, subject, html_content, files=None, dryrun=False):
 
 
 def send_MIME_email(e_from, e_to, mime_msg, dryrun=False):
-    SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
-    SMTP_PORT = conf.getint('smtp', 'SMTP_PORT')
-    SMTP_USER = conf.get('smtp', 'SMTP_USER')
-    SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
-    SMTP_STARTTLS = conf.getboolean('smtp', 'SMTP_STARTTLS')
+    SMTP_HOST = configuration.get('smtp', 'SMTP_HOST')
+    SMTP_PORT = configuration.getint('smtp', 'SMTP_PORT')
+    SMTP_USER = configuration.get('smtp', 'SMTP_USER')
+    SMTP_PASSWORD = configuration.get('smtp', 'SMTP_PASSWORD')
+    SMTP_STARTTLS = configuration.getboolean('smtp', 'SMTP_STARTTLS')
 
     if not dryrun:
         s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)

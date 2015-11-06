@@ -46,7 +46,7 @@ class CoreTest(unittest.TestCase):
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_confirm_unittest_mod(self):
-        assert configuration.conf.get('core', 'unit_test_mode')
+        assert configuration.get('core', 'unit_test_mode')
 
     def test_backfill_examples(self):
         self.dagbag = models.DagBag(
@@ -330,7 +330,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        configuration.conf.set("webserver", "authenticate", "False")
+        configuration.set("webserver", "authenticate", "False")
         app = application.create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
@@ -452,19 +452,19 @@ class WebUiTests(unittest.TestCase):
 class WebLdapAuthTest(unittest.TestCase):
 
     def setUp(self):
-        configuration.conf.set("webserver", "authenticate", "True")
-        configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
+        configuration.set("webserver", "authenticate", "True")
+        configuration.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
         try:
-            configuration.conf.add_section("ldap")
+            configuration.add_section("ldap")
         except:
             pass
-        configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
-        configuration.conf.set("ldap", "user_filter", "objectClass=*")
-        configuration.conf.set("ldap", "user_name_attr", "uid")
-        configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
-        configuration.conf.set("ldap", "bind_password", "insecure")
-        configuration.conf.set("ldap", "basedn", "dc=example,dc=com")
-        configuration.conf.set("ldap", "cacert", "")
+        configuration.set("ldap", "uri", "ldap://localhost:3890")
+        configuration.set("ldap", "user_filter", "objectClass=*")
+        configuration.set("ldap", "user_name_attr", "uid")
+        configuration.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
+        configuration.set("ldap", "bind_password", "insecure")
+        configuration.set("ldap", "basedn", "dc=example,dc=com")
+        configuration.set("ldap", "cacert", "")
 
         app = application.create_app()
         app.config['TESTING'] = True
@@ -480,7 +480,7 @@ class WebLdapAuthTest(unittest.TestCase):
         return self.app.get('/admin/airflow/logout', follow_redirects=True)
 
     def test_login_logout_ldap(self):
-        assert configuration.conf.getboolean('webserver', 'authenticate') is True
+        assert configuration.getboolean('webserver', 'authenticate') is True
 
         response = self.login('user1', 'userx')
         assert 'Incorrect login details' in response.data.decode('utf-8')
@@ -500,7 +500,7 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
-        configuration.conf.set("webserver", "authenticate", "False")
+        configuration.set("webserver", "authenticate", "False")
 
 
 if 'MySqlOperator' in dir(operators):

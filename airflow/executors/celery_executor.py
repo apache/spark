@@ -8,29 +8,29 @@ from celery import states as celery_states
 
 from airflow.utils import AirflowException
 from airflow.executors.base_executor import BaseExecutor
-from airflow.configuration import conf
+from airflow import configuration
 
-PARALLELISM = conf.get('core', 'PARALLELISM')
+PARALLELISM = configuration.get('core', 'PARALLELISM')
 
 '''
 To start the celery worker, run the command:
 airflow worker
 '''
 
-DEFAULT_QUEUE = conf.get('celery', 'DEFAULT_QUEUE')
+DEFAULT_QUEUE = configuration.get('celery', 'DEFAULT_QUEUE')
 
 
 class CeleryConfig(object):
     CELERY_ACCEPT_CONTENT = ['json', 'pickle']
     CELERYD_PREFETCH_MULTIPLIER = 1
     CELERY_ACKS_LATE = True
-    BROKER_URL = conf.get('celery', 'BROKER_URL')
-    CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
-    CELERYD_CONCURRENCY = conf.getint('celery', 'CELERYD_CONCURRENCY')
+    BROKER_URL = configuration.get('celery', 'BROKER_URL')
+    CELERY_RESULT_BACKEND = configuration.get('celery', 'CELERY_RESULT_BACKEND')
+    CELERYD_CONCURRENCY = configuration.getint('celery', 'CELERYD_CONCURRENCY')
     CELERY_DEFAULT_QUEUE = DEFAULT_QUEUE
 
 app = Celery(
-    conf.get('celery', 'CELERY_APP_NAME'),
+    configuration.get('celery', 'CELERY_APP_NAME'),
     config_source=CeleryConfig)
 
 

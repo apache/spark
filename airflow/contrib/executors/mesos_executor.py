@@ -8,7 +8,7 @@ import mesos.interface
 from mesos.interface import mesos_pb2
 import mesos.native
 
-from airflow.configuration import conf
+from airflow import configuration
 from airflow.executors.base_executor import BaseExecutor
 from airflow.settings import Session
 from airflow.utils import State
@@ -20,9 +20,9 @@ FRAMEWORK_CONNID_PREFIX = 'mesos_framework_'
 
 
 def get_framework_name():
-    if not conf.get('mesos', 'FRAMEWORK_NAME'):
+    if not configuration.get('mesos', 'FRAMEWORK_NAME'):
         return DEFAULT_FRAMEWORK_NAME
-    return conf.get('mesos', 'FRAMEWORK_NAME')
+    return configuration.get('mesos', 'FRAMEWORK_NAME')
 
 
 # AirflowMesosScheduler, implements Mesos Scheduler interface
@@ -51,7 +51,7 @@ class AirflowMesosScheduler(mesos.interface.Scheduler):
     def registered(self, driver, frameworkId, masterInfo):
         logging.info("AirflowScheduler registered to mesos with framework ID %s", frameworkId.value)
 
-        if conf.getboolean('mesos', 'CHECKPOINT') and conf.get('mesos', 'FAILOVER_TIMEOUT'):
+        if configuration.getboolean('mesos', 'CHECKPOINT') and configuration.get('mesos', 'FAILOVER_TIMEOUT'):
             # Import here to work around a circular import error
             from airflow.models import Connection
 
@@ -185,28 +185,28 @@ class MesosExecutor(BaseExecutor):
         framework = mesos_pb2.FrameworkInfo()
         framework.user = ''
 
-        if not conf.get('mesos', 'MASTER'):
+        if not configuration.get('mesos', 'MASTER'):
             logging.error("Expecting mesos master URL for mesos executor")
             raise AirflowException("mesos.master not provided for mesos executor")
 
-        master = conf.get('mesos', 'MASTER')
+        master = configuration.get('mesos', 'MASTER')
 
         framework.name = get_framework_name()
 
-        if not conf.get('mesos', 'TASK_CPU'):
+        if not configuration.get('mesos', 'TASK_CPU'):
             task_cpu = 1
         else:
-            task_cpu = conf.getint('mesos', 'TASK_CPU')
+            task_cpu = configuration.getint('mesos', 'TASK_CPU')
 
-        if not conf.get('mesos', 'TASK_MEMORY'):
+        if not configuration.get('mesos', 'TASK_MEMORY'):
             task_memory = 256
         else:
-            task_memory = conf.getint('mesos', 'TASK_MEMORY')
+            task_memory = configuration.getint('mesos', 'TASK_MEMORY')
 
-        if conf.getboolean('mesos', 'CHECKPOINT'):
+        if configuration.getboolean('mesos', 'CHECKPOINT'):
             framework.checkpoint = True
 
-            if conf.get('mesos', 'FAILOVER_TIMEOUT'):
+            if configuration.get('mesos', 'FAILOVER_TIMEOUT'):
                 # Import here to work around a circular import error
                 from airflow.models import Connection
 
@@ -218,7 +218,7 @@ class MesosExecutor(BaseExecutor):
                     # Set the Framework ID to let the scheduler reconnect with running tasks.
                     framework.id.value = connection.extra
 
-                framework.failover_timeout = conf.getint('mesos', 'FAILOVER_TIMEOUT')
+                framework.failover_timeout = configuration.getint('mesos', 'FAILOVER_TIMEOUT')
         else:
             framework.checkpoint = False
 
@@ -227,17 +227,17 @@ class MesosExecutor(BaseExecutor):
 
         implicit_acknowledgements = 1
 
-        if conf.getboolean('mesos', 'AUTHENTICATE'):
-            if not conf.get('mesos', 'DEFAULT_PRINCIPAL'):
+        if configuration.getboolean('mesos', 'AUTHENTICATE'):
+            if not configuration.get('mesos', 'DEFAULT_PRINCIPAL'):
                 logging.error("Expecting authentication principal in the environment")
                 raise AirflowException("mesos.default_principal not provided in authenticated mode")
-            if not conf.get('mesos', 'DEFAULT_SECRET'):
+            if not configuration.get('mesos', 'DEFAULT_SECRET'):
                 logging.error("Expecting authentication secret in the environment")
                 raise AirflowException("mesos.default_secret not provided in authenticated mode")
 
             credential = mesos_pb2.Credential()
-            credential.principal = conf.get('mesos', 'DEFAULT_PRINCIPAL')
-            credential.secret = conf.get('mesos', 'DEFAULT_SECRET')
+            credential.principal = configuration.get('mesos', 'DEFAULT_PRINCIPAL')
+            credential.secret = configuration.get('mesos', 'DEFAULT_SECRET')
 
             framework.principal = credential.principal
 

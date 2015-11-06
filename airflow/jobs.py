@@ -28,12 +28,12 @@ ID_LEN = models.ID_LEN
 
 # Setting up a statsd client if needed
 statsd = None
-if configuration.conf.getboolean('scheduler', 'statsd_on'):
+if configuration.getboolean('scheduler', 'statsd_on'):
     from statsd import StatsClient
     statsd = StatsClient(
-        host=configuration.conf.get('scheduler', 'statsd_host'),
-        port=configuration.conf.getint('scheduler', 'statsd_port'),
-        prefix=configuration.conf.get('scheduler', 'statsd_prefix'))
+        host=configuration.get('scheduler', 'statsd_host'),
+        port=configuration.getint('scheduler', 'statsd_port'),
+        prefix=configuration.get('scheduler', 'statsd_prefix'))
 
 
 class BaseJob(Base):
@@ -69,7 +69,7 @@ class BaseJob(Base):
     def __init__(
             self,
             executor=executors.DEFAULT_EXECUTOR,
-            heartrate=configuration.conf.getfloat('scheduler', 'JOB_HEARTBEAT_SEC'),
+            heartrate=configuration.getfloat('scheduler', 'JOB_HEARTBEAT_SEC'),
             *args, **kwargs):
         self.hostname = socket.gethostname()
         self.executor = executor
@@ -83,7 +83,7 @@ class BaseJob(Base):
     def is_alive(self):
         return (
             (datetime.now() - self.latest_heartbeat).seconds <
-            (configuration.conf.getint('scheduler', 'JOB_HEARTBEAT_SEC') * 2.1)
+            (configuration.getint('scheduler', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
     def kill(self):
@@ -224,7 +224,7 @@ class SchedulerJob(BaseJob):
         self.do_pickle = do_pickle
         super(SchedulerJob, self).__init__(*args, **kwargs)
 
-        self.heartrate = configuration.conf.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
+        self.heartrate = configuration.getint('scheduler', 'SCHEDULER_HEARTBEAT_SEC')
 
     @utils.provide_session
     def manage_slas(self, dag, session=None):

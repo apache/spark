@@ -3,9 +3,9 @@ from builtins import object
 import logging
 
 from airflow.utils import State
-from airflow.configuration import conf
+from airflow import configuration
 
-PARALLELISM = conf.getint('core', 'PARALLELISM')
+PARALLELISM = configuration.getint('core', 'PARALLELISM')
 
 
 class BaseExecutor(object):

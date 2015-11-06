@@ -3,7 +3,7 @@ from alembic import context
 from logging.config import fileConfig
 
 from airflow import settings
-from airflow.configuration import conf
+from airflow import configuration
 from airflow.jobs import models
 
 # this is the Alembic Config object, which provides
@@ -38,7 +38,7 @@ def run_migrations_offline():
     script output.
 
     """
-    url = conf.get('core', 'SQL_ALCHEMY_CONN')
+    url = configuration.get('core', 'SQL_ALCHEMY_CONN')
     context.configure(
         url=url, target_metadata=target_metadata, literal_binds=True)
 

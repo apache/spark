@@ -51,14 +51,14 @@ from airflow.www.forms import DateTimeForm, TreeForm, GraphForm
 QUERY_LIMIT = 100000
 CHART_LIMIT = 200000
 
-dagbag = models.DagBag(os.path.expanduser(configuration.conf.get('core', 'DAGS_FOLDER')))
+dagbag = models.DagBag(os.path.expanduser(configuration.get('core', 'DAGS_FOLDER')))
 
 login_required = airflow.login.login_required
 current_user = airflow.login.current_user
 logout_user = airflow.login.logout_user
 
 FILTER_BY_OWNER = False
-if configuration.conf.getboolean('webserver', 'FILTER_BY_OWNER'):
+if configuration.getboolean('webserver', 'FILTER_BY_OWNER'):
     # filter_by_owner if authentication is enabled and filter_by_owner is true
     FILTER_BY_OWNER = not current_app.config['LOGIN_DISABLED']
 
@@ -610,7 +610,7 @@ class Airflow(BaseView):
         return self.render(
             'airflow/dag_code.html', html_code=html_code, dag=dag, title=title,
             root=request.args.get('root'),
-            demo_mode=configuration.conf.getboolean('webserver', 'demo_mode'))
+            demo_mode=configuration.getboolean('webserver', 'demo_mode'))
 
     @current_app.errorhandler(404)
     def circles(self):
@@ -709,7 +709,7 @@ class Airflow(BaseView):
     @wwwutils.action_logging
     def log(self):
         BASE_LOG_FOLDER = os.path.expanduser(
-            configuration.conf.get('core', 'BASE_LOG_FOLDER'))
+            configuration.get('core', 'BASE_LOG_FOLDER'))
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
@@ -742,7 +742,7 @@ class Airflow(BaseView):
                     log = "*** Log file isn't where expected.\n".format(loc)
             else:
                 WORKER_LOG_SERVER_PORT = \
-                    configuration.conf.get('celery', 'WORKER_LOG_SERVER_PORT')
+                    configuration.get('celery', 'WORKER_LOG_SERVER_PORT')
                 url = os.path.join(
                     "http://{host}:{WORKER_LOG_SERVER_PORT}/log", log_relative
                     ).format(**locals())
@@ -757,12 +757,12 @@ class Airflow(BaseView):
                         **locals())
 
             # try to load log backup from S3
-            s3_log_folder = configuration.conf.get('core', 'S3_LOG_FOLDER')
+            s3_log_folder = configuration.get('core', 'S3_LOG_FOLDER')
             if not log_loaded and s3_log_folder.startswith('s3:'):
                 import boto
                 s3 = boto.connect_s3()
                 s3_log_loc = os.path.join(
-                    configuration.conf.get('core', 'S3_LOG_FOLDER'), log_relative)
+                    configuration.get('core', 'S3_LOG_FOLDER'), log_relative)
                 log += '*** Fetching log from S3: {}\n'.format(s3_log_loc)
                 log += ('*** Note: S3 logs are only available once '
                         'tasks have completed.\n')
@@ -1031,7 +1031,7 @@ class Airflow(BaseView):
     @wwwutils.action_logging
     def tree(self):
         dag_id = request.args.get('dag_id')
-        blur = configuration.conf.getboolean('webserver', 'demo_mode')
+        blur = configuration.getboolean('webserver', 'demo_mode')
         dag = dagbag.get_dag(dag_id)
         root = request.args.get('root')
         if root:
@@ -1160,7 +1160,7 @@ class Airflow(BaseView):
     def graph(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
-        blur = configuration.conf.getboolean('webserver', 'demo_mode')
+        blur = configuration.getboolean('webserver', 'demo_mode')
         arrange = request.args.get('arrange', "LR")
         dag = dagbag.get_dag(dag_id)
         if dag_id not in dagbag.dags:
@@ -1281,7 +1281,7 @@ class Airflow(BaseView):
             data=all_data,
             chart_options={'yAxis': {'title': {'text': 'hours'}}},
             height="700px",
-            demo_mode=configuration.conf.getboolean('webserver', 'demo_mode'),
+            demo_mode=configuration.getboolean('webserver', 'demo_mode'),
             root=root,
         )
 
@@ -1325,7 +1325,7 @@ class Airflow(BaseView):
             data=all_data,
             height="700px",
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
-            demo_mode=configuration.conf.getboolean('webserver', 'demo_mode'),
+            demo_mode=configuration.getboolean('webserver', 'demo_mode'),
             root=root,
         )
 
@@ -1385,7 +1385,7 @@ class Airflow(BaseView):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         dag = dagbag.get_dag(dag_id)
-        demo_mode = configuration.conf.getboolean('webserver', 'demo_mode')
+        demo_mode = configuration.getboolean('webserver', 'demo_mode')
 
         root = request.args.get('root')
         if root:
@@ -1897,7 +1897,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
 
     @classmethod
     def alert_fernet_key(cls):
-        return not configuration.conf.has_option('core', 'fernet_key')
+        return not configuration.has_option('core', 'fernet_key')
 
     @classmethod
     def is_secure(self):
@@ -1908,7 +1908,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
         is_secure = False
         try:
             import cryptography
-            configuration.conf.get('core', 'fernet_key')
+            configuration.get('core', 'fernet_key')
             is_secure = True
         except:
             pass
@@ -1940,7 +1940,7 @@ class ConfigurationView(wwwutils.SuperUserMixin, BaseView):
         raw = request.args.get('raw') == "true"
         title = "Airflow Configuration"
         subtitle = configuration.AIRFLOW_CONFIG
-        if configuration.conf.getboolean("webserver", "expose_config"):
+        if configuration.getboolean("webserver", "expose_config"):
             with open(configuration.AIRFLOW_CONFIG, 'r') as f:
                 config = f.read()
         else:

@@ -18,8 +18,8 @@ from airflow import configuration
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.secret_key = configuration.conf.get('webserver', 'SECRET_KEY')
-    app.config['LOGIN_DISABLED'] = not configuration.conf.getboolean('webserver', 'AUTHENTICATE')
+    app.secret_key = configuration.get('webserver', 'SECRET_KEY')
+    app.config['LOGIN_DISABLED'] = not configuration.getboolean('webserver', 'AUTHENTICATE')
 
     #app.config = config
     airflow.load_login()

@@ -29,13 +29,13 @@ def get_ldap_connection(dn=None, password=None):
     tls_configuration = None
     use_ssl = False
     try:
-        cacert = configuration.conf.get("ldap", "cacert")
+        cacert = configuration.get("ldap", "cacert")
         tls_configuration = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=cacert)
         use_ssl = True
     except:
         pass
 
-    server = Server(configuration.conf.get("ldap", "uri"), use_ssl, tls_configuration)
+    server = Server(configuration.get("ldap", "uri"), use_ssl, tls_configuration)
     conn = Connection(server, dn, password)
 
     if not conn.bind():
@@ -50,17 +50,17 @@ class LdapUser(models.User):
 
     @staticmethod
     def try_login(username, password):
-        conn = get_ldap_connection(configuration.conf.get("ldap", "bind_user"), configuration.conf.get("ldap", "bind_password"))
+        conn = get_ldap_connection(configuration.get("ldap", "bind_user"), configuration.get("ldap", "bind_password"))
 
         search_filter = "(&({0})({1}={2}))".format(
-            configuration.conf.get("ldap", "user_filter"),
-            configuration.conf.get("ldap", "user_name_attr"),
+            configuration.get("ldap", "user_filter"),
+            configuration.get("ldap", "user_name_attr"),
             username
         )
 
         # todo: BASE or ONELEVEL?
 
-        res = conn.search(configuration.conf.get("ldap", "basedn"), search_filter, search_scope=LEVEL)
+        res = conn.search(configuration.get("ldap", "basedn"), search_filter, search_scope=LEVEL)
 
         # todo: use list or result?
         if not res:

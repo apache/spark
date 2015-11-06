@@ -14,7 +14,7 @@ from wtforms.compat import text_type
 
 from airflow import configuration
 from airflow import login, models, settings
-AUTHENTICATE = configuration.conf.getboolean('webserver', 'AUTHENTICATE')
+AUTHENTICATE = configuration.getboolean('webserver', 'AUTHENTICATE')
 
 
 class LoginMixin(object):
