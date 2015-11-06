@@ -55,7 +55,7 @@ import org.apache.spark.sql.types.StructType
  * @since 1.6.0
  */
 @Experimental
-class Dataset[T] private(
+class Dataset[T] private[sql](
     @transient val sqlContext: SQLContext,
     @transient val queryExecution: QueryExecution,
     unresolvedEncoder: Encoder[T]) extends Serializable {
