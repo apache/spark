@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Alias, Literal}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.IntegerType
 
@@ -38,8 +38,14 @@ class ExpandSuite extends SparkPlanTest with SharedSQLContext {
     )
   }
 
+  test("inheriting child row type") {
+    val exprs = AttributeReference("a", IntegerType, false)() :: Nil
+    val plan = Expand(Seq(exprs), exprs, ConvertToUnsafe(LocalTableScan(exprs, Seq.empty)))
+    assert(plan.outputsUnsafeRows, "Expand should inherits the created row type from its child.")
+  }
+
   test("expanding UnsafeRows") {
-    testExpand(ConvertToSafe)
+    testExpand(ConvertToUnsafe)
   }
 
   test("expanding SafeRows") {
