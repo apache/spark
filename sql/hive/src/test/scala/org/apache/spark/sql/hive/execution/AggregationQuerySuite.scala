@@ -22,13 +22,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types._
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
 
@@ -700,6 +699,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       }.getMessage
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
     }
+  }
+
+  test("no aggregation function (SPARK-11486)") {
+    val df = sqlContext.range(20).selectExpr("id", "repeat(id, 1) as s")
+      .groupBy("s").count()
+      .groupBy().count()
+    checkAnswer(df, Row(20) :: Nil)
   }
 
   test("udaf with all data types") {

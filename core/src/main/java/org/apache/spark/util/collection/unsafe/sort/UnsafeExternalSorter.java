@@ -79,9 +79,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      UnsafeInMemorySorter inMemorySorter) {
-    return new UnsafeExternalSorter(taskMemoryManager, blockManager,
+      UnsafeInMemorySorter inMemorySorter) throws IOException {
+    UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, inMemorySorter);
+    sorter.spill(Long.MAX_VALUE, sorter);
+    // The external sorter will be used to insert records, in-memory sorter is not needed.
+    sorter.inMemSorter = null;
+    return sorter;
   }
 
   public static UnsafeExternalSorter create(
@@ -124,7 +128,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       acquireMemory(inMemSorter.getMemoryUsage());
     } else {
       this.inMemSorter = existingInMemorySorter;
-      // will acquire after free the map
     }
     this.peakMemoryUsedBytes = getMemoryUsage();
 
@@ -157,12 +160,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   @Override
   public long spill(long size, MemoryConsumer trigger) throws IOException {
-    assert(inMemSorter != null);
     if (trigger != this) {
       if (readingIterator != null) {
         return readingIterator.spill();
-      } else {
-
       }
       return 0L; // this should throw exception
     }
@@ -389,24 +389,37 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
+   * Merges another UnsafeExternalSorters into this one, the other one will be emptied.
+   *
+   * @throws IOException
+   */
+  public void merge(UnsafeExternalSorter other) throws IOException {
+    other.spill();
+    spillWriters.addAll(other.spillWriters);
+    // remove them from `spillWriters`, or the files will be deleted in `cleanupResources`.
+    other.spillWriters.clear();
+    other.cleanupResources();
+  }
+
+  /**
    * Returns a sorted iterator. It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
    */
   public UnsafeSorterIterator getSortedIterator() throws IOException {
-    assert(inMemSorter != null);
-    readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
-    int numIteratorsToMerge = spillWriters.size() + (readingIterator.hasNext() ? 1 : 0);
     if (spillWriters.isEmpty()) {
+      assert(inMemSorter != null);
+      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
       return readingIterator;
     } else {
       final UnsafeSorterSpillMerger spillMerger =
-        new UnsafeSorterSpillMerger(recordComparator, prefixComparator, numIteratorsToMerge);
+        new UnsafeSorterSpillMerger(recordComparator, prefixComparator, spillWriters.size());
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         spillMerger.addSpillIfNotEmpty(spillWriter.getReader(blockManager));
       }
-      spillWriters.clear();
-      spillMerger.addSpillIfNotEmpty(readingIterator);
-
+      if (inMemSorter != null) {
+        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+        spillMerger.addSpillIfNotEmpty(readingIterator);
+      }
       return spillMerger.getSortedIterator();
     }
   }
