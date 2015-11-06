@@ -23,12 +23,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
 class TestMemoryManager(conf: SparkConf)
-    extends MemoryManager(conf, numCores = 1, maxOnHeapExecutionMemory = Long.MaxValue) {
-
-  storageMemoryPool.incrementPoolSize(Long.MaxValue)
-  onHeapExecutionMemoryPool.incrementPoolSize(Long.MaxValue)
-
-  // TODO(josh): separate configs for available on- and off-heap
+  extends MemoryManager(
+    conf, numCores = 1,
+    initialStorageMemory = Long.MaxValue,
+    maxOnHeapExecutionMemory = Long.MaxValue) {
 
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,

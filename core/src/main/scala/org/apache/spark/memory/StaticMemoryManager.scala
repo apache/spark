@@ -34,7 +34,11 @@ private[spark] class StaticMemoryManager(
     maxOnHeapExecutionMemory: Long,
     override val maxStorageMemory: Long,
     numCores: Int)
-  extends MemoryManager(conf, numCores, maxOnHeapExecutionMemory) {
+  extends MemoryManager(
+    conf,
+    numCores,
+    initialStorageMemory = maxStorageMemory,
+    maxOnHeapExecutionMemory = maxOnHeapExecutionMemory) {
 
   def this(conf: SparkConf, numCores: Int) {
     this(
@@ -43,9 +47,6 @@ private[spark] class StaticMemoryManager(
       StaticMemoryManager.getMaxStorageMemory(conf),
       numCores)
   }
-
-  onHeapExecutionMemoryPool.incrementPoolSize(maxOnHeapExecutionMemory)
-  storageMemoryPool.incrementPoolSize(maxStorageMemory)
 
   // Max number of bytes worth of blocks to evict when unrolling
   private val maxMemoryToEvictForUnroll: Long = {

@@ -54,13 +54,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
   extends MemoryManager(
     conf,
     numCores,
-    // TODO(josh): it is confusing how this interacts with page size calculations:
+    initialStorageMemory = storageRegionSize,
     maxOnHeapExecutionMemory = maxMemory - storageRegionSize) {
 
-  // We always maintain the invariant that
-  //    onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory
-  // At first, all memory is allocated towards execution:
-  onHeapExecutionMemoryPool.incrementPoolSize(maxMemory)
+  // We always maintain this invariant:
+  assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
 
   override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
@@ -88,8 +86,8 @@ private[spark] class UnifiedMemoryManager private[memory] (
           // storage. We can reclaim any free memory from the storage pool. If the storage pool
           // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
           // the memory that storage has borrowed from execution.
-          val memoryReclaimableFromStorage =
-            math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
+          val memoryReclaimableFromStorage = storageMemoryPool.memoryFree +
+            math.max(storageMemoryPool.memoryUsed - storageRegionSize, 0)
           if (memoryReclaimableFromStorage > 0) {
             // Only reclaim as much space as is necessary and available:
             val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(

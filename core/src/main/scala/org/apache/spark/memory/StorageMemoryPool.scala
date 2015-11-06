@@ -29,14 +29,14 @@ import org.apache.spark.storage.{MemoryStore, BlockStatus, BlockId}
  * Performs bookkeeping for managing an adjustable-size pool of memory that is used for storage
  * (caching).
  *
- * @param memoryManager a [[MemoryManager]] instance to synchronize on
+ * @param lock a [[MemoryManager]] instance to synchronize on
  */
-class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager) with Logging {
+class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
 
-  @GuardedBy("memoryManager")
+  @GuardedBy("lock")
   private[this] var _memoryUsed: Long = 0L
 
-  override def memoryUsed: Long = memoryManager.synchronized {
+  override def memoryUsed: Long = lock.synchronized {
     _memoryUsed
   }
 
@@ -64,7 +64,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
   def acquireMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = memoryManager.synchronized {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
     acquireMemory(blockId, numBytes, numBytes, evictedBlocks)
   }
 
@@ -80,7 +80,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
       blockId: BlockId,
       numBytesToAcquire: Long,
       numBytesToFree: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = memoryManager.synchronized {
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
     assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
@@ -101,7 +101,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
     enoughMemory
   }
 
-  def releaseMemory(size: Long): Unit = memoryManager.synchronized {
+  def releaseMemory(size: Long): Unit = lock.synchronized {
     if (size > _memoryUsed) {
       logWarning(s"Attempted to release $size bytes of storage " +
         s"memory when we only have ${_memoryUsed} bytes")
@@ -111,7 +111,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
     }
   }
 
-  def releaseAllMemory(): Unit = memoryManager.synchronized {
+  def releaseAllMemory(): Unit = lock.synchronized {
     _memoryUsed = 0
   }
 
@@ -119,7 +119,7 @@ class StorageMemoryPool(memoryManager: Object) extends MemoryPool(memoryManager)
    * Try to shrink the size of this storage memory pool by `spaceToFree` bytes. Return the number
    * of bytes removed from the pool's capacity.
    */
-  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = memoryManager.synchronized {
+  def shrinkPoolToFreeSpace(spaceToFree: Long): Long = lock.synchronized {
     // First, shrink the pool by reclaiming free memory:
     val spaceFreedByReleasingUnusedMemory = Math.min(spaceToFree, memoryFree)
     decrementPoolSize(spaceFreedByReleasingUnusedMemory)

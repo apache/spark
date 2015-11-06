@@ -253,7 +253,7 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(size);
+    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {

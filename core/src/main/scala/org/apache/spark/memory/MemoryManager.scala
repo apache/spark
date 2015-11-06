@@ -36,6 +36,7 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
 private[spark] abstract class MemoryManager(
     conf: SparkConf,
     numCores: Int,
+    initialStorageMemory: Long,
     maxOnHeapExecutionMemory: Long) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
@@ -47,6 +48,8 @@ private[spark] abstract class MemoryManager(
   @GuardedBy("this")
   protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "off-heap execution")
 
+  storageMemoryPool.incrementPoolSize(initialStorageMemory)
+  onHeapExecutionMemoryPool.incrementPoolSize(maxOnHeapExecutionMemory)
   offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
 
   /**
@@ -182,6 +185,14 @@ private[spark] abstract class MemoryManager(
   // -- Fields related to Tungsten managed memory -------------------------------------------------
 
   /**
+   * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
+   * sun.misc.Unsafe.
+   */
+  final val tungstenMemoryMode: MemoryMode = {
+    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
+  }
+
+  /**
    * The default page size, in bytes.
    *
    * If user didn't explicitly set "spark.buffer.pageSize", we figure out the default value
@@ -194,17 +205,13 @@ private[spark] abstract class MemoryManager(
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
-    val size = ByteArrayMethods.nextPowerOf2(maxOnHeapExecutionMemory / cores / safetyFactor)
+    val maxTungstenMemory: Long = tungstenMemoryMode match {
+      case MemoryMode.ON_HEAP => maxOnHeapExecutionMemory
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
+    }
+    val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))
     conf.getSizeAsBytes("spark.buffer.pageSize", default)
-  }
-
-  /**
-   * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
-   * sun.misc.Unsafe.
-   */
-  final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
   }
 
   /**

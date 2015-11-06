@@ -36,28 +36,28 @@ import org.apache.spark.Logging
  * notifyAll() to signal changes to callers. Prior to Spark 1.6, this arbitration of memory across
  * tasks was performed by the ShuffleMemoryManager.
  *
- * @param memoryManager a [[MemoryManager]] instance to synchronize on
+ * @param lock a [[MemoryManager]] instance to synchronize on
  * @param poolName a human-readable name for this pool, for use in log messages
  */
 class ExecutionMemoryPool(
-    memoryManager: Object,
+    lock: Object,
     poolName: String
-  ) extends MemoryPool(memoryManager) with Logging {
+  ) extends MemoryPool(lock) with Logging {
 
   /**
    * Map from taskAttemptId -> memory consumption in bytes
    */
-  @GuardedBy("memoryManager")
+  @GuardedBy("lock")
   private val memoryForTask = new mutable.HashMap[Long, Long]()
 
-  override def memoryUsed: Long = memoryManager.synchronized {
+  override def memoryUsed: Long = lock.synchronized {
     memoryForTask.values.sum
   }
 
   /**
    * Returns the memory consumption, in bytes, for the given task.
    */
-  def getMemoryUsageForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
+  def getMemoryUsageForTask(taskAttemptId: Long): Long = lock.synchronized {
     memoryForTask.getOrElse(taskAttemptId, 0L)
   }
 
@@ -72,7 +72,7 @@ class ExecutionMemoryPool(
    *
    * @return the number of bytes granted to the task.
    */
-  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = memoryManager.synchronized {
+  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -80,7 +80,7 @@ class ExecutionMemoryPool(
     if (!memoryForTask.contains(taskAttemptId)) {
       memoryForTask(taskAttemptId) = 0L
       // This will later cause waiting tasks to wake up and check numTasks again
-      memoryManager.notifyAll()
+      lock.notifyAll()
     }
 
     // Keep looping until we're either sure that we don't want to grant this request (because this
@@ -108,7 +108,7 @@ class ExecutionMemoryPool(
         } else {
           logInfo(
             s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
-          memoryManager.wait()
+          lock.wait()
         }
       } else {
         memoryForTask(taskAttemptId) += toGrant
@@ -121,7 +121,7 @@ class ExecutionMemoryPool(
   /**
    * Release `numBytes` of memory acquired by the given task.
    */
-  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = memoryManager.synchronized {
+  def releaseMemory(numBytes: Long, taskAttemptId: Long): Unit = lock.synchronized {
     val curMem = memoryForTask.getOrElse(taskAttemptId, 0L)
     var memoryToFree = if (curMem < numBytes) {
       logWarning(
@@ -137,14 +137,14 @@ class ExecutionMemoryPool(
         memoryForTask.remove(taskAttemptId)
       }
     }
-    memoryManager.notifyAll() // Notify waiters in acquireMemory() that memory has been freed
+    lock.notifyAll() // Notify waiters in acquireMemory() that memory has been freed
   }
 
   /**
    * Release all memory for the given task and mark it as inactive (e.g. when a task ends).
    * @return the number of bytes freed.
    */
-  def releaseAllMemoryForTask(taskAttemptId: Long): Long = memoryManager.synchronized {
+  def releaseAllMemoryForTask(taskAttemptId: Long): Long = lock.synchronized {
     val numBytesToFree = getMemoryUsageForTask(taskAttemptId)
     releaseMemory(numBytesToFree, taskAttemptId)
     numBytesToFree
