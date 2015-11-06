@@ -20,6 +20,7 @@ package org.apache.spark.memory;
 
 import java.io.IOException;
 
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 
@@ -28,9 +29,9 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  */
 public abstract class MemoryConsumer {
 
-  private final TaskMemoryManager taskMemoryManager;
+  protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
-  private long used;
+  protected long used;
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
     this.taskMemoryManager = taskMemoryManager;
@@ -74,26 +75,29 @@ public abstract class MemoryConsumer {
   public abstract long spill(long size, MemoryConsumer trigger) throws IOException;
 
   /**
-   * Acquire `size` bytes memory.
-   *
-   * If there is not enough memory, throws OutOfMemoryError.
+   * Allocates a LongArray of `size`.
    */
-  protected void acquireMemory(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(size, this);
-    if (got < size) {
-      taskMemoryManager.releaseExecutionMemory(got, this);
+  public LongArray allocateArray(long size) {
+    long required = size * 8L;
+    MemoryBlock page = taskMemoryManager.allocatePage(required, this);
+    if (page == null || page.size() < required) {
+      long got = 0;
+      if (page != null) {
+        got = page.size();
+        taskMemoryManager.freePage(page, this);
+      }
       taskMemoryManager.showMemoryUsage();
-      throw new OutOfMemoryError("Could not acquire " + size + " bytes of memory, got " + got);
+      throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);
     }
-    used += got;
+    used += required;
+    return new LongArray(page);
   }
 
   /**
-   * Release `size` bytes memory.
+   * Frees a LongArray.
    */
-  protected void releaseMemory(long size) {
-    used -= size;
-    taskMemoryManager.releaseExecutionMemory(size, this);
+  public void freeArray(LongArray array) {
+    freePage(array.memoryBlock());
   }
 
   /**
@@ -109,7 +113,7 @@ public abstract class MemoryConsumer {
       long got = 0;
       if (page != null) {
         got = page.size();
-        freePage(page);
+        taskMemoryManager.freePage(page, this);
       }
       taskMemoryManager.showMemoryUsage();
       throw new OutOfMemoryError("Unable to acquire " + required + " bytes of memory, got " + got);

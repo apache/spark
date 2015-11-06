@@ -137,7 +137,7 @@ public class TaskMemoryManager {
       if (got < required) {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers) {
-          if (c != null && c != consumer && c.getUsed() > 0) {
+          if (c != consumer && c.getUsed() > 0) {
             try {
               long released = c.spill(required - got, consumer);
               if (released > 0) {
@@ -173,7 +173,9 @@ public class TaskMemoryManager {
         }
       }
 
-      consumers.add(consumer);
+      if (consumer != null) {
+        consumers.add(consumer);
+      }
       logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
