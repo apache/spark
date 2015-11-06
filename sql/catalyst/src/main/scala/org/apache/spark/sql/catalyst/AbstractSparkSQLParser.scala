@@ -103,10 +103,10 @@ class SqlLexical extends StdLexical {
 
   override lazy val token: Parser[Token] =
     ( rep1(digit) ~ scientificNotation ^^ { case i ~ s => DecimalLit(i.mkString + s) }
-    | '.' ~> (rep1(digit) ~ scientificNotation) ^^ { case i ~ s => DecimalLit("0." + i.mkString + s) }
-    | rep1(digit) ~ ('.' ~> digit.*) ~ scientificNotation ^^ {
-        case i1 ~ i2 ~ s => DecimalLit(i1.mkString + "." + i2.mkString + s)
-      }
+    | '.' ~> (rep1(digit) ~ scientificNotation) ^^
+      { case i ~ s => DecimalLit("0." + i.mkString + s) }
+    | rep1(digit) ~ ('.' ~> digit.*) ~ scientificNotation ^^
+      { case i1 ~ i2 ~ s => DecimalLit(i1.mkString + "." + i2.mkString + s) }
     | digit.* ~ identChar ~ (identChar | digit).* ^^
       { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {

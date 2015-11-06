@@ -334,9 +334,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
-    | sign.? ~ unsignedFloat ^^ {
-        case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
-      }
+    | sign.? ~ unsignedFloat ^^
+      { case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f)) }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
