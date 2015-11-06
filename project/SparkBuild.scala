@@ -233,9 +233,6 @@ object SparkBuild extends PomBuild {
   /* Enable unidoc only for the root spark project */
   enable(Unidoc.settings)(spark)
 
-  /* Spark ML settings */
-  enable(MLLib.settings)(mllib)
-
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
@@ -336,14 +333,6 @@ object OldDeps {
       "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
       "spark-core").map(versionArtifact(_).get intransitive())
   )
-}
-
-object MLLib {
-  lazy val settings = Seq(
-    addCompilerPlugin("org.scalamacros" % "paradise" % "2.0.1" cross CrossVersion.full),
-    // Quasiquotes break compiling scala doc...
-    // TODO: Investigate fixing this.
-    sources in (Compile, doc) ~= (_ filter (_.getName contains "codegen")))
 }
 
 object SQL {
