@@ -70,7 +70,9 @@ case class BroadcastNestedLoopJoin(
       case Inner =>
         // TODO we can avoid breaking the lineage, since we union an empty RDD for Inner Join case
         left.output ++ right.output
-      case x => // TODO support the Left Semi Join
+      case LeftSemi =>
+        left.output
+      case x =>
         throw new IllegalArgumentException(
           s"BroadcastNestedLoopJoin should not take $x as the JoinType")
     }
@@ -113,18 +115,25 @@ case class BroadcastNestedLoopJoin(
           val broadcastedRow = broadcastedRelation.value(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
-              matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
-              streamRowMatched = true
-              includedBroadcastTuples += i
+              // If it is LeftSemi join, we simply skip matching to other rows
+              // because we only need one copy of left row
+              if (joinType != LeftSemi || !streamRowMatched) {
+                matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
+                streamRowMatched = true
+                includedBroadcastTuples += i
+              }
             case BuildLeft if boundCondition(joinedRow(broadcastedRow, streamedRow)) =>
-              matchedRows += resultProj(joinedRow(broadcastedRow, streamedRow)).copy()
+              if (joinType != LeftSemi) {
+                matchedRows += resultProj(joinedRow(broadcastedRow, streamedRow)).copy()
+              }
               streamRowMatched = true
               includedBroadcastTuples += i
             case _ =>
           }
           i += 1
         }
-
+        // When joinType is outer join, if this left row doesn't match any rows in right,
+        // we should also output it matching a null row.
         (streamRowMatched, joinType, buildSide) match {
           case (false, LeftOuter | FullOuter, BuildRight) =>
             matchedRows += resultProj(joinedRow(streamedRow, rightNulls)).copy()
@@ -166,6 +175,13 @@ case class BroadcastNestedLoopJoin(
           while (i < rel.length) {
             if (!allIncludedBroadcastTuples.contains(i)) {
               buf += resultProj(joinedRow.withLeft(rel(i))).copy()
+            }
+            i += 1
+          }
+        case (LeftSemi, BuildLeft) =>
+          while (i < rel.length) {
+            if (allIncludedBroadcastTuples.contains(i)) {
+              buf += rel(i).copy()
             }
             i += 1
           }

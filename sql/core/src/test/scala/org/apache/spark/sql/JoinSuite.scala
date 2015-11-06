@@ -68,7 +68,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoin]),
       ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
       ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
@@ -489,7 +489,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[LeftSemiJoinHash]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
-          classOf[LeftSemiJoinBNL]),
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2",
