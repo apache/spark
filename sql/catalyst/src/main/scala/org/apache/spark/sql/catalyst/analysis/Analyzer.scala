@@ -205,45 +205,30 @@ class Analyzer(
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-        // We will insert another Projection if the GROUP BY keys contains the
-        // non-attribute expressions. And the top operators can references those
-        // expressions by its alias.
-        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 ==>
-        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a
 
-        // find all of the non-attribute expressions in the GROUP BY keys
-        val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
+        val aliasedGroupByExprPairs = x.groupByExprs.map{
+          case a @ Alias(expr, _) => (expr, a)
+          case expr: NamedExpression => (expr, Alias(expr, expr.name)())
+          case expr => (expr, Alias(expr, expr.prettyString)())
+        }
 
-        // The pair of (the original GROUP BY key, associated attribute)
-        val groupByExprPairs = x.groupByExprs.map(_ match {
-          case e: NamedExpression => (e, e.toAttribute)
-          case other => {
-            val alias = Alias(other, other.toString)()
-            nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
-            (other, alias.toAttribute)
-          }
-        })
+        val aliasedGroupByExprs = aliasedGroupByExprPairs.map(_._2)
+        val aliasedGroupByAttr = aliasedGroupByExprs.map(_.toAttribute)
 
-        // substitute the non-attribute expressions for aggregations.
-        val aggregation = x.aggregations.map(expr => expr.transformDown {
-          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
-        }.asInstanceOf[NamedExpression])
-
-        // substitute the group by expressions.
-        val newGroupByExprs = groupByExprPairs.map(_._2)
-
-        val child = if (nonAttributeGroupByExpressions.length > 0) {
-          // insert additional projection if contains the
-          // non-attribute expressions in the GROUP BY keys
-          Project(x.child.output ++ nonAttributeGroupByExpressions, x.child)
-        } else {
-          x.child
+        // substitute group by expressions in aggregation list with appropriate attribute
+        val aggregations = x.aggregations.map{
+          case a @ Alias(e, name) =>
+            aliasedGroupByExprPairs.find(_._1.semanticEquals(e))
+              .map(_._2.toAttribute.withName(name)).getOrElse(a)
+          case e =>
+            aliasedGroupByExprPairs.find(_._1.semanticEquals(e)).map(_._2.toAttribute).getOrElse(e)
         }
 
         Aggregate(
-          newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
-          aggregation,
-          Expand(x.bitmasks, newGroupByExprs, gid, child))
+          aliasedGroupByAttr :+ gid, aggregations,
+          Generate(ExpandGroupingSets(aliasedGroupByExprs, x.bitmasks),
+            join = true, outer = false, qualifier = None, aliasedGroupByAttr :+ gid, x.child)
+        )
     }
   }
 

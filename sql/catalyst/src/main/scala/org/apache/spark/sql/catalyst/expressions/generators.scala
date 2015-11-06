@@ -148,3 +148,47 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
     }
   }
 }
+
+/**
+ * Given grouping expressions and a list of bitmasks corresponding to grouping sets this produces
+ * rows for each grouping set with the unselected expressions set to null. Additional it outputs the
+ * bitmask as the last field.
+ */
+case class ExpandGroupingSets(
+    groupByExprs: Seq[Expression],
+    bitmasks: Seq[Int])
+  extends Expression with Generator with CodegenFallback {
+
+  override def elementTypes: Seq[(DataType, Boolean)] = {
+    groupByExprs.map(_.dataType).map(dt => (dt, true)) :+ (IntegerType, false)
+  }
+
+  val children = groupByExprs
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val groupByVals = groupByExprs.map(_.eval(input))
+
+    // Below it the imperative version of
+    //    bitmasks.map{ bitmask =>
+    //      val output = groupByVals.zipWithIndex.map{ case (col, colNum) =>
+    //        if ((bitmask & (1 << colNum)) != 0) col else null
+    //      }
+    //      InternalRow(output :+ bitmask: _*)
+    //    }
+
+    val outputRows = new Array[InternalRow](bitmasks.length)
+    var rowNum = 0
+    bitmasks.foreach{ bitmask =>
+      val output: Array[Any] = new Array[Any](groupByVals.length + 1)
+      var colNum = 0
+      groupByVals.foreach{ col =>
+        output(colNum) = if ((bitmask & (1 << colNum)) != 0) col else null
+        colNum += 1
+      }
+      output(groupByVals.length) = bitmask
+      outputRows(rowNum) = InternalRow(output: _*)
+      rowNum += 1
+    }
+    outputRows
+  }
+}
