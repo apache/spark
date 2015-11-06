@@ -1468,7 +1468,6 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
 })
 
-<<<<<<< HEAD
 test_that("attach() on a DataFrame", {
   df <- jsonFile(sqlContext, jsonPath)
   expect_error(age)
