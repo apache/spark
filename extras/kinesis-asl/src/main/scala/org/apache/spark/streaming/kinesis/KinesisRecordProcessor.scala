@@ -71,7 +71,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
       try {
         receiver.addRecords(shardId, batch)
         logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-        receiver.setCheckpointerForShardId(shardId, checkpointer)
+        receiver.setCheckpointer(shardId, checkpointer)
       } catch {
         case NonFatal(e) => {
           /*
@@ -130,7 +130,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
       case _ =>
         null // return null so that we don't checkpoint
     }
-    receiver.removeCheckpointerForShardId(shardId, cp)
+    receiver.removeCheckpointer(shardId, cp)
   }
 }
 
