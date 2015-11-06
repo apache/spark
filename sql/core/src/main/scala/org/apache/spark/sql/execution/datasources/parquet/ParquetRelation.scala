@@ -379,7 +379,7 @@ private[sql] class ParquetRelation(
     var schema: StructType = _
 
     // Cached leaves
-    var cachedLeaves: Set[FileStatus] = null
+    var cachedLeaves: mutable.LinkedHashSet[FileStatus] = null
 
     /**
      * Refreshes `FileStatus`es, footers, partition spec, and table schema.
@@ -392,7 +392,7 @@ private[sql] class ParquetRelation(
         !cachedLeaves.equals(currentLeafStatuses)
 
       if (leafStatusesChanged) {
-        cachedLeaves = currentLeafStatuses.toIterator.toSet
+        cachedLeaves = currentLeafStatuses
 
         // Lists `FileStatus`es of all leaf nodes (files) under all base directories.
         val leaves = currentLeafStatuses.filter { f =>
@@ -461,13 +461,29 @@ private[sql] class ParquetRelation(
           // You should enable this configuration only if you are very sure that for the parquet
           // part-files to read there are corresponding summary files containing correct schema.
 
+          // As filed in SPARK-11500, the order of files to touch is a matter, which might affect
+          // the ordering of the output columns. There are several things to mention here.
+          //
+          //  1. If mergeRespectSummaries config is false, then it merges schemas by reducing from
+          //     the first part-file so that the columns of the first file show first.
+          //
+          //  2. If mergeRespectSummaries config is true, then there should be, at least,
+          //     "_metadata"s for all given files. So, we can ensure the columns of the first file
+          //     show first.
+          //
+          //  3. If shouldMergeSchemas is false, but when multiple files are given, there is
+          //     no guarantee of the output order, since there might not be a summary file for the
+          //     first file, which ends up putting ahead the columns of the other files. However,
+          //     this should be okay since not enabling shouldMergeSchemas means (assumes) all the
+          //     files have the same schemas.
+
           val needMerged: Seq[FileStatus] =
             if (mergeRespectSummaries) {
               Seq()
             } else {
               dataStatuses
             }
-          (metadataStatuses ++ commonMetadataStatuses ++ needMerged).toSeq
+          needMerged ++ metadataStatuses ++ commonMetadataStatuses
         } else {
           // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
           // don't have this.
@@ -764,10 +780,10 @@ private[sql] object ParquetRelation extends Logging {
 
           footers.map { footer =>
             ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceOption(_ merge _).iterator
+          }.reduceLeftOption(_ merge _).iterator
         }.collect()
 
-    partiallyMergedSchemas.reduceOption(_ merge _)
+    partiallyMergedSchemas.reduceLeftOption(_ merge _)
   }
 
   /**

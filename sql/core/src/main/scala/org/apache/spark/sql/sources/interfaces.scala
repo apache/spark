@@ -419,11 +419,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
-    var leafFiles = mutable.Map.empty[Path, FileStatus]
+    var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
+    private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
       if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
         HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
       } else {
@@ -441,10 +441,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
         val (dirs, files) = statuses.partition(_.isDir)
 
+        // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
         if (dirs.isEmpty) {
-          files.toSet
+          mutable.LinkedHashSet(files: _*)
         } else {
-          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
+          mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
     }
@@ -455,7 +456,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
 
-      leafFiles ++= files.map(f => f.getPath -> f).toMap
+      leafFiles ++= files.map(f => f.getPath -> f)
       leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
     }
   }
@@ -466,8 +467,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     cache
   }
 
-  protected def cachedLeafStatuses(): Set[FileStatus] = {
-    fileStatusCache.leafFiles.values.toSet
+  protected def cachedLeafStatuses(): mutable.LinkedHashSet[FileStatus] = {
+    mutable.LinkedHashSet(fileStatusCache.leafFiles.values.toArray: _*)
   }
 
   final private[sql] def partitionSpec: PartitionSpec = {
@@ -766,7 +767,7 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Array[String],
       hadoopConf: Configuration,
-      sparkContext: SparkContext): Set[FileStatus] = {
+      sparkContext: SparkContext): mutable.LinkedHashSet[FileStatus] = {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -786,9 +787,10 @@ private[sql] object HadoopFsRelation extends Logging {
         status.getAccessTime)
     }.collect()
 
-    fakeStatuses.map { f =>
+    val fakeStatusesSeq = fakeStatuses.map { f =>
       new FileStatus(
         f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
-    }.toSet
+    }
+    mutable.LinkedHashSet(fakeStatusesSeq: _*)
   }
 }
