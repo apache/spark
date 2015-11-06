@@ -326,6 +326,19 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getSeconds(c.getTimeInMillis * 1000) === 9)
   }
 
+  test("hours / miniute / seconds") {
+    Seq(Timestamp.valueOf("2015-06-11 10:12:35.789"),
+      Timestamp.valueOf("2015-06-11 20:13:40.789"),
+      Timestamp.valueOf("1900-06-11 12:14:50.789"),
+      Timestamp.valueOf("1700-02-28 12:14:50.123456")).foreach { t =>
+      val us = fromJavaTimestamp(t)
+      assert(toJavaTimestamp(us) === t)
+      assert(getHours(us) === t.getHours)
+      assert(getMinutes(us) === t.getMinutes)
+      assert(getSeconds(us) === t.getSeconds)
+    }
+  }
+
   test("get day in year") {
     val c = Calendar.getInstance()
     c.set(2015, 2, 18, 0, 0, 0)
