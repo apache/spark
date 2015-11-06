@@ -80,7 +80,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         case TaskLocality.RACK_LOCAL => "Rack local"
         case TaskLocality.ANY => "Any"
       }
-      (localityName, count)
+      s"$localityName: $count"
     }
     localityNamesAndCounts.sorted.mkString("; ")
   }
