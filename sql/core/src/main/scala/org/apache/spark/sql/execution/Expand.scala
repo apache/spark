@@ -45,20 +45,8 @@ case class Expand(
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
-  protected val cleanedProjections = {
-    if (outputsUnsafeRows) {
-      projections.map { exprs =>
-        exprs.map(_ transform {
-          case CreateStruct(children) => CreateStructUnsafe(children)
-          case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-        })
-      }
-    } else {
-      projections
-    }
-  }
-
-  protected val projection = {
+  @transient
+  private[this] lazy val projection = {
     if (outputsUnsafeRows) {
       (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
     } else {
@@ -68,7 +56,7 @@ case class Expand(
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      val groups = cleanedProjections.map(projection).toArray
+      val groups = projections.map(projection).toArray
       new Iterator[InternalRow] {
         private[this] var result: InternalRow = _
         private[this] var idx = -1  // -1 means the initial state
