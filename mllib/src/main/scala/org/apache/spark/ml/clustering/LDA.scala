@@ -662,7 +662,7 @@ class OnlineLDAOptimizer @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setTau0(value: Double) = set(tau0, value)
+  def setTau0(value: Double): this.type = set(tau0, value)
 
   /**
    * Learning rate, set as an exponential decay rate.
@@ -679,7 +679,7 @@ class OnlineLDAOptimizer @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setKappa(value: Double) = set(kappa, value)
+  def setKappa(value: Double): this.type = set(kappa, value)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -714,7 +714,7 @@ class OnlineLDAOptimizer @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setSubsamplingRate(value: Double) = set(subsamplingRate, value)
+  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /**
    * Indicates whether the docConcentration (Dirichlet parameter for
@@ -736,5 +736,5 @@ class OnlineLDAOptimizer @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setOptimizeDocConcentration(value: Boolean) = set(optimizeDocConcentration, value)
+  def setOptimizeDocConcentration(value: Boolean): this.type = set(optimizeDocConcentration, value)
 }
