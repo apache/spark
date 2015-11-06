@@ -31,7 +31,7 @@ private[master]
 class MasterWebUI(
     val master: Master,
     requestedPort: Int,
-    customMasterPage :Option[MasterPage] = None)
+    customMasterPage: Option[MasterPage] = None)
   extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging
   with UIRoot {
 
