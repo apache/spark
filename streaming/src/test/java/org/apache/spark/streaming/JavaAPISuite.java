@@ -793,6 +793,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         });
       }
     });
+
+    // This is a test to make sure foreachRDD(VoidFunction2) can be called from Java
+    stream.foreachRDD(new VoidFunction2<JavaRDD<Integer>, Time>() {
+      @Override
+      public void call(JavaRDD<Integer> rdd, Time time) {
+      }
+    });
+
     JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(2, accumRdd.value().intValue());
@@ -856,14 +864,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @Test
   public void testUnion() {
     List<List<Integer>> inputData1 = Arrays.asList(
-        Arrays.asList(1,1),
-        Arrays.asList(2,2),
-        Arrays.asList(3,3));
+        Arrays.asList(1, 1),
+        Arrays.asList(2, 2),
+        Arrays.asList(3, 3));
 
     List<List<Integer>> inputData2 = Arrays.asList(
-        Arrays.asList(4,4),
-        Arrays.asList(5,5),
-        Arrays.asList(6,6));
+        Arrays.asList(4, 4),
+        Arrays.asList(5, 5),
+        Arrays.asList(6, 6));
 
     List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(1,1,4,4),
