@@ -144,7 +144,7 @@ public class TaskMemoryManager {
       if (got < required) {
         // Call spill() on other consumers to release memory
         for (MemoryConsumer c: consumers) {
-          if (c != consumer && c.getMemoryUsed(mode) > 0) {
+          if (c != consumer && c.getUsed() > 0) {
             try {
               long released = c.spill(required - got, consumer);
               if (released > 0 && mode == tungstenMemoryMode) {
@@ -204,8 +204,7 @@ public class TaskMemoryManager {
     synchronized (this) {
       long memoryAccountedForByConsumers = 0;
       for (MemoryConsumer c: consumers) {
-        long totalMemUsage =
-          c.getMemoryUsed(MemoryMode.OFF_HEAP) + c.getMemoryUsed(MemoryMode.ON_HEAP);
+        long totalMemUsage = c.getUsed();
         memoryAccountedForByConsumers += totalMemUsage;
         if (totalMemUsage > 0) {
           logger.info("Acquired by " + c + ": " + Utils.bytesToString(totalMemUsage));
@@ -359,16 +358,11 @@ public class TaskMemoryManager {
    */
   public long cleanUpAllAllocatedMemory() {
     synchronized (this) {
+      Arrays.fill(pageTable, null);
       for (MemoryConsumer c: consumers) {
-        if (c.getMemoryUsed(MemoryMode.ON_HEAP) > 0) {
+        if (c != null && c.getUsed() > 0) {
           // In case of failed task, it's normal to see leaked memory
-          logger.warn("leak " + Utils.bytesToString(c.getMemoryUsed(MemoryMode.ON_HEAP)) +
-            " of on-heap memory from " + c);
-        }
-        if (c.getMemoryUsed(MemoryMode.OFF_HEAP) > 0) {
-          // In case of failed task, it's normal to see leaked memory
-          logger.warn("leak " + Utils.bytesToString(c.getMemoryUsed(MemoryMode.OFF_HEAP)) +
-            " of off-heap memory from " + c);
+          logger.warn("leak " + Utils.bytesToString(c.getUsed()) + " memory from " + c);
         }
       }
       consumers.clear();

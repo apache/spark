@@ -97,12 +97,6 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
-        case expressions.Stddev(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Stddev(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
         case expressions.StddevPop(child) =>
           aggregate.AggregateExpression2(
             aggregateFunction = aggregate.StddevPop(child),
@@ -127,15 +121,15 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = true)
 
-        case expressions.ApproxCountDistinct(child, rsd) =>
+        case expressions.Corr(left, right) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
+            aggregateFunction = aggregate.Corr(left, right),
             mode = aggregate.Complete,
             isDistinct = false)
 
-        case expressions.Variance(child) =>
+        case expressions.ApproxCountDistinct(child, rsd) =>
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Variance(child),
+            aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
             mode = aggregate.Complete,
             isDistinct = false)
 

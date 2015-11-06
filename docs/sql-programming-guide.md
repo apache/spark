@@ -160,7 +160,7 @@ showDF(df)
 
 ## DataFrame Operations
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
 
 Here we include some basic examples of structured data processing using DataFrames:
 
@@ -877,6 +877,44 @@ df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
 df <- loadDF(sqlContext, "people.json", "json")
 saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 
+{% endhighlight %}
+
+</div>
+</div>
+
+### Run SQL on files directly
+
+Instead of using read API to load a file into DataFrame and query it, you can also query that
+file directly with SQL.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+DataFrame df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+df <- sql(sqlContext, "SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
 {% endhighlight %}
 
 </div>

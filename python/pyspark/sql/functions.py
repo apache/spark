@@ -122,6 +122,21 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_functions_1_6 = {
+    # unary math functions
+    "stddev": "Aggregate function: returns the unbiased sample standard deviation of" +
+              " the expression in a group.",
+    "stddev_samp": "Aggregate function: returns the unbiased sample standard deviation of" +
+              " the expression in a group.",
+    "stddev_pop": "Aggregate function: returns population standard deviation of" +
+              " the expression in a group.",
+    "variance": "Aggregate function: returns the population variance of the values in a group.",
+    "var_samp": "Aggregate function: returns the unbiased variance of the values in a group.",
+    "var_pop":  "Aggregate function: returns the population variance of the values in a group.",
+    "skewness": "Aggregate function: returns the skewness of the values in a group.",
+    "kurtosis": "Aggregate function: returns the kurtosis of the values in a group."
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -172,6 +187,8 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+for _name, _doc in _functions_1_6.items():
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 del _name, _doc
 
 

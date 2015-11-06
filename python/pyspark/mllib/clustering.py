@@ -17,6 +17,7 @@
 
 import sys
 import array as pyarray
+import warnings
 
 if sys.version > '3':
     xrange = range
@@ -170,6 +171,9 @@ class KMeans(object):
     def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||",
               seed=None, initializationSteps=5, epsilon=1e-4, initialModel=None):
         """Train a k-means clustering model."""
+        if runs != 1:
+            warnings.warn(
+                "Support for runs is deprecated in 1.6.0. This param will have no effect in 1.7.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):

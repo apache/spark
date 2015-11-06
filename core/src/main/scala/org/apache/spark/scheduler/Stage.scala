@@ -71,8 +71,8 @@ private[scheduler] abstract class Stage(
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
 
-  val name = callSite.shortForm
-  val details = callSite.longForm
+  val name: String = callSite.shortForm
+  val details: String = callSite.longForm
 
   private var _internalAccumulators: Seq[Accumulator[Long]] = Seq.empty
 
@@ -134,6 +134,7 @@ private[scheduler] abstract class Stage(
   def latestInfo: StageInfo = _latestInfo
 
   override final def hashCode(): Int = id
+
   override final def equals(other: Any): Boolean = other match {
     case stage: Stage => stage != null && stage.id == id
     case _ => false

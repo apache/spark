@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, Encoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
@@ -34,10 +34,32 @@ class GroupedDataset[K, T] private[sql](
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
-  private implicit def kEnc = kEncoder
-  private implicit def tEnc = tEncoder
+  private implicit val kEnc = kEncoder match {
+    case e: ExpressionEncoder[K] => e.resolve(groupingAttributes)
+    case other =>
+      throw new UnsupportedOperationException("Only expression encoders are currently supported")
+  }
+
+  private implicit val tEnc = tEncoder match {
+    case e: ExpressionEncoder[T] => e.resolve(dataAttributes)
+    case other =>
+      throw new UnsupportedOperationException("Only expression encoders are currently supported")
+  }
+
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
+
+  /**
+   * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
+   * type. The mapping of key columns to the type follows the same rules as `as` on [[Dataset]].
+   */
+  def asKey[L : Encoder]: GroupedDataset[L, T] =
+    new GroupedDataset(
+      encoderFor[L],
+      tEncoder,
+      queryExecution,
+      dataAttributes,
+      groupingAttributes)
 
   /**
    * Returns a [[Dataset]] that contains each unique key.
