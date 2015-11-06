@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
@@ -29,21 +29,28 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  *
  * @see [[RegexTokenizer]]
  */
+@Since("1.2.0")
 @Experimental
-class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class Tokenizer @Since("1.2.0") (@Since("1.4.0") override val uid: String) extends
+  UnaryTransformer[String, Seq[String], Tokenizer] {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("tok"))
 
+  @Since("1.2.0")
   override protected def createTransformFunc: String => Seq[String] = {
     _.toLowerCase.split("\\s")
   }
 
+  @Since("1.2.0")
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
+  @Since("1.2.0")
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
 }
 
@@ -54,10 +61,12 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
  * Optional parameters also allow filtering tokens using a minimal length.
  * It returns an array of strings that can be empty.
  */
+@Since("1.4.0")
 @Experimental
-class RegexTokenizer(override val uid: String)
+class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
@@ -69,9 +78,11 @@ class RegexTokenizer(override val uid: String)
     ParamValidators.gtEq(0))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getMinTokenLength: Int = $(minTokenLength)
 
   /**
@@ -82,9 +93,11 @@ class RegexTokenizer(override val uid: String)
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setGaps(value: Boolean): this.type = set(gaps, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getGaps: Boolean = $(gaps)
 
   /**
@@ -95,13 +108,16 @@ class RegexTokenizer(override val uid: String)
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setPattern(value: String): this.type = set(pattern, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getPattern: String = $(pattern)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+")
 
+  @Since("1.4.0")
   override protected def createTransformFunc: String => Seq[String] = { str =>
     val re = $(pattern).r
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
@@ -109,11 +125,14 @@ class RegexTokenizer(override val uid: String)
     tokens.filter(_.length >= minLength)
   }
 
+  @Since("1.4.0")
   override protected def validateInputType(inputType: DataType): Unit = {
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
 
+  @Since("1.4.0")
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 }

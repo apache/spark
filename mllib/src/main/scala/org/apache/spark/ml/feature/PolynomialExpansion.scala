@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
 import org.apache.spark.ml.util.Identifiable
@@ -34,10 +34,12 @@ import org.apache.spark.sql.types.DataType
  * multiplication distributes over addition". Take a 2-variable feature vector as an example:
  * `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
  */
+@Since("1.4.0")
 @Experimental
-class PolynomialExpansion(override val uid: String)
+class PolynomialExpansion @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("poly"))
 
   /**
@@ -51,17 +53,22 @@ class PolynomialExpansion(override val uid: String)
   setDefault(degree -> 2)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getDegree: Int = $(degree)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setDegree(value: Int): this.type = set(degree, value)
 
+  @Since("1.4.0")
   override protected def createTransformFunc: Vector => Vector = { v =>
     PolynomialExpansion.expand(v, $(degree))
   }
 
+  @Since("1.4.0")
   override protected def outputDataType: DataType = new VectorUDT()
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
 }
 

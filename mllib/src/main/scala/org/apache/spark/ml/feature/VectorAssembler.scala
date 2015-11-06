@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.ParamMap
@@ -35,18 +35,23 @@ import org.apache.spark.sql.types._
  * :: Experimental ::
  * A feature transformer that merges multiple columns into a vector column.
  */
+@Since("1.4.0")
 @Experimental
-class VectorAssembler(override val uid: String)
+class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCols with HasOutputCol {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Schema transformation.
     val schema = dataset.schema
@@ -103,6 +108,7 @@ class VectorAssembler(override val uid: String)
     dataset.select(col("*"), assembleFunc(struct(args : _*)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColName = $(outputCol)
@@ -119,6 +125,7 @@ class VectorAssembler(override val uid: String)
     StructType(schema.fields :+ new StructField(outputColName, new VectorUDT, true))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 }
 

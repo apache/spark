@@ -22,7 +22,7 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
@@ -91,21 +91,28 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add warning if a categorical feature has only 1 category.
  *  - Add option for allowing unknown categories.
  */
+@Since("1.4.0")
 @Experimental
-class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
+class VectorIndexer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends
+  Estimator[VectorIndexerModel]
   with VectorIndexerParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecIdx"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMaxCategories(value: Int): this.type = set(maxCategories, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
@@ -123,6 +130,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
     copyValues(model)
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
@@ -133,6 +141,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
     SchemaUtils.appendColumn(schema, $(outputCol), dataType)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 

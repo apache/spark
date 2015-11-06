@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -62,23 +62,30 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  *
  * @see [[IndexToString]] for the inverse transformation
  */
+@Since("1.4.0")
 @Experimental
-class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
+class StringIndexer @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends
+  Estimator[StringIndexerModel]
   with StringIndexerBase {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("strIdx"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, "error")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .map(_.getString(0))
@@ -87,10 +94,12 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
 }
 
@@ -104,11 +113,13 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
  *
  * @param labels  Ordered list of labels, corresponding to indices to be assigned.
  */
+@Since("1.4.0")
 @Experimental
 class StringIndexerModel (
     override val uid: String,
     val labels: Array[String]) extends Model[StringIndexerModel] with StringIndexerBase {
 
+  @Since("1.4.0")
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 
   private val labelToIndex: OpenHashMap[String, Double] = {
@@ -123,15 +134,19 @@ class StringIndexerModel (
   }
 
   /** @group setParam */
+  @Since("1.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
   setDefault(handleInvalid, "error")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     if (!dataset.schema.fieldNames.contains($(inputCol))) {
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
@@ -163,6 +178,7 @@ class StringIndexerModel (
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     if (schema.fieldNames.contains($(inputCol))) {
       validateAndTransformSchema(schema)
@@ -172,6 +188,7 @@ class StringIndexerModel (
     }
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StringIndexerModel = {
     val copied = new StringIndexerModel(uid, labels)
     copyValues(copied, extra).setParent(parent)

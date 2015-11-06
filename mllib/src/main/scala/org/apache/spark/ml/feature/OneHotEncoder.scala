@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
@@ -42,10 +42,12 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  *
  * @see [[StringIndexer]] for converting categorical values into category indices
  */
+@Since("1.4.0")
 @Experimental
-class OneHotEncoder(override val uid: String) extends Transformer
+class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
   with HasInputCol with HasOutputCol {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneHot"))
 
   /**
@@ -57,14 +59,18 @@ class OneHotEncoder(override val uid: String) extends Transformer
   setDefault(dropLast -> true)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
@@ -120,6 +126,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
     StructType(outputFields)
   }
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // schema transformation
     val inputColName = $(inputCol)
@@ -164,5 +171,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
     dataset.select(col("*"), encode(col(inputColName).cast(DoubleType)).as(outputColName, metadata))
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
 }

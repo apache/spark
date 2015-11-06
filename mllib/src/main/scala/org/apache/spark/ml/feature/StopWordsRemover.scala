@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -84,16 +84,20 @@ private[spark] object StopWords {
  * Note: null values from input array are preserved unless adding null to stopWords explicitly.
  * @see [[http://en.wikipedia.org/wiki/Stop_words]]
  */
+@Since("1.5.0")
 @Experimental
-class StopWordsRemover(override val uid: String)
+class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("stopWords"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
@@ -104,9 +108,11 @@ class StopWordsRemover(override val uid: String)
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setStopWords(value: Array[String]): this.type = set(stopWords, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getStopWords: Array[String] = $(stopWords)
 
   /**
@@ -118,13 +124,16 @@ class StopWordsRemover(override val uid: String)
     "whether to do case-sensitive comparison during filtering")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setCaseSensitive(value: Boolean): this.type = set(caseSensitive, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getCaseSensitive: Boolean = $(caseSensitive)
 
   setDefault(stopWords -> StopWords.English, caseSensitive -> false)
 
+  @Since("1.5.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val t = if ($(caseSensitive)) {
@@ -144,6 +153,7 @@ class StopWordsRemover(override val uid: String)
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
 
+  @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     require(inputType.sameType(ArrayType(StringType)),
@@ -153,5 +163,6 @@ class StopWordsRemover(override val uid: String)
     StructType(outputFields)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
 }
