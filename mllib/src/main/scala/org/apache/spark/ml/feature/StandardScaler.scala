@@ -61,7 +61,7 @@ class StandardScaler @Since("1.2.0") (@Since("1.4.0") override val uid: String) 
   Estimator[StandardScalerModel]
   with StandardScalerParams {
 
-  @Since("1.4.0")
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("stdScal"))
 
   setDefault(withMean -> false, withStd -> true)

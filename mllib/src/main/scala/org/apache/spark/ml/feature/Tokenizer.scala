@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 class Tokenizer @Since("1.2.0") (@Since("1.4.0") override val uid: String) extends
   UnaryTransformer[String, Seq[String], Tokenizer] {
 
-  @Since("1.4.0")
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("tok"))
 
   @Since("1.2.0")
