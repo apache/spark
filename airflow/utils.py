@@ -204,6 +204,10 @@ def initdb():
         models.Connection(
             conn_id='vertica_default', conn_type='vertica',
             host='localhost', port=5433))
+    merge_conn(
+        models.Connection(
+            conn_id='webhdfs_default', conn_type='hdfs',
+            host='localhost', port=50070))
 
     # Known event types
     KET = models.KnownEventType
