@@ -730,6 +730,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             t = operators.WebHdfsSensor(
                 task_id='webhdfs_sensor_check',
                 filepath='hdfs://user/hive/warehouse/airflow.db/static_babynames',
+                timeout=120,
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
