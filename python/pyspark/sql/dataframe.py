@@ -422,7 +422,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
-    @since(1.6)
+    @since(1.3)
     def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
@@ -431,6 +431,10 @@ class DataFrame(object):
         ``numPartitions`` can be an int to specify the target number of partitions or a Column.
         If it is a Column, it will be used as the first partitioning column. If not specified,
         the default number of partitions is used.
+
+        .. versionchanged:: 1.6
+           Added optional arguments to specify the partitioning columns. Also made numPartitions
+           optional if partitioning columns are specified.
 
         >>> df.repartition(10).rdd.getNumPartitions()
         10
