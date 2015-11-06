@@ -38,14 +38,14 @@ import org.apache.spark.util.random.XORShiftRandom
  * to it should be cached by the user.
  */
 @Since("0.8.0")
-class KMeans private (
-    private var k: Int,
-    private var maxIterations: Int,
-    private var runs: Int,
-    private var initializationMode: String,
-    private var initializationSteps: Int,
-    private var epsilon: Double,
-    private var seed: Long) extends Serializable with Logging {
+class KMeans private(
+                      private var k: Int,
+                      private var maxIterations: Int,
+                      private var runs: Int,
+                      private var initializationMode: String,
+                      private var initializationSteps: Int,
+                      private var epsilon: Double,
+                      private var seed: Long) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
@@ -306,7 +306,7 @@ class KMeans private (
         val runs = thisActiveCenters.length
         // how many clusters are needed (k)
         val k = thisActiveCenters(0).length
-        // the space dimension (munber of coordinates)
+        // the space dimension (number of coordinates)
         val dims = thisActiveCenters(0)(0).vector.size
 
         // sums are zero (per runs per each dimension)
@@ -324,6 +324,7 @@ class KMeans private (
             // Returns the index of the closest center to the given point, as well as the squared distance.
             // TODO - here we need something different for CMeans
             val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
+            val membershipDegrees = KMeans.degreesOfMembership(thisActiveCenters(i), point)
             // the total cost increases
             costAccums(i) += cost
             // add the current point to the cluster sum
@@ -448,10 +449,10 @@ class KMeans private (
       val bcNewCenters = data.context.broadcast(newCenters)
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-          Array.tabulate(runs) { r =>
-            math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
-          }
-        }.persist(StorageLevel.MEMORY_AND_DISK)
+        Array.tabulate(runs) { r =>
+          math.min(KMeans.pointCost(bcNewCenters.value(r), point), cost(r))
+        }
+      }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs
         .aggregate(new Array[Double](runs))(
           seqOp = (s, v) => {
@@ -537,12 +538,12 @@ object KMeans {
    */
   @Since("1.3.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String,
-      seed: Long): KMeansModel = {
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int,
+             runs: Int,
+             initializationMode: String,
+             seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
@@ -562,11 +563,11 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int,
+             runs: Int,
+             initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
@@ -579,9 +580,9 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int): KMeansModel = {
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int): KMeansModel = {
     train(data, k, maxIterations, 1, K_MEANS_PARALLEL)
   }
 
@@ -590,10 +591,10 @@ object KMeans {
    */
   @Since("0.8.0")
   def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int): KMeansModel = {
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int,
+             runs: Int): KMeansModel = {
     train(data, k, maxIterations, runs, K_MEANS_PARALLEL)
   }
 
@@ -601,8 +602,8 @@ object KMeans {
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */
   private[mllib] def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): (Int, Double) = {
+                                  centers: TraversableOnce[VectorWithNorm],
+                                  point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0
@@ -624,11 +625,37 @@ object KMeans {
   }
 
   /**
+   * Returns the degree of membership of the point to each of the clusters
+   */
+  private[mllib] def degreesOfMembership(
+                                          centers: Array[VectorWithNorm],
+                                          point: VectorWithNorm): Array[Double] = {
+    // TODO - make fuzzifier a parameter of the algorithm
+    val fuzzifier = 2
+
+    // Distances from the point to each centroid
+    val distances = centers map (fastSquaredDistance(_, point))
+
+    // If at least one of the distances is 0
+    val perfectMatches = distances.count(d => d == 0.0)
+    if (perfectMatches > 0) {
+      distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0)
+    } else {
+      // Initialize membershipDegrees
+      val membershipDegrees = distances
+      membershipDegrees map (m =>
+        1.0 / distances.foldLeft(0.0)((s, d) =>
+          s + Math.pow(m / d, 2.0 / (fuzzifier - 1.0))))
+    }
+  }
+
+
+  /**
    * Returns the K-means cost of a given point against the given cluster centers.
    */
   private[mllib] def pointCost(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): Double =
+                                centers: TraversableOnce[VectorWithNorm],
+                                point: VectorWithNorm): Double =
     findClosest(centers, point)._2
 
   /**
@@ -636,8 +663,8 @@ object KMeans {
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
   private[clustering] def fastSquaredDistance(
-      v1: VectorWithNorm,
-      v2: VectorWithNorm): Double = {
+                                               v1: VectorWithNorm,
+                                               v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
   }
 
