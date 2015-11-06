@@ -508,6 +508,10 @@ class SQLContext private[sql](
     new Dataset[T](this, plan)
   }
 
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala)
+  }
+
   /**
    * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
    * converted to Catalyst rows.
