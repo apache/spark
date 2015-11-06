@@ -518,7 +518,7 @@ class SparseVector(Vector):
             assert len(self.indices) == len(self.values), "index and value arrays not same length"
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
-                    raise TypeError("Found duplicate indices: $i")
+                    raise TypeError("Found duplicate indices: %s", % i)
 
     def numNonzeros(self):
         return np.count_nonzero(self.values)
