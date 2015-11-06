@@ -75,11 +75,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     assert(ds.reduce(_ + _) == 6)
   }
 
-  test("fold") {
-    val ds = Seq(1, 2, 3).toDS()
-    assert(ds.fold(0)(_ + _) == 6)
-  }
-
   test("groupBy function, keys") {
     val ds = Seq(1, 2, 3, 4, 5).toDS()
     val grouped = ds.groupBy(_ % 2)
