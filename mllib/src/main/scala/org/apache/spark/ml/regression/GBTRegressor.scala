@@ -140,17 +140,6 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
     }
   }
 
-//  override protected def train(dataset: DataFrame): GBTRegressionModel = {
-//    val categoricalFeatures: Map[Int, Int] =
-//      MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-//    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
-//    val numFeatures = oldDataset.first().features.size
-//    val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
-//    val oldGBT = new OldGBT(boostingStrategy)
-//    val oldModel = oldGBT.run(oldDataset)
-//    GBTRegressionModel.fromOld(oldModel, this, categoricalFeatures, numFeatures)
-//  }
-
   override protected def train(dataset: DataFrame): GBTRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))

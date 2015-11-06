@@ -143,8 +143,8 @@ final class DecisionTreeRegressionModel private[ml] (
   private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
 
-  // TODO: removed protected keyword
-  override def predict(features: Vector): Double = {
+  // TODO: add this change to DT classifier too?
+  override protected def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
   }
 

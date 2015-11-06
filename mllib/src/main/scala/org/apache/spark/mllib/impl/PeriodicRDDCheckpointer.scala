@@ -74,7 +74,6 @@ import org.apache.spark.storage.StorageLevel
  *
  * TODO: Move this out of MLlib?
  */
-// TODO: changed scope of this
 private[spark] class PeriodicRDDCheckpointer[T](
     checkpointInterval: Int,
     sc: SparkContext)

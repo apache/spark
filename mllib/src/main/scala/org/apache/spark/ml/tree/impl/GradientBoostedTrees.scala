@@ -107,7 +107,7 @@ private[ml] object GradientBoostedTrees extends Logging {
       initTree: DecisionTreeRegressionModel,
       loss: Loss): RDD[(Double, Double)] = {
     data.map { lp =>
-      val pred = initTreeWeight * initTree.predict(lp.features)
+      val pred = initTreeWeight * initTree.rootNode.predictImpl(lp.features).prediction
       val error = loss.computeError(pred, lp.label)
       (pred, error)
     }
@@ -134,7 +134,7 @@ private[ml] object GradientBoostedTrees extends Logging {
 
     val newPredError = data.zip(predictionAndError).mapPartitions { iter =>
       iter.map { case (lp, (pred, error)) =>
-        val newPred = pred + tree.predict(lp.features) * treeWeight
+        val newPred = pred + tree.rootNode.predictImpl(lp.features).prediction * treeWeight
         val newError = loss.computeError(newPred, lp.label)
         (newPred, newError)
       }
@@ -284,5 +284,4 @@ private[ml] object GradientBoostedTrees extends Logging {
       (baseLearners, baseLearnerWeights)
     }
   }
-
 }
