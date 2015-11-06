@@ -31,14 +31,11 @@ import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
-trait SparkListenerEvent {
-}
+trait SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
-  extends SparkListenerEvent {
-}
-
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent

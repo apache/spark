@@ -79,7 +79,7 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
  * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
  * `+=` and `add`.
  */
-private[sql] class LongSQLMetric(name: String, param: LongSQLMetricParam)
+private[sql] class LongSQLMetric private[metric] (name: String, param: LongSQLMetricParam)
   extends SQLMetric[LongSQLMetricValue, Long](name, param) {
 
   override def +=(term: Long): Unit = {
