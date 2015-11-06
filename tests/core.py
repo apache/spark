@@ -460,7 +460,7 @@ class WebLdapAuthTest(unittest.TestCase):
             pass
         configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
         configuration.conf.set("ldap", "user_filter", "objectClass=*")
-        configuration.conf.set("ldap", "user_name_attr", "True")
+        configuration.conf.set("ldap", "user_name_attr", "uid")
         configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
         configuration.conf.set("ldap", "bind_password", "insecure")
         configuration.conf.set("ldap", "basedn", "dc=example,dc=com")
@@ -469,7 +469,6 @@ class WebLdapAuthTest(unittest.TestCase):
         app = application.create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
-
 
     def login(self, username, password):
         return self.app.post('/admin/airflow/login', data=dict(
