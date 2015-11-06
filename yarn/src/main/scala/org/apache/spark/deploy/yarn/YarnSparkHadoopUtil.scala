@@ -395,7 +395,7 @@ object YarnSparkHadoopUtil {
    * If not using dynamic allocation it gets the number of executors reqeusted by the user.
    */
   def getInitialTargetExecutorNumber(
-      conf: SparkConf, 
+      conf: SparkConf,
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
       val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
