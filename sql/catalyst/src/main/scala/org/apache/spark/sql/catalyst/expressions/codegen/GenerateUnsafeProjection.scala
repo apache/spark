@@ -287,9 +287,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
     // Reset the isLoaded flag for each row.
-    val subexprReset = ctx.subExprEliminationStates.map(s => {
-     s"${s.isLoaded} = false;"
-    }).mkString("\n")
+    val subexprReset = ctx.subExprIsLoadedVariables.map { v => s"${v} = false;" }.mkString("\n")
 
     val code =
       s"""

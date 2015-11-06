@@ -67,7 +67,7 @@ class EquivalentExpressions {
    * is found. That is, if `expr` has already been added, its children are not added.
    * If ignoreLeaf is true, leaf nodes are ignored.
    */
-  def addExprTree(root: Expression, ignoreLeaf: Boolean): Unit = {
+  def addExprTree(root: Expression, ignoreLeaf: Boolean = true): Unit = {
     val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
     if (!skip && root.deterministic && !addExpr(root)) {
      root.children.foreach(addExprTree(_, ignoreLeaf))
