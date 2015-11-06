@@ -68,8 +68,16 @@ public class JavaDatasetSuite implements Serializable {
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = context.createDataset(data, e.STRING());
-    String[] collected = (String[]) ds.collect();
-    Assert.assertEquals(Arrays.asList("hello", "world"), Arrays.asList(collected));
+    List<String> collected = ds.collectAsList();
+    Assert.assertEquals(Arrays.asList("hello", "world"), collected);
+  }
+
+  @Test
+  public void testTake() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = context.createDataset(data, e.STRING());
+    List<String> collected = ds.takeAsList(1);
+    Assert.assertEquals(Arrays.asList("hello"), collected);
   }
 
   @Test

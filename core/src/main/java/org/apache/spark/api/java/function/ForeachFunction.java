@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java.function;
 
-    import java.io.Serializable;
+import java.io.Serializable;
 
 /**
  * Base interface for a function used in Dataset's foreach function.
