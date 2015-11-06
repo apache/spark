@@ -726,6 +726,13 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def test_webhdfs_sensor(self):
+            t = operators.WebHdfsSensor(
+                task_id='webhdfs_sensor_check',
+                filepath='hdfs://user/hive/warehouse/airflow.db/static_babynames',
+                dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
         def test_sql_sensor(self):
             t = operators.SqlSensor(
                 task_id='hdfs_sensor_check',
