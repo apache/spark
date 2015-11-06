@@ -165,8 +165,8 @@ object MimaExcludes {
         // SPARK-11485
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
         // SPARK-11541 mark various JDBC dialects as private
-        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$"),
-        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.PostgresDialect$")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.NoopDialect$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.jdbc.PostgresDialect$")
       )
     case v if v.startsWith("1.5") =>
       Seq(
