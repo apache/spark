@@ -334,26 +334,14 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
-    | sign.? ~ unsignedFloat ^^ {
-      case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
-    }
-    | sign.? ~ unsignedDecimal ^^ {
-      case s ~ d => Literal(toDecimalOrDouble(s.getOrElse("") + d))
-    }
+    | sign.? ~ unsignedFloat ^^
+      { case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f)) }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
     ( "." ~> numericLit ^^ { u => "0." + u }
-    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
+    | elem("decimal", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
     )
-
-  protected lazy val unsignedDecimal: Parser[String] =
-    ( "." ~> decimalLit ^^ { u => "0." + u }
-    | elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
-    )
-
-  def decimalLit: Parser[String] =
-    elem("scientific_notation", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
 
   protected lazy val sign: Parser[String] = ("+" | "-")
 
@@ -477,7 +465,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | (ident <~ "."). + <~ "*" ^^ { case target => UnresolvedStar(Option(target))}
+    | rep1(ident <~ ".") <~ "*" ^^ { case target => UnresolvedStar(Option(target))}
     | primary
    )
 
