@@ -49,7 +49,16 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, "e")
     )), new StructType().add("n", IntegerType).add("l", StringType))
 
-  private lazy val myTestData = Seq(
+  private lazy val myTestData1 = Seq(
+    (1, 1),
+    (1, 2),
+    (2, 1),
+    (2, 2),
+    (3, 1),
+    (3, 2)
+  ).toDF("a", "b")
+
+  private lazy val myTestData2 = Seq(
     (1, 1),
     (1, 2),
     (2, 1),
@@ -184,8 +193,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   )
 
   {
-    lazy val left = myTestData.where("a = 1")
-    lazy val right = myTestData.where("a = 1")
+    lazy val left = myTestData1.where("a = 1")
+    lazy val right = myTestData2.where("a = 1")
     testInnerJoin(
       "inner join, multiple matches",
       left,
@@ -201,8 +210,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   {
-    lazy val left = myTestData.where("a = 1")
-    lazy val right = myTestData.where("a = 2")
+    lazy val left = myTestData1.where("a = 1")
+    lazy val right = myTestData2.where("a = 2")
     testInnerJoin(
       "inner join, no matches",
       left,
@@ -212,4 +221,18 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     )
   }
 
+  {
+    lazy val left = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    lazy val right = Seq((1, Some(0)), (2, None)).toDF("a", "b")
+    testInnerJoin(
+      "inner join, null safe",
+      left,
+      right,
+      () => (left.col("b") <=> right.col("b")).expr,
+      Seq(
+        (1, 0, 1, 0),
+        (2, null, 2, null)
+      )
+    )
+  }
 }

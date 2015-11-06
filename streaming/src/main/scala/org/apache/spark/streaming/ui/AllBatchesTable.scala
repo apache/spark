@@ -17,9 +17,6 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.Date
-
 import scala.xml.Node
 
 import org.apache.spark.ui.{UIUtils => SparkUIUtils}
@@ -46,7 +43,8 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
     val formattedProcessingTime = processingTime.map(SparkUIUtils.formatDuration).getOrElse("-")
     val batchTimeId = s"batch-$batchTime"
 
-    <td id={batchTimeId} sorttable_customkey={batchTime.toString}>
+    <td id={batchTimeId} sorttable_customkey={batchTime.toString}
+        isFailed={batch.isFailed.toString}>
       <a href={s"batch?id=$batchTime"}>
         {formattedBatchTime}
       </a>
@@ -75,6 +73,19 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
     batchTable
   }
 
+  protected def createOutputOperationProgressBar(batch: BatchUIData): Seq[Node] = {
+    <td class="progress-cell">
+      {
+      SparkUIUtils.makeProgressBar(
+        started = batch.numActiveOutputOp,
+        completed = batch.numCompletedOutputOp,
+        failed = batch.numFailedOutputOp,
+        skipped = 0,
+        total = batch.outputOperations.size)
+      }
+    </td>
+  }
+
   /**
    * Return HTML for all rows of this table.
    */
@@ -86,7 +97,10 @@ private[ui] class ActiveBatchTable(
     waitingBatches: Seq[BatchUIData],
     batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++ <th>Status</th>
+  override protected def columns: Seq[Node] = super.columns ++ {
+    <th>Output Ops: Succeeded/Total</th>
+      <th>Status</th>
+  }
 
   override protected def renderRows: Seq[Node] = {
     // The "batchTime"s of "waitingBatches" must be greater than "runningBatches"'s, so display
@@ -96,20 +110,21 @@ private[ui] class ActiveBatchTable(
   }
 
   private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ <td>processing</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>processing</td>
   }
 
   private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ <td>queued</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>queued</td>
   }
 }
 
 private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
   extends BatchTableBase("completed-batches-table", batchInterval) {
 
-  override protected def columns: Seq[Node] = super.columns ++
-    <th>Total Delay
-      {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
+  override protected def columns: Seq[Node] = super.columns ++ {
+    <th>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
+      <th>Output Ops: Succeeded/Total</th>
+  }
 
   override protected def renderRows: Seq[Node] = {
     batches.flatMap(batch => <tr>{completedBatchRow(batch)}</tr>)
@@ -118,9 +133,11 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: 
   private def completedBatchRow(batch: BatchUIData): Seq[Node] = {
     val totalDelay = batch.totalDelay
     val formattedTotalDelay = totalDelay.map(SparkUIUtils.formatDuration).getOrElse("-")
-    baseRow(batch) ++
+
+    baseRow(batch) ++ {
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}
       </td>
+    } ++ createOutputOperationProgressBar(batch)
   }
 }

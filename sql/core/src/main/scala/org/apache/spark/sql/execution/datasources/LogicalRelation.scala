@@ -45,6 +45,11 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
     case _ => false
   }
 
+  // When comparing two LogicalRelations from within LogicalPlan.sameResult, we only need
+  // LogicalRelation.cleanArgs to return Seq(relation), since expectedOutputAttribute's
+  // expId can be different but the relation is still the same.
+  override lazy val cleanArgs: Seq[Any] = Seq(relation)
+
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = BigInt(relation.sizeInBytes)
   )

@@ -28,7 +28,7 @@ import static org.mockito.Mockito.*;
 
 import static org.apache.spark.launcher.SparkSubmitOptionParser.*;
 
-public class SparkSubmitOptionParserSuite {
+public class SparkSubmitOptionParserSuite extends BaseSuite {
 
   private SparkSubmitOptionParser parser;
 

@@ -62,12 +62,13 @@ case class JobSet(
   }
 
   def toBatchInfo: BatchInfo = {
-    new BatchInfo(
+    BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
-      if (processingStartTime >= 0 ) Some(processingStartTime) else None,
-      if (processingEndTime >= 0 ) Some(processingEndTime) else None
+      if (processingStartTime >= 0) Some(processingStartTime) else None,
+      if (processingEndTime >= 0) Some(processingEndTime) else None,
+      jobs.map { job => (job.outputOpId, job.toOutputOperationInfo) }.toMap
     )
   }
 }

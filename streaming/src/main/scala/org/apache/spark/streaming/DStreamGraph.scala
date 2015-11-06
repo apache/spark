@@ -117,7 +117,11 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)
     val jobs = this.synchronized {
-      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
+      outputStreams.flatMap { outputStream =>
+        val jobOption = outputStream.generateJob(time)
+        jobOption.foreach(_.setCallSite(outputStream.creationSite))
+        jobOption
+      }
     }
     logDebug("Generated " + jobs.length + " jobs for time " + time)
     jobs
@@ -169,7 +173,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
    * safe remember duration which can be used to perform cleanup operations.
    */
   def getMaxInputStreamRememberDuration(): Duration = {
-    inputStreams.map { _.rememberDuration }.maxBy { _.milliseconds }
+    // If an InputDStream is not used, its `rememberDuration` will be null and we can ignore them
+    inputStreams.map(_.rememberDuration).filter(_ != null).maxBy(_.milliseconds)
   }
 
   @throws(classOf[IOException])

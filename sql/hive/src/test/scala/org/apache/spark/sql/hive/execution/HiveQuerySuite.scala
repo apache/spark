@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
+
 import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
@@ -67,6 +69,58 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("USE default")
       sql("SHOW DATABASES")
     }
+  }
+
+  // Testing the Broadcast based join for cartesian join (cross join)
+  // We assume that the Broadcast Join Threshold will works since the src is a small table
+  private val spark_10484_1 = """
+                                | SELECT a.key, b.key
+                                | FROM src a LEFT JOIN src b WHERE a.key > b.key + 300
+                                | ORDER BY b.key, a.key
+                                | LIMIT 20
+                              """.stripMargin
+  private val spark_10484_2 = """
+                                | SELECT a.key, b.key
+                                | FROM src a RIGHT JOIN src b WHERE a.key > b.key + 300
+                                | ORDER BY a.key, b.key
+                                | LIMIT 20
+                              """.stripMargin
+  private val spark_10484_3 = """
+                                | SELECT a.key, b.key
+                                | FROM src a FULL OUTER JOIN src b WHERE a.key > b.key + 300
+                                | ORDER BY a.key, b.key
+                                | LIMIT 20
+                              """.stripMargin
+  private val spark_10484_4 = """
+                                | SELECT a.key, b.key
+                                | FROM src a JOIN src b WHERE a.key > b.key + 300
+                                | ORDER BY a.key, b.key
+                                | LIMIT 20
+                              """.stripMargin
+
+  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #1",
+    spark_10484_1)
+
+  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #2",
+    spark_10484_2)
+
+  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #3",
+    spark_10484_3)
+
+  createQueryTest("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN #4",
+    spark_10484_4)
+
+  test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
+    def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
+      assert(sql(sqlText).queryExecution.sparkPlan.collect {
+        case _: BroadcastNestedLoopJoin => 1
+      }.nonEmpty)
+    }
+
+    assertBroadcastNestedLoopJoin(spark_10484_1)
+    assertBroadcastNestedLoopJoin(spark_10484_2)
+    assertBroadcastNestedLoopJoin(spark_10484_3)
+    assertBroadcastNestedLoopJoin(spark_10484_4)
   }
 
   createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
@@ -509,6 +563,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("Specify the udtf output",
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
+    "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
+
+  createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #2",
+    "SELECT key,value FROM (SELECT explode(map(key,value)) FROM src LIMIT 1) t")
+
   test("sampling") {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
     sql("SELECT * FROM src TABLESAMPLE(100 PERCENT) s")
@@ -899,6 +959,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TABLE t1")
   }
 
+  test("CREATE TEMPORARY FUNCTION") {
+    val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $funcJar")
+    sql(
+      """CREATE TEMPORARY FUNCTION udtf_count2 AS
+        | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
+    assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
+    sql("DROP TEMPORARY FUNCTION udtf_count2")
+  }
+
   test("ADD FILE command") {
     val testFile = TestHive.getHiveFile("data/files/v1.txt").getCanonicalFile
     sql(s"ADD FILE $testFile")
@@ -1131,6 +1201,38 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     conf.clear()
+  }
+
+  test("current_database with multiple sessions") {
+    sql("create database a")
+    sql("use a")
+    val s2 = newSession()
+    s2.sql("create database b")
+    s2.sql("use b")
+
+    assert(sql("select current_database()").first() === Row("a"))
+    assert(s2.sql("select current_database()").first() === Row("b"))
+
+    try {
+      sql("create table test_a(key INT, value STRING)")
+      s2.sql("create table test_b(key INT, value STRING)")
+
+      sql("select * from test_a")
+      intercept[AnalysisException] {
+        sql("select * from test_b")
+      }
+      sql("select * from b.test_b")
+
+      s2.sql("select * from test_b")
+      intercept[AnalysisException] {
+        s2.sql("select * from test_a")
+      }
+      s2.sql("select * from a.test_a")
+    } finally {
+      sql("DROP TABLE IF EXISTS test_a")
+      s2.sql("DROP TABLE IF EXISTS test_b")
+    }
+
   }
 
   createQueryTest("select from thrift based table",

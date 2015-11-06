@@ -21,7 +21,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 
 /**
@@ -59,11 +59,11 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final ArrayData ${ev.primitive} = new $arrayClass($values);"
+      s"final ArrayData ${ev.value} = new $arrayClass($values);"
   }
 
   override def prettyName: String = "array"
@@ -107,11 +107,11 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final InternalRow ${ev.primitive} = new $rowClass($values);"
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "struct"
@@ -124,6 +124,14 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
  * @param children Seq(name1, val1, name2, val2, ...)
  */
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
+
+  /**
+   * Returns Aliased [[Expressions]] that could be used to construct a flattened version of this
+   * StructType.
+   */
+  def flatten: Seq[NamedExpression] = valExprs.zip(names).map {
+    case (v, n) => Alias(v, n.toString)()
+  }
 
   private lazy val (nameExprs, valExprs) =
     children.grouped(2).map { case Seq(name, value) => (name, value) }.toList.unzip
@@ -176,11 +184,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
-            $values[$i] = ${eval.primitive};
+            $values[$i] = ${eval.value};
           }
          """
       }.mkString("\n") +
-      s"final InternalRow ${ev.primitive} = new $rowClass($values);"
+      s"final InternalRow ${ev.value} = new $rowClass($values);"
   }
 
   override def prettyName: String = "named_struct"
@@ -218,7 +226,7 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 
@@ -258,7 +266,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ev.isNull = eval.isNull
-    ev.primitive = eval.primitive
+    ev.value = eval.value
     eval.code
   }
 
