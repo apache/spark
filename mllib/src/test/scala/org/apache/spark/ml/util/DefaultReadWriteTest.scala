@@ -58,7 +58,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       }
     }
 
-    val another = instance.getClass.getMethod("load", classOf[String]).invoke(path).asInstanceOf[T]
+    val load = instance.getClass.getMethod("load", classOf[String])
+    val another = load.invoke(instance, path).asInstanceOf[T]
     assert(another.uid === instance.uid)
   }
 }
