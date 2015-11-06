@@ -436,7 +436,7 @@ class DataFrame(object):
         """Returns a sampled subset of this :class:`DataFrame`.
 
         >>> df.sample(False, 0.5, 42).count()
-        1
+        2
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -463,8 +463,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    3|
-        |  1|    8|
+        |  0|    5|
+        |  1|    9|
         +---+-----+
 
         """
