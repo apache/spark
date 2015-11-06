@@ -43,6 +43,7 @@ _operators = {
         'SqlSensor',
         'TimeDeltaSensor',
         'TimeSensor',
+        'WebHdfsSensor',
     ],
     'subdag_operator': ['SubDagOperator'],
     'hive_stats_operator': ['HiveStatsCollectionOperator'],

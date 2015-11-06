@@ -34,6 +34,7 @@ doc = [
 ]
 druid = ['pydruid>=0.2.1']
 hdfs = ['snakebite>=2.4.13']
+webhdfs = ['hdfs[dataframe,avro,kerberos]>=2.0.4']
 hive = [
     'hive-thrift-py>=0.0.1',
     'pyhive>=0.1.3',
@@ -103,6 +104,7 @@ setup(
         'slack': slack,
         'statsd': statsd,
         'vertica': vertica,
+        'webhdfs': webhdfs,
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',

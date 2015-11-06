@@ -76,7 +76,8 @@ Operator API
         SlackAPIPostOperator,
         SqlSensor,
         SubDagOperator,
-        TimeSensor
+        TimeSensor,
+        WebHdfsSensor
 
 
 Community-contributed Operators
@@ -172,7 +173,8 @@ Hooks
         PostgresHook,
         PrestoHook,
         S3Hook,
-        SqliteHook
+        SqliteHook,
+        WebHDFSHook
 
 Community contributed hooks
 '''''''''''''''''''''''''''
