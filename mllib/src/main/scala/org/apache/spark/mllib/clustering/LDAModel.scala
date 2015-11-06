@@ -273,9 +273,9 @@ class LocalLDAModel private[clustering] (
 
   /**
    * Estimate the variational likelihood bound of from `documents`:
-   * log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
+   *    log p(documents) >= E_q[log p(documents)] - E_q[log q(documents)]
    * This bound is derived by decomposing the LDA model to:
-   * log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
+   *    log p(documents) = E_q[log p(documents)] - E_q[log q(documents)] + D(q|p)
    * and noting that the KL-divergence D(q|p) >= 0.
    *
    * See Equation (16) in original Online LDA paper, as well as Appendix A.3 in the JMLR version of
@@ -290,13 +290,13 @@ class LocalLDAModel private[clustering] (
    * @param vocabSize number of unique terms in the entire test corpus
    */
   private def logLikelihoodBound(
-                                  documents: RDD[(Long, Vector)],
-                                  alpha: Vector,
-                                  eta: Double,
-                                  lambda: BDM[Double],
-                                  gammaShape: Double,
-                                  k: Int,
-                                  vocabSize: Long): Double = {
+      documents: RDD[(Long, Vector)],
+      alpha: Vector,
+      eta: Double,
+      lambda: BDM[Double],
+      gammaShape: Double,
+      k: Int,
+      vocabSize: Long): Double = {
     val brzAlpha = alpha.toBreeze.toDenseVector
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
