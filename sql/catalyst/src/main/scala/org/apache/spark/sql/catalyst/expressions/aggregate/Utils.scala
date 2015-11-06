@@ -367,9 +367,9 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case e: Expression =>
-            // GROUP BY can be different in form () but must be semantically equal. This makes
-            // a map lookup tricky. So we do a linear search for a semantically equal group by
-            // expression.
+            // The same GROUP BY clauses can have different forms (different names for instance) in
+            // the groupBy and aggregate expressions of an aggregate. This makes a map lookup
+            // tricky. So we do a linear search for a semantically equal group by expression.
             groupByMap
               .find(ge => e.semanticEquals(ge._1))
               .map(_._2)
