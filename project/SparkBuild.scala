@@ -207,7 +207,8 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExcludedDependencies.settings ++ Revolver.settings))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -295,6 +296,14 @@ object Flume {
 }
 
 /**
+ * Overrides to work around sbt's dependency resolution being different from Maven's.
+ */
+object DependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+}
+
+/**
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
   */
@@ -319,7 +328,7 @@ object OldDeps {
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
-    scalaVersion := "2.10.4",
+    scalaVersion := "2.10.5",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",

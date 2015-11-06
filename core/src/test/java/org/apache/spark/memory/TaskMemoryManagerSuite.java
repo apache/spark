@@ -17,8 +17,6 @@
 
 package org.apache.spark.memory;
 
-import java.io.IOException;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,27 +24,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
-
-  class TestMemoryConsumer extends MemoryConsumer {
-    TestMemoryConsumer(TaskMemoryManager memoryManager) {
-      super(memoryManager);
-    }
-
-    @Override
-    public long spill(long size, MemoryConsumer trigger) throws IOException {
-      long used = getUsed();
-      releaseMemory(used);
-      return used;
-    }
-
-    void use(long size) {
-      acquireMemory(size);
-    }
-
-    void free(long size) {
-      releaseMemory(size);
-    }
-  }
 
   @Test
   public void leakedPageMemoryIsDetected() {

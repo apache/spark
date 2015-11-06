@@ -233,6 +233,15 @@ abstract class BaseRelation {
    * @since 1.4.0
    */
   def needConversion: Boolean = true
+
+  /**
+   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
+   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
+   * data source relation.
+   *
+   * @since 1.6.0
+   */
+  def unhandledFilters(filters: Array[Filter]): Array[Filter] = filters
 }
 
 /**

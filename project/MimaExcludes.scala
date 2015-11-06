@@ -59,7 +59,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticAggregator.add"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.count")
+          "org.apache.spark.ml.classification.LogisticAggregator.count"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
       ) ++ Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.
@@ -112,6 +114,26 @@ object MimaExcludes {
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
+      ) ++ Seq(
+        // SPARK-11485
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
+        // SPARK-11541 mark various JDBC dialects as private
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productElement"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productArity"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.canEqual"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productIterator"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.productPrefix"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.toString"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.NoopDialect.hashCode"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.PostgresDialect$"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productElement"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productArity"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.canEqual"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productIterator"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.productPrefix"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.toString"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.hashCode"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       )
     case v if v.startsWith("1.5") =>
       Seq(
