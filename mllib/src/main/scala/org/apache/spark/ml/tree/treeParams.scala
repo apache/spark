@@ -29,7 +29,8 @@ import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointInterval {
+private[ml] trait DecisionTreeParams extends PredictorParams
+  with HasCheckpointInterval with HasSeed {
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -122,6 +123,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
+
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
@@ -257,7 +261,7 @@ private[ml] object TreeRegressorParams {
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
@@ -275,9 +279,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Create a Strategy instance to use with the old API.
