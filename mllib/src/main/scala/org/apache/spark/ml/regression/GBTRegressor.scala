@@ -177,7 +177,8 @@ final class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
-    override val numFeatures: Int)
+    override val numFeatures: Int,
+    val useCodeGen: Boolean = false)
   extends PredictionModel[Vector, GBTRegressionModel]
   with TreeEnsembleModel with Serializable {
 
@@ -200,7 +201,6 @@ final class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  val useCodeGen = numTrees < 400
   val treePredictors = _trees.map(_.predictor(useCodeGen))
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
@@ -228,6 +228,24 @@ final class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def toString: String = {
     s"GBTRegressionModel (uid=$uid) with $numTrees trees"
+  }
+
+  /**
+   * Convert this GBT Model to a model using code generation.
+   * There is diminishing returns as the number of trees in the model increases, in DB's testing
+   * around ~400 is where it starts to make sense to not use code generation.
+   * This may be replaced with a different mechanism to control code generation in future versions.
+   */
+  @Experimental
+  @Since("1.7.0")
+  def toCodeGen(): GBTRegressionModel = {
+    if (!useCodeGen) {
+      val extra = ParamMap.empty
+      copyValues(new GBTRegressionModel(uid, _trees, _treeWeights, numFeatures, true),
+        extra).setParent(parent)
+    } else {
+      this
+    }
   }
 
   /** (private[ml]) Convert to a model in the old API */
