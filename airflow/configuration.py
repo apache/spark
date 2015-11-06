@@ -312,7 +312,7 @@ class ConfigParserWithDefaults(ConfigParser):
         d = self.defaults
 
         # environment variables get precedence
-        # must have format AIRFLOW__{SESTION}__{KEY} (note double underscore)
+        # must have format AIRFLOW__{SECTION}__{KEY} (note double underscore)
         env_var = 'AIRFLOW__{S}__{K}'.format(S=section.upper(), K=key.upper())
         if env_var in os.environ:
             return expand_env_var(os.environ[env_var])
