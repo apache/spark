@@ -54,8 +54,8 @@ private[spark] class UnifiedMemoryManager private[memory] (
   extends MemoryManager(
     conf,
     numCores,
-    initialStorageMemory = storageRegionSize,
-    maxOnHeapExecutionMemory = maxMemory - storageRegionSize) {
+    storageRegionSize,
+    maxMemory - storageRegionSize) {
 
   // We always maintain this invariant:
   assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)

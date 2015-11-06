@@ -36,8 +36,8 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
 private[spark] abstract class MemoryManager(
     conf: SparkConf,
     numCores: Int,
-    initialStorageMemory: Long,
-    maxOnHeapExecutionMemory: Long) extends Logging {
+    storageMemory: Long,
+    onHeapExecutionMemory: Long) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
@@ -48,8 +48,8 @@ private[spark] abstract class MemoryManager(
   @GuardedBy("this")
   protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, "off-heap execution")
 
-  storageMemoryPool.incrementPoolSize(initialStorageMemory)
-  onHeapExecutionMemoryPool.incrementPoolSize(maxOnHeapExecutionMemory)
+  storageMemoryPool.incrementPoolSize(storageMemory)
+  onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
   offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
 
   /**
@@ -206,7 +206,7 @@ private[spark] abstract class MemoryManager(
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
     val maxTungstenMemory: Long = tungstenMemoryMode match {
-      case MemoryMode.ON_HEAP => maxOnHeapExecutionMemory
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
       case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
