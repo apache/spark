@@ -224,9 +224,12 @@ class Analyzer(
           }
         }
 
-        // substitute the non-attribute expressions for aggregations.
+        // substitute the non-attribute expressions in aggregations
+        // by the generated aliases. Here, it does not include the ones that
+        // function as the input parameters in the other expressions.
         val aggregation = x.aggregations.map(expr => expr.transformDown {
-          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
+          case alias @ Alias(e: Expression, _) =>
+            groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(alias)
         }.asInstanceOf[NamedExpression])
 
         // substitute the group by expressions.

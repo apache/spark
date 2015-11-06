@@ -40,6 +40,31 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
     hiveContext.dropTempTable("mytable")
   }
 
+  test("rollup: aggregation input parameters overlap with the non-attribute expressions in group by") {
+    val sqlRollUp = sql(
+      """
+        SELECT a + b, b, sum(a + b) as ab, (a + b) as c FROM mytable GROUP BY a + b, b WITH ROLLUP
+      """.stripMargin)
+
+    val res = sqlRollUp.collect()
+
+    val expected =
+      Row ( null, null, 20,  null) ::
+      Row ( 3,    null,  3,  3   ) ::
+      Row ( 6,    null,  6,  6   ) ::
+      Row (11,    null, 11, 11   ) ::
+      Row ( 3,    2,     3,  3   ) ::
+      Row ( 6,    4,     6,  6   ) ::
+      Row (11,    9,    11, 11   ) :: Nil
+
+    checkAnswer(sqlRollUp, expected)
+
+    checkAnswer(
+      testData.rollup($"a" + $"b", $"b").agg(sum($"a" + $"b"), $"a" + $"b"),
+      expected
+    )
+  }
+
   test("rollup: group by function") {
     val sqlRollUp = sql(
       """
@@ -85,6 +110,34 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
 
     checkAnswer(
       testData.rollup("a", "b").agg(sum("b"), max("b"), min($"b" + $"b")),
+      expected
+    )
+  }
+
+  test("cube: aggregation input parameters overlap with the non-attribute expressions in group by") {
+    val sqlCube = sql(
+      """
+        SELECT a + b, b, sum(a + b) as ab, (a + b) as c FROM mytable GROUP BY a + b, b WITH CUBE
+      """.stripMargin)
+
+    val res = sqlCube.collect()
+
+    val expected =
+      Row ( null, 2,     3,  null) ::
+      Row ( null, 4,     6,  null) ::
+      Row ( null, 9,    11,  null) ::
+      Row ( null, null, 20,  null) ::
+      Row ( 3,    null,  3,  3   ) ::
+      Row ( 6,    null,  6,  6   ) ::
+      Row (11,    null, 11, 11   ) ::
+      Row ( 3,    2,     3,  3   ) ::
+      Row ( 6,    4,     6,  6   ) ::
+      Row (11,    9,    11, 11   ) :: Nil
+
+    checkAnswer(sqlCube, expected)
+
+    checkAnswer(
+      testData.cube($"a" + $"b", $"b").agg(sum($"a" + $"b"), $"a" + $"b"),
       expected
     )
   }
