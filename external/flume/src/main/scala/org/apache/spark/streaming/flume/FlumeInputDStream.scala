@@ -43,7 +43,7 @@ import org.jboss.netty.handler.codec.compression._
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
+  ssc_ : StreamingContext,
   host: String,
   port: Int,
   storageLevel: StorageLevel,

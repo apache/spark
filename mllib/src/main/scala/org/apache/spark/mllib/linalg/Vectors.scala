@@ -30,6 +30,7 @@ import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -122,7 +123,8 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Double) => Unit)
+  @Since("1.6.0")
+  def foreachActive(f: (Int, Double) => Unit): Unit
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
@@ -569,7 +571,8 @@ class DenseVector @Since("1.0.0") (
     new DenseVector(values.clone())
   }
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
     val localValuesSize = values.length
     val localValues = values
@@ -699,7 +702,8 @@ class SparseVector @Since("1.0.0") (
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
     val localValuesSize = values.length
     val localIndices = indices

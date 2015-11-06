@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
@@ -26,8 +27,11 @@ __all__ = ['KMeans', 'KMeansModel']
 class KMeansModel(JavaModel):
     """
     Model fitted by KMeans.
+
+    .. versionadded:: 1.5.0
     """
 
+    @since("1.5.0")
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
@@ -55,6 +59,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+
+    .. versionadded:: 1.5.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -88,6 +94,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return KMeansModel(java_model)
 
     @keyword_only
+    @since("1.5.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
                   initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20, seed=None):
         """
@@ -99,6 +106,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("1.5.0")
     def setK(self, value):
         """
         Sets the value of :py:attr:`k`.
@@ -110,12 +118,14 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         self._paramMap[self.k] = value
         return self
 
+    @since("1.5.0")
     def getK(self):
         """
         Gets the value of `k`
         """
         return self.getOrDefault(self.k)
 
+    @since("1.5.0")
     def setInitMode(self, value):
         """
         Sets the value of :py:attr:`initMode`.
@@ -130,12 +140,14 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         self._paramMap[self.initMode] = value
         return self
 
+    @since("1.5.0")
     def getInitMode(self):
         """
         Gets the value of `initMode`
         """
         return self.getOrDefault(self.initMode)
 
+    @since("1.5.0")
     def setInitSteps(self, value):
         """
         Sets the value of :py:attr:`initSteps`.
@@ -147,6 +159,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         self._paramMap[self.initSteps] = value
         return self
 
+    @since("1.5.0")
     def getInitSteps(self):
         """
         Gets the value of `initSteps`

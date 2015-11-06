@@ -26,6 +26,16 @@ test_that("repeatedly starting and stopping SparkR", {
   }
 })
 
+test_that("repeatedly starting and stopping SparkR SQL", {
+  for (i in 1:4) {
+    sc <- sparkR.init()
+    sqlContext <- sparkRSQL.init(sc)
+    df <- createDataFrame(sqlContext, data.frame(a = 1:20))
+    expect_equal(count(df), 20)
+    sparkR.stop()
+  }
+})
+
 test_that("rdd GC across sparkR.stop", {
   sparkR.stop()
   sc <- sparkR.init() # sc should get id 0
@@ -54,4 +64,31 @@ test_that("job group functions can be called", {
   setJobGroup(sc, "groupId", "job description", TRUE)
   cancelJobGroup(sc, "groupId")
   clearJobGroup(sc)
+})
+
+test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
+  e <- new.env()
+  e[["spark.driver.memory"]] <- "512m"
+  ops <- getClientModeSparkSubmitOpts("sparkrmain", e)
+  expect_equal("--driver-memory \"512m\" sparkrmain", ops)
+
+  e[["spark.driver.memory"]] <- "5g"
+  e[["spark.driver.extraClassPath"]] <- "/opt/class_path" # nolint
+  e[["spark.driver.extraJavaOptions"]] <- "-XX:+UseCompressedOops -XX:+UseCompressedStrings"
+  e[["spark.driver.extraLibraryPath"]] <- "/usr/local/hadoop/lib" # nolint
+  e[["random"]] <- "skipthis"
+  ops2 <- getClientModeSparkSubmitOpts("sparkr-shell", e)
+  # nolint start
+  expect_equal(ops2, paste0("--driver-class-path \"/opt/class_path\" --driver-java-options \"",
+                      "-XX:+UseCompressedOops -XX:+UseCompressedStrings\" --driver-library-path \"",
+                      "/usr/local/hadoop/lib\" --driver-memory \"5g\" sparkr-shell"))
+  # nolint end
+
+  e[["spark.driver.extraClassPath"]] <- "/" # too short
+  ops3 <- getClientModeSparkSubmitOpts("--driver-memory 4g sparkr-shell2", e)
+  # nolint start
+  expect_equal(ops3, paste0("--driver-java-options \"-XX:+UseCompressedOops ",
+                      "-XX:+UseCompressedStrings\" --driver-library-path \"/usr/local/hadoop/lib\"",
+                      " --driver-memory 4g sparkr-shell2"))
+  # nolint end
 })
