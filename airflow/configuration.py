@@ -408,7 +408,7 @@ conf.read(AIRFLOW_CONFIG)
 
 
 def get(section, key, **kwargs):
-    return conf.get(section, key, kwargs)
+    return conf.get(section, key, **kwargs)
 
 
 def getboolean(section, key):
