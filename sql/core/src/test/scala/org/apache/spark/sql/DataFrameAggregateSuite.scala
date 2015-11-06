@@ -167,12 +167,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       ("a", "b", "c"),
       ("a", "b", "c"),
       ("a", "b", "d"),
-      ("x", "y", "z"))
+      ("x", "y", "z"),
+      ("x", "q", null.asInstanceOf[String]))
       .toDF("key1", "key2", "key3")
 
     checkAnswer(
       df1.agg(countDistinct('key1, 'key2)),
-      Row(2)
+      Row(3)
     )
 
     checkAnswer(
