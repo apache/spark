@@ -105,7 +105,8 @@ class GroupedDataset[K, T] private[sql](
   }
 
   // To ensure valid overloading.
-  def agg(expr: Column, exprs: Column*): DataFrame = groupedData.agg(expr, exprs: _*)
+  protected def agg(expr: Column, exprs: Column*): DataFrame = 
+    groupedData.agg(expr, exprs: _*)
 
   /**
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
