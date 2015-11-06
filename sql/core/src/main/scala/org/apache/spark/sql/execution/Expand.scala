@@ -45,8 +45,7 @@ case class Expand(
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
-  @transient
-  private[this] lazy val projection = {
+  private[this] val projection = {
     if (outputsUnsafeRows) {
       (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
     } else {
