@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
 private[hive] abstract class AbstractSparkSQLDriver(
@@ -58,11 +59,21 @@ private[hive] abstract class AbstractSparkSQLDriver(
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
-    } catch {
-      case cause: Throwable =>
-        logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null)
     }
+  }
+
+  def runWrapper(command: String): CommandProcessorResponseWrapper = try {
+    val result = run(command)
+    new CommandProcessorResponseWrapper(result, null)
+  } catch {
+    case ae: AnalysisException =>
+      logDebug(s"Failed in [$command]", ae)
+      new CommandProcessorResponseWrapper(new CommandProcessorResponse(1,
+        ExceptionUtils.getStackTrace(ae), null), ae)
+    case cause: Throwable =>
+      logError(s"Failed in [$command]", cause)
+      new CommandProcessorResponseWrapper(new CommandProcessorResponse(1,
+        ExceptionUtils.getStackTrace(cause), null), cause)
   }
 
   override def close(): Int = {
@@ -79,3 +90,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
     tableSchema = null
   }
 }
+
+private[hive] case class CommandProcessorResponseWrapper(
+    rc : CommandProcessorResponse,
+    cause : Throwable)
