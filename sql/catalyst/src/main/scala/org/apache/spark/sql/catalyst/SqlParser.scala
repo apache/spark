@@ -341,7 +341,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val unsignedFloat: Parser[String] =
     ( "." ~> numericLit ^^ { u => "0." + u }
-    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
+    | elem("decimal", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
     )
 
   protected lazy val sign: Parser[String] = ("+" | "-")
