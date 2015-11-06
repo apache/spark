@@ -18,10 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-// $example on$
-
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.DecisionTreeClassifier
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
@@ -31,13 +30,11 @@ import org.apache.spark.mllib.util.MLUtils
 // $example off$
 
 object DecisionTreeClassificationExample {
-
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("DecisionTreeClassificationExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
-
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
     val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
@@ -50,10 +47,10 @@ object DecisionTreeClassificationExample {
       .fit(data)
     // Automatically identify categorical features, and index them.
     val featureIndexer = new VectorIndexer()
-  .setInputCol("features")
-  .setOutputCol("indexedFeatures")
-  .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
-  .fit(data)
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
+      .fit(data)
 
     // Split the data into training and test sets (30% held out for testing)
     val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))

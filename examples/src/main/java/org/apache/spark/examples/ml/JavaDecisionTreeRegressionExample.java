@@ -18,6 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml;
 // $example on$
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
@@ -33,59 +34,60 @@ import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
+
 // $example off$
+
 public class JavaDecisionTreeRegressionExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("JavaDecisionTreeRegressionExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext sqlContext = new SQLContext(jsc);
+    // $example on$
+    // Load and parse the data file, converting it to a DataFrame.
+    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
+    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
 
-    public static void main(String[] args) {
-        SparkConf conf = new SparkConf().setAppName("JavaDecisionTreeRegressionExample");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
-        // $example on$
-        // Load and parse the data file, converting it to a DataFrame.
-        RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-        DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    // Automatically identify categorical features, and index them.
+    // Set maxCategories so features with > 4 distinct values are treated as continuous.
+    VectorIndexerModel featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(data);
 
-        // Automatically identify categorical features, and index them.
-        // Set maxCategories so features with > 4 distinct values are treated as continuous.
-        VectorIndexerModel featureIndexer = new VectorIndexer()
-                .setInputCol("features")
-                .setOutputCol("indexedFeatures")
-                .setMaxCategories(4)
-                .fit(data);
+    // Split the data into training and test sets (30% held out for testing)
+    DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
+    DataFrame trainingData = splits[0];
+    DataFrame testData = splits[1];
 
-        // Split the data into training and test sets (30% held out for testing)
-        DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
-        DataFrame trainingData = splits[0];
-        DataFrame testData = splits[1];
+    // Train a DecisionTree model.
+    DecisionTreeRegressor dt = new DecisionTreeRegressor()
+      .setFeaturesCol("indexedFeatures");
 
-        // Train a DecisionTree model.
-        DecisionTreeRegressor dt = new DecisionTreeRegressor()
-                .setFeaturesCol("indexedFeatures");
+    // Chain indexer and tree in a Pipeline
+    Pipeline pipeline = new Pipeline()
+      .setStages(new PipelineStage[]{featureIndexer, dt});
 
-        // Chain indexer and tree in a Pipeline
-        Pipeline pipeline = new Pipeline()
-                .setStages(new PipelineStage[]{featureIndexer, dt});
+    // Train model.  This also runs the indexer.
+    PipelineModel model = pipeline.fit(trainingData);
 
-        // Train model.  This also runs the indexer.
-        PipelineModel model = pipeline.fit(trainingData);
+    // Make predictions.
+    DataFrame predictions = model.transform(testData);
 
-        // Make predictions.
-        DataFrame predictions = model.transform(testData);
+    // Select example rows to display.
+    predictions.select("label", "features").show(5);
 
-        // Select example rows to display.
-        predictions.select("label", "features").show(5);
+    // Select (prediction, true label) and compute test error
+    RegressionEvaluator evaluator = new RegressionEvaluator()
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("rmse");
+    double rmse = evaluator.evaluate(predictions);
+    System.out.println("Root Mean Squared Error (RMSE) on test data = " + rmse);
 
-        // Select (prediction, true label) and compute test error
-        RegressionEvaluator evaluator = new RegressionEvaluator()
-                .setLabelCol("label")
-                .setPredictionCol("prediction")
-                .setMetricName("rmse");
-        double rmse = evaluator.evaluate(predictions);
-        System.out.println("Root Mean Squared Error (RMSE) on test data = " + rmse);
-
-        DecisionTreeRegressionModel treeModel =
-                (DecisionTreeRegressionModel) (model.stages()[1]);
-        System.out.println("Learned regression tree model:\n" + treeModel.toDebugString());
-        // $example off$
-    }
+    DecisionTreeRegressionModel treeModel =
+      (DecisionTreeRegressionModel) (model.stages()[1]);
+    System.out.println("Learned regression tree model:\n" + treeModel.toDebugString());
+    // $example off$
+  }
 }
