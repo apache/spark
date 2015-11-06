@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
@@ -76,7 +76,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch)
-    verify(receiverMock, times(1)).setCheckpointerForShardId(shardId, checkpointerMock)
+    verify(receiverMock, times(1)).setCheckpointer(shardId, checkpointerMock)
   }
 
   test("shouldn't store and update checkpointer when receiver is stopped") {
@@ -87,7 +87,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
-    verify(receiverMock, never).setCheckpointerForShardId(anyString, meq(checkpointerMock))
+    verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
   test("shouldn't update checkpointer when exception occurs during store") {
@@ -104,7 +104,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch)
-    verify(receiverMock, never).setCheckpointerForShardId(anyString, meq(checkpointerMock))
+    verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
   test("shutdown should checkpoint if the reason is TERMINATE") {
@@ -114,7 +114,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.initialize(shardId)
     recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
 
-    verify(receiverMock, times(1)).removeCheckpointerForShardId(meq(shardId), meq(checkpointerMock))
+    verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
   }
 
 
@@ -126,7 +126,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
     recordProcessor.shutdown(checkpointerMock, null)
 
-    verify(receiverMock, times(2)).removeCheckpointerForShardId(meq(shardId),
+    verify(receiverMock, times(2)).removeCheckpointer(meq(shardId),
       meq[IRecordProcessorCheckpointer](null))
   }
 

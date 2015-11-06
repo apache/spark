@@ -67,7 +67,6 @@ private[kinesis] class KinesisCheckpointer(
   private[kinesis] def checkpoint(
       shardId: String,
       checkpointer: Option[IRecordProcessorCheckpointer]): Unit = {
-    // if this method throws an exception, then the scheduled task will not run again
     try {
       checkpointer.foreach { cp =>
         receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
@@ -85,15 +84,22 @@ private[kinesis] class KinesisCheckpointer(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning("Failed to checkpoint to DynamoDB.", e)
+        logWarning(s"Failed to checkpoint shardId $shardId to DynamoDB.", e)
     }
   }
 
+  /** Checkpoint the latest saved sequence numbers for all active shardId's. */
   private def checkpointAll(): Unit = {
-    val shardIds = checkpointers.keys()
-    while (shardIds.hasMoreElements) {
-      val shardId = shardIds.nextElement()
-      checkpoint(shardId, Option(checkpointers.get(shardId)))
+    // if this method throws an exception, then the scheduled task will not run again
+    try {
+      val shardIds = checkpointers.keys()
+      while (shardIds.hasMoreElements) {
+        val shardId = shardIds.nextElement()
+        checkpoint(shardId, Option(checkpointers.get(shardId)))
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Failed to checkpoint to DynamoDB.", e)
     }
   }
 
@@ -118,5 +124,6 @@ private[kinesis] class KinesisCheckpointer(
     checkpointAll()
     checkpointers.clear()
     lastCheckpointedSeqNums.clear()
+    logInfo("Successfully shutdown Kinesis Checkpointer.")
   }
 }

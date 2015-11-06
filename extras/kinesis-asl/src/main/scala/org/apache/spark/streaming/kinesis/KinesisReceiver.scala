@@ -31,8 +31,7 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkEnv}
-
+import org.apache.spark.Logging
 
 private[kinesis]
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
@@ -204,8 +203,8 @@ private[kinesis] class KinesisReceiver[T](
       logInfo(s"Stopped receiver for workerId $workerId")
     }
     workerId = null
-    if (getCheckpointer() != null) {
-      getCheckpointer().shutdown()
+    if (kinesisCheckpointer != null) {
+      kinesisCheckpointer.shutdown()
       kinesisCheckpointer = null
     }
   }
@@ -230,11 +229,11 @@ private[kinesis] class KinesisReceiver[T](
    * Set the checkpointer that will be used to checkpoint sequence numbers to DynamoDB for the
    * given shardId.
    */
-  private[kinesis] def setCheckpointerForShardId(
+  private[kinesis] def setCheckpointer(
       shardId: String,
       checkpointer: IRecordProcessorCheckpointer): Unit = {
-    assert(getCheckpointer() != null, "Kinesis Checkpointer not initialized!")
-    getCheckpointer().setCheckpointer(shardId, checkpointer)
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.setCheckpointer(shardId, checkpointer)
   }
 
   /**
@@ -242,15 +241,12 @@ private[kinesis] class KinesisReceiver[T](
    * checkpoint one last time for the given shard. If `checkpointer` is `null`, then we will not
    * checkpoint.
    */
-  private[kinesis] def removeCheckpointerForShardId(
+  private[kinesis] def removeCheckpointer(
       shardId: String,
       checkpointer: IRecordProcessorCheckpointer): Unit = {
-    assert(getCheckpointer() != null, "Kinesis Checkpointer not initialized!")
-    getCheckpointer().removeCheckpointer(shardId, checkpointer)
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.removeCheckpointer(shardId, checkpointer)
   }
-
-  /** Access the internal Kinesis Checkpointer. Exposed for tests. */
-  private[kinesis] def getCheckpointer(): KinesisCheckpointer = kinesisCheckpointer
 
   /**
    * Remember the range of sequence numbers that was added to the currently active block.
