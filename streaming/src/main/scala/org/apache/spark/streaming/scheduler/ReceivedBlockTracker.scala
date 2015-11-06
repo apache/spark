@@ -225,7 +225,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Write an update to the tracker to the write ahead log */
-  private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
+  private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
       logTrace(s"Writing record: $record")
       try {

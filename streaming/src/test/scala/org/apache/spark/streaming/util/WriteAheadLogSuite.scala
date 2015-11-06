@@ -102,7 +102,7 @@ abstract class CommonWriteAheadLogTests(
     assert(writtenData === dataToWrite)
   }
 
-  test(testPrefix + "recover past logs when creating new manager") {
+  test(testPrefix + "read all logs after write") {
     // Write data with manager, recover with new manager and verify
     val dataToWrite = generateRandomData()
     writeDataUsingWriteAheadLog(testDir, dataToWrite, closeFileAfterWrite, allowBatching)
@@ -315,10 +315,12 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   import WriteAheadLogSuite._
 
   private var fileBasedWAL: FileBasedWriteAheadLog = _
+  private var walHandle: FileBasedWriteAheadLogSegment = _
   private var walBatchingThreadPool: ExecutionContextExecutorService = _
 
   override def beforeEach(): Unit = {
     fileBasedWAL = mock[FileBasedWriteAheadLog]
+    walHandle = mock[FileBasedWriteAheadLogSegment]
     walBatchingThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonFixedThreadPool(8, "wal-test-thread-pool"))
   }
@@ -364,7 +366,9 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       numFail: AtomicInteger = null): Unit = {
     val f = Future(wal.write(event, time))(walBatchingThreadPool)
     f.onComplete {
-      case Success(v) => if (numSuccess != null) numSuccess.incrementAndGet()
+      case Success(v) =>
+        assert(v === walHandle) // return our mock handle after the write
+        if (numSuccess != null) numSuccess.incrementAndGet()
       case Failure(v) => if (numFail != null) numFail.incrementAndGet()
     }(walBatchingThreadPool)
   }
@@ -380,7 +384,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       new Answer[FileBasedWriteAheadLogSegment] {
         override def answer(invocation: InvocationOnMock): FileBasedWriteAheadLogSegment = {
           Await.ready(promise.future, 4.seconds)
-          mock[FileBasedWriteAheadLogSegment]
+          walHandle
         }
       }
     )
