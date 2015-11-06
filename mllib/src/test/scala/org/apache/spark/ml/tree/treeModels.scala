@@ -46,4 +46,38 @@ class CodeGenerationDecisionTreeModelSuite extends SparkFunSuite with MLlibTestS
     }
   }
 
+  test("basic tree conversion") {
+    /* Tree structure borrowed from RandomForestSuite */
+    /* Build tree for testing, with this structure:
+          grandParent
+      left2       parent
+                left  right
+     */
+    val leftImp = new GiniCalculator(Array(3.0, 2.0, 1.0))
+    val left = new LeafNode(0.0, leftImp.calculate(), leftImp)
+
+    val rightImp = new GiniCalculator(Array(1.0, 2.0, 5.0))
+    val right = new LeafNode(2.0, rightImp.calculate(), rightImp)
+
+    val parent = TreeTests.buildParentNode(left, right, new ContinuousSplit(0, 0.5))
+    val parentImp = parent.impurityStats
+
+    val left2Imp = new GiniCalculator(Array(1.0, 6.0, 1.0))
+    val left2 = new LeafNode(0.1, left2Imp.calculate(), left2Imp)
+
+    val grandParent = TreeTests.buildParentNode(left2, parent, new ContinuousSplit(1, 1.0))
+
+
+    val vectorExpectations = List(
+      (Vectors.dense(0.0, 0.9), 0.1), // left2
+      (Vectors.dense(0.4, 1.2), 0.0), // left
+      (Vectors.dense(0.5, 1.2), 2.0) // right
+    )
+
+    val predictor = CodeGenerationDecisionTreeModel.getScorer(grandParent)
+    vectorExpectations.foreach{ case (v, e) =>
+      val r = predictor(v)
+      assert(e ~== r absTol 1E-5)
+    }
+  }
 }
