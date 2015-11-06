@@ -423,16 +423,18 @@ class DataFrame(object):
         return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     @since(1.6)
-    def repartitionBy(self, *cols, **kwargs):
+    def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        :param numPartitions: int
-            If specified, the number of partitions to partition into. If not specified, preserves
-            the current number of partitions.
+        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
+        If it is a Column, it will be used as the first partitioning column. If not specified,
+        the default number of partitions is used.
 
-        >>> data = df.unionAll(df).repartitionBy("age")
+        >>> df.repartition(10).rdd.getNumPartitions()
+        10
+        >>> data = df.unionAll(df).repartition("age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -442,9 +444,7 @@ class DataFrame(object):
         |  5|  Bob|
         |  5|  Bob|
         +---+-----+
-        >>> data.rdd.getNumPartitions()
-        200
-        >>> data = data.repartitionBy("age", numPartitions=7)
+        >>> data = data.repartition(7, "age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -456,14 +456,28 @@ class DataFrame(object):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
+        >>> data = data.repartition("name", "age")
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  5|  Bob|
+        |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
+        +---+-----+
         """
-        numPartitions = kwargs.get('numPartitions', -1)
-        if not isinstance(numPartitions, int):
-            raise TypeError("numPartitions can only be int, but got %s" % type(numPartitions))
-        if numPartitions == -1:
-          return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
+        if isinstance(numPartitions, int):
+            if len(cols) == 0:
+                return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
+            else:
+                return DataFrame(
+                    self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions, ) + cols
+            return DataFrame(self._jdf.repartition(self._jcols(*cols)), self.sql_ctx)
         else:
-          return DataFrame(self._jdf.repartition(numPartitions, self._jcols(*cols)), self.sql_ctx)
+            raise TypeError("numPartitions should be an int or Column")
 
     @since(1.3)
     def distinct(self):
@@ -632,7 +646,6 @@ class DataFrame(object):
                 jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
-    @ignore_unicode_prefix
     @since(1.6)
     def sortWithinPartitions(self, *cols, **kwargs):
         """Returns a new :class:`DataFrame` with each partition sorted by the specified column(s).
@@ -642,8 +655,6 @@ class DataFrame(object):
             Sort ascending vs. descending. Specify list for multiple sort orders.
             If a list is specified, length of the list must equal length of the `cols`.
 
-        >>> df.rdd.getNumPartitions()
-        4
         >>> df.sortWithinPartitions("age", ascending=False).show()
         +---+-----+
         |age| name|
