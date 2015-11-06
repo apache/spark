@@ -183,28 +183,16 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
       case None => input.output
       // If there is a table, pick out attributes that are part of this table.
       case Some(t) => if (t.size == 1) {
-        input.output.filter(_.qualifiers.filter(resolver(_, t.head)).nonEmpty)
+        input.output.filter(_.qualifiers.exists(resolver(_, t.head)))
       } else {
         List()
       }
     }
-    if (!expandedAttributes.isEmpty) {
-      if (expandedAttributes.forall(_.isInstanceOf[NamedExpression])) {
-        return expandedAttributes
-      } else {
-        require(expandedAttributes.size == input.output.size)
-        expandedAttributes.zip(input.output).map {
-          case (e, originalAttribute) =>
-            Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
-        }
-      }
-      return expandedAttributes
-    }
-
-    require(target.isDefined)
+    if (expandedAttributes.nonEmpty) return expandedAttributes
 
     // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
     // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
+    require(target.isDefined)
     val attribute = input.resolve(target.get, resolver)
     if (attribute.isDefined) {
       // This target resolved to an attribute in child. It must be a struct. Expand it.

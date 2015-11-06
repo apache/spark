@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{SortMergeJoin, CartesianProduct}
+import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -536,7 +536,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
         "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(0, -1.5, 1, 3, 2, 2.0 / 3.0, 1, 6, 3)
+      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -724,83 +724,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("select count(a) from t"),
         Row(0))
     }
-  }
-
-  test("stddev") {
-    checkAnswer(
-      sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4.0 / 5.0))
-    )
-  }
-
-  test("stddev_pop") {
-    checkAnswer(
-      sql("SELECT STDDEV_POP(a) FROM testData2"),
-      Row(math.sqrt(4.0 / 6.0))
-    )
-  }
-
-  test("stddev_samp") {
-    checkAnswer(
-      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("var_samp") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VAR_SAMP(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 5.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("variance") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VARIANCE(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 6.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("var_pop") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VAR_POP(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 6.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("skewness") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT skewness(a) FROM testData2")
-    val expectedAnswer = Row(0.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("kurtosis") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT kurtosis(a) FROM testData2")
-    val expectedAnswer = Row(-1.5)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("stddev agg") {
-    checkAnswer(
-        sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1.0 / 2.0), math.sqrt(1.0 / 4.0), math.sqrt(1.0 / 2.0))))
-  }
-
-  test("variance agg") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT a, variance(b), var_samp(b), var_pop(b)" +
-      "FROM testData2 GROUP BY a")
-    val expectedAnswer = (1 to 3).map(i => Row(i, 1.0 / 4.0, 1.0 / 2.0, 1.0 / 4.0))
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("skewness and kurtosis agg") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT a, skewness(b), kurtosis(b) FROM testData2 GROUP BY a")
-    val expectedAnswer = (1 to 3).map(i => Row(i, 0.0, -2.0))
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("inner join where, one match per row") {
@@ -1956,7 +1879,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     // Try with a registered table.
     sql("select struct(a, b) as record from testData2").registerTempTable("structTable")
-    checkAnswer(sql("SELECT record.* FROM structTable"),
+    checkAnswer(
+      sql("SELECT record.* FROM structTable"),
       Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
 
     checkAnswer(sql(
@@ -2019,50 +1943,62 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
 
     // Try with a registered table
-    nestedStructData.registerTempTable("nestedStructTable")
-    checkAnswer(sql("SELECT record.* FROM nestedStructTable"),
-      nestedStructData.select($"record.*"))
-    checkAnswer(sql("SELECT record.r1 FROM nestedStructTable"),
-      nestedStructData.select($"record.r1"))
-    checkAnswer(sql("SELECT record.r1.* FROM nestedStructTable"),
-      nestedStructData.select($"record.r1.*"))
+    withTempTable("nestedStructTable") {
+      nestedStructData.registerTempTable("nestedStructTable")
+      checkAnswer(
+        sql("SELECT record.* FROM nestedStructTable"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT record.r1 FROM nestedStructTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT record.r1.* FROM nestedStructTable"),
+        nestedStructData.select($"record.r1.*"))
 
-    // Create paths with unusual characters.
+      // Try resolving something not there.
+      assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
+        .getMessage.contains("cannot resolve"))
+    }
+
+    // Create paths with unusual characters
     val specialCharacterPath = sql(
       """
         | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
         |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
       """.stripMargin)
-    specialCharacterPath.registerTempTable("specialCharacterTable")
-    checkAnswer(specialCharacterPath.select($"`r&&b.c`.*"),
-      nestedStructData.select($"record.*"))
-    checkAnswer(sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
-      nestedStructData.select($"record.r1"))
-    checkAnswer(sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
-      nestedStructData.select($"record.r2"))
-    checkAnswer(sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
-      nestedStructData.select($"record.r1.*"))
+    withTempTable("specialCharacterTable") {
+      specialCharacterPath.registerTempTable("specialCharacterTable")
+      checkAnswer(
+        specialCharacterPath.select($"`r&&b.c`.*"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r2"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1.*"))
+    }
 
     // Try star expanding a scalar. This should fail.
     assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
       "Can only star expand struct data types."))
-
-    // Try resolving something not there.
-    assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
-      .getMessage.contains("cannot resolve"))
   }
-
 
   test("Struct Star Expansion - Name conflict") {
     // Create a data set that contains a naming conflict
     val nameConflict = sql("SELECT struct(a, b) as nameConflict, a as a FROM testData2")
-    nameConflict.registerTempTable("nameConflict")
-    // Unqualified should resolve to table.
-    checkAnswer(sql("SELECT nameConflict.* FROM nameConflict"),
-      Row(Row(1, 1), 1) :: Row(Row(1, 2), 1) :: Row(Row(2, 1), 2) :: Row(Row(2, 2), 2) ::
-        Row(Row(3, 1), 3) :: Row(Row(3, 2), 3) :: Nil)
-    // Qualify the struct type with the table name.
-    checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
-      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    withTempTable("nameConflict") {
+      nameConflict.registerTempTable("nameConflict")
+      // Unqualified should resolve to table.
+      checkAnswer(sql("SELECT nameConflict.* FROM nameConflict"),
+        Row(Row(1, 1), 1) :: Row(Row(1, 2), 1) :: Row(Row(2, 1), 2) :: Row(Row(2, 2), 2) ::
+          Row(Row(3, 1), 3) :: Row(Row(3, 2), 3) :: Nil)
+      // Qualify the struct type with the table name.
+      checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    }
   }
 }

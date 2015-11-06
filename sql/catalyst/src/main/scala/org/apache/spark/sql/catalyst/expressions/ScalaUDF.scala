@@ -30,17 +30,12 @@ case class ScalaUDF(
     function: AnyRef,
     dataType: DataType,
     children: Seq[Expression],
-    inputTypes: Seq[DataType] = Nil,
-    isDeterministic: Boolean = true)
+    inputTypes: Seq[DataType] = Nil)
   extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = true
 
   override def toString: String = s"UDF(${children.mkString(",")})"
-
-  override def foldable: Boolean = deterministic && children.forall(_.foldable)
-
-  override def deterministic: Boolean = isDeterministic && children.forall(_.deterministic)
 
   // scalastyle:off
 
@@ -978,10 +973,11 @@ case class ScalaUDF(
     val scalaUDFClassName = classOf[ScalaUDF].getName
 
     val converterTerm = ctx.freshName("converter")
+    val expressionIdx = ctx.references.size - 1
     ctx.addMutableState(converterClassName, converterTerm,
       s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
-          s"expressions[${ctx.references.size - 1}]).getChildren().apply($index))).dataType());")
+          s"expressions[$expressionIdx]).getChildren().apply($index))).dataType());")
     converterTerm
   }
 
@@ -998,10 +994,11 @@ case class ScalaUDF(
 
     // Generate codes used to convert the returned value of user-defined functions to Catalyst type
     val catalystConverterTerm = ctx.freshName("catalystConverter")
+    val catalystConverterTermIdx = ctx.references.size - 1
     ctx.addMutableState(converterClassName, catalystConverterTerm,
       s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
         s".createToCatalystConverter((($scalaUDFClassName)expressions" +
-          s"[${ctx.references.size - 1}]).dataType());")
+          s"[$catalystConverterTermIdx]).dataType());")
 
     val resultTerm = ctx.freshName("result")
 
@@ -1013,9 +1010,10 @@ case class ScalaUDF(
     val funcClassName = s"scala.Function${children.size}"
 
     val funcTerm = ctx.freshName("udf")
+    val funcExpressionIdx = ctx.references.size - 1
     ctx.addMutableState(funcClassName, funcTerm,
       s"this.$funcTerm = ($funcClassName)((($scalaUDFClassName)expressions" +
-        s"[${ctx.references.size - 1}]).userDefinedFunc());")
+        s"[$funcExpressionIdx]).userDefinedFunc());")
 
     // codegen for children expressions
     val evals = children.map(_.gen(ctx))

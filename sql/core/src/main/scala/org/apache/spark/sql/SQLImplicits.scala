@@ -48,6 +48,14 @@ abstract class SQLImplicits {
   implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder[Boolean](flat = true)
   implicit def newStringEncoder: Encoder[String] = ExpressionEncoder[String](flat = true)
 
+  implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(rdd))
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 1.6.0
+   */
   implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
     DatasetHolder(_sqlContext.createDataset(s))
   }

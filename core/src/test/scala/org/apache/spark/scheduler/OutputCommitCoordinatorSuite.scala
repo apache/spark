@@ -171,7 +171,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage)
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
     assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
