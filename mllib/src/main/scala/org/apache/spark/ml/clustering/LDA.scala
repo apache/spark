@@ -17,8 +17,9 @@
 
 package org.apache.spark.ml.clustering
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasSeed, HasMaxIter}
 import org.apache.spark.ml.param._
@@ -26,13 +27,12 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
     EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
     LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
     OnlineLDAOptimizer => OldOnlineLDAOptimizer}
-import org.apache.spark.mllib.linalg.{Vectors, Matrix, Vector}
+import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Matrix, Vector}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, DataFrame, Row}
-import org.apache.spark.sql.functions.monotonicallyIncreasingId
+import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 
-
-// TODO: Add since tags everywhere, and fix the ones which say 1.6.0
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
@@ -43,8 +43,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val k = new IntParam(this, "k", "number of clusters to create", ParamValidators.gt(1))
-
-  setDefault(k -> 10)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -80,8 +78,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     "Concentration parameter (commonly named \"alpha\") for the prior placed on documents'" +
       " distributions over topics (\"theta\").", validDocConcentration)
 
-  setDefault(docConcentration -> Array(-1.0))
-
   /** Check that the docConcentration is valid, independently of other Params */
   private def validDocConcentration(alpha: Array[Double]): Boolean = {
     if (alpha.length == 1) {
@@ -101,6 +97,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Alias for [[getDocConcentration]]
    * @group getParam
    */
+  @Since("1.6.0")
   def getAlpha: Array[Double] = getDocConcentration
 
   /**
@@ -131,8 +128,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     "Concentration parameter (commonly named \"beta\" or \"eta\") for the prior placed on topic'" +
       " distributions over terms.", (beta: Double) => beta == -1 || beta >= 0.0)
 
-  setDefault(topicConcentration -> -1.0)
-
   /** @group getParam */
   @Since("1.6.0")
   def getTopicConcentration: Double = $(topicConcentration)
@@ -141,6 +136,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Alias for [[getTopicConcentration]]
    * @group getParam
    */
+  @Since("1.6.0")
   def getBeta: Double = getTopicConcentration
 
   /**
@@ -151,17 +147,18 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - Expectation-Maximization (EM): [[EMLDAOptimizer]]
    * @group param
    */
+  @Since("1.6.0")
   final val optimizer = new Param[LDAOptimizer](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model")
 
-  setDefault(optimizer -> new OnlineLDAOptimizer)
-
   /** @group getParam */
+  @Since("1.6.0")
   def getOptimizer: LDAOptimizer = $(optimizer)
 
   // Developers should override these setOptimizer() methods.  These are defined here to
   // ensure identical behavior when setting the optimizer using a String.
   /** @group setParam */
+  @Since("1.6.0")
   def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
 
   /**
@@ -170,11 +167,12 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *  - "em" = [[EMLDAOptimizer]]
    * @group setParam
    */
-  def setOptimizer(optimizer: String): this.type = optimizer.toLowerCase match {
+  @Since("1.6.0")
+  def setOptimizer(value: String): this.type = value.toLowerCase match {
     case "online" => setOptimizer(new OnlineLDAOptimizer)
     case "em" => setOptimizer(new EMLDAOptimizer)
     case _ => throw new IllegalArgumentException(
-      s"LDA was given unknown optimizer \"$optimizer\".  Supported values: em, online")
+      s"LDA was given unknown optimizer \"$value\".  Supported values: em, online")
   }
 
   /**
@@ -184,13 +182,17 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * This uses a variational approximation following Hoffman et al. (2010), where the approximate
    * distribution is called "gamma."  Technically, this method returns this approximation "gamma"
    * for each document.
+   * @group param
    */
+  @Since("1.6.0")
   final val topicDistributionCol = new Param[String](this, "topicDistribution", "Output column" +
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
   setDefault(topicDistributionCol -> "topicDistribution")
 
+  /** @group getParam */
+  @Since("1.6.0")
   def getTopicDistributionCol: String = $(topicDistributionCol)
 
   /**
@@ -198,42 +200,69 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @param schema input schema
    * @return output schema
    */
-  protected def validateAndTransformSchema(schema: StructType): StructType = ???
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
+  }
 }
 
 
 /**
  * :: Experimental ::
- * Model fitted by LDA.
+ * Model fitted by [[LDA]].
  *
- * TODO
  * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
- * @param oldLocalModel  Underlying spark.mllib model.  Only used if this is not a
- *                       [[DistributedLDAModel]].
+ * @param oldLocalModel  Underlying spark.mllib model.
+ *                       If this model was produced by [[OnlineLDAOptimizer]], then this is the
+ *                       only model representation.
+ *                       If this model was produced by [[EMLDAOptimizer]], then this local
+ *                       representation may be built lazily.
+ * @param sqlContext  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
 @Experimental
 class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
-    private val oldLocalModel: Option[OldLocalLDAModel],
-    protected val sqlContext: SQLContext) extends Model[LDAModel] with LDAParams {
+    @Since("1.6.0") protected var oldLocalModel: Option[OldLocalLDAModel],
+    @Since("1.6.0") @transient protected val sqlContext: SQLContext)
+  extends Model[LDAModel] with LDAParams with Logging {
 
+  /** Returns underlying spark.mllib model */
+  @Since("1.6.0")
   protected def getModel: OldLDAModel = oldLocalModel match {
     case Some(m) => m
     case None =>
       // Should never happen.
-      throw new RuntimeException("LocalLDAModel.estimatedDocConcentration was called," +
+      throw new RuntimeException("LDAModel required local model format," +
         " but the underlying model is missing.")
   }
 
-  // TODO: ADD PARAM SETTERS
+  /** @group setParam */
+  @Since("1.6.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("1.6.0")
-  override def copy(extra: ParamMap): LDAModel = ???
+  override def copy(extra: ParamMap): LDAModel = {
+    val copied = new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+    copyValues(copied, extra).setParent(parent)
+  }
 
   @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = ???
+  override def transform(dataset: DataFrame): DataFrame = {
+    if ($(topicDistributionCol).nonEmpty) {
+      val t = udf(oldLocalModel.get.getTopicDistributionMethod(sqlContext.sparkContext))
+      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol))))
+    } else {
+      logWarning("LDAModel.transform was called as a noop. Set an output column such as" +
+        " topicDistributionCol to produce results.")
+      dataset
+    }
+  }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -245,6 +274,7 @@ class LDAModel private[ml] (
    * If [[estimatedDocConcentration]] was set to false, then this returns the fixed (given) value
    * for the [[docConcentration]] parameter.
    */
+  @Since("1.6.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
 
   /**
@@ -252,28 +282,67 @@ class LDAModel private[ml] (
    * This is a matrix of size vocabSize x k, where each column is a topic.
    * No guarantees are given about the ordering of the topics.
    *
-   * WARNING: If this model is actually a [[DistributedLDAModel]] instance, then this method
-   *          could involve collecting a large amount of data to the driver (vocabSize x k).
+   * WARNING: If this model is actually a [[DistributedLDAModel]] instance from [[EMLDAOptimizer]],
+   *          then this method could involve collecting a large amount of data to the driver
+   *          (on the order of vocabSize x k).
    */
   @Since("1.6.0")
   def topicsMatrix: Matrix = getModel.topicsMatrix
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
+  @Since("1.6.0")
   def isDistributed: Boolean = false
 
-  def logLikelihood(data: DataFrame): Double = ???
-
-  def logPerplexity(data: DataFrame): Double = ???
+  /**
+   * Calculates a lower bound on the log likelihood of the entire corpus.
+   *
+   * See Equation (16) in original Online LDA paper.
+   *
+   * WARNING: If this model was learned via a [[DistributedLDAModel]], this involves collecting
+   *          a large [[topicsMatrix]] to the driver.  This implementation may be changed in the
+   *          future.
+   *
+   * @param dataset  test corpus to use for calculating log likelihood
+   * @return variational lower bound on the log likelihood of the entire corpus
+   */
+  @Since("1.6.0")
+  def logLikelihood(dataset: DataFrame): Double = oldLocalModel match {
+    case Some(m) =>
+      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+      m.logLikelihood(oldDataset)
+    case None =>
+      // Should never happen.
+      throw new RuntimeException("LocalLDAModel.logLikelihood was called," +
+        " but the underlying model is missing.")
+  }
 
   /**
-   * Return the topics described by weighted terms, returned as lists sorted in order of decreasing
-   * term importance.
+   * Calculate an upper bound bound on perplexity.  (Lower is better.)
+   * See Equation (16) in original Online LDA paper.
+   *
+   * @param dataset test corpus to use for calculating perplexity
+   * @return Variational upper bound on log perplexity per token.
+   */
+  @Since("1.6.0")
+  def logPerplexity(dataset: DataFrame): Double = oldLocalModel match {
+    case Some(m) =>
+      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+      m.logPerplexity(oldDataset)
+    case None =>
+      // Should never happen.
+      throw new RuntimeException("LocalLDAModel.logPerplexity was called," +
+        " but the underlying model is missing.")
+  }
+
+  /**
+   * Return the topics described by their top-weighted terms.
    *
    * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    *                          Default value of 10.
    * @return  Local DataFrame with one topic per Row, with columns:
    *           - "topic": IntegerType: topic index
-   *           - "termIndices": ArrayType(IntegerType): sorted term indices
+   *           - "termIndices": ArrayType(IntegerType): term indices, sorted in order of decreasing
+   *                            term importance
    *           - "termWeights": ArrayType(DoubleType): corresponding sorted term weights
    */
   @Since("1.6.0")
@@ -282,65 +351,186 @@ class LDAModel private[ml] (
       case ((termIndices, termWeights), topic) =>
         (topic, termIndices, termWeights)
     }
-    sqlContext.createDataFrame() // TODO: RIGHT HERE NOW
+    sqlContext.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
   }
 
   @Since("1.6.0")
   def describeTopics(): DataFrame = describeTopics(10)
-
 }
+
 
 /**
  * :: Experimental ::
  *
- * TODO
+ * Distributed model fitted by [[LDA]] using the [[EMLDAOptimizer]].
+ *
+ * This model stores the inferred topics, the full training dataset, and the topic distribution
+ * for each training document.
  */
+@Since("1.6.0")
 @Experimental
 class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
-    private val oldDistributedModel: OldDistributedLDAModel)
-  extends LDAModel(uid, vocabSize, None) {
+    private val oldDistributedModel: OldDistributedLDAModel,
+    sqlContext: SQLContext)
+  extends LDAModel(uid, vocabSize, None, sqlContext) {
 
+  /**
+   * Convert this distributed model to a local representation.  This discards info about the
+   * training dataset.
+   */
+  @Since("1.6.0")
+  def toLocal: LDAModel = {
+    if (oldLocalModel.isEmpty) {
+      oldLocalModel = Some(oldDistributedModel.toLocal)
+    }
+    new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+  }
+
+  @Since("1.6.0")
   override protected def getModel: OldLDAModel = oldDistributedModel
 
   @Since("1.6.0")
-  override def copy(extra: ParamMap): DistributedLDAModel = ???
+  override def copy(extra: ParamMap): DistributedLDAModel = {
+    val copied = new DistributedLDAModel(uid, vocabSize, oldDistributedModel, sqlContext)
+    if (oldLocalModel.nonEmpty) copied.oldLocalModel = oldLocalModel
+    copyValues(copied, extra).setParent(parent)
+    copied
+  }
 
-  // TODO
+  @Since("1.6.0")
+  override def topicsMatrix: Matrix = {
+    if (oldLocalModel.isEmpty) {
+      oldLocalModel = Some(oldDistributedModel.toLocal)
+    }
+    super.topicsMatrix
+  }
+
+  @Since("1.6.0")
   override def isDistributed: Boolean = true
 
-  def trainingLogLikelihood(): Double = ???
+  @Since("1.6.0")
+  override def logLikelihood(dataset: DataFrame): Double = {
+    if (oldLocalModel.isEmpty) {
+      oldLocalModel = Some(oldDistributedModel.toLocal)
+    }
+    super.logLikelihood(dataset)
+  }
 
-  def trainingLogPerplexity(): Double = ???
+  @Since("1.6.0")
+  override def logPerplexity(dataset: DataFrame): Double = {
+    if (oldLocalModel.isEmpty) {
+      oldLocalModel = Some(oldDistributedModel.toLocal)
+    }
+    super.logPerplexity(dataset)
+  }
+
+  /**
+   * Log likelihood of the observed tokens in the training set,
+   * given the current parameter estimates:
+   *  log P(docs | topics, topic distributions for docs, alpha, eta)
+   *
+   * Note:
+   *  - This excludes the prior; for that, use [[logPrior]].
+   *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
+   *    hyperparameters.
+   */
+  @Since("1.6.0")
+  lazy val trainingLogLikelihood: Double = oldDistributedModel.logLikelihood
+
+  /**
+   * Log probability of the current parameter estimate:
+   * log P(topics, topic distributions for docs | alpha, eta)
+   */
+  @Since("1.6.0")
+  lazy val logPrior: Double = oldDistributedModel.logPrior
 }
 
 
 /**
  * :: Experimental ::
  *
- * TODO
+ * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
+ *
+ * Terminology:
+ *  - "term" = "word": an element of the vocabulary
+ *  - "token": instance of a term appearing in a document
+ *  - "topic": multinomial distribution over terms representing some concept
+ *  - "document": one piece of text, corresponding to one row in the input data
+ *
+ * References:
+ *  - Original LDA paper (journal version):
+ *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ *
+ * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
+ *       (Wikipedia)]]
  */
+@Since("1.6.0")
 @Experimental
 class LDA @Since("1.6.0") (
     @Since("1.6.0") override val uid: String) extends Estimator[LDAModel] with LDAParams {
 
-  // TODO: setDefault()
-
-  // TODO: ADD PARAM SETTERS
-
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): LDA = defaultCopy(extra)
-
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
+
+  setDefault(k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
+    optimizer -> new OnlineLDAOptimizer)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
   @Since("1.6.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
+  /** @group setParam */
+  @Since("1.6.0")
+  def setSeed(value: Long): this.type = set(seed, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setK(value: Int): this.type = set(k, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setDocConcentration(value: Array[Double]): this.type = set(docConcentration, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setDocConcentration(value: Double): this.type = set(docConcentration, Array(value))
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setAlpha(value: Array[Double]): this.type = set(docConcentration, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setTopicConcentration(value: Double): this.type = set(topicConcentration, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setBeta(value: Double): this.type = set(topicConcentration, value)
+
+  override def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
+
+  override def setOptimizer(value: String): this.type = super.setOptimizer(value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setTopicDistributionCol(value: String): this.type = set(topicDistributionCol, value)
+
+  @Since("1.6.0")
+  override def copy(extra: ParamMap): LDA = defaultCopy(extra)
+
   @Since("1.6.0")
   override def fit(dataset: DataFrame): LDAModel = {
+    transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
       .setDocConcentration(Vectors.dense($(docConcentration)))
@@ -349,17 +539,16 @@ class LDA @Since("1.6.0") (
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))
       .setOptimizer($(optimizer).getOldOptimizer)
-    val oldData = dataset
-      .withColumn("docId", monotonicallyIncreasingId())
-      .select("docId", $(featuresCol))
-      .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
-      }
+    // TODO: persist here, or in old LDA?
+    val oldData = LDA.getOldDataset(dataset, $(featuresCol))
     val oldModel = oldLDA.run(oldData)
-    oldModel match {
-      case m: OldLocalLDAModel => // TODO
-      case m: OldDistributedLDAModel => // TODO
+    val newModel = oldModel match {
+      case m: OldLocalLDAModel =>
+        new LDAModel(uid, m.vocabSize, Some(m), dataset.sqlContext)
+      case m: OldDistributedLDAModel =>
+        new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
     }
+    copyValues(newModel).setParent(this)
   }
 
   @Since("1.6.0")
@@ -369,11 +558,26 @@ class LDA @Since("1.6.0") (
 }
 
 
+private[clustering] object LDA {
+
+  /** Get dataset for spark.mllib LDA */
+  def getOldDataset(dataset: DataFrame, featuresCol: String): RDD[(Long, Vector)] = {
+    dataset
+      .withColumn("docId", monotonicallyIncreasingId())
+      .select("docId", featuresCol)
+      .map { case Row(docId: Long, features: Vector) =>
+        (docId, features)
+      }
+  }
+}
+
+
 /**
  * :: Experimental ::
  *
  * Abstraction for specifying the [[LDA.optimizer]] Param.
  */
+@Since("1.6.0")
 @Experimental
 sealed abstract class LDAOptimizer extends Params {
   private[clustering] def getOldOptimizer: OldLDAOptimizer
@@ -386,6 +590,7 @@ sealed abstract class LDAOptimizer extends Params {
  * Expectation-Maximization (EM) [[LDA.optimizer]].
  * This class may be used for specifying optimizer-specific Params.
  */
+@Since("1.6.0")
 @Experimental
 class EMLDAOptimizer @Since("1.6.0") (
     @Since("1.6.0") override val uid: String) extends LDAOptimizer {
@@ -408,6 +613,7 @@ class EMLDAOptimizer @Since("1.6.0") (
  * Online Variational Bayes [[LDA.optimizer]].
  * This class may be used for specifying optimizer-specific Params.
  */
+@Since("1.6.0")
 @Experimental
 class OnlineLDAOptimizer @Since("1.6.0") (
     @Since("1.6.0") override val uid: String) extends LDAOptimizer {
@@ -488,11 +694,11 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   /**
    * Indicates whether the docConcentration (Dirichlet parameter for
    * document-topic distribution) will be optimized during training.
-   * Default: true
-   * TODO: Check defaults of other libraries.
+   * Setting this to true will make the model more expressive and fit the training data better.
+   * Default: false
    * @group param
    */
-  @Since("1.5.0")
+  @Since("1.6.0")
   final val optimizeDocConcentration = new BooleanParam(this, "optimizeDocConcentration",
     "Indicates whether the docConcentration (Dirichlet parameter for document-topic" +
       " distribution) will be optimized during training.")
