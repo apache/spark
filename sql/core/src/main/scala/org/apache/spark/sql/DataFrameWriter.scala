@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import org.apache.spark.sql.jdbc.JdbcDialects
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -255,6 +257,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
     val conn = JdbcUtils.createConnection(url, props)
+    val dialect = JdbcDialects.get(url)
 
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, table)
@@ -268,13 +271,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
+        JdbcUtils.dropTable(conn, dialect, table)
         tableExists = false
       }
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
+        dialect.vetSqlIdentifier(table)
         val sql = s"CREATE TABLE $table ($schema)"
         conn.prepareStatement(sql).executeUpdate()
       }

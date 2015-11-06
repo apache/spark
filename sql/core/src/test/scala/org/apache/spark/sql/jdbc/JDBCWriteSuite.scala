@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.DriverManager
 import java.util.Properties
 
+import org.apache.spark.SparkException
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{Row, SaveMode}
@@ -151,4 +152,29 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
+
+  test("Negative: CREATE with illegal table name") {
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    df.write.jdbc(url, "TEST.DUMMY", new Properties)
+    assert(2 === sqlContext.read.jdbc(url, "TEST.DUMMY", new Properties).count)
+
+    try {
+      df.write.jdbc(url, "TEST.FOO(A INT); DROP TABLE TEST.DUMMY;", new Properties)
+      fail("Table creation should have failed.")
+    } catch {
+      case exc: SparkException => {
+        val expectedMessage =
+          "Error parsing SQL identifier: TEST.FOO(A INT); DROP TABLE TEST.DUMMY;"
+        assert(expectedMessage == exc.getMessage)
+      }
+      case obj: Throwable => {
+        val badResponse = obj.toString
+        fail("Unexpected failure for table creation: " + badResponse)
+      }
+    }
+    assert(2 === sqlContext.read.jdbc(url, "TEST.DUMMY", new Properties).count)
+  }
+
+
 }
