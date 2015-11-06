@@ -244,7 +244,6 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     }
 
     // Extract distinct aggregate expressions.
-    // TODO try to get the distinct group as small
     val distinctAggGroups = aggExpressions
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
@@ -316,7 +315,15 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
           aggregate.First(evalWithinGroup(regularGroupId, a.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
-        (e, a, b)
+
+        // COUNT has the special property that it can return a result without input rows. This is
+        // almost impossible to
+        val c = af match {
+          case _: Count => Coalesce(Seq(b, Literal(0L)))
+          case _ => b
+        }
+
+        (e, a, c)
       }
 
       // Construct the regular aggregate input projection only if we need one.
@@ -360,7 +367,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val patchedAggExpressions = a.aggregateExpressions.map { e =>
         e.transformDown {
           case e: Expression =>
-            // GROUP BY can different in form (name) but must be semantically equal. This makes
+            // GROUP BY can be different in form () but must be semantically equal. This makes
             // a map lookup tricky. So we do a linear search for a semantically equal group by
             // expression.
             groupByMap
