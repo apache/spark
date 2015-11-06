@@ -156,6 +156,10 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     prevStateRDD = null
     partitionedDataRDD = null
   }
+
+  def setFullScan(): Unit = {
+    doFullScan = true
+  }
 }
 
 private[streaming] object TrackStateRDD {

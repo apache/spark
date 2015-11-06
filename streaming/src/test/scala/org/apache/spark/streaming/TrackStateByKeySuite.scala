@@ -19,14 +19,13 @@ package org.apache.spark.streaming
 
 import java.io.File
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.util.{Utils, ManualClock}
-import org.apache.spark.{SparkFunSuite, SparkConf, SparkContext}
-import org.apache.spark.streaming.dstream.{EmittedRecordsDStream, DStream}
+import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
 
@@ -36,7 +35,9 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
   private val batchDuration = Seconds(1)
 
   before {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    StreamingContext.getActive().foreach {
+      _.stop(stopSparkContext = false)
+    }
     checkpointDir = Utils.createTempDir("checkpoint")
 
     ssc = new StreamingContext(sc, batchDuration)
@@ -44,7 +45,9 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
   }
 
   after {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    StreamingContext.getActive().foreach {
+      _.stop(stopSparkContext = false)
+    }
   }
 
   override def beforeAll(): Unit = {
@@ -53,7 +56,72 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     sc = new SparkContext(conf)
   }
 
-  test("basic operation") {
+  test("state - get, exists, update, remove, ") {
+    val state = new StateImpl[Int]()
+
+    def testState(
+        expectedData: Option[Int],
+        shouldBeUpdated: Boolean = false,
+        shouldBeRemoved: Boolean = false,
+        shouldBeTimingOut: Boolean = false
+      ): Unit = {
+      if (expectedData.isDefined) {
+        assert(state.exists)
+        assert(state.get() === expectedData.get)
+        assert(state.getOption() === expectedData)
+        assert(state.getOrElse(-1) === expectedData.get) // test implicit Option conversion
+      } else {
+        assert(!state.exists)
+        intercept[NoSuchElementException] {
+          state.get()
+        }
+        assert(state.getOption() === None)
+        assert(state.getOrElse(-1) === -1)  // test implicit Option conversion
+      }
+
+      assert(state.isTimingOut() === shouldBeTimingOut)
+      if (shouldBeTimingOut) {
+        intercept[IllegalArgumentException] {
+          state.remove()
+        }
+        intercept[IllegalArgumentException] {
+          state.update(-1)
+        }
+      }
+
+      assert(state.isUpdated() === shouldBeUpdated)
+
+      assert(state.isRemoved() === shouldBeRemoved)
+      if (shouldBeRemoved) {
+        intercept[IllegalArgumentException] {
+          state.remove()
+        }
+        intercept[IllegalArgumentException] {
+          state.update(-1)
+        }
+      }
+    }
+
+    testState(None)
+
+    state.wrap(None)
+    testState(None)
+
+    state.wrap(Some(1))
+    testState(Some(1))
+
+    state.update(2)
+    testState(Some(2), shouldBeRemoved = true)
+
+    state.remove()
+    testState(None, shouldBeUpdated = true)
+
+    state.wrapTiminoutState(3)
+    testState(Some(3), shouldBeTimingOut = true)
+  }
+
+
+  test("trackStateByKey - basic operations") {
     val inputData =
       Seq(
         Seq(),
@@ -87,17 +155,17 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         Seq(("a", 5), ("b", 3), ("c", 1))
       )
 
-      // state maintains running count, key string doubled and returned
-      val trackStateFunc = (key: String, value: Option[Int], state: State[Int]) => {
-        val sum = value.getOrElse(0) + state.getOrElse(0)
-        state.update(sum)
-        Some(key * 2)
+    // state maintains running count, key string doubled and returned
+    val trackStateFunc = (key: String, value: Option[Int], state: State[Int]) => {
+      val sum = value.getOrElse(0) + state.getOrElse(0)
+      state.update(sum)
+      Some(key * 2)
     }
 
-    testOperation(inputData, TrackStateSpec(trackStateFunc), outputData, stateData)
+    testOperation(inputData, StateSpec(trackStateFunc), outputData, stateData)
   }
 
-  test("states as emitted records") {
+  test("trackStateByKey - states as emitted records") {
     val inputData =
       Seq(
         Seq(),
@@ -138,10 +206,10 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       Some(output)
     }
 
-    testOperation(inputData, TrackStateSpec(trackStateFunc), outputData, stateData)
+    testOperation(inputData, StateSpec(trackStateFunc), outputData, stateData)
   }
 
-  test("initial states, with nothing emitted") {
+  test("trackStateByKey - initial states, with nothing emitted") {
 
     val initialState = Seq(("a", 5), ("b", 10), ("c", -20), ("d", 0))
 
@@ -176,20 +244,20 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       None.asInstanceOf[Option[Int]]
     }
 
-    val trackStateSpec = TrackStateSpec(trackStateFunc).initialState(sc.makeRDD(initialState))
+    val trackStateSpec = StateSpec(trackStateFunc).initialState(sc.makeRDD(initialState))
     testOperation(inputData, trackStateSpec, outputData, stateData)
   }
 
-  test("state removing") {
+  test("trackStateByKey - state removing") {
     val inputData =
       Seq(
         Seq(),
         Seq("a"),
-        Seq("a", "b"),        // a will be removed
-        Seq("a", "b", "c"),   // b will be removed
-        Seq("a", "b", "c"),   // a and c will be removed
-        Seq("a", "b"),        // b will be removed
-        Seq("a"),             // a will be removed
+        Seq("a", "b"), // a will be removed
+        Seq("a", "b", "c"), // b will be removed
+        Seq("a", "b", "c"), // a and c will be removed
+        Seq("a", "b"), // b will be removed
+        Seq("a"), // a will be removed
         Seq()
       )
 
@@ -228,19 +296,19 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       }
     }
 
-    testOperation(inputData, TrackStateSpec(trackStateFunc).numPartitions(1), outputData, stateData)
+    testOperation(inputData, StateSpec(trackStateFunc).numPartitions(1), outputData, stateData)
   }
 
-  test("state timing out") {
+  test("trackStateByKey - state timing out") {
     val inputData =
       Seq(
         Seq("a", "b", "c"),
         Seq("a", "b"),
         Seq("a"),
-        Seq(),                // c will time out
-        Seq(),                // b will time out
-        Seq("a")              // a will not time out
-      ) ++ Seq.fill(20)(Seq("a"))   // a will continue to stay active
+        Seq(), // c will time out
+        Seq(), // b will time out
+        Seq("a") // a will not time out
+      ) ++ Seq.fill(20)(Seq("a")) // a will continue to stay active
 
     val trackStateFunc = (key: String, value: Option[Int], state: State[Int]) => {
       if (value.isDefined) {
@@ -254,13 +322,15 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     }
 
     val (collectedOutputs, collectedStateSnapshots) = getOperationOutput(
-      inputData, TrackStateSpec(trackStateFunc).timeout(Seconds(3)), 20)
+      inputData, StateSpec(trackStateFunc).timeout(Seconds(3)), 20)
 
     // b and c should be emitted once each, when they were marked as expired
     assert(collectedOutputs.flatten.sorted === Seq("b", "c"))
 
     // States for a, b, c should be defined at one point of time
-    assert(collectedStateSnapshots.exists { _.toSet == Set(("a", 1), ("b", 1), ("c", 1)) })
+    assert(collectedStateSnapshots.exists {
+      _.toSet == Set(("a", 1), ("b", 1), ("c", 1))
+    })
 
     // Finally state should be defined only for a
     assert(collectedStateSnapshots.last.toSet === Set(("a", 1)))
@@ -269,7 +339,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
 
   private def testOperation[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],
-      trackStateSpec: TrackStateSpec[K, Int, S, T],
+      trackStateSpec: StateSpec[K, Int, S, T],
       expectedOutputs: Seq[Seq[T]],
       expectedStateSnapshots: Seq[Seq[(K, S)]]
     ): Unit = {
@@ -283,7 +353,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
 
   private def getOperationOutput[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],
-      trackStateSpec: TrackStateSpec[K, Int, S, T],
+      trackStateSpec: StateSpec[K, Int, S, T],
       numBatches: Int
     ): (Seq[Seq[T]], Seq[Seq[(K, S)]]) = {
 
@@ -319,4 +389,5 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       )
     }
   }
+}
 

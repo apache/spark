@@ -17,48 +17,106 @@
 
 package org.apache.spark.streaming
 
+import scala.language.implicitConversions
+
+import org.apache.spark.annotation.Experimental
+
 /**
+ * :: Experimental ::
  * Abstract class for getting and updating the tracked state in the `trackStateByKey` operation of
- * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] and
- * [[org.apache.spark.streaming.api.java.JavaPairDStream]].
+ * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+ * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+ *
+ * Scala example of using `State`:
  * {{{
+ *    def trackStateFunc(key: String, data: Option[Int], wrappedState: State[Int]): Option[Int] = {
+ *
+ *      // Check if state exists
+ *      if (state.exists) {
+ *
+ *        val existingState = wrappedState.get  // Get the existing state
+ *
+ *        val shouldRemove = ...      // Decide whether to remove the state
+ *
+ *        if (shouldRemove) {
+ *
+ *          wrappedState.remove()     // Remove the state
+ *
+ *        } else {
+ *
+ *          val newState = ...
+ *          wrappedState(newState)    // Set the new state
+ *
+ *        }
+ *      } else {
+ *
+ *        val initialState = ...
+ *        state.update(initialState)  // Set the initial state
+ *
+ *      }
+ *    }
  *
  * }}}
+ *
+ * Java example:
+ * {{{
+ *      TODO(@zsxwing)
+ * }}}
  */
+@Experimental
 sealed abstract class State[S] {
 
   /** Whether the state already exists */
   def exists(): Boolean
 
   /**
-   * Get the state if it exists, otherwise wise it will throw an exception.
+   * Get the state if it exists, otherwise it will throw `java.util.NoSuchElementException`.
    * Check with `exists()` whether the state exists or not before calling `get()`.
+   *
+   * @throws java.util.NoSuchElementException If the state does not exist.
    */
   def get(): S
 
   /**
-   * Update the state with a new value. Note that you cannot update the state if the state is
-   * timing out (that is, `isTimingOut() return true`, or if the state has already been removed by
-   * `remove()`.
+   * Update the state with a new value.
+   *
+   * State cannot be updated if it has been already removed (that is, `remove()` has already been
+   * called) or it is going to be removed due to timeout (that is, `isTimingOut()` is `true`).
+   *
+   * @throws java.lang.IllegalArgumentException If the state has already been removed, or is
+   *                                            going to be removed
    */
   def update(newState: S): Unit
 
-  /** Remove the state if it exists. */
+  /**
+   * Remove the state if it exists.
+   *
+   * State cannot be updated if it has been already removed (that is, `remove()` has already been
+   * called) or it is going to be removed due to timeout (that is, `isTimingOut()` is `true`).
+   */
   def remove(): Unit
 
-  /** Is the state going to be timed out by the system after this batch interval */
+  /**
+   * Whether the state is timing out and going to be removed by the system after the current batch.
+   * This timeou can occur if timeout duration has been specified in the
+   * [[org.apache.spark.streaming.StateSpec StatSpec]] and the key has not received any new data
+   * for that timeout duration.
+   */
   def isTimingOut(): Boolean
 
-  @inline final def getOption(): Option[S] = Option(get())
-
-  /** Get the state if it exists, otherwise return the default value */
-  @inline final def getOrElse[S1 >: S](default: => S1): S1 = {
-    if (exists) this.get else default
-  }
+  /**
+   * Get the state as an [[scala.Option]]. It will be `Some(state)` if it exists, otherwise `None`.
+   */
+  @inline final def getOption(): Option[S] = if (exists) Some(get()) else None
 
   @inline final override def toString(): String = {
     getOption.map { _.toString }.getOrElse("<state not set>")
   }
+}
+
+private[streaming]
+object State {
+  implicit def toOption[S](state: State[S]): Option[S] = state.getOption()
 }
 
 /** Internal implementation of the [[State]] interface */

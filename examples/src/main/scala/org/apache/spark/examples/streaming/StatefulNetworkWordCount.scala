@@ -69,7 +69,7 @@ object StatefulNetworkWordCount {
     }
 
     val stateDstream = wordDstream.trackStateByKey(
-      TrackStateSpec(trackStateFunc).initialState(initialRDD))
+      StateSpec(trackStateFunc).initialState(initialRDD))
     stateDstream.print()
     ssc.start()
     ssc.awaitTermination()

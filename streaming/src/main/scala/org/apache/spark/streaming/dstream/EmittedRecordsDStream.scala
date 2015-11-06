@@ -20,23 +20,36 @@ package org.apache.spark.streaming.dstream
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.{TrackStateRDD, TrackStateRDDRecord}
 
-
-abstract class EmittedRecordsDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+/**
+ * :: Experimental ::
+ * DStream representing the stream of records emitted after the `trackStateByKey` operation
+ * on a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] in Scala.
+ * Additionally, it also gives access to the stream of state snapshots, that is, the state data of
+ * all keys after a batch has updated them.
+ *
+ * @tparam K Class of the state key
+ * @tparam S Class of the state data
+ * @tparam T Class of the emitted records
+ */
+@Experimental
+sealed abstract class EmittedRecordsDStream[K, S, T: ClassTag](
     ssc: StreamingContext) extends DStream[T](ssc) {
 
+  /** Return a pair DStream where each RDD is the snapshot of the state of all the keys. */
   def stateSnapshots(): DStream[(K, S)]
 }
 
-
+/** Internal implementation of the [[EmittedRecordsDStream]] */
 private[streaming] class EmittedRecordsDStreamImpl[
     K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     trackStateDStream: TrackStateDStream[K, V, S, T])
-  extends EmittedRecordsDStream[K, V, S, T](trackStateDStream.context) {
+  extends EmittedRecordsDStream[K, S, T](trackStateDStream.context) {
 
   override def slideDuration: Duration = trackStateDStream.slideDuration
 
@@ -64,7 +77,7 @@ private[streaming] class EmittedRecordsDStreamImpl[
  * @tparam T   Type of the eiitted records
  */
 private[streaming] class TrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
-    parent: DStream[(K, V)], spec: TrackStateSpecImpl[K, V, S, T])
+    parent: DStream[(K, V)], spec: StateSpecImpl[K, V, S, T])
   extends DStream[TrackStateRDDRecord[K, S, T]](parent.context) {
 
   persist(StorageLevel.MEMORY_ONLY)
