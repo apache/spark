@@ -1,0 +1,228 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.ml.clustering
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+
+
+object LDASuite {
+  def generateLDAData(
+      sql: SQLContext,
+      rows: Int,
+      dim: Int,
+      k: Int,
+      vocabSize: Int): DataFrame = {
+    val sc = sql.sparkContext
+    val rng = new java.util.Random()
+    rng.setSeed(1)
+    val rdd = sc.parallelize(1 to rows).map { i =>
+      Vectors.dense(Array.fill(dim)(rng.nextInt(vocabSize).toDouble))
+    }.map(v => new TestRow(v))
+    sql.createDataFrame(rdd)
+  }
+}
+
+
+class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  val k = 5
+  @transient var dataset: DataFrame = _
+  @transient var vocabSize: Int = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    dataset = LDASuite.generateLDAData(sqlContext, 50, 3, k, 30)
+    vocabSize = dataset.flatMap(_.getAs[Vector](0).toArray.map(_.toInt).toSet)
+      .distinct().count().toInt
+  }
+
+  test("default parameters") {
+    val lda = new LDA()
+
+    assert(lda.getFeaturesCol === "features")
+    assert(lda.getMaxIter === 20)
+    assert(lda.isDefined(lda.seed))
+    assert(!lda.isDefined(lda.checkpointInterval))
+    assert(lda.getK === 10)
+    assert(lda.getDocConcentration === Array(-1.0))
+    assert(lda.getTopicConcentration === -1.0)
+    assert(lda.getOptimizer.isInstanceOf[OnlineLDAOptimizer])
+    val optimizer = lda.getOptimizer.asInstanceOf[OnlineLDAOptimizer]
+    assert(optimizer.getKappa === 0.51)
+    assert(optimizer.getTau0 === 1024)
+    assert(optimizer.getSubsamplingRate === 0.05)
+    assert(optimizer.getOptimizeDocConcentration)
+    assert(lda.getTopicDistributionCol === "topicDistribution")
+  }
+
+  test("set parameters") {
+    val lda = new LDA()
+      .setFeaturesCol("test_feature")
+      .setMaxIter(33)
+      .setSeed(123)
+      .setCheckpointInterval(7)
+      .setK(9)
+      .setTopicConcentration(0.56)
+      .setTopicDistributionCol("myOutput")
+
+    assert(lda.getFeaturesCol === "test_feature")
+    assert(lda.getMaxIter === 33)
+    assert(lda.getSeed === 123)
+    assert(lda.getCheckpointInterval === 7)
+    assert(lda.getK === 9)
+    assert(lda.getTopicConcentration === 0.56)
+    assert(lda.getTopicDistributionCol === "myOutput")
+
+
+    // setOptimizer
+    lda.setOptimizer("em")
+    assert(lda.getOptimizer.isInstanceOf[EMLDAOptimizer])
+    lda.setOptimizer("online")
+    assert(lda.getOptimizer.isInstanceOf[OnlineLDAOptimizer])
+    val optimizer = lda.getOptimizer.asInstanceOf[OnlineLDAOptimizer]
+    optimizer.setKappa(0.53)
+    assert(optimizer.getKappa === 0.53)
+    optimizer.setTau0(1027)
+    assert(optimizer.getTau0 === 1027)
+    optimizer.setSubsamplingRate(0.06)
+    assert(optimizer.getSubsamplingRate === 0.06)
+    optimizer.setOptimizeDocConcentration(false)
+    assert(!optimizer.getOptimizeDocConcentration)
+  }
+
+  test("parameters validation") {
+    val lda = new LDA()
+
+    // misc Params
+    intercept[IllegalArgumentException] {
+      new LDA().setK(1)
+    }
+    intercept[IllegalArgumentException] {
+      new LDA().setOptimizer("no_such_optimizer")
+    }
+    intercept[IllegalArgumentException] {
+      new LDA().setDocConcentration(-1.1)
+    }
+    intercept[IllegalArgumentException] {
+      new LDA().setTopicConcentration(-1.1)
+    }
+
+    // validateParams()
+    lda.setDocConcentration(-1)
+    assert(lda.getDocConcentration === -1)
+    lda.validateParams()
+    lda.setDocConcentration(0.1)
+    lda.validateParams()
+    lda.setDocConcentration(Range(0, lda.getK).map(_ + 2.0).toArray)
+    lda.validateParams()
+    lda.setDocConcentration(Range(0, lda.getK - 1).map(_ + 2.0).toArray)
+    withClue("LDA docConcentration validity check failed for bad array length") {
+      intercept[IllegalArgumentException] {
+        lda.validateParams()
+      }
+    }
+
+    // OnlineLDAOptimizer
+    intercept[IllegalArgumentException] {
+      new OnlineLDAOptimizer().setTau0(0)
+    }
+    intercept[IllegalArgumentException] {
+      new OnlineLDAOptimizer().setKappa(0)
+    }
+    intercept[IllegalArgumentException] {
+      new OnlineLDAOptimizer().setSubsamplingRate(0)
+    }
+    intercept[IllegalArgumentException] {
+      new OnlineLDAOptimizer().setSubsamplingRate(1.1)
+    }
+  }
+
+  test("fit & transform with Online LDA") {
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
+    val model = lda.fit(dataset)
+
+    MLTestingUtils.checkCopy(model)
+
+    assert(!model.isInstanceOf[DistributedLDAModel])
+    assert(model.vocabSize === vocabSize)
+    assert(model.estimatedDocConcentration.size === k)
+    assert(model.topicsMatrix.numRows === vocabSize)
+    assert(model.topicsMatrix.numCols === k)
+    assert(!model.isDistributed)
+
+    // transform()
+    val transformed = model.transform(dataset)
+    val expectedColumns = Array("features", lda.getTopicDistributionCol)
+    expectedColumns.foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
+      val topicDistribution = r.getAs[Vector](0)
+      assert(topicDistribution.size === vocabSize)
+      assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
+    }
+
+    // logLikelihood, logPerplexity
+    val ll = model.logLikelihood(dataset)
+    assert(ll <= 0.0 && ll != Double.NegativeInfinity)
+    val lp = model.logPerplexity(dataset)
+    assert(lp >= 0.0 && lp != Double.PositiveInfinity)
+
+    // describeTopics
+    val topics = model.describeTopics(3)
+    assert(topics.count() === k)
+    assert(topics.select("topic").map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
+    assert(topics.select("termIndices").collect().forall { case r: Row =>
+      val termIndices = r.getAs[Array[Int]](0)
+      termIndices.length === 3 && termIndices.toSet.size === 3
+    })
+    assert(topics.select("termWeights").collect().forall { case r: Row =>
+      val termWeights = r.getAs[Array[Double]](0)
+      termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0)
+    })
+  }
+
+  test("fit & transform with EM LDA") {
+    val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
+    val model_ = lda.fit(dataset)
+
+    MLTestingUtils.checkCopy(model_)
+
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+    assert(model.vocabSize === vocabSize)
+    assert(model.estimatedDocConcentration.size === k)
+    assert(model.topicsMatrix.numRows === vocabSize)
+    assert(model.topicsMatrix.numCols === k)
+    assert(model.isDistributed)
+
+    val localModel = model.toLocal
+    assert(!localModel.isInstanceOf[DistributedLDAModel])
+
+    // training logLikelihood, logPrior
+    val ll = model.trainingLogLikelihood
+    assert(ll <= 0.0 && ll != Double.NegativeInfinity)
+    val lp = model.logPrior
+    assert(lp >= 0.0 && lp != Double.PositiveInfinity)
+  }
+}

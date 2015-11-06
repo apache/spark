@@ -172,7 +172,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     case "online" => setOptimizer(new OnlineLDAOptimizer)
     case "em" => setOptimizer(new EMLDAOptimizer)
     case _ => throw new IllegalArgumentException(
-      s"LDA was given unknown optimizer \"$value\".  Supported values: em, online")
+      s"LDA was given unknown optimizer '$value'.  Supported values: em, online")
   }
 
   /**
@@ -227,6 +227,14 @@ class LDAModel private[ml] (
     @Since("1.6.0") protected var oldLocalModel: Option[OldLocalLDAModel],
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
   extends Model[LDAModel] with LDAParams with Logging {
+
+  override def validateParams(): Unit = {
+    if (getDocConcentration.length != 1) {
+      require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
+        s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
+        s" length 1 (scalar) or an array of length k.")
+    }
+  }
 
   /** Returns underlying spark.mllib model */
   @Since("1.6.0")
@@ -431,10 +439,13 @@ class DistributedLDAModel private[ml] (
    * given the current parameter estimates:
    *  log P(docs | topics, topic distributions for docs, alpha, eta)
    *
-   * Note:
+   * Notes:
    *  - This excludes the prior; for that, use [[logPrior]].
    *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
    *    hyperparameters.
+   *  - This is computed from the topic distributions computed during training. If you call
+   *    [[logLikelihood()]] on the same training dataset, the topic distributions will be computed
+   *    again, possibly giving different results.
    */
   @Since("1.6.0")
   lazy val trainingLogLikelihood: Double = oldDistributedModel.logLikelihood
@@ -649,6 +660,10 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   @Since("1.6.0")
   def getTau0: Double = $(tau0)
 
+  /** @group setParam */
+  @Since("1.6.0")
+  def setTau0(value: Double) = set(tau0, value)
+
   /**
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
@@ -661,6 +676,10 @@ class OnlineLDAOptimizer @Since("1.6.0") (
     ParamValidators.gt(0))
 
   setDefault(kappa -> 0.51)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setKappa(value: Double) = set(kappa, value)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -691,6 +710,12 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   @Since("1.6.0")
   def getSubsamplingRate: Double = $(subsamplingRate)
 
+  // TODO: MOVE TO SHARED PARAMS
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setSubsamplingRate(value: Double) = set(subsamplingRate, value)
+
   /**
    * Indicates whether the docConcentration (Dirichlet parameter for
    * document-topic distribution) will be optimized during training.
@@ -708,4 +733,8 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   /** @group getParam */
   @Since("1.6.0")
   def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setOptimizeDocConcentration(value: Boolean) = set(optimizeDocConcentration, value)
 }
