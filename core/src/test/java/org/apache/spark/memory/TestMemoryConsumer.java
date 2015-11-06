@@ -15,28 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.array;
+package org.apache.spark.memory;
 
-import org.junit.Assert;
-import org.junit.Test;
+import java.io.IOException;
 
-import org.apache.spark.unsafe.memory.MemoryBlock;
+public class TestMemoryConsumer extends MemoryConsumer {
+  public TestMemoryConsumer(TaskMemoryManager memoryManager) {
+    super(memoryManager);
+  }
 
-public class LongArraySuite {
+  @Override
+  public long spill(long size, MemoryConsumer trigger) throws IOException {
+    long used = getUsed();
+    free(used);
+    return used;
+  }
 
-  @Test
-  public void basicTest() {
-    long[] bytes = new long[2];
-    LongArray arr = new LongArray(MemoryBlock.fromLongArray(bytes));
-    arr.set(0, 1L);
-    arr.set(1, 2L);
-    arr.set(1, 3L);
-    Assert.assertEquals(2, arr.size());
-    Assert.assertEquals(1L, arr.get(0));
-    Assert.assertEquals(3L, arr.get(1));
+  void use(long size) {
+    long got = taskMemoryManager.acquireExecutionMemory(size, this);
+    used += got;
+  }
 
-    arr.zeroOut();
-    Assert.assertEquals(0L, arr.get(0));
-    Assert.assertEquals(0L, arr.get(1));
+  void free(long size) {
+    used -= size;
+    taskMemoryManager.releaseExecutionMemory(size, this);
   }
 }
+
+
