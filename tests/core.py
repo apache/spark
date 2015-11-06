@@ -455,7 +455,7 @@ class WebLdapAuthTest(unittest.TestCase):
         configuration.conf.set("webserver", "authenticate", "True")
         configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
         try:
-            configuration.add_section("ldap")
+            configuration.conf.add_section("ldap")
         except:
             pass
         configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
