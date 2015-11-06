@@ -71,33 +71,33 @@ public class TaskMemoryManagerSuite {
     TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
     TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
     c1.use(100);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 100);
+    assert(c1.getUsed() == 100);
     c2.use(100);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 100);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 0);  // spilled
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
     c1.use(100);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 100);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 0);  // spilled
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
 
     c1.use(50);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 50);  // spilled
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 0);
+    assert(c1.getUsed() == 50);  // spilled
+    assert(c2.getUsed() == 0);
     c2.use(50);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 50);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 50);
+    assert(c1.getUsed() == 50);
+    assert(c2.getUsed() == 50);
 
     c1.use(100);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 100);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 0);  // spilled
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
 
     c1.free(20);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 80);
+    assert(c1.getUsed() == 80);
     c2.use(10);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 80);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 10);
+    assert(c1.getUsed() == 80);
+    assert(c2.getUsed() == 10);
     c2.use(100);
-    assert(c2.getMemoryUsed(MemoryMode.ON_HEAP) == 100);
-    assert(c1.getMemoryUsed(MemoryMode.ON_HEAP) == 0);  // spilled
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
 
     c1.free(0);
     c2.free(100);
