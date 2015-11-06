@@ -879,6 +879,7 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
+        sm.compact()
         // There is no isTranspose flag for sparse matrices in Breeze
         new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
       case _ =>
