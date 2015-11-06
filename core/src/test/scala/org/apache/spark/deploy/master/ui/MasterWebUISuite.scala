@@ -19,6 +19,13 @@ package org.apache.spark.deploy.master.ui
 
 import java.util.Date
 
+import scala.io.Source
+import scala.language.postfixOps
+
+import org.json4s.jackson.JsonMethods._
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SparkConf, SecurityManager, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.MasterStateResponse
 import org.apache.spark.deploy.DeployTestUtils._
@@ -26,28 +33,28 @@ import org.apache.spark.deploy.master._
 import org.apache.spark.rpc.RpcEnv
 import org.json4s.JsonAST.{JNothing, JString, JInt}
 
-import scala.io.Source
-import scala.language.postfixOps
 
-import org.json4s.jackson.JsonMethods._
-import org.mockito.Mockito.{mock, when}
-import org.scalatest.concurrent.Eventually
-import org.scalatest.{Matchers, PrivateMethodTester}
+class MasterWebUISuite extends SparkFunSuite with BeforeAndAfter {
 
+  val masterPage = mock(classOf[MasterPage])
+  val master = {
+    val conf = new SparkConf
+    val securityMgr = new SecurityManager(conf)
+    val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
+    val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
+    master
+  }
+  val masterWebUI = new MasterWebUI(master, 0, customMasterPage = Some(masterPage))
 
-class MasterUISuite extends SparkFunSuite with Matchers with Eventually with PrivateMethodTester {
+  before {
+    masterWebUI.bind()
+  }
+
+  after {
+    masterWebUI.stop()
+  }
 
   test("list applications") {
-    val masterPage = mock(classOf[MasterPage])
-    val master = {
-      val conf = new SparkConf
-      val securityMgr = new SecurityManager(conf)
-      val rpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityMgr)
-      val master = new Master(rpcEnv, rpcEnv.address, 0, securityMgr, conf)
-      master
-    }
-    val masterWebUI = new MasterWebUI(master, 0, customMasterPage = Some(masterPage))
-
     val worker = createWorkerInfo()
     val appDesc = createAppDesc()
     // use new start date so it isn't filtered by UI
@@ -66,7 +73,6 @@ class MasterUISuite extends SparkFunSuite with Matchers with Eventually with Pri
 
     when(masterPage.getMasterState).thenReturn(stateResponse)
 
-    masterWebUI.bind()
     val resultJson = Source.fromURL(
       s"http://localhost:${masterWebUI.boundPort}/api/v1/applications")
       .mkString
