@@ -22,7 +22,7 @@ from __future__ import print_function
 
 import sys
 
-from pyspark import SparkContext,SQLContext
+from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.regression import DecisionTreeRegressor
@@ -69,5 +69,6 @@ if __name__ == "__main__":
     print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
 
     treeModel = model.stages[1]
-    print(treeModel) # summary only
+    # summary only
+    print(treeModel)
     # $example off$

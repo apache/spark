@@ -44,8 +44,8 @@ if __name__ == "__main__":
     labelIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel").fit(data)
     # Automatically identify categorical features, and index them.
     # We specify maxCategories so features with > 4 distinct values are treated as continuous.
-    featureIndexer =VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4)\
-        .fit(data)
+    featureIndexer =\
+        VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
 
     # Split the data into training and test sets (30% held out for testing)
     (trainingData, testData) = data.randomSplit([0.7, 0.3])
