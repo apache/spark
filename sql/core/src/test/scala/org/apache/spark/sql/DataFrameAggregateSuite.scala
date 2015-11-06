@@ -220,7 +220,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val input = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
       input.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
-      Row(null, null, 0.0, null, null))
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
 
     checkAnswer(
       input.agg(
@@ -229,7 +229,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         expr("var_pop(a)"),
         expr("skewness(a)"),
         expr("kurtosis(a)")),
-      Row(null, null, 0.0, null, null))
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
   }
 
   test("null moments") {
