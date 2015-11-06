@@ -330,7 +330,7 @@ class WebUiTests(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        configuration.set("webserver", "authenticate", "False")
+        configuration.conf.set("webserver", "authenticate", "False")
         app = application.create_app()
         app.config['TESTING'] = True
         self.app = app.test_client()
@@ -452,19 +452,19 @@ class WebUiTests(unittest.TestCase):
 class WebLdapAuthTest(unittest.TestCase):
 
     def setUp(self):
-        configuration.set("webserver", "authenticate", "True")
-        configuration.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
+        configuration.conf.set("webserver", "authenticate", "True")
+        configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.ldap_auth")
         try:
             configuration.add_section("ldap")
         except:
             pass
-        configuration.set("ldap", "uri", "ldap://localhost:3890")
-        configuration.set("ldap", "user_filter", "objectClass=*")
-        configuration.set("ldap", "user_name_attr", "uid")
-        configuration.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
-        configuration.set("ldap", "bind_password", "insecure")
-        configuration.set("ldap", "basedn", "dc=example,dc=com")
-        configuration.set("ldap", "cacert", "")
+        configuration.conf.set("ldap", "uri", "ldap://localhost:3890")
+        configuration.conf.set("ldap", "user_filter", "objectClass=*")
+        configuration.conf.set("ldap", "user_name_attr", "uid")
+        configuration.conf.set("ldap", "bind_user", "cn=Manager,dc=example,dc=com")
+        configuration.conf.set("ldap", "bind_password", "insecure")
+        configuration.conf.set("ldap", "basedn", "dc=example,dc=com")
+        configuration.conf.set("ldap", "cacert", "")
 
         app = application.create_app()
         app.config['TESTING'] = True
@@ -500,7 +500,7 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
-        configuration.set("webserver", "authenticate", "False")
+        configuration.conf.set("webserver", "authenticate", "False")
 
 
 if 'MySqlOperator' in dir(operators):
