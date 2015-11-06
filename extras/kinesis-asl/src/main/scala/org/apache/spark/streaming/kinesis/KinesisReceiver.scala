@@ -226,7 +226,10 @@ private[kinesis] class KinesisReceiver[T](
     shardIdToLatestStoredSeqNum.get(shardId)
   }
 
-  /** Pass the setCheckpointer request to the checkpointer. */
+  /**
+   * Set the checkpointer that will be used to checkpoint sequence numbers to DynamoDB for the
+   * given shardId.
+   */
   private[kinesis] def setCheckpointerForShardId(
       shardId: String,
       checkpointer: IRecordProcessorCheckpointer): Unit = {
@@ -234,7 +237,11 @@ private[kinesis] class KinesisReceiver[T](
     getCheckpointer().setCheckpointer(shardId, checkpointer)
   }
 
-  /** Pass the removeCheckpointer request to the checkpointer. */
+  /**
+   * Remove the checkpointer for the given shardId. The provided checkpointer will be used to
+   * checkpoint one last time for the given shard. If `checkpointer` is `null`, then we will not
+   * checkpoint.
+   */
   private[kinesis] def removeCheckpointerForShardId(
       shardId: String,
       checkpointer: IRecordProcessorCheckpointer): Unit = {

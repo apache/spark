@@ -85,7 +85,15 @@ private[kinesis] class KinesisCheckpointer(
       }
     } catch {
       case NonFatal(e) =>
-        logError("Failed to checkpoint to DynamoDB.", e)
+        logWarning("Failed to checkpoint to DynamoDB.", e)
+    }
+  }
+
+  private def checkpointAll(): Unit = {
+    val shardIds = checkpointers.keys()
+    while (shardIds.hasMoreElements) {
+      val shardId = shardIds.nextElement()
+      checkpoint(shardId, Option(checkpointers.get(shardId)))
     }
   }
 
@@ -97,13 +105,7 @@ private[kinesis] class KinesisCheckpointer(
     val ex =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor(s"Kinesis Checkpointer - Worker $workerId")
     val task = new Runnable {
-      def run() = {
-        val shardIds = checkpointers.keys()
-        while (shardIds.hasMoreElements) {
-          val shardId = shardIds.nextElement()
-          checkpoint(shardId, Option(checkpointers.get(shardId)))
-        }
-      }
+      def run() = checkpointAll()
     }
     ex.scheduleAtFixedRate(task, period, period, TimeUnit.MILLISECONDS)
   }
@@ -113,5 +115,8 @@ private[kinesis] class KinesisCheckpointer(
    */
   def shutdown(): Unit = {
     checkpointerThread.cancel(false)
+    checkpointAll()
+    checkpointers.clear()
+    lastCheckpointedSeqNums.clear()
   }
 }

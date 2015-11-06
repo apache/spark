@@ -27,19 +27,19 @@ import org.apache.spark.streaming.{Duration, TestSuiteBase, Milliseconds}
 
 class KinesisCheckpointerSuite extends TestSuiteBase with MockitoSugar with BeforeAndAfter {
 
-  val app = "TestKinesisReceiver"
-  val stream = "mySparkStream"
-  val endpoint = "endpoint-url"
-  val workerId = "dummyWorkerId"
-  val shardId = "dummyShardId"
-  val seqNum = "123"
-  val otherSeqNum = "245"
-  val checkpointInterval = Duration(10)
-  val someSeqNum = Some(seqNum)
-  val someOtherSeqNum = Some(otherSeqNum)
+  private val app = "TestKinesisReceiver"
+  private val stream = "mySparkStream"
+  private val endpoint = "endpoint-url"
+  private val workerId = "dummyWorkerId"
+  private val shardId = "dummyShardId"
+  private val seqNum = "123"
+  private val otherSeqNum = "245"
+  private val checkpointInterval = Duration(10)
+  private val someSeqNum = Some(seqNum)
+  private val someOtherSeqNum = Some(otherSeqNum)
 
-  var receiverMock: KinesisReceiver[Array[Byte]] = _
-  var checkpointerMock: IRecordProcessorCheckpointer = _
+  private var receiverMock: KinesisReceiver[Array[Byte]] = _
+  private var checkpointerMock: IRecordProcessorCheckpointer = _
 
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]

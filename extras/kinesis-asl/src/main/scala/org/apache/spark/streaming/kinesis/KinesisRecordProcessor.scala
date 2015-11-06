@@ -43,7 +43,7 @@ import org.apache.spark.streaming.Duration
 private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], workerId: String)
   extends IRecordProcessor with Logging {
 
-  // shardId and checkpointState to be populated during initialize()
+  // shardId populated during initialize()
   @volatile
   private var shardId: String = _
 
