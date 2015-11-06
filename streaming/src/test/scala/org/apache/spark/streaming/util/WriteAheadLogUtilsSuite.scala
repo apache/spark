@@ -255,9 +255,10 @@ object WriteAheadLogSuite {
       logDirectory: String,
       closeFileAfterWrite: Boolean,
       allowBatching: Boolean): WriteAheadLog = {
-    val wal = new FileBasedWriteAheadLog(new SparkConf(), logDirectory, hadoopConf, 1, 1,
+    val sparkConf = new SparkConf
+    val wal = new FileBasedWriteAheadLog(sparkConf, logDirectory, hadoopConf, 1, 1,
       closeFileAfterWrite)
-    if (allowBatching) new BatchedWriteAheadLog(wal) else wal
+    if (allowBatching) new BatchedWriteAheadLog(wal, sparkConf) else wal
   }
 
   def generateRandomData(): Seq[String] = {

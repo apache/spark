@@ -27,7 +27,7 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{SparkConf, SparkException, Logging}
 import org.apache.spark.util.Utils
 
 /**
@@ -45,12 +45,11 @@ import org.apache.spark.util.Utils
  *
  * All other methods of the WriteAheadLog interface will be passed on to the wrapped WriteAheadLog.
  */
-private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog)
+private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: SparkConf)
   extends WriteAheadLog with Logging {
 
   import BatchedWriteAheadLog._
 
-  // exposed for tests
   private val walWriteQueue = new LinkedBlockingQueue[Record]()
 
   // Whether the writer thread is active
@@ -65,18 +64,30 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog)
    */
   override def write(byteBuffer: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
     val promise = Promise[WriteAheadLogRecordHandle]()
-    walWriteQueue.offer(Record(byteBuffer, time, promise))
-    Await.result(promise.future, WAL_WRITE_STATUS_TIMEOUT.milliseconds)
+    val putSuccessfully = synchronized {
+      if (active) {
+        walWriteQueue.offer(Record(byteBuffer, time, promise))
+        true
+      } else {
+        false
+      }
+    }
+    if (putSuccessfully) {
+      Await.result(promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
+    } else {
+      throw new SparkException("close() was called on BatchedWriteAheadLog before " +
+        s"write request with time $time could be fulfilled.")
+    }
   }
 
   /**
-   * Read a segment from an existing Write Ahead Log. The data may be aggregated, and the user
-   * should de-aggregate using [[BatchedWriteAheadLog.deaggregate]]
-   *
-   * This method is handled by the parent WriteAheadLog.
+   * This method is not supported as the resulting ByteBuffer would actually require de-aggregation.
+   * This method is primarily used in testing, and to ensure that it is not used in production,
+   * we throw an UnsupportedOperationException.
    */
   override def read(segment: WriteAheadLogRecordHandle): ByteBuffer = {
-    wrappedLog.read(segment)
+    throw new UnsupportedOperationException("read() is not supported for BatchedWriteAheadLog " +
+      "as the data may require de-aggregation.")
   }
 
   /**
@@ -101,13 +112,16 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog)
    * Stop the batched writer thread, fulfill promises with failures and close the wrapped WAL.
    */
   override def close(): Unit = {
-    logInfo("BatchedWriteAheadLog shutting down.")
-    active = false
+    logInfo(s"BatchedWriteAheadLog shutting down at time: ${System.currentTimeMillis()}.")
+    synchronized {
+      active = false
+    }
     batchedWriterThread.interrupt()
     batchedWriterThread.join()
     while (!walWriteQueue.isEmpty) {
-      val Record(_, _, promise) = walWriteQueue.poll()
-      promise.failure(new SparkException("close() was called on BatchedWriteAheadLog."))
+      val Record(_, time, promise) = walWriteQueue.poll()
+      promise.failure(new SparkException("close() was called on BatchedWriteAheadLog before " +
+        s"write request with time $time could be fulfilled."))
     }
     wrappedLog.close()
   }
@@ -167,8 +181,6 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog)
 
 /** Static methods for aggregating and de-aggregating records. */
 private[util] object BatchedWriteAheadLog {
-
-  val WAL_WRITE_STATUS_TIMEOUT = 5000 // 5 seconds
 
   /**
    * Wrapper class for representing the records that we will write to the WriteAheadLog. Coupled
