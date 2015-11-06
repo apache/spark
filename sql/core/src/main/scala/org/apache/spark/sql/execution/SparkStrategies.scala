@@ -27,8 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{SQLContext, Strategy, execution}
+import org.apache.spark.sql.{Strategy, execution}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -294,8 +293,33 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object BroadcastNestedLoop extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.Join(
+             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
+      case logical.Join(
+             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
+      case _ => Nil
+    }
+  }
 
-  object BroadcastNestedLoopJoin extends Strategy {
+  object CartesianProduct extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // TODO CartesianProduct doesn't support the Left Semi Join
+      case logical.Join(left, right, joinType, None) if joinType != LeftSemi =>
+        execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
+      case logical.Join(left, right, Inner, Some(condition)) =>
+        execution.Filter(condition,
+          execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object DefaultJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
@@ -306,17 +330,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object CartesianProduct extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(left, right, _, None) =>
-        execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
-      case logical.Join(left, right, Inner, Some(condition)) =>
-        execution.Filter(condition,
-          execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
   }
@@ -372,6 +385,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
+
+      case logical.MapPartitions(f, tEnc, uEnc, output, child) =>
+        execution.MapPartitions(f, tEnc, uEnc, output, planLater(child)) :: Nil
+      case logical.AppendColumn(f, tEnc, uEnc, newCol, child) =>
+        execution.AppendColumns(f, tEnc, uEnc, newCol, planLater(child)) :: Nil
+      case logical.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, child) =>
+        execution.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, planLater(child)) :: Nil
+      case logical.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output,
+        leftGroup, rightGroup, left, right) =>
+        execution.CoGroup(f, kEnc, leftEnc, rightEnc, rEnc, output, leftGroup, rightGroup,
+          planLater(left), planLater(right)) :: Nil
+
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
@@ -429,8 +454,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
       case logical.OneRowRelation =>
         execution.PhysicalRDD(Nil, singleRowRdd, "OneRowRelation") :: Nil
-      case logical.RepartitionByExpression(expressions, child) =>
-        execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
+      case logical.RepartitionByExpression(expressions, child, nPartitions) =>
+        execution.Exchange(HashPartitioning(
+          expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "PhysicalRDD") :: Nil

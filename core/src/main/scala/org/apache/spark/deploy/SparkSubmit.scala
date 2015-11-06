@@ -328,6 +328,8 @@ object SparkSubmit {
       case (STANDALONE, CLUSTER) if args.isR =>
         printErrorAndExit("Cluster deploy mode is currently not supported for R " +
           "applications on standalone clusters.")
+      case (LOCAL, CLUSTER) =>
+        printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -651,6 +653,15 @@ object SparkSubmit {
         if (childMainClass.contains("thriftserver")) {
           // scalastyle:off println
           printStream.println(s"Failed to load main class $childMainClass.")
+          printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
+          // scalastyle:on println
+        }
+        System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+      case e: NoClassDefFoundError =>
+        e.printStackTrace(printStream)
+        if (e.getMessage.contains("org/apache/hadoop/hive")) {
+          // scalastyle:off println
+          printStream.println(s"Failed to load hive class.")
           printStream.println("You need to build Spark with -Phive and -Phive-thriftserver.")
           // scalastyle:on println
         }

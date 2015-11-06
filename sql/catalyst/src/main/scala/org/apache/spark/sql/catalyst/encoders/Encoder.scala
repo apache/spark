@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+
+
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -28,17 +29,11 @@ import org.apache.spark.sql.types.StructType
  * Encoders are not intended to be thread-safe and thus they are allow to avoid internal locking
  * and reuse internal buffers to improve performance.
  */
-trait Encoder[T] {
+trait Encoder[T] extends Serializable {
+
   /** Returns the schema of encoding this type of object as a Row. */
   def schema: StructType
 
   /** A ClassTag that can be used to construct and Array to contain a collection of `T`. */
   def clsTag: ClassTag[T]
-
-  /**
-   * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
-   * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
-   * copy the result before making another call if required.
-   */
-  def toRow(t: T): InternalRow
 }

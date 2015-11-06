@@ -45,7 +45,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
@@ -90,11 +90,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
   SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
 
-  // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
-  // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
-  // contains a map from hostname to a list of input format splits on the host.
-  private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
-
   val startTime = System.currentTimeMillis()
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
@@ -116,16 +111,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Alternative constructor for setting preferred locations where Spark will create executors.
    *
    * @param config a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
-   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
-   * from a list of input files or InputFormats for the application.
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
   @deprecated("Passing in preferred locations has no effect at all, see SPARK-8949", "1.5.0")
   @DeveloperApi
   def this(config: SparkConf, preferredNodeLocationData: Map[String, Set[SplitInfo]]) = {
     this(config)
     logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
-    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   /**
@@ -147,10 +139,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
-   * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on.
-   * Can be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
-   * from a list of input files or InputFormats for the application.
+   * @param preferredNodeLocationData not used. Left for backward compatibility.
    */
+  @deprecated("Passing in preferred locations has no effect at all, see SPARK-10921", "1.6.0")
   def this(
       master: String,
       appName: String,
@@ -163,7 +154,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     if (preferredNodeLocationData.nonEmpty) {
       logWarning("Passing in preferred locations has no effect at all, see SPARK-8949")
     }
-    this.preferredNodeLocationData = preferredNodeLocationData
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -177,7 +167,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param appName A name for your application, to display on the cluster web UI.
    */
   private[spark] def this(master: String, appName: String) =
-    this(master, appName, null, Nil, Map(), Map())
+    this(master, appName, null, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -187,7 +177,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String) =
-    this(master, appName, sparkHome, Nil, Map(), Map())
+    this(master, appName, sparkHome, Nil, Map())
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -199,7 +189,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, appName, sparkHome, jars, Map(), Map())
+    this(master, appName, sparkHome, jars, Map())
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
@@ -279,7 +269,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -880,8 +870,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * :: Experimental ::
-   *
    * Get an RDD for a Hadoop-readable dataset as PortableDataStream for each file
    * (useful for binary data)
    *
@@ -912,7 +900,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
-  @Experimental
   def binaryFiles(
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[(String, PortableDataStream)] = withScope {
@@ -932,8 +919,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * :: Experimental ::
-   *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
    * '''Note:''' We ensure that the byte array for each record in the resulting RDD
@@ -946,7 +931,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * @return An RDD of data with values, represented as byte arrays
    */
-  @Experimental
   def binaryRecords(
       path: String,
       recordLength: Int,
@@ -1973,10 +1957,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * :: Experimental ::
    * Submit a job for execution and return a FutureJob holding the result.
    */
-  @Experimental
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
@@ -2571,24 +2553,28 @@ object SparkContext extends Logging {
   }
 
   /**
+   * The number of driver cores to use for execution in local mode, 0 otherwise.
+   */
+  private[spark] def numDriverCores(master: String): Int = {
+    def convertToInt(threads: String): Int = {
+      if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
+    }
+    master match {
+      case "local" => 1
+      case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
+      case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
+      case _ => 0 // driver is not used for execution
+    }
+  }
+
+  /**
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
   private def createTaskScheduler(
       sc: SparkContext,
       master: String): (SchedulerBackend, TaskScheduler) = {
-    // Regular expression used for local[N] and local[*] master formats
-    val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
-    // Regular expression for local[N, maxRetries], used in tests with failing tasks
-    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
-    // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
-    val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
-    // Regular expression for connecting to Spark deploy clusters
-    val SPARK_REGEX = """spark://(.*)""".r
-    // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
-    val MESOS_REGEX = """(mesos|zk)://.*""".r
-    // Regular expression for connection to Simr cluster
-    val SIMR_REGEX = """simr://(.*)""".r
+    import SparkMasterRegex._
 
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
@@ -2727,6 +2713,24 @@ object SparkContext extends Logging {
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
+}
+
+/**
+ * A collection of regexes for extracting information from the master string.
+ */
+private object SparkMasterRegex {
+  // Regular expression used for local[N] and local[*] master formats
+  val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
+  // Regular expression for local[N, maxRetries], used in tests with failing tasks
+  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
+  // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
+  val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
+  // Regular expression for connecting to Spark deploy clusters
+  val SPARK_REGEX = """spark://(.*)""".r
+  // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
+  val MESOS_REGEX = """(mesos|zk)://.*""".r
+  // Regular expression for connection to Simr cluster
+  val SIMR_REGEX = """simr://(.*)""".r
 }
 
 /**

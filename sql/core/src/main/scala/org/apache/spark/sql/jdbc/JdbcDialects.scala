@@ -139,6 +139,7 @@ object JdbcDialects {
   registerDialect(DB2Dialect)
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
+  registerDialect(OracleDialect)
 
 
   /**
@@ -198,15 +199,15 @@ case object PostgresDialect extends JdbcDialect {
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
-      Some(BinaryType)
+      Option(BinaryType)
     } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("json")) {
-      Some(StringType)
+      Option(StringType)
     } else if (sqlType == Types.OTHER && typeName.equals("jsonb")) {
-      Some(StringType)
+      Option(StringType)
     } else None
   }
 
@@ -236,9 +237,9 @@ case object MySQLDialect extends JdbcDialect {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
       md.putLong("binarylong", 1)
-      Some(LongType)
+      Option(LongType)
     } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Some(BooleanType)
+      Option(BooleanType)
     } else None
   }
 
@@ -279,7 +280,7 @@ case object MsSqlServerDialect extends JdbcDialect {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
-      Some(StringType)
+      Option(StringType)
     } else None
   }
 
@@ -315,3 +316,27 @@ case object DerbyDialect extends JdbcDialect {
 
 }
 
+/**
+ * :: DeveloperApi ::
+ * Default Oracle dialect, mapping a nonspecific numeric type to a general decimal type.
+ */
+@DeveloperApi
+case object OracleDialect extends JdbcDialect {
+  override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+  override def getCatalystType(
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    // Handle NUMBER fields that have no precision/scale in special way
+    // because JDBC ResultSetMetaData converts this to 0 procision and -127 scale
+    // For more details, please see
+    // https://github.com/apache/spark/pull/8780#issuecomment-145598968
+    // and
+    // https://github.com/apache/spark/pull/8780#issuecomment-144541760
+    if (sqlType == Types.NUMERIC && size == 0) {
+      // This is sub-optimal as we have to pick a precision/scale in advance whereas the data
+      //  in Oracle is allowed to have different precision/scale for each value.
+      Some(DecimalType(DecimalType.MAX_PRECISION, 10))
+    } else {
+      None
+    }
+  }
+}

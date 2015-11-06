@@ -45,11 +45,13 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
+            standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
+            formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                                 alpha)
+                                 "fitRModelFormula", formula, data@sdf, family, lambda,
+                                 alpha, standardize, solver)
             return(new("PipelineModel", model = model))
           })
 
@@ -91,9 +93,9 @@ setMethod("summary", signature(x = "PipelineModel"),
           function(x, ...) {
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelFeatures", x@model)
-            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", x@model)
-            coefficients <- as.matrix(unlist(weights))
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", x@model)
+            coefficients <- as.matrix(unlist(coefficients))
             colnames(coefficients) <- c("Estimate")
             rownames(coefficients) <- unlist(features)
             return(list(coefficients = coefficients))

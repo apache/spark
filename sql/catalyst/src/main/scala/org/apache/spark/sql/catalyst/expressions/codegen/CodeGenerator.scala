@@ -27,6 +27,7 @@ import org.codehaus.janino.ClassBodyEvaluator
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -129,6 +130,7 @@ class CodeGenContext {
       case _: ArrayType => s"$input.getArray($ordinal)"
       case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
+      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ => s"($jt)$input.get($ordinal, null)"
     }
   }
@@ -143,6 +145,7 @@ class CodeGenContext {
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       // The UTF8String may came from UnsafeRow, otherwise clone is cheap (re-use the bytes)
       case StringType => s"$row.update($ordinal, $value.clone())"
+      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
     }
   }
@@ -177,6 +180,7 @@ class CodeGenContext {
     case _: MapType => "MapData"
     case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
     case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
+    case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"
@@ -222,6 +226,7 @@ class CodeGenContext {
     case FloatType => s"(java.lang.Float.isNaN($c1) && java.lang.Float.isNaN($c2)) || $c1 == $c2"
     case DoubleType => s"(java.lang.Double.isNaN($c1) && java.lang.Double.isNaN($c2)) || $c1 == $c2"
     case dt: DataType if isPrimitiveType(dt) => s"$c1 == $c2"
+    case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case other => s"$c1.equals($c2)"
   }
 
@@ -255,6 +260,7 @@ class CodeGenContext {
       addNewFunction(compareFunc, funcCode)
       s"this.$compareFunc($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
+    case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
   }
@@ -386,26 +392,24 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
       classOf[MapData].getName,
-      classOf[UnsafeMapData].getName
+      classOf[UnsafeMapData].getName,
+      classOf[MutableRow].getName
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
     def formatted = CodeFormatter.format(code)
-    def withLineNums = formatted.split("\n").zipWithIndex.map {
-      case (l, n) => f"${n + 1}%03d $l"
-    }.mkString("\n")
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      withLineNums
+      formatted
     })
 
     try {
       evaluator.cook("generated.java", code)
     } catch {
       case e: Exception =>
-        val msg = s"failed to compile: $e\n$withLineNums"
+        val msg = s"failed to compile: $e\n$formatted"
         logError(msg, e)
         throw new Exception(msg, e)
     }

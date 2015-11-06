@@ -117,6 +117,18 @@ class KMeansModel private[ml] (
 
   @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters
+
+  /**
+   * Return the K-means cost (sum of squared distances of points to their nearest center) for this
+   * model on the given data.
+   */
+  // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
+  @Since("1.6.0")
+  def computeCost(dataset: DataFrame): Double = {
+    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    parentModel.computeCost(data)
+  }
 }
 
 /**

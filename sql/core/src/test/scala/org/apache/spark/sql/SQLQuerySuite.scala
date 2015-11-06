@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.aggregate
+import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -222,6 +223,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("select * from d where d.a in (1,2)"),
       Seq(Row("1"), Row("2")))
+  }
+
+  test("SPARK-11226 Skip empty line in json file") {
+    sqlContext.read.json(
+      sparkContext.parallelize(
+        Seq("{\"a\": \"1\"}}", "{\"a\": \"2\"}}", "{\"a\": \"3\"}}", "")))
+      .registerTempTable("d")
+
+    checkAnswer(
+      sql("select count(1) from d"),
+      Seq(Row(3)))
   }
 
   test("SPARK-8828 sum should return null if all input values are null") {
@@ -522,8 +534,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("aggregates with nulls") {
     checkAnswer(
-      sql("SELECT MIN(a), MAX(a), AVG(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
-      Row(1, 3, 2, 1, 6, 3)
+      sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
+        "AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a) FROM nullInts"),
+      Row(0, -1.5, 1, 3, 2, 1.0, 1, 6, 3)
     )
   }
 
@@ -713,33 +726,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("stddev") {
-    checkAnswer(
-      sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("stddev_pop") {
-    checkAnswer(
-      sql("SELECT STDDEV_POP(a) FROM testData2"),
-      Row(math.sqrt(4/6.0))
-    )
-  }
-
-  test("stddev_samp") {
-    checkAnswer(
-      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("stddev agg") {
-    checkAnswer(
-      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1/2.0), math.sqrt(1/4.0), math.sqrt(1/2.0))))
-  }
-
   test("inner join where, one match per row") {
     checkAnswer(
       sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
@@ -848,6 +834,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row (4, "D", 4, "D") ::
       Row(null, null, 5, "E") ::
       Row(null, null, 6, "F") :: Nil)
+  }
+
+  test("SPARK-11111 null-safe join should not use cartesian product") {
+    val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
+    val cp = df.queryExecution.executedPlan.collect {
+      case cp: CartesianProduct => cp
+    }
+    assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
+    val smj = df.queryExecution.executedPlan.collect {
+      case smj: SortMergeJoin => smj
+    }
+    assert(smj.size > 0, "should use SortMergeJoin")
+    checkAnswer(df, Row(100) :: Nil)
   }
 
   test("SPARK-3349 partitioning after limit") {
@@ -1782,6 +1781,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.json(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from json.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.json`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+
+    val e1 = intercept[AnalysisException] {
+      sql("select * from in_valid_table")
+    }
+    assert(e1.message.contains("Table not found"))
+
+    val e2 = intercept[AnalysisException] {
+      sql("select * from no_db.no_table")
+    }
+    assert(e2.message.contains("Table not found"))
+
+    val e3 = intercept[AnalysisException] {
+      sql("select * from json.invalid_file")
+    }
+    assert(e3.message.contains("No input paths specified"))
+  }
+
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
     // This test is for the fix of https://issues.apache.org/jira/browse/SPARK-10737.
     // This bug will be triggered when Tungsten is enabled and there are multiple
@@ -1807,6 +1834,171 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         df4,
         df1.withColumn("diff", lit(0)))
+    }
+  }
+
+  test("SPARK-11032: resolve having correctly") {
+    withTempTable("src") {
+      Seq(1 -> "a").toDF("i", "j").registerTempTable("src")
+      checkAnswer(
+        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
+        Row(1))
+    }
+  }
+
+  test("SPARK-11303: filter should not be pushed down into sample") {
+    val df = sqlContext.range(100)
+    List(true, false).foreach { withReplacement =>
+      val sampled = df.sample(withReplacement, 0.1, 1)
+      val sampledOdd = sampled.filter("id % 2 != 0")
+      val sampledEven = sampled.filter("id % 2 = 0")
+      assert(sampled.count() == sampledOdd.count() + sampledEven.count())
+    }
+  }
+
+  test("Struct Star Expansion") {
+    val structDf = testData2.select("a", "b").as("record")
+
+    checkAnswer(
+      structDf.select($"record.a", $"record.b"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(
+      structDf.select($"record.*", $"record.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 1, 2) :: Row(2, 1, 2, 1) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 3, 1) :: Row(3, 2, 3, 2) :: Nil)
+
+    checkAnswer(
+      sql("select struct(a, b) as r1, struct(b, a) as r2 from testData2").select($"r1.*", $"r2.*"),
+      Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
+        Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
+
+    // Try with a registered table.
+    sql("select struct(a, b) as record from testData2").registerTempTable("structTable")
+    checkAnswer(
+      sql("SELECT record.* FROM structTable"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin),
+      Row(Row(1, 1)) :: Nil)
+
+    // Try with an alias on the select list
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select struct(a,b) as record from testData2) tmp
+      """.stripMargin).select($"r.*"),
+      Row(3, 2) :: Nil)
+
+    // With GROUP BY
+    checkAnswer(sql(
+      """
+        | SELECT min(struct(record.*)) FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin),
+      Row(Row(1, 1)) :: Row(Row(2, 1)) :: Row(Row(3, 1)) :: Nil)
+
+    // With GROUP BY and alias
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(record.*)) as r FROM
+        |   (select a as a, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Nil)
+
+    // With GROUP BY and alias and additional fields in the struct
+    checkAnswer(sql(
+      """
+        | SELECT max(struct(a, record.*, b)) as r FROM
+        |   (select a as a, b as b, struct(a,b) as record from testData2) tmp
+        | GROUP BY a
+      """.stripMargin).select($"r.*"),
+      Row(1, 1, 2, 2) :: Row(2, 2, 2, 2) :: Row(3, 3, 2, 2) :: Nil)
+
+    // Create a data set that contains nested structs.
+    val nestedStructData = sql(
+      """
+        | SELECT struct(r1, r2) as record FROM
+        |   (SELECT struct(a, b) as r1, struct(b, a) as r2 FROM testData2) tmp
+      """.stripMargin)
+
+    checkAnswer(nestedStructData.select($"record.*"),
+      Row(Row(1, 1), Row(1, 1)) :: Row(Row(1, 2), Row(2, 1)) :: Row(Row(2, 1), Row(1, 2)) ::
+        Row(Row(2, 2), Row(2, 2)) :: Row(Row(3, 1), Row(1, 3)) :: Row(Row(3, 2), Row(2, 3)) :: Nil)
+    checkAnswer(nestedStructData.select($"record.r1"),
+      Row(Row(1, 1)) :: Row(Row(1, 2)) :: Row(Row(2, 1)) :: Row(Row(2, 2)) ::
+        Row(Row(3, 1)) :: Row(Row(3, 2)) :: Nil)
+    checkAnswer(
+      nestedStructData.select($"record.r1.*"),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+
+    // Try with a registered table
+    withTempTable("nestedStructTable") {
+      nestedStructData.registerTempTable("nestedStructTable")
+      checkAnswer(
+        sql("SELECT record.* FROM nestedStructTable"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT record.r1 FROM nestedStructTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT record.r1.* FROM nestedStructTable"),
+        nestedStructData.select($"record.r1.*"))
+
+      // Try resolving something not there.
+      assert(intercept[AnalysisException](sql("SELECT abc.* FROM nestedStructTable"))
+        .getMessage.contains("cannot resolve"))
+    }
+
+    // Create paths with unusual characters
+    val specialCharacterPath = sql(
+      """
+        | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
+        |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
+      """.stripMargin)
+    withTempTable("specialCharacterTable") {
+      specialCharacterPath.registerTempTable("specialCharacterTable")
+      checkAnswer(
+        specialCharacterPath.select($"`r&&b.c`.*"),
+        nestedStructData.select($"record.*"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+        nestedStructData.select($"record.r2"))
+      checkAnswer(
+        sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+        nestedStructData.select($"record.r1.*"))
+    }
+
+    // Try star expanding a scalar. This should fail.
+    assert(intercept[AnalysisException](sql("select a.* from testData2")).getMessage.contains(
+      "Can only star expand struct data types."))
+  }
+
+  test("Struct Star Expansion - Name conflict") {
+    // Create a data set that contains a naming conflict
+    val nameConflict = sql("SELECT struct(a, b) as nameConflict, a as a FROM testData2")
+    withTempTable("nameConflict") {
+      nameConflict.registerTempTable("nameConflict")
+      // Unqualified should resolve to table.
+      checkAnswer(sql("SELECT nameConflict.* FROM nameConflict"),
+        Row(Row(1, 1), 1) :: Row(Row(1, 2), 1) :: Row(Row(2, 1), 2) :: Row(Row(2, 2), 2) ::
+          Row(Row(3, 1), 3) :: Row(Row(3, 2), 3) :: Nil)
+      // Qualify the struct type with the table name.
+      checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
+        Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
     }
   }
 }

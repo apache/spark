@@ -40,6 +40,7 @@ object DefaultOptimizer extends Optimizer {
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
+      PushPredicateThroughAggregate,
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
@@ -53,7 +54,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
-      RemovePositive,
+      RemoveDispensable,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions)
@@ -83,10 +84,6 @@ object DefaultOptimizer extends Optimizer {
 object SamplePushDown extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Push down filter into sample
-    case Filter(condition, s @ Sample(lb, up, replace, seed, child)) =>
-      Sample(lb, up, replace, seed,
-        Filter(condition, child))
     // Push down projection into sample
     case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
       Sample(lb, up, replace, seed,
@@ -470,6 +467,11 @@ object NullPropagation extends Rule[LogicalPlan] {
         case left :: Literal(null, _) :: Nil => Literal.create(null, e.dataType)
         case _ => e
       }
+
+      // If the value expression is NULL then transform the In expression to
+      // Literal(null)
+      case In(Literal(null, _), list) => Literal.create(null, BooleanType)
+
     }
   }
 }
@@ -725,6 +727,29 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
 }
 
 /**
+ * Push [[Filter]] operators through [[Aggregate]] operators. Parts of the predicate that reference
+ * attributes which are subset of group by attribute set of [[Aggregate]] will be pushed beneath,
+ * and the rest should remain above.
+ */
+object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition,
+        aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
+        conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val withPushdown = aggregate.copy(child = Filter(pushDownPredicate, grandChild))
+        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+      } else {
+        filter
+      }
+  }
+}
+
+/**
  * Pushes down [[Filter]] operators where the `condition` can be
  * evaluated using only the attributes of the left or right side of a join.  Other
  * [[Filter]] conditions are moved into the `condition` of the [[Join]].
@@ -834,11 +859,12 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes [[UnaryPositive]] identify function
+ * Removes nodes that are not necessary.
  */
-object RemovePositive extends Rule[LogicalPlan] {
+object RemoveDispensable extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
+    case PromotePrecision(child) => child
   }
 }
 
