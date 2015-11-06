@@ -56,17 +56,17 @@ public class JavaDefaultReadWriteSuite {
     MyParams instance = new MyParams(uid);
     instance.set(instance.intParam(), 2);
     String outputPath = new File(tempDir, uid).getPath();
-    instance.write().to(outputPath);
+    instance.save(outputPath);
     try {
-      instance.write().to(outputPath);
+      instance.save(outputPath);
       Assert.fail(
         "Write without overwrite enabled should fail if the output directory already exists.");
     } catch (IOException e) {
       // expected
     }
     SQLContext sqlContext = new SQLContext(jsc);
-    instance.write().context(sqlContext).overwrite().to(outputPath);
-    MyParams newInstance = MyParams.read().from(outputPath);
+    instance.write().context(sqlContext).overwrite().save(outputPath);
+    MyParams newInstance = MyParams.load(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
     Assert.assertEquals("Params should be preserved.",
       2, newInstance.getOrDefault(newInstance.intParam()));

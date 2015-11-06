@@ -36,13 +36,13 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val uid = instance.uid
     val path = new File(tempDir, uid).getPath
 
-    instance.write.to(path)
+    instance.save(path)
     intercept[IOException] {
-      instance.write.to(path)
+      instance.save(path)
     }
-    instance.write.overwrite().to(path)
+    instance.write.overwrite().save(path)
     val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[Reader[T]]
-    val newInstance = loader.from(path)
+    val newInstance = loader.load(path)
 
     assert(newInstance.uid === instance.uid)
     instance.params.foreach { p =>
@@ -57,6 +57,9 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
         assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
       }
     }
+
+    val another = instance.getClass.getMethod("load", classOf[String]).invoke(path).asInstanceOf[T]
+    assert(another.uid === instance.uid)
   }
 }
 
@@ -90,7 +93,10 @@ class MyParams(override val uid: String) extends Params with Writable {
 }
 
 object MyParams extends Readable[MyParams] {
+
   override def read: Reader[MyParams] = new DefaultParamsReader[MyParams]
+
+  override def load(path: String): MyParams = read.load(path)
 }
 
 class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext

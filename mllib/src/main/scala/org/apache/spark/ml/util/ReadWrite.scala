@@ -63,22 +63,16 @@ abstract class Writer extends BaseReadWrite {
   protected var shouldOverwrite: Boolean = false
 
   /**
-   * Saves the ML instance to the input path.
+   * Saves the ML instances to the input path.
    */
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  def to(path: String): Unit
-
-  /**
-   * Saves the ML instances to the input path, the same as [[to()]].
-   */
-  @Since("1.6.0")
-  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
-  def save(path: String): Unit = to(path)
+  def save(path: String): Unit
 
   /**
    * Overwrites if the output path already exists.
    */
+  @Since("1.6.0")
   def overwrite(): this.type = {
     shouldOverwrite = true
     this
@@ -99,6 +93,13 @@ trait Writable {
    */
   @Since("1.6.0")
   def write: Writer
+
+  /**
+   * Saves this ML instance to the input path, a shortcut of `write.save(path)`.
+   */
+  @Since("1.6.0")
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
+  def save(path: String): Unit = write.save(path)
 }
 
 /**
@@ -113,12 +114,7 @@ abstract class Reader[T] extends BaseReadWrite {
    * Loads the ML component from the input path.
    */
   @Since("1.6.0")
-  def from(path: String): T
-
-  /**
-   * Loads the ML component from the input path, the same as [[from()]].
-   */
-  def load(path: String): T = from(path)
+  def load(path: String): T
 
   // override for Java compatibility
   override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
@@ -137,6 +133,12 @@ trait Readable[T] {
    */
   @Since("1.6.0")
   def read: Reader[T]
+
+  /**
+   * Reads an ML instance from the input path, a shortcut of `read.load(path)`.
+   */
+  @Since("1.6.0")
+  def load(path: String): T = read.load(path)
 }
 
 /**
@@ -150,7 +152,7 @@ private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logg
   /**
    * Saves the ML component to the input path.
    */
-  override def to(path: String): Unit = {
+  override def save(path: String): Unit = {
     val sc = sqlContext.sparkContext
 
     val hadoopConf = sc.hadoopConfiguration
@@ -159,10 +161,11 @@ private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logg
     if (fs.exists(p)) {
       if (shouldOverwrite) {
         logInfo(s"Path $path already exists. It will be overwritten.")
+        // TODO: Revert back to the original content if save is not successful.
         fs.delete(p, true)
       } else {
         throw new IOException(
-          s"Path $path already exists. Please set overwrite=true to overwrite it.")
+          s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
       }
     }
 
@@ -193,7 +196,7 @@ private[ml] class DefaultParamsReader[T] extends Reader[T] {
   /**
    * Loads the ML component from the input path.
    */
-  override def from(path: String): T = {
+  override def load(path: String): T = {
     implicit val format = DefaultFormats
     val sc = sqlContext.sparkContext
     val metadataPath = new Path(path, "metadata").toString
