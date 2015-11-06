@@ -17,9 +17,10 @@
 
 package org.apache.spark.rdd
 
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.util.Progressable
+import org.apache.spark.api.java.JavaPairRDD
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
@@ -503,6 +504,58 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
       (1, ArrayBuffer(3)),
       (1, ArrayBuffer(1)),
       (2, ArrayBuffer(1))))
+  }
+
+  test("saveAsTextFileByKey should generate files by key") {
+    val pairsLocal = Seq(
+      ("2015/1", List("A", "B", "C")),
+      ("2015/2", List("C", "D", "E")),
+      ("2015/1", List("F", "G", "H"))
+    )
+
+    val pairs = sc.parallelize(pairsLocal, 2)
+    val fs = FileSystem.get(new Configuration())
+    val basePath = sc.conf.get("spark.local.dir", "/tmp")
+    val fullPath = basePath + "/testPath"
+    fs.delete(new Path(fullPath), true)
+    pairs.saveAsTextFileByKey(fullPath)
+
+    pairsLocal.groupBy(_._1).foreach {
+      case (key, values) =>
+        val testPath = new Path(fullPath + "/" + key)
+        assert(fs.exists(testPath))
+
+        val testValues = sc.textFile(testPath.toString).collect()
+        assert(testValues.sorted.sameElements(values.map(_._2.toString()).sorted))
+    }
+
+    fs.delete(new Path(fullPath), true)
+  }
+
+  test("JavaPairRDD.saveAsTextFileByKey should generate files by key") {
+    val pairsLocal = Seq(
+      ("2015/1", List("A", "B", "C")),
+      ("2015/2", List("C", "D", "E")),
+      ("2015/1", List("F", "G", "H"))
+    )
+
+    val pairs = JavaPairRDD.fromRDD(sc.parallelize(pairsLocal, 2))
+    val fs = FileSystem.get(new Configuration())
+    val basePath = sc.conf.get("spark.local.dir", "/tmp")
+    val fullPath = basePath + "/testPath"
+    fs.delete(new Path(fullPath), true)
+    pairs.saveAsTextFileByKey(fullPath)
+
+    pairsLocal.groupBy(_._1).foreach {
+      case (key, values) =>
+        val testPath = new Path(fullPath + "/" + key)
+        assert(fs.exists(testPath))
+
+        val testValues = sc.textFile(testPath.toString).collect()
+        assert(testValues.sorted.sameElements(values.map(_._2.toString()).sorted))
+    }
+
+    fs.delete(new Path(fullPath), true)
   }
 
   test("saveNewAPIHadoopFile should call setConf if format is configurable") {
