@@ -174,4 +174,3 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
   }
 }
-
