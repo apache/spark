@@ -71,13 +71,15 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
+  override def setSeed(value: Long): this.type = super.setSeed(value)
+
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
+      seed = $(seed), parentUID = Some(uid))
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
