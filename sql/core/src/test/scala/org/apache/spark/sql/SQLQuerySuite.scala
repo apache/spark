@@ -2036,6 +2036,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     verifyCallCount(
       df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
 
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
+
     // Would be nice if semantic equals for `+` understood commutative
     verifyCallCount(
       df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)

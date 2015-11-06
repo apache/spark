@@ -17,8 +17,24 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.IntegerType
 
 class SubexpressionEliminationSuite extends SparkFunSuite {
+  test("Semantic equals and hash") {
+    val id = ExprId(1)
+    val a: AttributeReference = AttributeReference("name", IntegerType)()
+    val b1 = a.withName("name2").withExprId(id)
+    val b2 = a.withExprId(id)
+
+    assert(b1 != b2)
+    assert(a != b1)
+    assert(b1.semanticEquals(b2))
+    assert(!b1.semanticEquals(a))
+    assert(a.hashCode != b1.hashCode)
+    assert(b1.hashCode == b2.hashCode)
+    assert(b1.semanticHash() == b2.semanticHash())
+  }
+
   test("Expression Equivalence - basic") {
     val equivalence = new EquivalentExpressions
     assert(equivalence.getAllEquivalentExprs.isEmpty)
