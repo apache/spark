@@ -107,7 +107,7 @@ if __name__ == "__main__":
     print("from pyspark.ml.param import Param, Params\n\n")
     shared = [
         ("maxIter", "max number of iterations (>= 0).", None, int),
-        ("regParam", "regularization parameter (>= 0).", float),
+        ("regParam", "regularization parameter (>= 0).", None, float),
         ("featuresCol", "features column name.", "'features'", None),
         ("labelCol", "label column name.", "'label'", str),
         ("predictionCol", "prediction column name.", "'prediction'", str),
@@ -147,18 +147,18 @@ if __name__ == "__main__":
 
     decisionTreeParams = [
         ("maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; " +
-         "depth 1 means 1 internal node + 2 leaf nodes.", int),
+         "depth 1 means 1 internal node + 2 leaf nodes."),
         ("maxBins", "Max number of bins for" +
          " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-         " categorical feature.", int),
+         " categorical feature."),
         ("minInstancesPerNode", "Minimum number of instances each child must have after split. " +
          "If a split causes the left or right child to have fewer than minInstancesPerNode, the " +
-         "split will be discarded as invalid. Should be >= 1.", int),
-        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node.", float),
-        ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation.", int),
+         "split will be discarded as invalid. Should be >= 1."),
+        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node."),
+        ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation."),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
-         "Caching can speed up training of deeper trees.", bool)]
+         "Caching can speed up training of deeper trees.")]
 
     decisionTreeCode = '''class DecisionTreeParams(Params):
     """
