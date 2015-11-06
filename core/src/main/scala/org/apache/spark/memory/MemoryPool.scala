@@ -29,7 +29,7 @@ import javax.annotation.concurrent.GuardedBy
  */
 abstract class MemoryPool(lock: Object) {
 
-  @GuardedBy("lcok")
+  @GuardedBy("lock")
   private[this] var _poolSize: Long = 0
 
   /**
