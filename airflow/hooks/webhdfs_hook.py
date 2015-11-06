@@ -3,6 +3,14 @@ from airflow.configuration import conf
 import logging
 
 from hdfs import InsecureClient, HdfsError
+
+_kerberos_security_mode = conf.get("core", "security") == "kerberos"
+if _kerberos_security_mode:
+  try:
+    from hdfs.ext.kerberos import KerberosClient
+  except ImportError:
+    logging.error("Could not load the Kerberos extension for the WebHDFSHook.")
+    raise
 from airflow.utils import AirflowException
 
 
@@ -25,7 +33,11 @@ class WebHDFSHook(BaseHook):
         for nn in nn_connections:
             try:
                 logging.debug('Trying namenode {}'.format(nn.host))
-                client = InsecureClient('http://{nn.host}:{nn.port}'.format(nn=nn))
+                connection_str = 'http://{nn.host}:{nn.port}'.format(nn=nn)
+                if _kerberos_security_mode:
+                  client = KerberosClient(connection_str)
+                else:
+                  client = InsecureClient(connection_str)
                 client.content('/')
                 logging.debug('Using namenode {} for hook'.format(nn.host))
                 return client
@@ -34,7 +46,7 @@ class WebHDFSHook(BaseHook):
                               " error: {e.message}".format(**locals()))
         nn_hosts = [c.host for c in nn_connections]
         no_nn_error = "Read operations failed on the namenodes below:\n{}".format("\n".join(nn_hosts))
-        raise WebHDFSHookException(no_nn_error)
+        raise AirflowWebHDFSHookException(no_nn_error)
 
     def check_for_path(self, hdfs_path):
         """
