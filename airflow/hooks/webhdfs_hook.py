@@ -6,7 +6,7 @@ from hdfs import InsecureClient, HdfsError
 from airflow.utils import AirflowException
 
 
-class WebHDFSHookException(AirflowException):
+class AirflowWebHDFSHookException(AirflowException):
     pass
 
 
@@ -60,15 +60,7 @@ class WebHDFSHook(BaseHook):
         :param parallelism: Number of threads to use for parallelization. A value of
           `0` (or negative) uses as many threads as there are files.
         :type parallelism: int
-        :param temp_dir: Directory under which the files will first be uploaded
-          when `overwrite=True` and the final remote path already exists. Once the
-          upload successfully completes, it will be swapped in.
-        :param chunk_size: Interval in bytes by which the files will be uploaded.
-        :param progress: Callback function to track progress, called every
-          `chunk_size` bytes. It will be passed two arguments, the path to the
-          file being uploaded and the number of bytes transferred so far. On
-          completion, it will be called once with `-1` as second argument.
-        :param \*\*kwargs: Keyword arguments forwarded to :meth:`write`.
+        :param \*\*kwargs: Keyword arguments forwarded to :meth:`upload`.
 
 
         """
