@@ -82,102 +82,15 @@ The implementation matches the result from R's survival function
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.regression.AFTSurvivalRegression
-import org.apache.spark.mllib.linalg.Vectors
-
-// Generate training data
-val training = sqlContext.createDataFrame(Seq(
-  (1.218, 1.0, Vectors.dense(1.560, -0.605)),
-  (2.949, 0.0, Vectors.dense(0.346, 2.158)),
-  (3.627, 0.0, Vectors.dense(1.380, 0.231)),
-  (0.273, 1.0, Vectors.dense(0.520, 1.151)),
-  (4.199, 0.0, Vectors.dense(0.795, -0.226))
-)).toDF("label", "censor", "features")
-val quantileProbabilities = Array(0.3, 0.6)
-val aft = new AFTSurvivalRegression()
-  .setQuantileProbabilities(quantileProbabilities)
-  .setQuantilesCol("quantiles")
-
-// Fit the model
-val model = aft.fit(training)
-
-// Print the coefficients, intercept and scale parameter for AFT survival regression
-println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept} Scale: ${model.scale}")
-model.transform(training).show(false)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.regression.AFTSurvivalRegression;
-import org.apache.spark.ml.regression.AFTSurvivalRegressionModel;
-import org.apache.spark.mllib.linalg.*;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.*;
-
-JavaSparkContext jsc = ...
-SQLContext jsql = ...
-
-// Generate training data
-List<Row> data = Arrays.asList(
-  RowFactory.create(1.218, 1.0, Vectors.dense(1.560, -0.605)),
-  RowFactory.create(2.949, 0.0, Vectors.dense(0.346, 2.158)),
-  RowFactory.create(3.627, 0.0, Vectors.dense(1.380, 0.231)),
-  RowFactory.create(0.273, 1.0, Vectors.dense(0.520, 1.151)),
-  RowFactory.create(4.199, 0.0, Vectors.dense(0.795, -0.226))
-);
-StructType schema = new StructType(new StructField[]{
-  new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("censor", DataTypes.DoubleType, false, Metadata.empty()),
-  new StructField("features", new VectorUDT(), false, Metadata.empty())
-});
-DataFrame training = jsql.createDataFrame(data, schema);
-double[] quantileProbabilities = new double[]{0.3, 0.6};
-AFTSurvivalRegression aft = new AFTSurvivalRegression()
-  .setQuantileProbabilities(quantileProbabilities)
-  .setQuantilesCol("quantiles");
-
-// Fit the model
-AFTSurvivalRegressionModel model = aft.fit(training);
-
-// Print the coefficients, intercept and scale parameter for AFT survival regression
-System.out.println("Coefficients: " + model.coefficients() + " Intercept: " + model.intercept() + " Scale: " + model.scale());
-model.transform(training).show(false);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-<!--- TODO: Add python model summaries once implemented -->
-{% highlight python %}
-from pyspark.ml.regression import AFTSurvivalRegression
-from pyspark.mllib.linalg import Vectors
-
-// Generate training data
-training = sqlContext.createDataFrame([  
-  (1.218, 1.0, Vectors.dense(1.560, -0.605)),
-  (2.949, 0.0, Vectors.dense(0.346, 2.158)),
-  (3.627, 0.0, Vectors.dense(1.380, 0.231)),
-  (0.273, 1.0, Vectors.dense(0.520, 1.151)),
-  (4.199, 0.0, Vectors.dense(0.795, -0.226))], ["label", "censor", "features"])
-quantileProbabilities = [0.3, 0.6]
-aft = AFTSurvivalRegression(quantileProbabilities=quantileProbabilities, quantilesCol="quantiles")
-
-// Fit the model
-model = aft.fit(training)
-
-// Print the coefficients, intercept and scale parameter for AFT survival regression
-print("Coefficients: " + str(model.coefficients))
-print("Intercept: " + str(model.intercept))
-print("Scale: " + str(model.scale))
-model.transform(training).show(truncate=False)
-{% endhighlight %}
+{% include_example python/ml/aft_survival_regression.py %}
 </div>
 
 </div>
