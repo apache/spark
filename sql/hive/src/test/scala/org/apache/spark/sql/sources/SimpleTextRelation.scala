@@ -128,6 +128,9 @@ class SimpleTextRelation(
       filters: Array[Filter],
       inputFiles: Array[FileStatus]): RDD[Row] = {
 
+    SimpleTextRelation.requiredColumns = requiredColumns
+    SimpleTextRelation.pushedFilters = filters.toSet
+
     val fields = this.dataSchema.map(_.dataType)
     val inputAttributes = this.dataSchema.toAttributes
     val outputAttributes = requiredColumns.flatMap(name => inputAttributes.find(_.name == name))
@@ -189,6 +192,14 @@ class SimpleTextRelation(
       case _ => true
     }
   }
+}
+
+object SimpleTextRelation {
+  // Used to test column pruning
+  var requiredColumns: Seq[String] = Nil
+
+  // Used to test filter push-down
+  var pushedFilters: Set[Filter] = Set.empty
 }
 
 /**
