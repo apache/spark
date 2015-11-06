@@ -40,8 +40,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
 
   val testH2Dialect = new JdbcDialect {
     override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
-    override def getCatalystType(
-        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+    override def getCatalystType(sqlType: Int, typeName: String, size: Int, scale: Int,
+                                 md: MetadataBuilder): Option[DataType] =
       Some(StringType)
   }
 
@@ -437,7 +437,8 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val agg = new AggregatedDialect(List(new JdbcDialect {
       override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
       override def getCatalystType(
-          sqlType: Int, typeName: String, size: Int, scale: Int, md: MetadataBuilder): Option[DataType] =
+          sqlType: Int, typeName: String, size: Int, scale: Int,
+          md: MetadataBuilder): Option[DataType] =
         if (sqlType % 2 == 0) {
           Some(LongType)
         } else {
