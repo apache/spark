@@ -537,10 +537,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     val childPlan = nodeToPlan(query, context)
     val withUDFs = childPlan.flatMap {
-        case p =>
-          p.expressions.collect {
-            case _: UnresolvedFunction => true
-          }
+      case p =>
+        p.expressions.flatMap { _.find {
+          case _: UnresolvedFunction => true
+          case _ => false
+        }}
     }.nonEmpty
 
     CreateViewAsSelect(tableDesc, childPlan, allowExist, replace, sql, withUDFs)
