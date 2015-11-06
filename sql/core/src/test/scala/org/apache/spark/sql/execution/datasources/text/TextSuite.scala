@@ -65,7 +65,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   /** Verifies data and schema. */
   private def verifyFrame(df: DataFrame): Unit = {
     // schema
-    assert(df.schema == new StructType().add("text", StringType))
+    assert(df.schema == new StructType().add("value", StringType))
 
     // verify content
     val data = df.collect()
