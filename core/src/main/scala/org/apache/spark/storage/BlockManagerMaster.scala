@@ -17,14 +17,14 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{RpcUtils, ThreadUtils}
-import org.apache.spark.{Logging, SparkConf, SparkException}
-
 import scala.collection.Iterable
 import scala.collection.generic.CanBuildFrom
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
+
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
 private[spark]
 class BlockManagerMaster(
