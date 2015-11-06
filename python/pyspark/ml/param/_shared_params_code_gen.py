@@ -62,12 +62,15 @@ def _gen_param_header(name, doc, defaultValueStr, expectedType):
         self._setDefault($name=$defaultValueStr)'''
 
     Name = name[0].upper() + name[1:]
+    expectedTypeName = str(expectedType)
+    if expectedType is not None:
+        expectedTypeName = expectedType.__name__
     return template \
         .replace("$name", name) \
         .replace("$Name", Name) \
         .replace("$doc", doc) \
         .replace("$defaultValueStr", str(defaultValueStr)) \
-        .replace("$expectedType", str(expectedType))
+        .replace("$expectedType", expectedTypeName)
 
 
 def _gen_param_code(name, doc, defaultValueStr):
