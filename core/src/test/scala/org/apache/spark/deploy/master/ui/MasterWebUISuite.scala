@@ -23,6 +23,7 @@ import scala.io.Source
 import scala.language.postfixOps
 
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonAST.{JNothing, JString, JInt}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfter
 
@@ -31,7 +32,6 @@ import org.apache.spark.deploy.DeployMessages.MasterStateResponse
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.rpc.RpcEnv
-import org.json4s.JsonAST.{JNothing, JString, JInt}
 
 
 class MasterWebUISuite extends SparkFunSuite with BeforeAndAfter {
