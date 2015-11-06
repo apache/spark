@@ -23,7 +23,7 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{execution, AnalysisException, SaveMode}
+import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 
@@ -155,4 +155,23 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
     }
   }
+
+  test("SPARK-11500: Not deterministic order of columns when using merging schemas.") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val pathOne = s"${dir.getCanonicalPath}/table1"
+        Seq(1, 1).zipWithIndex.toDF("a", "b").write.parquet(pathOne)
+        val pathTwo = s"${dir.getCanonicalPath}/table2"
+        Seq(1, 1).zipWithIndex.toDF("c", "b").write.parquet(pathTwo)
+        val pathThree = s"${dir.getCanonicalPath}/table3"
+        Seq(1, 1).zipWithIndex.toDF("d", "b").write.parquet(pathThree)
+
+        // Here the columns shows according to the order of given files.
+        assert(sqlContext.read.parquet(pathOne, pathTwo, pathThree).schema.map(_.name)
+          === Seq("a", "b", "c", "d"))
+      }
+    }
+  }
 }
+
