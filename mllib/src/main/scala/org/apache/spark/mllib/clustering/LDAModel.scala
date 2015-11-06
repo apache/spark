@@ -377,20 +377,18 @@ class LocalLDAModel private[clustering] (
    * @return (document ID, topic mixture distribution for document)
    */
   @Since("1.6.0")
-  def topicDistributions(document: (Long, Vector)): (Long, Vector) = {
+  def topicDistributions(document: Vector): Vector = {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
-    val id = document._1
-    val termCounts = document._2
-    if (termCounts.numNonzeros == 0) {
-      (id, Vectors.zeros(this.k))
+    if (document.numNonzeros == 0) {
+      Vectors.zeros(this.k)
     } else {
       val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
-        termCounts,
+        document,
         expElogbeta,
         this.docConcentration.toBreeze,
         gammaShape,
         this.k)
-      (id, Vectors.dense(normalize(gamma, 1.0).toArray))
+      Vectors.dense(normalize(gamma, 1.0).toArray)
     }
   }
 
