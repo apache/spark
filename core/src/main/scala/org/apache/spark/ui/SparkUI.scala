@@ -21,6 +21,7 @@ import java.util.Date
 
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}
+import org.apache.spark.util.JsonProtocol
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -30,7 +31,6 @@ import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobsTab, JobProgressListener, StagesTab}
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
-import org.apache.spark.ui.sql.{SQLHistoryListener, SQLTab, SQLListener}
 
 /**
  * Top level user interface for a Spark application.
@@ -151,11 +151,13 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    val sqlListener = new SQLHistoryListener(conf)
-    listenerBus.addListener(sqlListener)
     val sparkUI = create(
       None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
-    new SQLTab(sqlListener, sparkUI)
+    JsonProtocol.eventRegisters.foreach { eventRegister =>
+      val listener = eventRegister.getListener()
+      listenerBus.addListener(listener)
+      eventRegister.attachUITab(listener, sparkUI)
+    }
     sparkUI
   }
 

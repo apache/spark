@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.ui
 
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
+
+import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -40,7 +43,7 @@ private[ui] case class SparkPlanGraph(
   }
 }
 
-private[spark] object SparkPlanGraph {
+private[sql] object SparkPlanGraph {
 
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.

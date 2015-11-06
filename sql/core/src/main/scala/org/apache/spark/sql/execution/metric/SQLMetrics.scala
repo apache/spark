@@ -15,7 +15,7 @@
 * limitations under the License.
 */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.util.Utils
 import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}

@@ -15,12 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.ui
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricValue, SQLMetricParam}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 
 import scala.collection.mutable
+
+@DeveloperApi
+case class SparkListenerSQLExecutionStart(
+    executionId: Long,
+    description: String,
+    details: String,
+    physicalPlanDescription: String,
+    sparkPlanInfo: SparkPlanInfo,
+    time: Long)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+  extends SparkListenerEvent
 
 private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 

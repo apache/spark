@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
-import org.apache.spark.scheduler.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionStart,
+  SparkListenerSQLExecutionEnd}
 import org.apache.spark.util.Utils
 
 private[sql] object SQLExecution {

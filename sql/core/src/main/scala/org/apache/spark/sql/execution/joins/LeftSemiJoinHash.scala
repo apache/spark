@@ -21,8 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, Distribution, ClusteredDistribution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.ui.sql.SQLMetrics
 
 /**
  * Build the right table's join keys into a HashSet, and iteratively go through the left

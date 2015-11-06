@@ -15,19 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.Logging
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-/**
- * :: DeveloperApi ::
- * Stores information about a SQL SparkPlan.
- */
-@DeveloperApi
-class SparkPlanInfo(
-    val nodeName: String,
-    val simpleString: String,
-    val children: Seq[SparkPlanInfo],
-    val metrics: Seq[SQLMetricInfo]
-) {
+private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
+  extends SparkUITab(sparkUI, "SQL") with Logging {
+
+  val parent = sparkUI
+
+  attachPage(new AllExecutionsPage(this))
+  attachPage(new ExecutionPage(this))
+  parent.attachTab(this)
+
+  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
+}
+
+private[sql] object SQLTab {
+  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
 }

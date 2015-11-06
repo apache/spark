@@ -15,27 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.metric
 
-import java.util.concurrent.atomic.AtomicInteger
+import org.apache.spark.annotation.DeveloperApi
 
-import org.apache.spark.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
-
-import scala.collection.mutable
-
-private[spark] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
-
-  val parent = sparkUI
-
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
-
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-private[sql] object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+/**
+ * :: DeveloperApi ::
+ * Stores information about a SQL Metric.
+ */
+@DeveloperApi
+class SQLMetricInfo(
+    val name: String,
+    val accumulatorId: Long,
+    val metricParam: String) {
 }

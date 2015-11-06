@@ -15,17 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.ui
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.{SparkListenerEventRegister, SparkListener}
+import org.apache.spark.ui.SparkUI
 
-/**
- * :: DeveloperApi ::
- * Stores information about a SQL Metric.
- */
-@DeveloperApi
-class SQLMetricInfo(
-    val name: String,
-    val accumulatorId: Long,
-    val metricParam: String) {
+class SQLEventRegister extends SparkListenerEventRegister {
+
+  override def getEventClasses(): List[Class[_]] = {
+    List(
+      classOf[SparkListenerSQLExecutionStart],
+      classOf[SparkListenerSQLExecutionEnd])
+  }
+
+  override def getListener(): SparkListener = {
+    new SQLHistoryListener(new SparkConf())
+  }
+
+  override def attachUITab(listener: SparkListener, sparkUI: SparkUI): Unit = {
+    new SQLTab(listener.asInstanceOf[SQLListener], sparkUI)
+  }
 }

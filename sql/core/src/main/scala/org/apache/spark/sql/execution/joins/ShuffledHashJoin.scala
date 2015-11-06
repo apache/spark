@@ -21,8 +21,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
-import org.apache.spark.ui.sql.SQLMetrics
 
 /**
  * Performs an inner hash join of two child relations by first shuffling the data using the join

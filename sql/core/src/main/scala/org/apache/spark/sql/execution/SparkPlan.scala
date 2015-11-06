@@ -31,8 +31,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.ui.sql.{LongSQLMetric, SQLMetric}
 
 object SparkPlan {
   protected[sql] val currentContext = new ThreadLocal[SQLContext]()

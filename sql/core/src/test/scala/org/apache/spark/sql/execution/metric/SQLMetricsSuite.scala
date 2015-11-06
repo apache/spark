@@ -21,16 +21,17 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
+import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.ui.sql.{SQLMetrics, SparkPlanGraph}
 import org.apache.spark.util.Utils
+
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._

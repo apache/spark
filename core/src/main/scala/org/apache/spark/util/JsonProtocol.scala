@@ -17,18 +17,19 @@
 
 package org.apache.spark.util
 
-import java.io.IOException
-import java.util.{Properties, UUID}
+import java.util.{ServiceLoader, Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.ui.sql.{SQLMetricInfo, SparkPlanInfo}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.mutable.ListBuffer
 
-import org.json4s.DefaultFormats
+import org.json4s.{ShortTypeHints, DefaultFormats}
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.Serialization.{read, write}
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -51,10 +52,24 @@ import org.apache.spark.storage._
  *  - Any new JSON fields should be optional; use `Utils.jsonOption` when reading these fields
  *    in `*FromJson` methods.
  */
-private[spark] object JsonProtocol {
+private[spark] object JsonProtocol extends Logging {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
-  private implicit val format = DefaultFormats
+  val eventRegisters: Iterable[SparkListenerEventRegister] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[SparkListenerEventRegister], loader)
+    serviceLoader.asScala
+  }
+
+  var eventClasses = new ListBuffer[Class[_]]()
+  eventRegisters.foreach { eventRegister =>
+    eventClasses ++= eventRegister.getEventClasses()
+  }
+
+  private implicit val format = new DefaultFormats {
+    override val typeHintFieldName = "Event"
+    override val typeHints = ShortTypeHints(eventClasses.toList)
+  }
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -96,12 +111,9 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         executorMetricsUpdateToJson(metricsUpdate)
-      case sqlExecutionStart: SparkListenerSQLExecutionStart =>
-        sqlExecutionStartToJson(sqlExecutionStart)
-      case sqlExecutionEnd: SparkListenerSQLExecutionEnd =>
-        sqlExecutionEndToJson(sqlExecutionEnd)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
+      case _ => parse(write(event))
     }
   }
 
@@ -243,22 +255,6 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Task Metrics" -> taskMetricsToJson(metrics))
     })
-  }
-
-  def sqlExecutionStartToJson(sqlExecutionStart: SparkListenerSQLExecutionStart): JValue = {
-    ("Event" -> Utils.getFormattedClassName(sqlExecutionStart)) ~
-    ("Execution ID" -> sqlExecutionStart.executionId) ~
-    ("Description" -> sqlExecutionStart.description) ~
-    ("Details" -> sqlExecutionStart.details) ~
-    ("Physical Plan Description" -> sqlExecutionStart.physicalPlanDescription) ~
-    ("SparkPlan Info" -> sparkPlanInfoToJson(sqlExecutionStart.sparkPlanInfo)) ~
-    ("Timestamp" -> sqlExecutionStart.time)
-  }
-
-  def sqlExecutionEndToJson(sqlExecutionEnd: SparkListenerSQLExecutionEnd): JValue = {
-    ("Event" -> Utils.getFormattedClassName(sqlExecutionEnd)) ~
-    ("Execution ID" -> sqlExecutionEnd.executionId) ~
-    ("Timestamp" -> sqlExecutionEnd.time)
   }
 
   /** ------------------------------------------------------------------- *
@@ -450,21 +446,6 @@ private[spark] object JsonProtocol {
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap))
   }
 
-  def sparkPlanInfoToJson(planInfo: SparkPlanInfo): JValue = {
-    val children = JArray(planInfo.children.map(sparkPlanInfoToJson).toList)
-    val metrics = JArray(planInfo.metrics.map(sqlMetricInfoToJson).toList)
-    ("Node Name" -> planInfo.nodeName) ~
-    ("Simple String" -> planInfo.simpleString) ~
-    ("Children" -> children) ~
-    ("Metrics" -> metrics)
-  }
-
-  def sqlMetricInfoToJson(sqlMetricInfo: SQLMetricInfo): JValue = {
-    ("Name" -> sqlMetricInfo.name) ~
-    ("Accumulator Id" -> sqlMetricInfo.accumulatorId) ~
-    ("Metric Param" -> sqlMetricInfo.metricParam)
-  }
-
   /** ------------------------------ *
    * Util JSON serialization methods |
    * ------------------------------- */
@@ -522,10 +503,9 @@ private[spark] object JsonProtocol {
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
-    val sqlExecutionStart = Utils.getFormattedClassName(SparkListenerSQLExecutionStart)
-    val sqlExecutionEnd = Utils.getFormattedClassName(SparkListenerSQLExecutionEnd)
 
-    (json \ "Event").extract[String] match {
+    val event = (json \ "Event").extract[String]
+    event match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
       case `stageCompleted` => stageCompletedFromJson(json)
       case `taskStart` => taskStartFromJson(json)
@@ -543,27 +523,8 @@ private[spark] object JsonProtocol {
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
-      case `sqlExecutionStart` => sqlExecutionStartFromJson(json)
-      case `sqlExecutionEnd` => sqlExecutionEndFromJson(json)
-      case other => throw new IOException(s"Unknown Event $other")
+      case other => read[SparkListenerEvent](compact(render(json)))
     }
-  }
-
-  def sqlExecutionStartFromJson(json: JValue): SparkListenerSQLExecutionStart = {
-    val executionId = (json \ "Execution ID").extract[Long]
-    val description = (json \ "Description").extract[String]
-    val details = (json \ "Details").extract[String]
-    val physicalPlanDescription = (json \ "Physical Plan Description").extract[String]
-    val sparkPlanInfo = sparkPlanInfoFromJson(json \ "SparkPlan Info")
-    val time = (json \ "Timestamp").extract[Long]
-    SparkListenerSQLExecutionStart(executionId, description, details, physicalPlanDescription,
-      sparkPlanInfo, time)
-  }
-
-  def sqlExecutionEndFromJson(json: JValue): SparkListenerSQLExecutionEnd = {
-    val executionId = (json \ "Execution ID").extract[Long]
-    val time = (json \ "Timestamp").extract[Long]
-    SparkListenerSQLExecutionEnd(executionId, time)
   }
 
   def stageSubmittedFromJson(json: JValue): SparkListenerStageSubmitted = {
@@ -952,21 +913,6 @@ private[spark] object JsonProtocol {
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
     new ExecutorInfo(executorHost, totalCores, logUrls)
-  }
-
-  def sparkPlanInfoFromJson(json: JValue): SparkPlanInfo = {
-    val nodeName = (json \ "Node Name").extract[String]
-    val simpleString = (json \ "Simple String").extract[String]
-    val children = (json \ "Children").extract[List[JValue]].map(sparkPlanInfoFromJson)
-    val metrics = (json \ "Metrics").extract[List[JValue]].map(sqlMetricInfoFromJson)
-    new SparkPlanInfo(nodeName, simpleString, children, metrics)
-  }
-
-  def sqlMetricInfoFromJson(json: JValue): SQLMetricInfo = {
-    val name = (json \ "Name").extract[String]
-    val accumulatorId = (json \ "Accumulator Id").extract[Long]
-    val metricParam = (json \ "Metric Param").extract[String]
-    new SQLMetricInfo(name, accumulatorId, metricParam)
   }
 
   /** -------------------------------- *

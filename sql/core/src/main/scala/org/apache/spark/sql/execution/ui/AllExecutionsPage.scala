@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.sql
+package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 

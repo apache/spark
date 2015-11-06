@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.ui.sql.SQLListener
-
 import scala.language.implicitConversions
 
 import java.io._
@@ -227,7 +225,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private var _sqlListener: SQLListener = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -250,7 +247,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
-  private[spark] def sqlListener: SQLListener = _sqlListener
 
   // Generate the random name for a temp folder in external block store.
   // Add a timestamp as the suffix here to make it more safe
@@ -1394,9 +1390,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @DeveloperApi
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
-    if (listener.isInstanceOf[SQLListener]) {
-      _sqlListener = listener.asInstanceOf[SQLListener]
-    }
   }
 
   /**

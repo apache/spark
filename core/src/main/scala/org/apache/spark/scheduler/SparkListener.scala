@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.ui.sql.SparkPlanInfo
+import org.apache.spark.ui.SparkUI
 
 import scala.collection.Map
 import scala.collection.mutable
@@ -29,17 +29,20 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.{JsonProtocol, Distribution, Utils}
 
 @DeveloperApi
-sealed trait SparkListenerEvent
+trait SparkListenerEvent {
+}
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+}
+
 
 @DeveloperApi
-case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
+case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {}
 
 @DeveloperApi
 case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
@@ -126,25 +129,17 @@ case class SparkListenerApplicationStart(
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
-@DeveloperApi
-case class SparkListenerSQLExecutionStart(
-    executionId: Long,
-    description: String,
-    details: String,
-    physicalPlanDescription: String,
-    sparkPlanInfo: SparkPlanInfo,
-    time: Long)
-  extends SparkListenerEvent
-
-@DeveloperApi
-case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
-  extends SparkListenerEvent
-
 /**
  * An internal class that describes the metadata of an event log.
  * This event is not meant to be posted to listeners downstream.
  */
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+
+trait SparkListenerEventRegister {
+  def getEventClasses(): List[Class[_]]
+  def getListener(): SparkListener
+  def attachUITab(listener: SparkListener, sparkUI: SparkUI)
+}
 
 /**
  * :: DeveloperApi ::

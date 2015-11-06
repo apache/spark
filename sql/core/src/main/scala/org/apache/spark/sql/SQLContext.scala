@@ -42,11 +42,11 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, _}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.ui.sql.{SQLTab, SQLListener}
 import org.apache.spark.util.Utils
 
 /**
@@ -67,12 +67,15 @@ import org.apache.spark.util.Utils
 class SQLContext private[sql](
     @transient val sparkContext: SparkContext,
     @transient protected[sql] val cacheManager: CacheManager,
+    @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
   extends org.apache.spark.Logging with Serializable {
 
   self =>
 
-  def this(sparkContext: SparkContext) = this(sparkContext, new CacheManager, true)
+  def this(sparkContext: SparkContext) = {
+    this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
+  }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
@@ -98,15 +101,6 @@ class SQLContext private[sql](
     }
   }
 
-  @transient private[sql] val listener: SQLListener = if (sparkContext.sqlListener != null) {
-      sparkContext.sqlListener
-    } else {
-      val listener = new SQLListener(sparkContext.conf)
-      sparkContext.addSparkListener(listener)
-      sparkContext.ui.foreach(new SQLTab(listener, _))
-      listener
-    }
-
   /**
    * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
    * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
@@ -117,6 +111,7 @@ class SQLContext private[sql](
     new SQLContext(
       sparkContext = sparkContext,
       cacheManager = cacheManager,
+      listener = listener,
       isRootContext = false)
   }
 
@@ -1250,6 +1245,8 @@ object SQLContext {
    */
   @transient private val instantiatedContext = new AtomicReference[SQLContext]()
 
+  @transient private val sqlListener = new AtomicReference[SQLListener]()
+
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
@@ -1333,4 +1330,13 @@ object SQLContext {
     }
   }
 
+  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
+    if (sqlListener.get() == null) {
+      val listener = new SQLListener(sc.conf)
+      sqlListener.compareAndSet(null, listener)
+      sc.addSparkListener(listener)
+      sc.ui.foreach(new SQLTab(listener, _))
+    }
+    sqlListener.get()
+  }
 }

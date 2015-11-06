@@ -17,12 +17,26 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.ui.sql._
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.util.Utils
+
+/**
+ * :: DeveloperApi ::
+ * Stores information about a SQL SparkPlan.
+ */
+@DeveloperApi
+class SparkPlanInfo(
+    val nodeName: String,
+    val simpleString: String,
+    val children: Seq[SparkPlanInfo],
+    val metrics: Seq[SQLMetricInfo]
+) {
+}
 
 private[sql] object SparkPlanInfo {
 
-    def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
+  def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
         Utils.getFormattedClassName(metric.param))

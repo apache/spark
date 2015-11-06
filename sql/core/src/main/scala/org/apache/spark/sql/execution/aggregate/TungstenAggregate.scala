@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnaryNode, SparkPlan}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.ui.sql.SQLMetrics
 
 case class TungstenAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
