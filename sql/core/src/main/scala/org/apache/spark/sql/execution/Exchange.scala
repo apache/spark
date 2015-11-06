@@ -416,9 +416,6 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // First check if the existing partitions of the children all match. This means they are
       // partitioned by the same partitioning into the same number of partitions. In that case,
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
-      // TODO: this should be a cost based decision. For example, a big relation should probably
-      // maintain its existing number of partitions and smaller partitions should be shuffled.
-      // defaultPartitions is arbitrary.
       val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
       val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
         case (child, distribution) => {

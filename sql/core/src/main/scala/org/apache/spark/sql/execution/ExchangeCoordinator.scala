@@ -142,8 +142,9 @@ private[sql] class ExchangeCoordinator(
     // The reason that we are expecting a single value of the number of pre-shuffle partitions
     // is that when we add Exchanges, we set the number of pre-shuffle partitions
     // (i.e. map output partitions) using a static setting, which is the value of
-    // spark.sql.shuffle.partitions. Even two input RDDs are having different number of partitions,
-    // they will have the same number of pre-shuffle partitions (i.e. map output partitions).
+    // spark.sql.shuffle.partitions. Even if two input RDDs are having different
+    // number of partitions, they will have the same number of pre-shuffle partitions
+    // (i.e. map output partitions).
     assert(
       distinctNumPreShufflePartitions.length == 1,
       "There should be only one distinct value of the number pre-shuffle partitions " +

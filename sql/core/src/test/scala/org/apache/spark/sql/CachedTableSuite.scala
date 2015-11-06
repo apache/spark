@@ -468,5 +468,42 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       sqlContext.uncacheTable("t1")
       sqlContext.uncacheTable("t2")
     }
+
+    // repartition's column ordering is different from group by column ordering.
+    // But they use the same set of columns.
+    withTempTable("t1") {
+      testData.repartition(6, $"value", $"key").registerTempTable("t1")
+      sqlContext.cacheTable("t1")
+
+      val query = sql("SELECT value, key from t1 group by key, value")
+      verifyNumExchanges(query, 0)
+      checkAnswer(
+        query,
+        testData.distinct().select($"value", $"key"))
+      sqlContext.uncacheTable("t1")
+    }
+
+    // repartition's column ordering is different from join condition's column ordering.
+    // We will still shuffle because hashcodes of a row depend on the column ordering.
+    // If we do not shuffle, we may actually partition two tables in totally two different way.
+    // See PartitioningSuite for more details.
+    withTempTable("t1", "t2") {
+      val df1 = testData
+      df1.repartition(6, $"value", $"key").registerTempTable("t1")
+      val df2 = testData2.select($"a", $"b".cast("string"))
+      df2.repartition(6, $"a", $"b").registerTempTable("t2")
+      sqlContext.cacheTable("t1")
+      sqlContext.cacheTable("t2")
+
+      val query =
+        sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a and t1.value = t2.b")
+      verifyNumExchanges(query, 1)
+      assert(query.queryExecution.executedPlan.outputPartitioning.numPartitions === 6)
+      checkAnswer(
+        query,
+        df1.join(df2, $"key" === $"a" && $"value" === $"b").select($"key", $"value", $"a", $"b"))
+      sqlContext.uncacheTable("t1")
+      sqlContext.uncacheTable("t2")
+    }
   }
 }
