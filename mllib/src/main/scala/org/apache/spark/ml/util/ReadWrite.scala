@@ -17,12 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import java.{util => ju}
 import java.io.IOException
-
-import scala.annotation.varargs
-import scala.collection.mutable
-import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s._
@@ -88,6 +83,9 @@ abstract class Writer extends BaseReadWrite {
     shouldOverwrite = true
     this
   }
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
 }
 
 /**
@@ -121,6 +119,9 @@ abstract class Reader[T] extends BaseReadWrite {
    * Loads the ML component from the input path, the same as [[from()]].
    */
   def load(path: String): T = from(path)
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
 }
 
 /**
@@ -130,7 +131,7 @@ abstract class Reader[T] extends BaseReadWrite {
 @Experimental
 @Since("1.6.0")
 trait Readable[T] {
-  
+
   /**
    * Returns a [[Reader]] instance for this class.
    */
@@ -139,7 +140,9 @@ trait Readable[T] {
 }
 
 /**
- * Default [[Writer]] implementation for non-meta transformers and estimators.
+ * Default [[Writer]] implementation for transformers and estimators that contain basic
+ * (json4s-serializable) params and no data. This will not handle more complex params or types with
+ * data (e.g., models with coefficients).
  * @param instance object to save
  */
 private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logging {
@@ -180,7 +183,9 @@ private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logg
 }
 
 /**
- * Default [[Reader]] implementation for non-meta transformers and estimators.
+ * Default [[Reader]] implementation for transformers and estimators that contain basic
+ * (json4s-serializable) params and no data. This will not handle more complex params or types with
+ * data (e.g., models with coefficients).
  * @tparam T ML instance type
  */
 private[ml] class DefaultParamsReader[T] extends Reader[T] {

@@ -49,7 +49,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       if (instance.isDefined(p)) {
         (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
           case (Array(values), Array(newValues)) =>
-            assert(values !== newValues, s"Values do not match on param ${p.name}.")
+            assert(values === newValues, s"Values do not match on param ${p.name}.")
           case (value, newValue) =>
             assert(value === newValue, s"Values do not match on param ${p.name}.")
         }
@@ -89,8 +89,8 @@ class MyParams(override val uid: String) extends Params with Writable {
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
-object MyParams {
-  def load: Reader[MyParams] = new DefaultParamsReader[MyParams]
+object MyParams extends Readable[MyParams] {
+  override def read: Reader[MyParams] = new DefaultParamsReader[MyParams]
 }
 
 class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext

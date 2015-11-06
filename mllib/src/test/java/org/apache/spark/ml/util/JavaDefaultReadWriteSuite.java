@@ -26,6 +26,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.util.Utils;
 
 public class JavaDefaultReadWriteSuite {
@@ -63,8 +64,9 @@ public class JavaDefaultReadWriteSuite {
     } catch (IOException e) {
       // expected
     }
-    instance.write().overwrite().to(outputPath);
-    MyParams newInstance = MyParams.load().from(outputPath);
+    SQLContext sqlContext = new SQLContext(jsc);
+    instance.write().context(sqlContext).overwrite().to(outputPath);
+    MyParams newInstance = MyParams.read().from(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
     Assert.assertEquals("Params should be preserved.",
       2, newInstance.getOrDefault(newInstance.intParam()));
