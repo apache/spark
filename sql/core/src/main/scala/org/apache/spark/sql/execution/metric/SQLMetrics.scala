@@ -26,7 +26,7 @@ import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
  *
  * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
-private[spark] abstract class SQLMetric[R <: SQLMetricValue[T], T](
+private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String, val param: SQLMetricParam[R, T])
   extends Accumulable[R, T](param.zero, param, Some(name), true) {
 
@@ -39,7 +39,7 @@ private[spark] abstract class SQLMetric[R <: SQLMetricValue[T], T](
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  */
-private[spark] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
+private[sql] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends AccumulableParam[R, T] {
 
   /**
    * A function that defines how we aggregate the final accumulator results among all tasks,
@@ -54,7 +54,7 @@ private[spark] trait SQLMetricParam[R <: SQLMetricValue[T], T] extends Accumulab
  * Create a layer for specialized metric. We cannot add `@specialized` to
  * `Accumulable/AccumulableParam` because it will break Java source compatibility.
  */
-private[spark] trait SQLMetricValue[T] extends Serializable {
+private[sql] trait SQLMetricValue[T] extends Serializable {
 
   def value: T
 
@@ -64,7 +64,7 @@ private[spark] trait SQLMetricValue[T] extends Serializable {
 /**
  * A wrapper of Long to avoid boxing and unboxing when using Accumulator
  */
-private[spark] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
+private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetricValue[Long] {
 
   def add(incr: Long): LongSQLMetricValue = {
     _value += incr
@@ -79,7 +79,7 @@ private[spark] class LongSQLMetricValue(private var _value : Long) extends SQLMe
  * A specialized long Accumulable to avoid boxing and unboxing when using Accumulator's
  * `+=` and `add`.
  */
-private[spark] class LongSQLMetric(name: String, param: LongSQLMetricParam)
+private[sql] class LongSQLMetric(name: String, param: LongSQLMetricParam)
   extends SQLMetric[LongSQLMetricValue, Long](name, param) {
 
   override def +=(term: Long): Unit = {
@@ -91,7 +91,7 @@ private[spark] class LongSQLMetric(name: String, param: LongSQLMetricParam)
   }
 }
 
-private[spark] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
+private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
   extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
@@ -104,9 +104,9 @@ private[spark] class LongSQLMetricParam(val stringValue: Seq[Long] => String, in
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private[spark] object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
+private[sql] object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
 
-private[spark] object StaticsLongSQLMetricParam extends LongSQLMetricParam(
+private[sql] object StaticsLongSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {
     // This is a workaround for SPARK-11013.
     // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
@@ -124,7 +124,7 @@ private[spark] object StaticsLongSQLMetricParam extends LongSQLMetricParam(
     s"\n$sum ($min, $med, $max)"
   }, -1L)
 
-private[spark] object SQLMetrics {
+private[sql] object SQLMetrics {
 
   private def createLongMetric(
       sc: SparkContext,

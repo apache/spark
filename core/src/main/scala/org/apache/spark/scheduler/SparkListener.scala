@@ -19,8 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.ui.SparkUI
-
 import scala.collection.Map
 import scala.collection.mutable
 
@@ -29,7 +27,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
-import org.apache.spark.util.{JsonProtocol, Distribution, Utils}
+import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
 trait SparkListenerEvent {
@@ -42,7 +41,7 @@ case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Propert
 
 
 @DeveloperApi
-case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {}
+case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
@@ -135,9 +134,23 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
  */
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
+/**
+ * Interface for registering events defined in other modules like SQL.
+ */
 trait SparkListenerEventRegister {
+  /**
+   * Get the class of events to register.
+   */
   def getEventClasses(): List[Class[_]]
+
+  /**
+   * Get a listener used when rebuilding the history UI.
+   */
   def getListener(): SparkListener
+
+  /**
+   * Attach a UI Tab to the spark UI if necessary.
+   */
   def attachUITab(listener: SparkListener, sparkUI: SparkUI)
 }
 

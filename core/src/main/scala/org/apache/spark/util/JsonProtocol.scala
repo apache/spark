@@ -52,13 +52,14 @@ import org.apache.spark.storage._
  *  - Any new JSON fields should be optional; use `Utils.jsonOption` when reading these fields
  *    in `*FromJson` methods.
  */
-private[spark] object JsonProtocol extends Logging {
+private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
+  // Events defined in other modules are allowed to be registered through implementing the
+  // SparkListenerEventRegister trait. These events are written to Json using Jackson.
   val eventRegisters: Iterable[SparkListenerEventRegister] = {
     val loader = Utils.getContextOrSparkClassLoader
-    val serviceLoader = ServiceLoader.load(classOf[SparkListenerEventRegister], loader)
-    serviceLoader.asScala
+    ServiceLoader.load(classOf[SparkListenerEventRegister], loader).asScala
   }
 
   var eventClasses = new ListBuffer[Class[_]]()
@@ -504,8 +505,7 @@ private[spark] object JsonProtocol extends Logging {
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
 
-    val event = (json \ "Event").extract[String]
-    event match {
+    (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
       case `stageCompleted` => stageCompletedFromJson(json)
       case `taskStart` => taskStartFromJson(json)

@@ -76,7 +76,6 @@ class SQLContext private[sql](
   def this(sparkContext: SparkContext) = {
     this(sparkContext, new CacheManager, SQLContext.createListenerAndUI(sparkContext), true)
   }
-
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
@@ -1330,6 +1329,9 @@ object SQLContext {
     }
   }
 
+  /**
+   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   */
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
     if (sqlListener.get() == null) {
       val listener = new SQLListener(sc.conf)

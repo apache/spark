@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
-import org.apache.spark.sql.execution.metric.{SQLMetrics, LongSQLMetric}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 
 /**
  * Performs an sort merge join of two child relations.

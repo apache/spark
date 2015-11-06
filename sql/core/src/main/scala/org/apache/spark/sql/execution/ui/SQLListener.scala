@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.ui
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricValue, SQLMetricParam}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
-
-import scala.collection.mutable
+import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
@@ -39,7 +40,24 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
-private[spark] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
+private[sql] class SQLEventRegister extends SparkListenerEventRegister {
+
+  override def getEventClasses(): List[Class[_]] = {
+    List(
+      classOf[SparkListenerSQLExecutionStart],
+      classOf[SparkListenerSQLExecutionEnd])
+  }
+
+  override def getListener(): SparkListener = {
+    new SQLHistoryListener(new SparkConf())
+  }
+
+  override def attachUITab(listener: SparkListener, sparkUI: SparkUI): Unit = {
+    new SQLTab(listener.asInstanceOf[SQLListener], sparkUI)
+  }
+}
+
+private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
 

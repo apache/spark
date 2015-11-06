@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.spark.Logging
-import org.apache.spark.ui.{UIUtils, WebUIPage}
-
 import scala.collection.mutable
 import scala.xml.Node
+
+import org.apache.commons.lang3.StringEscapeUtils
+
+import org.apache.spark.Logging
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with Logging {
 

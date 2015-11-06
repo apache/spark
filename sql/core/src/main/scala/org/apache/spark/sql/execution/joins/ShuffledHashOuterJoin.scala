@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.execution.metric.SQLMetrics
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
@@ -27,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Performs a hash based outer join for two child relations by shuffling the data using

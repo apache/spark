@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.xml.Node
+
 import org.apache.spark.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
-import scala.xml.Node
-
-private[ui] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
   private val listener = parent.listener
 
