@@ -134,7 +134,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.toString"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.jdbc.PostgresDialect.hashCode"),
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
-      ) ++seq(
+      ) ++ Seq(
         // SPARK-9065 Support message handler in Kafka Python API
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
