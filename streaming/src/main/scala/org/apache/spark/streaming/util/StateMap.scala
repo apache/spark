@@ -166,15 +166,21 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     new OpenHashMapBasedStateMap[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
 
+  /** Whether the delta chain lenght is long enough that it should be compacted */
   def shouldCompact: Boolean = {
     deltaChainLength >= deltaChainThreshold
   }
 
+  /** Length of the delta chains of this map */
   def deltaChainLength: Int = parentStateMap match {
     case map: OpenHashMapBasedStateMap[_, _] => map.deltaChainLength + 1
     case _ => 0
   }
 
+  /**
+   * Approximate number of keys in the map. This is an overestimation that is mainly used to
+   * reserve capacity in a new map at delta compaction time.
+   */
   def approxSize: Int = deltaMap.size + {
     parentStateMap match {
       case s: OpenHashMapBasedStateMap[_, _] => s.approxSize
@@ -182,6 +188,7 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     }
   }
 
+  /** Get all the data of this map as string formatted as a tree based on the delta depth */
   override def toDebugString(): String = {
     val tabs = if (deltaChainLength > 0) {
       ("    " * (deltaChainLength - 1)) + "+--- "
@@ -193,11 +200,16 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     s"[${System.identityHashCode(this)}, ${System.identityHashCode(parentStateMap)}]"
   }
 
-  private def writeObject(outputStream: ObjectOutputStream): Unit = {
+  /**
+   * Serialize the map data. Besides serialization, this method actually compact the deltas
+   * (if needed) in a single pass over all the data in the map.
+   */
 
+  private def writeObject(outputStream: ObjectOutputStream): Unit = {
+    // Write all the non-transient fields, especially class tags, etc.
     outputStream.defaultWriteObject()
 
-    // Write the deltaMap
+    // Write the data in the delta of this state map
     outputStream.writeInt(deltaMap.size)
     val deltaMapIterator = deltaMap.iterator
     var deltaMapCount = 0
@@ -209,7 +221,8 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     }
     assert(deltaMapCount == deltaMap.size)
 
-    // Write the parentStateMap while consolidating
+    // Write the data in the parent state map while copying the data into a new parent map for
+    // compaction (if needed)
     val doCompaction = shouldCompact
     val newParentSessionStore = if (doCompaction) {
       val initCapacity = if (approxSize > 0) approxSize else 64
@@ -220,6 +233,8 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
 
     var parentSessionCount = 0
 
+    // First write the approximate size of the data to be written, so that readObject can
+    // allocate appropriately sized OpenHashMap.
     outputStream.writeInt(approxSize)
 
     while(iterOfActiveSessions.hasNext) {
@@ -235,6 +250,8 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
           key, StateInfo(state, updateTime, deleted = false))
       }
     }
+
+    // Write the final limit marking object with the correct count of records written.
     val limiterObj = new LimitMarker(parentSessionCount)
     outputStream.writeObject(limiterObj)
     if (doCompaction) {
@@ -242,9 +259,13 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     }
   }
 
+  /** Deserialize the map data. */
   private def readObject(inputStream: ObjectInputStream): Unit = {
+
+    // Read the non-transient fields, especially class tags, etc.
     inputStream.defaultReadObject()
 
+    // Read the data of the delta
     val deltaMapSize = inputStream.readInt()
     deltaMap = new OpenHashMap[K, StateInfo[S]]()
     var deltaMapCount = 0
@@ -255,10 +276,15 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
       deltaMapCount += 1
     }
 
+
+    // Read the data of the parent map. Keep reading records, until the limiter is reached
+    // First read the approximate number of records to expect and allocate properly size
+    // OpenHashMap
     val parentSessionStoreSizeHint = inputStream.readInt()
     val newParentSessionStore = new OpenHashMapBasedStateMap[K, S](
       initialCapacity = parentSessionStoreSizeHint, deltaChainThreshold)
 
+    // Read the records until the limit marking object has been reached
     var parentSessionLoopDone = false
     while(!parentSessionLoopDone) {
       val obj = inputStream.readObject()
@@ -278,8 +304,13 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
   }
 }
 
+/**
+ * Companion object of [[OpenHashMapBasedStateMap]] having associated helper
+ * classes and methods
+ */
 private[streaming] object OpenHashMapBasedStateMap {
 
+  /** Internal class to represent the state information */
   case class StateInfo[S](
       var data: S = null.asInstanceOf[S],
       var updateTime: Long = -1,
@@ -296,6 +327,10 @@ private[streaming] object OpenHashMapBasedStateMap {
     }
   }
 
+  /**
+   * Internal class to represent a marker the demarkate the the end of all state data in the
+   * serialized bytes.
+   */
   class LimitMarker(val num: Int) extends Serializable
 
   val DELTA_CHAIN_LENGTH_THRESHOLD = 20

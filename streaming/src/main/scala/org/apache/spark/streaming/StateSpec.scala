@@ -110,13 +110,16 @@ sealed abstract class StateSpec[K, V, S, T] extends Serializable {
 @Experimental
 object StateSpec {
   /**
-   *
-   * @param trackingFunction
-   * @tparam KeyType Class of keys
-   * @tparam ValueType
-   * @tparam StateType
-   * @tparam EmittedType
-   * @return
+   * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
+   * `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+   * @param trackingFunction The function applied on every data item to manage the associated state
+   *                         and generate the emitted data and
+   * @tparam KeyType      Class of the keys
+   * @tparam ValueType    Class of the values
+   * @tparam StateType    Class of the states data
+   * @tparam EmittedType  Class of the emitted data
    */
   def apply[KeyType, ValueType, StateType, EmittedType](
       trackingFunction: (KeyType, Option[ValueType], State[StateType]) => Option[EmittedType]
@@ -124,6 +127,18 @@ object StateSpec {
     new StateSpecImpl[KeyType, ValueType, StateType, EmittedType](trackingFunction)
   }
 
+  /**
+   * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
+   * `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+   * @param trackingFunction The function applied on every data item to manage the associated state
+   *                         and generate the emitted data and
+   * @tparam KeyType      Class of the keys
+   * @tparam ValueType    Class of the values
+   * @tparam StateType    Class of the states data
+   * @tparam EmittedType  Class of the emitted data
+   */
   def create[KeyType, ValueType, StateType, EmittedType](
       trackingFunction: (KeyType, Option[ValueType], State[StateType]) => Option[EmittedType]
     ): StateSpec[KeyType, ValueType, StateType, EmittedType] = {
@@ -143,28 +158,28 @@ case class StateSpecImpl[K, V, S, T](
   @volatile private var initialStateRDD: RDD[(K, S)] = null
   @volatile private var timeoutInterval: Duration = null
 
-  def initialState(rdd: RDD[(K, S)]): this.type = {
+  override def initialState(rdd: RDD[(K, S)]): this.type = {
     this.initialStateRDD = rdd
     this
   }
 
-  def initialState(javaPairRDD: JavaPairRDD[K, S]): this.type = {
+  override def initialState(javaPairRDD: JavaPairRDD[K, S]): this.type = {
     this.initialStateRDD = javaPairRDD.rdd
     this
   }
 
 
-  def numPartitions(numPartitions: Int): this.type = {
+  override def numPartitions(numPartitions: Int): this.type = {
     this.partitioner(new HashPartitioner(numPartitions))
     this
   }
 
-  def partitioner(partitioner: Partitioner): this.type = {
+  override def partitioner(partitioner: Partitioner): this.type = {
     this.partitioner = partitioner
     this
   }
 
-  def timeout(interval: Duration): this.type = {
+  override def timeout(interval: Duration): this.type = {
     this.timeoutInterval = interval
     this
   }

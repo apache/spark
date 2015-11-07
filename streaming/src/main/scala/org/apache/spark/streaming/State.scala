@@ -129,26 +129,26 @@ private[streaming] class StateImpl[S] extends State[S] {
   private var removed: Boolean = false
 
   // ========= Public API =========
-  def exists(): Boolean = {
+  override def exists(): Boolean = {
     defined
   }
 
-  def get(): S = {
+  override def get(): S = {
     state
   }
 
-  def update(newState: S): Unit = {
+  override def update(newState: S): Unit = {
     require(!removed, "Cannot update the state after it has been removed")
     require(!timingOut, "Cannot update the state that is timing out")
     state = newState
     updated = true
   }
 
-  def isTimingOut(): Boolean = {
+  override def isTimingOut(): Boolean = {
     timingOut
   }
 
-  def remove(): Unit = {
+  override def remove(): Unit = {
     require(!timingOut, "Cannot remove the state that is timing out")
     require(!removed, "Cannot remove the state that has already been removed")
     removed = true
