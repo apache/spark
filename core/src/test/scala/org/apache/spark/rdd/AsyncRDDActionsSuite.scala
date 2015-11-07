@@ -198,7 +198,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     }
   }
 
-  test("FutureAction callback must not consume a thread while waiting") {
+  test("SimpleFutureAction callback must not consume a thread while waiting") {
     val executorInvoked = Promise[Unit]
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
@@ -207,6 +207,19 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       override def reportFailure(t: Throwable): Unit = ???
     }
     val f = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr}).countAsync()
+    f.onComplete(_ => ())(fakeExecutionContext)
+    assert(!executorInvoked.isCompleted)
+  }
+
+  test("ComplexFutureAction callback must not consume a thread while waiting") {
+    val executorInvoked = Promise[Unit]
+    val fakeExecutionContext = new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = {
+        executorInvoked.success(())
+      }
+      override def reportFailure(t: Throwable): Unit = ???
+    }
+    val f = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr}).takeAsync(100)
     f.onComplete(_ => ())(fakeExecutionContext)
     assert(!executorInvoked.isCompleted)
   }
