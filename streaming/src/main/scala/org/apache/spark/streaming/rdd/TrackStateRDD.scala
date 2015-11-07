@@ -132,14 +132,12 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
       emittedRecords ++= emittedRecord
     }
 
-    if (doFullScan) {
-      if (timeoutThresholdTime.isDefined) {
-        newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
-          wrappedState.wrapTiminoutState(state)
-          val emittedRecord = trackingFunction(key, None, wrappedState)
-          emittedRecords ++= emittedRecord
-          newStateMap.remove(key)
-        }
+    if (doFullScan && timeoutThresholdTime.isDefined) {
+      newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
+        wrappedState.wrapTiminoutState(state)
+        val emittedRecord = trackingFunction(key, None, wrappedState)
+        emittedRecords ++= emittedRecord
+        newStateMap.remove(key)
       }
     }
 

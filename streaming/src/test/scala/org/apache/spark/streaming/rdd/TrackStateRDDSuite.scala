@@ -108,7 +108,6 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       newStateRDD
     }
 
-
     // Test no-op, no state should change
     testStateUpdates(initStateRDD, Seq(), initStateWthTime)   // should not scan any state
     testStateUpdates(
@@ -148,8 +147,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     )
   }
 
-
-
+  /** Assert whether the `trackStateByKey` operation generates expected results */
   private def assertOperation[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
       testStateRDD: TrackStateRDD[K, V, S, T],
       newDataRDD: RDD[(K, V)],
@@ -177,6 +175,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     newStateRDD
   }
 
+  /** Assert whether the [[TrackStateRDD]] has the expected state ad emitted records */
   private def assertRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
       trackStateRDD: TrackStateRDD[K, V, S, T],
       expectedStates: Set[(K, S, Int)],

@@ -59,6 +59,7 @@ private[streaming] class EmittedRecordsDStreamImpl[
     trackStateDStream.getOrCompute(validTime).map { _.flatMap[T] { _.emittedRecords } }
   }
 
+  /** Return a pair DStream where each RDD is the snapshot of the state of all the keys. */
   def stateSnapshots(): DStream[(K, S)] = {
     trackStateDStream.flatMap[(K, S)] {
       _.stateMap.getAll().map { case (k, s, _) => (k, s) }.toTraversable }

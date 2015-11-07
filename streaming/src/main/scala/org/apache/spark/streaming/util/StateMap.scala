@@ -71,12 +71,10 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
   override def get(key: K): Option[S] = None
   override def getByTime(threshUpdatedTime: Long): Iterator[(K, S, Long)] = Iterator.empty
   override def getAll(): Iterator[(K, S, Long)] = Iterator.empty
-  override def copy(): StateMap[K, S] = new EmptyStateMap[K, S]
+  override def copy(): StateMap[K, S] = this
   override def remove(key: K): Unit = { }
   override def toDebugString(): String = ""
 }
-
-
 
 /** Implementation of StateMap based on Spark's OpenHashMap */
 private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
@@ -118,10 +116,10 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
       !deltaMap.contains(key)
     }
 
-    val updatedStates = deltaMap.iterator.flatMap { case (key, stateInfo) =>
-      if (! stateInfo.deleted && stateInfo.updateTime < threshUpdatedTime) {
-        Some((key, stateInfo.data, stateInfo.updateTime))
-      } else None
+    val updatedStates = deltaMap.iterator.filter { case (_, stateInfo) =>
+      !stateInfo.deleted && stateInfo.updateTime < threshUpdatedTime
+    }.map { case (key, stateInfo) =>
+      (key, stateInfo.data, stateInfo.updateTime)
     }
     oldStates ++ updatedStates
   }
