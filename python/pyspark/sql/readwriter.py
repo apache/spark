@@ -203,7 +203,7 @@ class DataFrameReader(object):
 
         >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
-        [Row(text=u'hello'), Row(text=u'this')]
+        [Row(value=u'hello'), Row(value=u'this')]
         """
         return self._df(self._jreader.text(path))
 
