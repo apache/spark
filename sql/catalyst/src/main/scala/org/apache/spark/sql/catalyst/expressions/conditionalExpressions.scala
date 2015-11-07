@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{NullType, BooleanType, DataType}
+import org.apache.spark.sql.types._
 
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -421,9 +421,10 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 }
 
 /** Operator that drops a row when it contains any nulls. */
-case class DropAnyNull(child: Expression) extends UnaryExpression {
+case class DropAnyNull(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
 
   protected override def nullSafeEval(input: Any): InternalRow = {
     val row = input.asInstanceOf[InternalRow]
