@@ -777,8 +777,8 @@ class LDA(object):
             Currently "em", "online" are supported. Default to "em".
         """
         model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
-                                      docConcentration, topicConcentration, seed,
-                                      checkpointInterval, optimizer)
+                              docConcentration, topicConcentration, seed,
+                              checkpointInterval, optimizer)
         return LDAModel(model)
 
 
