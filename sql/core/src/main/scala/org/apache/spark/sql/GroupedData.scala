@@ -23,6 +23,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
@@ -92,25 +93,33 @@ class GroupedData protected[sql](
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
-    expr.toLowerCase match {
-      case "avg" | "average" | "mean" => Average
-      case "max" => Max
-      case "min" => Min
-      case "stddev" | "std" => StddevSamp
-      case "stddev_pop" => StddevPop
-      case "stddev_samp" => StddevSamp
-      case "variance" => VarianceSamp
-      case "var_pop" => VariancePop
-      case "var_samp" => VarianceSamp
-      case "sum" => Sum
-      case "skewness" => Skewness
-      case "kurtosis" => Kurtosis
-      case "count" | "size" =>
-        // Turn count(*) into count(1)
-        (inputExpr: Expression) => inputExpr match {
-          case s: Star => Count(Literal(1))
-          case _ => Count(inputExpr)
-        }
+    val exprToFunc: (Expression => AggregateFunction2) = {
+      (child: Expression) => expr.toLowerCase match {
+        case "avg" | "average" | "mean" => Average(child)
+        case "max" => Max(child)
+        case "min" => Min(child)
+        case "stddev" | "std" => StddevSamp(child)
+        case "stddev_pop" => StddevPop(child)
+        case "stddev_samp" => StddevSamp(child)
+        case "variance" => VarianceSamp(child, 0, 0)
+        case "var_pop" => VariancePop(child, 0, 0)
+        case "var_samp" => VarianceSamp(child, 0, 0)
+        case "sum" => Sum(child)
+        case "skewness" => Skewness(child, 0, 0)
+        case "kurtosis" => Kurtosis(child, 0, 0)
+        case "count" | "size" =>
+          // Turn count(*) into count(1)
+          (inputExpr: Expression) => inputExpr match {
+            case s: Star => Count(Literal(1))
+            case _ => Count(inputExpr)
+          }
+      }
+    }
+    (child: Expression) => {
+      AggregateExpression2(
+        exprToFunc(child),
+        mode = Complete,
+        isDistinct = false)
     }
   }
 

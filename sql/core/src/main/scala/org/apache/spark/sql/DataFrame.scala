@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -1338,7 +1339,7 @@ class DataFrame private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(First(attr), attr.name)()
+        Alias(new First(attr), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)

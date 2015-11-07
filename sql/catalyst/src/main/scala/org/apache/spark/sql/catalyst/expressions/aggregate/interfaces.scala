@@ -73,7 +73,9 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 private[sql] case class AggregateExpression2(
     aggregateFunction: AggregateFunction2,
     mode: AggregateMode,
-    isDistinct: Boolean) extends AggregateExpression {
+    isDistinct: Boolean)
+  extends Expression
+  with Unevaluable {
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
