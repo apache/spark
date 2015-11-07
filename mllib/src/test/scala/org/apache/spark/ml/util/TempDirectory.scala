@@ -15,21 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.ml.util
 
-import java.util.Properties
+import java.io.File
+
+import org.scalatest.{BeforeAndAfterAll, Suite}
+
+import org.apache.spark.util.Utils
 
 /**
- * A set of tasks submitted together to the low-level TaskScheduler, usually representing
- * missing partitions of a particular stage.
+ * Trait that creates a temporary directory before all tests and deletes it after all.
  */
-private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
-    val stageId: Int,
-    val stageAttemptId: Int,
-    val priority: Int,
-    val properties: Properties) {
-  val id: String = stageId + "." + stageAttemptId
+trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
 
-  override def toString: String = "TaskSet " + id
+  private var _tempDir: File = _
+
+  /** Returns the temporary directory as a [[File]] instance. */
+  protected def tempDir: File = _tempDir
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    _tempDir = Utils.createTempDir(this.getClass.getName)
+  }
+
+  override def afterAll(): Unit = {
+    Utils.deleteRecursively(_tempDir)
+    super.afterAll()
+  }
 }
