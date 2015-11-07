@@ -80,7 +80,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     """.
         stripMargin.format(classOf[PairSerDe].getName))
 
-    val location= Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
+    val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
     sql(s"""
       ALTER TABLE hiveUDFTestTable
       ADD IF NOT EXISTS PARTITION(partition='testUDF')
