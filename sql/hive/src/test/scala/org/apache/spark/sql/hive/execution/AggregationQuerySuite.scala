@@ -523,14 +523,15 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |SELECT
           |  key,
           |  count(distinct value1),
-          |  count(distinct value2)
+          |  count(distinct value2),
+          |  count(distinct value1, value2)
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(null, 3, 3) ::
-        Row(1, 2, 3) ::
-        Row(2, 2, 1) ::
-        Row(3, 0, 1) :: Nil)
+      Row(null, 3, 3, 3) ::
+        Row(1, 2, 3, 3) ::
+        Row(2, 2, 1, 1) ::
+        Row(3, 0, 1, 0) :: Nil)
   }
 
   test("test count") {
