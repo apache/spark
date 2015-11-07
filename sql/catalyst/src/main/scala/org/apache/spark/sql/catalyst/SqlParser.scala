@@ -22,6 +22,7 @@ import scala.language.implicitConversions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
@@ -272,7 +273,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val function: Parser[Expression] =
     ( ident <~ ("(" ~ "*" ~ ")") ^^ { case udfName =>
       if (lexical.normalizeKeyword(udfName) == "count") {
-        Count(Literal(1))
+        AggregateExpression2(Count(Literal(1)), mode = Complete, isDistinct = false)
       } else {
         throw new AnalysisException(s"invalid expression $udfName(*)")
       }
@@ -281,14 +282,15 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       { case udfName ~ exprs => UnresolvedFunction(udfName, exprs, isDistinct = false) }
     | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
       lexical.normalizeKeyword(udfName) match {
-        case "sum" => SumDistinct(exprs.head)
-        case "count" => CountDistinct(exprs)
+        case "sum" => AggregateExpression2(Sum(exprs.head), mode = Complete, isDistinct = true)
+        // TODO: re-enable it
+        // case "count" => CountDistinct(exprs)
         case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
       if (lexical.normalizeKeyword(udfName) == "count") {
-        ApproxCountDistinct(exp)
+        AggregateExpression2(new HyperLogLogPlusPlus(exp), mode = Complete, isDistinct = false)
       } else {
         throw new AnalysisException(s"invalid function approximate $udfName")
       }
@@ -296,7 +298,10 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | APPROXIMATE ~> "(" ~> unsignedFloat ~ ")" ~ ident ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
       { case s ~ _ ~ udfName ~ _ ~ _ ~ exp =>
         if (lexical.normalizeKeyword(udfName) == "count") {
-          ApproxCountDistinct(exp, s.toDouble)
+          AggregateExpression2(
+            HyperLogLogPlusPlus(exp, s.toDouble, 0, 0),
+            mode = Complete,
+            isDistinct = false)
         } else {
           throw new AnalysisException(s"invalid function approximate($s) $udfName")
         }
