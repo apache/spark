@@ -171,7 +171,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    * @since 1.6.0
    */
-  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t).booleanValue())
+  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
 
   /**
    * (Scala-specific)
@@ -544,8 +544,8 @@ class Dataset[T] private[sql](
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.
    *
-   * Running take requires moving data into the application's driver process, and doing so on a
-   * very large dataset can crash the driver process with OutOfMemoryError.
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
    *
    * @since 1.6.0
    */
@@ -554,8 +554,8 @@ class Dataset[T] private[sql](
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.
    *
-   * Running take requires moving data into the application's driver process, and doing so on a
-   * very large dataset can crash the driver process with OutOfMemoryError.
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
    *
    * @since 1.6.0
    */
