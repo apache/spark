@@ -408,22 +408,6 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     assert(sql("SELECT input_file_name() as file FROM internal_parquet_tmp").distinct().collect().length == 1)
     sql("DROP TABLE internal_parquet_tmp")
 
-    /*
-    println("======================================")
-    println("Non-External parquet pointing to LOCATION")
-    withTempPath { dir =>
-      sql("SELECT 1, 2 ").write.parquet(dir.getCanonicalPath)
-
-      sql(s"""CREATE table non_external_parquet(c1 int, c2 int)
-         stored as parquet
-         LOCATION '${dir.getCanonicalPath}'""")
-
-      val answer5 = sql("SELECT input_file_name() as file FROM non_external_parquet").head().getString(0)
-      assert(answer5.contains(dir.getCanonicalPath))
-      assert(sql("SELECT input_file_name() as file FROM non_external_parquet").distinct().collect().length == 1)
-      sql("DROP TABLE non_external_parquet")
-    }
-    */
   }
 
 
