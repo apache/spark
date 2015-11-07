@@ -687,7 +687,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
     ...     [2, SparseVector(2, {0: 1.0})],
     ... ]
     >>> rdd =  sc.parallelize(data)
-    >>> model = LDA.train(rdd, k=2, seed = 1)
+    >>> model = LDA.train(rdd, k=2, seed=1)
     >>> model.vocabSize()
     2
     >>> model.describeTopics()
@@ -749,8 +749,8 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
-        wrapper_model = callMLlibFunc("loadLDAModel", sc, path)
-        return LDAModel(wrapper_model)
+        model = callMLlibFunc("loadLDAModel", sc, path)
+        return LDAModel(model)
 
 
 class LDA(object):
@@ -776,10 +776,10 @@ class LDA(object):
         :param optimizer:           LDAOptimizer used to perform the actual calculation.
             Currently "em", "online" are supported. Default to "em".
         """
-        wrapper_model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
+        model = callMLlibFunc("trainLDAModel", rdd, k, maxIterations,
                                       docConcentration, topicConcentration, seed,
                                       checkpointInterval, optimizer)
-        return LDAModel(wrapper_model)
+        return LDAModel(model)
 
 
 def _test():
