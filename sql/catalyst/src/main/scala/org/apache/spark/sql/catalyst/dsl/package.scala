@@ -159,14 +159,6 @@ package object dsl {
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
     def abs(e: Expression): Expression = Abs(e)
-    def stddev(e: Expression): Expression = Stddev(e)
-    def stddev_pop(e: Expression): Expression = StddevPop(e)
-    def stddev_samp(e: Expression): Expression = StddevSamp(e)
-    def variance(e: Expression): Expression = Variance(e)
-    def var_pop(e: Expression): Expression = VariancePop(e)
-    def var_samp(e: Expression): Expression = VarianceSamp(e)
-    def skewness(e: Expression): Expression = Skewness(e)
-    def kurtosis(e: Expression): Expression = Kurtosis(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?

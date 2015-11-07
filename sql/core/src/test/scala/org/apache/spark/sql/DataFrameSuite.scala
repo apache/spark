@@ -177,9 +177,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filterExpr") {
-    checkAnswer(
-      testData.filter("key > 90"),
-      testData.collect().filter(_.getInt(0) > 90).toSeq)
+    val res = testData.collect().filter(_.getInt(0) > 90).toSeq
+    checkAnswer(testData.filter("key > 90"), res)
+    checkAnswer(testData.filter("key > 9.0e1"), res)
+    checkAnswer(testData.filter("key > .9e+2"), res)
+    checkAnswer(testData.filter("key > 0.9e+2"), res)
+    checkAnswer(testData.filter("key > 900e-1"), res)
+    checkAnswer(testData.filter("key > 900.0E-1"), res)
+    checkAnswer(testData.filter("key > 9.e+1"), res)
   }
 
   test("filterExpr using where") {
@@ -1039,78 +1044,94 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("distributeBy and localSort") {
     val original = testData.repartition(1)
     assert(original.rdd.partitions.length == 1)
-    val df = original.distributeBy(Column("key") :: Nil, 5)
-    assert(df.rdd.partitions.length  == 5)
+    val df = original.repartition(5, $"key")
+    assert(df.rdd.partitions.length == 5)
     checkAnswer(original.select(), df.select())
 
-    val df2 = original.distributeBy(Column("key") :: Nil, 10)
-    assert(df2.rdd.partitions.length  == 10)
+    val df2 = original.repartition(10, $"key")
+    assert(df2.rdd.partitions.length == 10)
     checkAnswer(original.select(), df2.select())
 
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
-    val df3 = testData.distributeBy(Column("key") :: Nil).groupBy("key").count()
+    val df3 = testData.repartition($"key").groupBy("key").count()
     verifyNonExchangingAgg(df3)
-    verifyNonExchangingAgg(testData.distributeBy(Column("key") :: Column("value") :: Nil)
+    verifyNonExchangingAgg(testData.repartition($"key", $"value")
       .groupBy("key", "value").count())
 
     // Grouping by just the first distributeBy expr, need to exchange.
-    verifyExchangingAgg(testData.distributeBy(Column("key") :: Column("value") :: Nil)
+    verifyExchangingAgg(testData.repartition($"key", $"value")
       .groupBy("key").count())
 
     val data = sqlContext.sparkContext.parallelize(
       (1 to 100).map(i => TestData2(i % 10, i))).toDF()
 
     // Distribute and order by.
-    val df4 = data.distributeBy(Column("a") :: Nil).localSort($"b".desc)
+    val df4 = data.repartition($"a").sortWithinPartitions($"b".desc)
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
-    df4.rdd.foreachPartition(p => {
+    df4.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
-      p.foreach(r => {
+      p.foreach { r =>
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue < v) throw new SparkException("Partition is not ordered.")
           if (v + 1 != previousValue) allSequential = false
         }
         previousValue = v
-      })
+      }
       if (allSequential) throw new SparkException("Partition should not be globally ordered")
-    })
+    }
 
     // Distribute and order by with multiple order bys
-    val df5 = data.distributeBy(Column("a") :: Nil, 2).localSort($"b".asc, $"a".asc)
+    val df5 = data.repartition(2, $"a").sortWithinPartitions($"b".asc, $"a".asc)
     // Walk each partition and verify that it is sorted ascending
-    df5.rdd.foreachPartition(p => {
+    df5.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
-      p.foreach(r => {
+      p.foreach { r =>
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue > v) throw new SparkException("Partition is not ordered.")
           if (v - 1 != previousValue) allSequential = false
         }
         previousValue = v
-      })
+      }
       if (allSequential) throw new SparkException("Partition should not be all sequential")
-    })
+    }
 
     // Distribute into one partition and order by. This partition should contain all the values.
-    val df6 = data.distributeBy(Column("a") :: Nil, 1).localSort($"b".asc)
+    val df6 = data.repartition(1, $"a").sortWithinPartitions($"b".asc)
     // Walk each partition and verify that it is sorted descending and not globally sorted.
-    df6.rdd.foreachPartition(p => {
+    df6.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
-      p.foreach(r => {
+      p.foreach { r =>
         val v: Int = r.getInt(1)
         if (previousValue != -1) {
           if (previousValue > v) throw new SparkException("Partition is not ordered.")
           if (v - 1 != previousValue) allSequential = false
         }
         previousValue = v
-      })
+      }
       if (!allSequential) throw new SparkException("Partition should contain all sequential values")
-    })
+    }
+  }
+
+  test("fix case sensitivity of partition by") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        val p = path.getAbsolutePath
+        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
+        checkAnswer(sqlContext.read.parquet(p).select("YeaR"), Row(2012))
+      }
+    }
+  }
+
+  test("SPARK-10656: completely support special chars") {
+    val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
+    checkAnswer(df.select(df("*")), Row(1, "a"))
+    checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
   }
 }
