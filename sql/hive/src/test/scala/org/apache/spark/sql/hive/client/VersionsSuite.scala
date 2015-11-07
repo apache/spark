@@ -45,6 +45,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
 
+  private val mavenRepo = Some("http://www.datanucleus.org/downloads/maven2")
+
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
@@ -59,6 +61,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       config = buildConf(),
+      mavenRepo = mavenRepo,
       ivyPath = ivyPath).createClient()
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
@@ -93,6 +96,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = "13",
           hadoopVersion = VersionInfo.getVersion,
           config = buildConf(),
+          mavenRepo = mavenRepo,
           ivyPath = ivyPath).createClient()
       }
     }
@@ -112,6 +116,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
           config = buildConf(),
+          mavenRepo = mavenRepo,
           ivyPath = ivyPath).createClient()
     }
 

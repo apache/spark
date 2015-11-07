@@ -169,6 +169,13 @@ class HiveContext private[hive](
   protected[hive] def hiveMetastoreJars: String = getConf(HIVE_METASTORE_JARS)
 
   /**
+   * The Maven repository where the jars are to be downloaded which should be used to instantiate
+   * the HiveMetastoreClient. This setting will take effect when HIVE_METASTORE_JARS is set to
+   * 'maven'.
+   */
+  protected[hive] def hiveMetastoreMavenRepo: String = getConf(HIVE_METASTORE_MAVEN_REPO)
+
+  /**
    * A comma separated list of class prefixes that should be loaded using the classloader that
    * is shared between Spark SQL and a specific version of Hive. An example of classes that should
    * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
@@ -292,6 +299,7 @@ class HiveContext private[hive](
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
         config = allConfig,
+        mavenRepo = Some(hiveMetastoreMavenRepo),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else {
@@ -685,6 +693,12 @@ private[hive] object HiveContext {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. A classpath in the standard format for both Hive and Hadoop.
     """.stripMargin)
+
+  val HIVE_METASTORE_MAVEN_REPO = stringConf("spark.sql.hive.metastore.mavenRepo",
+    defaultValue = Some("http://www.datanucleus.org/downloads/maven2"),
+    doc = "Maven repositories where Hive metastore jars which are used to instantiate the" +
+      "HiveMetastoreClient are downloaded.")
+
   val CONVERT_METASTORE_PARQUET = booleanConf("spark.sql.hive.convertMetastoreParquet",
     defaultValue = Some(true),
     doc = "When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +

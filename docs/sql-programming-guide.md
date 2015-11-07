@@ -1747,6 +1747,13 @@ The following options can be used to configure the version of Hive that is used 
     </td>
   </tr>
   <tr>
+    <td><code>spark.sql.hive.metastore.mavenRepo</code></td>
+    <td><a href="http://www.datanucleus.org/downloads/maven2">http://www.datanucleus.org/downloads/maven2</a></td>
+    <td>
+      Maven repository to download Hive Metastore jars when <code>spark.sql.hive.metastore.jars</code> is set to <code>maven</code>.
+    </td>
+  </tr>
+  <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
     <td><code>com.mysql.jdbc,<br/>org.postgresql,<br/>com.microsoft.sqlserver,<br/>oracle.jdbc</code></td>
     <td>

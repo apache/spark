@@ -42,6 +42,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       hiveMetastoreVersion: String,
       hadoopVersion: String,
       config: Map[String, String] = Map.empty,
+      mavenRepo: Option[String],
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
       barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
@@ -54,7 +55,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     } else {
       val (downloadedFiles, actualHadoopVersion) =
         try {
-          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath), hadoopVersion)
+          (downloadVersion(resolvedVersion, hadoopVersion, mavenRepo, ivyPath), hadoopVersion)
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
@@ -68,7 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, "2.4.0", ivyPath), "2.4.0")
+            (downloadVersion(resolvedVersion, "2.4.0", mavenRepo, ivyPath), "2.4.0")
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -95,6 +96,7 @@ private[hive] object IsolatedClientLoader extends Logging {
   private def downloadVersion(
       version: HiveVersion,
       hadoopVersion: String,
+      mavenRepo: Option[String],
       ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
@@ -105,7 +107,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        Some("http://www.datanucleus.org/downloads/maven2"),
+        mavenRepo,
         ivyPath,
         exclusions = version.exclusions)
     }
