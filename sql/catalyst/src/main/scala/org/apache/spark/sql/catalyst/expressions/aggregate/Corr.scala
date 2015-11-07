@@ -35,6 +35,8 @@ case class Corr(
     inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate {
 
+  def this(left: Expression, right: Expression) = this(left, right, 0, 0)
+
   override def children: Seq[Expression] = Seq(left, right)
 
   override def nullable: Boolean = false
