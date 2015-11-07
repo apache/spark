@@ -89,8 +89,19 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   /** @group getParam */
   final def getLearningRate: Double = $(learningRate)
 
+  /**
+   * Model weights. Can be returned either after training or after explicit setting
+   * @group expertParam
+   */
+  final val weights: Param[Vector] = new Param[Vector](this, "weights",
+    " Sets the weights of the model ")
+
+  /** @group getParam */
+  final def getWeights: Vector = $(weights)
+
+
   setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128,
-    optimizer -> "LBFGS", learningRate -> 0.03)
+    optimizer -> "LBFGS", learningRate -> 0.03, weights -> null)
 }
 
 /** Label to vector converter. */
@@ -160,10 +171,16 @@ class MultilayerPerceptronClassifier(override val uid: String)
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
-   * Set the seed for weights initialization.
+   * Set the seed for weights initialization if weights are not set
    * @group setParam
    */
   def setSeed(value: Long): this.type = set(seed, value)
+
+  /**
+   * Set the model weights.
+   * @group setParam
+   */
+  def setWeights(value: Vector): this.type = set(weights, value)
 
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
@@ -181,10 +198,17 @@ class MultilayerPerceptronClassifier(override val uid: String)
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, true)
-    val FeedForwardTrainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
-    FeedForwardTrainer.LBFGSOptimizer.setConvergenceTol($(tol)).setNumIterations($(maxIter))
-    FeedForwardTrainer.setStackSize($(blockSize))
-    val mlpModel = FeedForwardTrainer.train(data)
+    val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
+    if ($(weights) != null) {
+      trainer.setWeights($(weights))
+    } else {
+      trainer.setSeed($(seed))
+    }
+    trainer.LBFGSOptimizer
+      .setConvergenceTol($(tol))
+      .setNumIterations($(maxIter))
+    trainer.setStackSize($(blockSize))
+    val mlpModel = trainer.train(data)
     new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights())
   }
 }

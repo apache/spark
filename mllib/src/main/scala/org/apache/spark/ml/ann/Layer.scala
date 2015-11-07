@@ -56,14 +56,15 @@ private[ann] trait Layer extends Serializable {
   val inPlace: Boolean
 
   /**
-   * Returns the instance of the layer based on weights provided
+   * Returns the instance of the layer based on weights provided.
+   * Size of weights must be equal to weightSize
    * @param weights vector with layer weights
    * @return the layer model
    */
   def model(weights: BDV[Double]): LayerModel
   /**
    * Returns the instance of the layer with random generated weights
-   * @param weights vector for weights initialization
+   * @param weights vector for weights initialization, must be equal to weightSize
    * @param random random number generator
    * @return the layer model
    */
@@ -571,6 +572,7 @@ private[ann] object FeedForwardModel {
    * @return model
    */
   def apply(topology: FeedForwardTopology, weights: Vector): FeedForwardModel = {
+    // TODO: check that weights size is equal to sum of layers sizes
     val layers = topology.layers
     val layerModels = new Array[LayerModel](layers.length)
     var offset = 0
@@ -718,13 +720,29 @@ private[ml] class FeedForwardTrainer(
     val inputSize: Int,
     val outputSize: Int) extends Serializable {
 
-  // TODO: what if we need to pass random seed?
-  private var _weights = topology.getInstance(11L).weights()
+  private var _seed = 11L
+  private var _weights = topology.getInstance(_seed).weights()
   private var _stackSize = 128
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
   private var _updater: Updater = new ANNUpdater()
   private var optimizer: Optimizer = LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(100)
+
+  /**
+   * Returns seed
+   * @return seed
+   */
+  def getSeed: Long = _seed
+
+  /**
+   * Sets seed
+   * @param value seed
+   * @return trainer
+   */
+  def setSeed(value: Long): FeedForwardTrainer = {
+    _seed = value
+    this
+  }
 
   /**
    * Returns weights
