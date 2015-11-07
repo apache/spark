@@ -44,7 +44,7 @@ START_TACHYON=false
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
-      if [ ! -e "${SPARK_HOME}"/../tachyon/bin/tachyon ]; then
+      if [ ! -e "${SPARK_HOME}"/tachyon/bin/tachyon ]; then
         echo "Error: --with-tachyon specified, but tachyon not found."
         exit -1
       fi
