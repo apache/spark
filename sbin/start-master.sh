@@ -75,7 +75,7 @@ fi
   $ORIGINAL_ARGS
 
 if [ "$START_TACHYON" == "true" ]; then
-  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
-  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon format -s
-  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon-start.sh master
+  "${SPARK_HOME}"/tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+  "${SPARK_HOME}"/tachyon/bin/tachyon format -s
+  "${SPARK_HOME}"/tachyon/bin/tachyon-start.sh master
 fi
