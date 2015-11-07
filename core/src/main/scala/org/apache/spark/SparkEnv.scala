@@ -341,7 +341,7 @@ object SparkEnv extends Logging {
       if (useLegacyMemoryManager) {
         new StaticMemoryManager(conf, numUsableCores)
       } else {
-        new UnifiedMemoryManager(conf, numUsableCores)
+        UnifiedMemoryManager(conf, numUsableCores)
       }
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
