@@ -864,14 +864,14 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @Test
   public void testUnion() {
     List<List<Integer>> inputData1 = Arrays.asList(
-        Arrays.asList(1, 1),
-        Arrays.asList(2, 2),
-        Arrays.asList(3, 3));
+        Arrays.asList(1,1),
+        Arrays.asList(2,2),
+        Arrays.asList(3,3));
 
     List<List<Integer>> inputData2 = Arrays.asList(
-        Arrays.asList(4, 4),
-        Arrays.asList(5, 5),
-        Arrays.asList(6, 6));
+        Arrays.asList(4,4),
+        Arrays.asList(5,5),
+        Arrays.asList(6,6));
 
     List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(1,1,4,4),
