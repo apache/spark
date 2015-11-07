@@ -251,6 +251,7 @@ def coalesce(*cols):
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+
 @since(1.6)
 def corr(col1, col2):
     """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
@@ -264,6 +265,7 @@ def corr(col1, col2):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
+
 
 @since(1.3)
 def countDistinct(col, *cols):
