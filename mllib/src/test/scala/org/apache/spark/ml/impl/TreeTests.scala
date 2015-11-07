@@ -17,20 +17,17 @@
 
 package org.apache.spark.ml.impl
 
-import org.apache.spark.mllib.linalg.Vectors
-
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame}
-
-import scala.util.Random
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
