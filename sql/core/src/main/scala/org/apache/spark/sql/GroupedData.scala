@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.NumericType
 class GroupedData protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
-    private val groupType: GroupedData.GroupType) {
+    groupType: GroupedData.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {

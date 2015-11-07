@@ -17,8 +17,6 @@
 
 package org.apache.spark.memory;
 
-import java.io.IOException;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,32 +25,17 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
 
-  class TestMemoryConsumer extends MemoryConsumer {
-    TestMemoryConsumer(TaskMemoryManager memoryManager) {
-      super(memoryManager);
-    }
-
-    @Override
-    public long spill(long size, MemoryConsumer trigger) throws IOException {
-      long used = getUsed();
-      releaseMemory(used);
-      return used;
-    }
-
-    void use(long size) {
-      acquireMemory(size);
-    }
-
-    void free(long size) {
-      releaseMemory(size);
-    }
-  }
-
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+      new StaticMemoryManager(
+        new SparkConf().set("spark.unsafe.offHeap", "false"),
+        Long.MAX_VALUE,
+        Long.MAX_VALUE,
+        1),
+      0);
     manager.allocatePage(4096, null);  // leak memory
+    Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
   }
 
