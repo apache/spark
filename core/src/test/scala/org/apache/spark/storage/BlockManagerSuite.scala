@@ -825,7 +825,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val memoryManager = new StaticMemoryManager(
       conf,
-      maxExecutionMemory = Long.MaxValue,
+      maxOnHeapExecutionMemory = Long.MaxValue,
       maxStorageMemory = 1200,
       numCores = 1)
     store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,

@@ -17,15 +17,15 @@
 
 package org.apache.spark.memory;
 
-
 import java.io.IOException;
 
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
-
 /**
  * An memory consumer of TaskMemoryManager, which support spilling.
+ *
+ * Note: this only supports allocation / spilling of Tungsten memory.
  */
 public abstract class MemoryConsumer {
 
@@ -36,7 +36,6 @@ public abstract class MemoryConsumer {
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
     this.taskMemoryManager = taskMemoryManager;
     this.pageSize = pageSize;
-    this.used = 0;
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
@@ -66,6 +65,8 @@ public abstract class MemoryConsumer {
    * This should be implemented by subclass.
    *
    * Note: In order to avoid possible deadlock, should not call acquireMemory() from spill().
+   *
+   * Note: today, this only frees Tungsten-managed pages.
    *
    * @param size the amount of memory should be released
    * @param trigger the MemoryConsumer that trigger this spilling
