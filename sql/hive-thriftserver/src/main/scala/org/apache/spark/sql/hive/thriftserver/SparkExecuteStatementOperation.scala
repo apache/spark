@@ -53,6 +53,18 @@ private[hive] class SparkExecuteStatementOperation(
   private var dataTypes: Array[DataType] = _
   private var statementId: String = _
 
+  private lazy val resultSchema: TableSchema = {
+    if (result == null || result.queryExecution.analyzed.output.size == 0) {
+      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+    } else {
+      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
+      val schema = result.queryExecution.analyzed.output.map { attr =>
+        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
+      }
+      new TableSchema(schema.asJava)
+    }
+  }
+
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
     hiveContext.sparkContext.clearJobGroup()
@@ -120,17 +132,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def getResultSetSchema: TableSchema = {
-    if (result == null || result.queryExecution.analyzed.output.size == 0) {
-      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
-    } else {
-      logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
-      val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
-      }
-      new TableSchema(schema.asJava)
-    }
-  }
+  def getResultSetSchema: TableSchema = resultSchema
 
   override def run(): Unit = {
     setState(OperationState.PENDING)
