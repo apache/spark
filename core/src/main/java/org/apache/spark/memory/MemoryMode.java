@@ -17,35 +17,10 @@
 
 package org.apache.spark.memory;
 
-import java.io.IOException;
+import org.apache.spark.annotation.Private;
 
-public class TestMemoryConsumer extends MemoryConsumer {
-  public TestMemoryConsumer(TaskMemoryManager memoryManager) {
-    super(memoryManager);
-  }
-
-  @Override
-  public long spill(long size, MemoryConsumer trigger) throws IOException {
-    long used = getUsed();
-    free(used);
-    return used;
-  }
-
-  void use(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(
-      size,
-      taskMemoryManager.tungstenMemoryMode,
-      this);
-    used += got;
-  }
-
-  void free(long size) {
-    used -= size;
-    taskMemoryManager.releaseExecutionMemory(
-      size,
-      taskMemoryManager.tungstenMemoryMode,
-      this);
-  }
+@Private
+public enum MemoryMode {
+  ON_HEAP,
+  OFF_HEAP
 }
-
-
