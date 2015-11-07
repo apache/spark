@@ -539,7 +539,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val withUDFs = childPlan.flatMap {
       case p =>
         p.expressions.flatMap { _.find {
-          case _: UnresolvedFunction => true
+          case UnresolvedFunction(name, _, _) =>
+            !Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).isDefined
           case _ => false
         }}
     }.nonEmpty

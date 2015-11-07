@@ -155,6 +155,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     }
     assert(errMsg.getMessage contains "Cannot use Spark UDFs when using Hive" +
       " native commands to handle CREATE VIEW")
+    sql("CREATE VIEW test_view2 AS SELECT max(key) FROM src LIMIT 1")
   }
 
   test("Generic UDAF aggregates") {
