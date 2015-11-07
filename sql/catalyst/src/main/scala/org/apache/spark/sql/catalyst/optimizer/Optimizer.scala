@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
@@ -987,41 +989,28 @@ object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Adds a null filter on given columns, if any
    */
-  def addNullFilter(columns: AttributeSet, expr: LogicalPlan): LogicalPlan = {
-    columns.map(IsNotNull(_))
+  def addNullFilter(columns: Seq[Expression], expr: LogicalPlan): LogicalPlan = {
+    columns.map(IsNotNull)
       .reduceLeftOption(And)
       .map(Filter(_, expr))
       .getOrElse(expr)
   }
 
+  private def hasNullableKeys(leftKeys: Seq[Expression], rightKeys: Seq[Expression]) = {
+    leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f@Join(left, right, joinType, joinCondition) =>
-      // get "real" join conditions, which refer both left and right
-      val joinConditionsOnBothRelations = joinCondition
-        .map(splitConjunctivePredicates).getOrElse(Nil)
-        .filter(_.isInstanceOf[EqualTo])
-        .filter(cond => !canEvaluate(cond, left) && !canEvaluate(cond, right))
+    case join @ Join(left, right, joinType, originalJoinCondition) =>
+      join match {
+        case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _)
+          if hasNullableKeys(leftKeys, rightKeys) && Seq(Inner, LeftSemi).contains(joinType) =>
+            // add a non-null join-key filter on both sides of join
+            val newLeft = addNullFilter(leftKeys.filter(_.nullable), left)
+            val newRight = addNullFilter(rightKeys.filter(_.nullable), right)
+            Join(newLeft, newRight, joinType, originalJoinCondition)
 
-      def nullableJoinKeys(leftOrRight: LogicalPlan) = {
-        val joinKeys = leftOrRight.outputSet.intersect(
-          joinConditionsOnBothRelations
-            .map(_.references)
-            .reduceLeftOption(_ ++ _).getOrElse(AttributeSet.empty)
-        )
-        joinKeys.filter(_.nullable)
-      }
-
-      def hasNullableKeys = Seq(left, right).exists(nullableJoinKeys(_).nonEmpty)
-
-      joinType match {
-        case _ @ (Inner | LeftSemi) if hasNullableKeys =>
-          // add a non-null keys filter for both sides sub queries
-          val newLeft = addNullFilter(nullableJoinKeys(left), left)
-          val newRight = addNullFilter(nullableJoinKeys(right), right)
-
-          Join(newLeft, newRight, joinType, joinCondition)
-
-        case _ => f
+        case _ => join
       }
   }
 }
