@@ -33,7 +33,6 @@ object Utils {
     val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
       case array: ArrayType => true
       case map: MapType => true
-      case struct: StructType => true
       case _ => false
     }
 
