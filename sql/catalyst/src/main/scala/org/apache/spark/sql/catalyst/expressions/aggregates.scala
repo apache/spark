@@ -549,7 +549,7 @@ case class SumDistinct(child: Expression) extends UnaryExpression with PartialAg
     case _ =>
       child.dataType
   }
-  override def toString: String = s"SUM(DISTINCT $child)"
+  override def toString: String = s"sum(distinct $child)"
   override def newInstance(): SumDistinctFunction = new SumDistinctFunction(child, this)
 
   override def asPartial: SplitEvaluation = {
@@ -646,7 +646,7 @@ case class First(
 
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"FIRST(${child}${if (ignoreNulls) " IGNORE NULLS"})"
+  override def toString: String = s"first(${child}${if (ignoreNulls) " ignore nulls"})"
 
   override def asPartial: SplitEvaluation = {
     val partialFirst = Alias(First(child, ignoreNulls), "PartialFirst")()
@@ -707,7 +707,7 @@ case class Last(
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"LAST($child)${if (ignoreNulls) " IGNORE NULLS"}"
+  override def toString: String = s"last($child)${if (ignoreNulls) " ignore nulls"}"
 
   override def asPartial: SplitEvaluation = {
     val partialLast = Alias(Last(child, ignoreNulls), "PartialLast")()
@@ -747,6 +747,24 @@ case class LastFunction(
   }
 }
 
+/**
+ * Calculate Pearson Correlation Coefficient for the given columns.
+ * Only support AggregateExpression2.
+ *
+ */
+case class Corr(left: Expression, right: Expression)
+    extends BinaryExpression with AggregateExpression1 with ImplicitCastInputTypes {
+  override def nullable: Boolean = false
+  override def dataType: DoubleType.type = DoubleType
+  override def toString: String = s"corr($left, $right)"
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException(
+      "Corr only supports the new AggregateExpression2 and can only be used " +
+        "when spark.sql.useAggregate2 = true")
+  }
+}
+
 // Compute standard deviation based on online algorithm specified here:
 // http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 abstract class StddevAgg1(child: Expression) extends UnaryExpression with PartialAggregate1 {
@@ -767,42 +785,36 @@ abstract class StddevAgg1(child: Expression) extends UnaryExpression with Partia
 
 }
 
-// Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV($child)"
-  override def isSample: Boolean = true
-}
-
 // Compute the population standard deviation of a column
 case class StddevPop(child: Expression) extends StddevAgg1(child) {
 
-  override def toString: String = s"STDDEV_POP($child)"
+  override def toString: String = s"stddev_pop($child)"
   override def isSample: Boolean = false
 }
 
 // Compute the sample standard deviation of a column
 case class StddevSamp(child: Expression) extends StddevAgg1(child) {
 
-  override def toString: String = s"STDDEV_SAMP($child)"
+  override def toString: String = s"stddev_samp($child)"
   override def isSample: Boolean = true
 }
 
 case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
-    def this() = this(null)
+  def this() = this(null)
 
-    override def children: Seq[Expression] = child :: Nil
-    override def nullable: Boolean = false
-    override def dataType: DataType = ArrayType(DoubleType)
-    override def toString: String = s"computePartialStddev($child)"
-    override def newInstance(): ComputePartialStdFunction =
-      new ComputePartialStdFunction(child, this)
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = ArrayType(DoubleType)
+  override def toString: String = s"computePartialStddev($child)"
+  override def newInstance(): ComputePartialStdFunction =
+    new ComputePartialStdFunction(child, this)
 }
 
 case class ComputePartialStdFunction (
     expr: Expression,
     base: AggregateExpression1
-) extends AggregateFunction1 {
+  ) extends AggregateFunction1 {
+
   def this() = this(null, null)  // Required for serialization
 
   private val computeType = DoubleType
@@ -1007,8 +1019,6 @@ case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExp
   override def foldable: Boolean = false
 
   override def prettyName: String = "kurtosis"
-
-  override def toString: String = s"KURTOSIS($child)"
 }
 
 // placeholder
@@ -1026,27 +1036,6 @@ case class Skewness(child: Expression) extends UnaryExpression with AggregateExp
   override def foldable: Boolean = false
 
   override def prettyName: String = "skewness"
-
-  override def toString: String = s"SKEWNESS($child)"
-}
-
-// placeholder
-case class Variance(child: Expression) extends UnaryExpression with AggregateExpression1 {
-
-  override def newInstance(): AggregateFunction1 = {
-    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
-      "please set spark.sql.useAggregate2 = true")
-  }
-
-  override def nullable: Boolean = false
-
-  override def dataType: DoubleType.type = DoubleType
-
-  override def foldable: Boolean = false
-
-  override def prettyName: String = "variance"
-
-  override def toString: String = s"VARIANCE($child)"
 }
 
 // placeholder
@@ -1063,9 +1052,7 @@ case class VariancePop(child: Expression) extends UnaryExpression with Aggregate
 
   override def foldable: Boolean = false
 
-  override def prettyName: String = "variance_pop"
-
-  override def toString: String = s"VAR_POP($child)"
+  override def prettyName: String = "var_pop"
 }
 
 // placeholder
@@ -1082,7 +1069,5 @@ case class VarianceSamp(child: Expression) extends UnaryExpression with Aggregat
 
   override def foldable: Boolean = false
 
-  override def prettyName: String = "variance_samp"
-
-  override def toString: String = s"VAR_SAMP($child)"
+  override def prettyName: String = "var_samp"
 }

@@ -26,46 +26,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
-/**
- * Companion object for GroupedData
- */
-private[sql] object GroupedData {
-  def apply(
-      df: DataFrame,
-      groupingExprs: Seq[Expression],
-      groupType: GroupType): GroupedData = {
-    new GroupedData(df, groupingExprs, groupType)
-  }
-
-  /**
-   * The Grouping Type
-   */
-  private[sql] trait GroupType
-
-  /**
-   * To indicate it's the GroupBy
-   */
-  private[sql] object GroupByType extends GroupType
-
-  /**
-   * To indicate it's the CUBE
-   */
-  private[sql] object CubeType extends GroupType
-
-  /**
-   * To indicate it's the ROLLUP
-   */
-  private[sql] object RollupType extends GroupType
-
-  /**
-   * To indicate it's the PIVOT
-   */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[String]) extends GroupType
-}
 
 /**
  * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
+ *
+ * The main method is the agg function, which has multiple variants. This class also contains
+ * convenience some first order statistics such as mean, sum for convenience.
  *
  * @since 1.3.0
  */
@@ -73,7 +40,7 @@ private[sql] object GroupedData {
 class GroupedData protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
-    private val groupType: GroupedData.GroupType) {
+    groupType: GroupedData.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
@@ -136,10 +103,10 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
-      case "stddev" => Stddev
+      case "stddev" | "std" => StddevSamp
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
-      case "variance" => Variance
+      case "variance" => VarianceSamp
       case "var_pop" => VariancePop
       case "var_samp" => VarianceSamp
       case "sum" => Sum
@@ -268,30 +235,6 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the skewness for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the skewness values for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def skewness(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Skewness)
-  }
-
-  /**
-   * Compute the kurtosis for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the kurtosis values for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def kurtosis(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Kurtosis)
-  }
-
-  /**
    * Compute the max value for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the max values for them.
@@ -328,42 +271,6 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the sample standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Stddev)
-  }
-
-  /**
-   * Compute the population standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev_pop(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(StddevPop)
-  }
-
-  /**
-   * Compute the sample standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev_samp(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(StddevSamp)
-  }
-
-  /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
@@ -376,53 +283,17 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the sample variance for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the variance for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def variance(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Variance)
-  }
-
-  /**
-   * Compute the population variance for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the variance for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def var_pop(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(VariancePop)
-  }
-
-  /**
-   * Compute the sample variance for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the variance for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def var_samp(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(VarianceSamp)
-  }
-
-  /**
-   * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
-   * aggregation.
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column.
-   *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
-   * }}}
-   * @param pivotColumn Column to pivot
-   * @param values Values of pivotColumn that will be translated to columns in the output data
-   *                    frame.
-   * @since 1.6.0
-   */
+    * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
+    * aggregation.
+    * {{{
+    *   // Compute the sum of earnings for each year by course with each course as a separate column.
+    *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
+    * }}}
+    * @param pivotColumn Column to pivot
+    * @param values Values of pivotColumn that will be translated to columns in the output data
+    *                    frame.
+    * @since 1.6.0
+    */
   @scala.annotation.varargs
   def pivot(pivotColumn: Column, values: String*): GroupedData = groupType match {
     case _: GroupedData.PivotType =>
@@ -434,19 +305,58 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
-   * {{{
-   *   // Compute the sum of earnings for each year by course with each course as a separate column.
-   *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
-   * }}}
-   * @param pivotColumn Column to pivot
-   * @param values Values of pivotColumn that will be translated to columns in the output data
-   *                    frame.
-   * @since 1.6.0
-   */
+    * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+    * {{{
+    *   // Compute the sum of earnings for each year by course with each course as a separate column.
+    *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
+    * }}}
+    * @param pivotColumn Column to pivot
+    * @param values Values of pivotColumn that will be translated to columns in the output data
+    *                    frame.
+    * @since 1.6.0
+    */
   @scala.annotation.varargs
   def pivot(pivotColumn: String, values: String*): GroupedData = {
     val resolvedPivotColumn = Column(df.resolve(pivotColumn))
     pivot(resolvedPivotColumn, values: _*)
   }
+}
+
+
+/**
+ * Companion object for GroupedData.
+ */
+private[sql] object GroupedData {
+
+  def apply(
+      df: DataFrame,
+      groupingExprs: Seq[Expression],
+      groupType: GroupType): GroupedData = {
+    new GroupedData(df, groupingExprs, groupType: GroupType)
+  }
+
+  /**
+   * The Grouping Type
+   */
+  private[sql] trait GroupType
+
+  /**
+   * To indicate it's the GroupBy
+   */
+  private[sql] object GroupByType extends GroupType
+
+  /**
+   * To indicate it's the CUBE
+   */
+  private[sql] object CubeType extends GroupType
+
+  /**
+   * To indicate it's the ROLLUP
+   */
+  private[sql] object RollupType extends GroupType
+
+  /**
+    * To indicate it's the PIVOT
+    */
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[String]) extends GroupType
 }

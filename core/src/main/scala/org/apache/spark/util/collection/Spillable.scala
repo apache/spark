@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.{Logging, SparkEnv}
 
 /**
@@ -78,7 +78,8 @@ private[spark] trait Spillable[C] extends Logging {
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = taskMemoryManager.acquireExecutionMemory(amountToRequest)
+      val granted =
+        taskMemoryManager.acquireExecutionMemory(amountToRequest, MemoryMode.ON_HEAP, null)
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
@@ -107,7 +108,8 @@ private[spark] trait Spillable[C] extends Logging {
    */
   def releaseMemory(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
-    taskMemoryManager.releaseExecutionMemory(myMemoryThreshold - initialMemoryThreshold)
+    taskMemoryManager.releaseExecutionMemory(
+      myMemoryThreshold - initialMemoryThreshold, MemoryMode.ON_HEAP, null)
     myMemoryThreshold = initialMemoryThreshold
   }
 

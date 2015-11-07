@@ -22,16 +22,23 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
-  private[memory] override def doAcquireExecutionMemory(
+class TestMemoryManager(conf: SparkConf)
+  extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
+
+  override private[memory] def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
-    if (oom) {
-      oom = false
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = {
+    if (oomOnce) {
+      oomOnce = false
       0
-    } else {
-      _executionMemoryUsed += numBytes // To suppress warnings when freeing unallocated memory
+    } else if (available >= numBytes) {
+      available -= numBytes
       numBytes
+    } else {
+      val grant = available
+      available = 0
+      grant
     }
   }
   override def acquireStorageMemory(
@@ -42,13 +49,24 @@ class GrantEverythingMemoryManager(conf: SparkConf) extends MemoryManager(conf, 
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = true
-  override def releaseStorageMemory(numBytes: Long): Unit = { }
-  override def maxExecutionMemory: Long = Long.MaxValue
+  override def releaseStorageMemory(numBytes: Long): Unit = {}
+  override private[memory] def releaseExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Unit = {
+    available += numBytes
+  }
   override def maxStorageMemory: Long = Long.MaxValue
 
-  private var oom = false
+  private var oomOnce = false
+  private var available = Long.MaxValue
 
-  def markExecutionAsOutOfMemory(): Unit = {
-    oom = true
+  def markExecutionAsOutOfMemoryOnce(): Unit = {
+    oomOnce = true
   }
+
+  def limit(avail: Long): Unit = {
+    available = avail
+  }
+
 }

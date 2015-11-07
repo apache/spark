@@ -50,7 +50,7 @@ module Jekyll
         .map { |l| l[/\A */].size }
         .min
 
-      lines.map { |l| l[min_start_spaces .. -1] }
+      lines.map { |l| l.strip.size == 0 ? l : l[min_start_spaces .. -1] }
     end
 
     # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"
