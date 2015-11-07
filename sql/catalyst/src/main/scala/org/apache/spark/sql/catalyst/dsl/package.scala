@@ -23,6 +23,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.types._
@@ -144,17 +145,24 @@ package object dsl {
       }
     }
 
+    private def withAggregateFunction(
+        func: AggregateFunction2,
+        isDistinct: Boolean = false): Expression = {
+      AggregateExpression2(func, mode = Complete, isDistinct)
+    }
+
     def sum(e: Expression): Expression = Sum(e)
-    def sumDistinct(e: Expression): Expression = SumDistinct(e)
+    def sumDistinct(e: Expression): Expression = withAggregateFunction(Sum(e), true)
     def count(e: Expression): Expression = Count(e)
-    def countDistinct(e: Expression*): Expression = CountDistinct(e)
+    // TODO: re-enable it
+    // def countDistinct(e: Expression*): Expression = CountDistinct(e)
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      ApproxCountDistinct(e, rsd)
-    def avg(e: Expression): Expression = Average(e)
-    def first(e: Expression): Expression = First(e)
-    def last(e: Expression): Expression = Last(e)
-    def min(e: Expression): Expression = Min(e)
-    def max(e: Expression): Expression = Max(e)
+      withAggregateFunction(HyperLogLogPlusPlus(e, rsd), false)
+    def avg(e: Expression): Expression = withAggregateFunction(Average(e))
+    def first(e: Expression): Expression = withAggregateFunction(new First(e))
+    def last(e: Expression): Expression = withAggregateFunction(new Last(e))
+    def min(e: Expression): Expression = withAggregateFunction(Min(e))
+    def max(e: Expression): Expression = withAggregateFunction(Max(e))
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
