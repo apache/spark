@@ -445,8 +445,6 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * :: Experimental ::
-   *
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files, assuming a fixed length per record,
    * generating one byte array per record. Files must be written to the monitored directory
@@ -459,7 +457,6 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    * @param recordLength length of each record in bytes
    */
-  @Experimental
   def binaryRecordsStream(
       directory: String,
       recordLength: Int): DStream[Array[Byte]] = withNamedScope("binary records stream") {

@@ -26,41 +26,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
 import org.apache.spark.sql.types.NumericType
 
-/**
- * Companion object for GroupedData
- */
-private[sql] object GroupedData {
-  def apply(
-      df: DataFrame,
-      groupingExprs: Seq[Expression],
-      groupType: GroupType): GroupedData = {
-    new GroupedData(df, groupingExprs, groupType: GroupType)
-  }
-
-  /**
-   * The Grouping Type
-   */
-  private[sql] trait GroupType
-
-  /**
-   * To indicate it's the GroupBy
-   */
-  private[sql] object GroupByType extends GroupType
-
-  /**
-   * To indicate it's the CUBE
-   */
-  private[sql] object CubeType extends GroupType
-
-  /**
-   * To indicate it's the ROLLUP
-   */
-  private[sql] object RollupType extends GroupType
-}
 
 /**
  * :: Experimental ::
  * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
+ *
+ * The main method is the agg function, which has multiple variants. This class also contains
+ * convenience some first order statistics such as mean, sum for convenience.
  *
  * @since 1.3.0
  */
@@ -68,7 +40,7 @@ private[sql] object GroupedData {
 class GroupedData protected[sql](
     df: DataFrame,
     groupingExprs: Seq[Expression],
-    private val groupType: GroupedData.GroupType) {
+    groupType: GroupedData.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sqlContext.conf.dataFrameRetainGroupColumns) {
@@ -124,10 +96,15 @@ class GroupedData protected[sql](
       case "avg" | "average" | "mean" => Average
       case "max" => Max
       case "min" => Min
-      case "stddev" => Stddev
+      case "stddev" | "std" => StddevSamp
       case "stddev_pop" => StddevPop
       case "stddev_samp" => StddevSamp
+      case "variance" => VarianceSamp
+      case "var_pop" => VariancePop
+      case "var_samp" => VarianceSamp
       case "sum" => Sum
+      case "skewness" => Skewness
+      case "kurtosis" => Kurtosis
       case "count" | "size" =>
         // Turn count(*) into count(1)
         (inputExpr: Expression) => inputExpr match {
@@ -287,42 +264,6 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Compute the sample standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Stddev)
-  }
-
-  /**
-   * Compute the population standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev_pop(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(StddevPop)
-  }
-
-  /**
-   * Compute the sample standard deviation for each numeric columns for each group.
-   * The resulting [[DataFrame]] will also contain the grouping columns.
-   * When specified columns are given, only compute the stddev for them.
-   *
-   * @since 1.6.0
-   */
-  @scala.annotation.varargs
-  def stddev_samp(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(StddevSamp)
-  }
-
-  /**
    * Compute the sum for each numeric columns for each group.
    * The resulting [[DataFrame]] will also contain the grouping columns.
    * When specified columns are given, only compute the sum for them.
@@ -333,4 +274,38 @@ class GroupedData protected[sql](
   def sum(colNames: String*): DataFrame = {
     aggregateNumericColumns(colNames : _*)(Sum)
   }
+}
+
+
+/**
+ * Companion object for GroupedData.
+ */
+private[sql] object GroupedData {
+
+  def apply(
+      df: DataFrame,
+      groupingExprs: Seq[Expression],
+      groupType: GroupType): GroupedData = {
+    new GroupedData(df, groupingExprs, groupType: GroupType)
+  }
+
+  /**
+   * The Grouping Type
+   */
+  private[sql] trait GroupType
+
+  /**
+   * To indicate it's the GroupBy
+   */
+  private[sql] object GroupByType extends GroupType
+
+  /**
+   * To indicate it's the CUBE
+   */
+  private[sql] object CubeType extends GroupType
+
+  /**
+   * To indicate it's the ROLLUP
+   */
+  private[sql] object RollupType extends GroupType
 }

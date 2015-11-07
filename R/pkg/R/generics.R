@@ -714,6 +714,10 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
+#' @rdname cumeDist
+#' @export
+setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
+
 #' @rdname datediff
 #' @export
 setGeneric("datediff", function(y, x) { standardGeneric("datediff") })
@@ -737,6 +741,10 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @rdname dayofyear
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
+
+#' @rdname denseRank
+#' @export
+setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
 
 #' @rdname explode
 #' @export
@@ -790,6 +798,10 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
+#' @rdname lag
+#' @export
+setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
+
 #' @rdname last
 #' @export
 setGeneric("last", function(x) { standardGeneric("last") })
@@ -797,6 +809,10 @@ setGeneric("last", function(x) { standardGeneric("last") })
 #' @rdname last_day
 #' @export
 setGeneric("last_day", function(x) { standardGeneric("last_day") })
+
+#' @rdname lead
+#' @export
+setGeneric("lead", function(x, offset, defaultValue = NULL) { standardGeneric("lead") })
 
 #' @rdname least
 #' @export
@@ -858,9 +874,17 @@ setGeneric("negate", function(x) { standardGeneric("negate") })
 #' @export
 setGeneric("next_day", function(y, x) { standardGeneric("next_day") })
 
+#' @rdname ntile
+#' @export
+setGeneric("ntile", function(x) { standardGeneric("ntile") })
+
 #' @rdname countDistinct
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
+
+#' @rdname percentRank
+#' @export
+setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
 
 #' @rdname pmod
 #' @export
@@ -878,6 +902,10 @@ setGeneric("rand", function(seed) { standardGeneric("rand") })
 #' @export
 setGeneric("randn", function(seed) { standardGeneric("randn") })
 
+#' @rdname rank
+#' @export
+setGeneric("rank", function(x, ...) { standardGeneric("rank") })
+
 #' @rdname regexp_extract
 #' @export
 setGeneric("regexp_extract", function(x, pattern, idx) { standardGeneric("regexp_extract") })
@@ -894,6 +922,10 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @rdname rint
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
+
+#' @rdname rowNumber
+#' @export
+setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
 
 #' @rdname rpad
 #' @export
@@ -1011,3 +1043,7 @@ setGeneric("as.data.frame")
 #' @rdname attach
 #' @export
 setGeneric("attach")
+
+#' @rdname with
+#' @export
+setGeneric("with")

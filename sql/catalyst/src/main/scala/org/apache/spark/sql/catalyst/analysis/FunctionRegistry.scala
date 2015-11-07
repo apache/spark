@@ -178,17 +178,24 @@ object FunctionRegistry {
 
     // aggregate functions
     expression[Average]("avg"),
+    expression[Corr]("corr"),
     expression[Count]("count"),
     expression[First]("first"),
     expression[First]("first_value"),
     expression[Last]("last"),
     expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[Average]("mean"),
     expression[Min]("min"),
-    expression[Stddev]("stddev"),
+    expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
+    expression[VarianceSamp]("variance"),
+    expression[VariancePop]("var_pop"),
+    expression[VarianceSamp]("var_samp"),
+    expression[Skewness]("skewness"),
+    expression[Kurtosis]("kurtosis"),
 
     // string functions
     expression[Ascii]("ascii"),

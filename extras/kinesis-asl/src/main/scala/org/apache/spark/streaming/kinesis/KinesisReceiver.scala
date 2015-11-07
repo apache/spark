@@ -80,7 +80,7 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
  *                             the credentials
  */
-private[kinesis] class KinesisReceiver(
+private[kinesis] class KinesisReceiver[T](
     val streamName: String,
     endpointUrl: String,
     regionName: String,
@@ -88,8 +88,9 @@ private[kinesis] class KinesisReceiver(
     checkpointAppName: String,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
-    awsCredentialsOption: Option[SerializableAWSCredentials]
-  ) extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
+    messageHandler: Record => T,
+    awsCredentialsOption: Option[SerializableAWSCredentials])
+  extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
    * =================================================================================
@@ -202,12 +203,7 @@ private[kinesis] class KinesisReceiver(
   /** Add records of the given shard to the current block being generated */
   private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
     if (records.size > 0) {
-      val dataIterator = records.iterator().asScala.map { record =>
-        val byteBuffer = record.getData()
-        val byteArray = new Array[Byte](byteBuffer.remaining())
-        byteBuffer.get(byteArray)
-        byteArray
-      }
+      val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
@@ -240,7 +236,7 @@ private[kinesis] class KinesisReceiver(
 
   /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
-      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Array[Byte]]): Unit = {
+      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
     val rangesToReportOption = blockIdToSeqNumRanges.remove(blockId)
     if (rangesToReportOption.isEmpty) {
       stop("Error while storing block into Spark, could not find sequence number ranges " +
@@ -325,7 +321,7 @@ private[kinesis] class KinesisReceiver(
     /** Callback method called when a block is ready to be pushed / stored. */
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
       storeBlockWithRanges(blockId,
-        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[Array[Byte]]])
+        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
     }
 
     /** Callback called in case of any error in internal of the BlockGenerator */

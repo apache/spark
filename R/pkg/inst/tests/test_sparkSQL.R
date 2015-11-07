@@ -829,6 +829,13 @@ test_that("column functions", {
   c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
+  c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
+  c13 <- cumeDist() + ntile(1)
+  c14 <- denseRank() + percentRank() + rank() + rowNumber()
+
+  # Test if base::rank() is exposed
+  expect_equal(class(rank())[[1]], "Column")
+  expect_equal(rank(1:3), as.numeric(c(1:3)))
 
   df <- jsonFile(sqlContext, jsonPath)
   df2 <- select(df, between(df$age, c(20, 30)), between(df$age, c(10, 20)))
@@ -868,9 +875,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.45, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -0.0111, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1105,11 +1112,40 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(joined9), 4)
   expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
 
-  merged <- select(merge(df, df2, df$name == df2$name, "outer"),
-                   alias(df$age + 5, "newAge"), df$name, df2$test)
-  expect_equal(names(merged), c("newAge", "name", "test"))
+  merged <- merge(df, df2, by.x = "name", by.y = "name", all.x = TRUE, all.y = TRUE)
   expect_equal(count(merged), 4)
-  expect_equal(collect(orderBy(merged, merged$name))$newAge[3], 24)
+  expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
+  expect_equal(collect(orderBy(merged, merged$name_x))$age[3], 19)
+
+  merged <- merge(df, df2, suffixes = c("-X","-Y"))
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-X"))$age[1], 30)
+
+  merged <- merge(df, df2, by = "name", suffixes = c("-X","-Y"), sort = FALSE)
+  expect_equal(count(merged), 3)
+  expect_equal(names(merged), c("age", "name-X", "name-Y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name-Y"))$"name-X"[3], "Michael")
+
+  merged <- merge(df, df2, by = "name", all = T, sort = T)
+  expect_equal(count(merged), 4)
+  expect_equal(names(merged), c("age", "name_x", "name_y", "test"))
+  expect_equal(collect(orderBy(merged, merged$"name_y"))$"name_x"[1], "Andy")
+
+  merged <- merge(df, df2, by = NULL)
+  expect_equal(count(merged), 12)
+  expect_equal(names(merged), c("age", "name", "name", "test"))
+
+  mockLines3 <- c("{\"name\":\"Michael\", \"name_y\":\"Michael\", \"test\": \"yes\"}",
+                  "{\"name\":\"Andy\", \"name_y\":\"Andy\", \"test\": \"no\"}",
+                  "{\"name\":\"Justin\", \"name_y\":\"Justin\", \"test\": \"yes\"}",
+                  "{\"name\":\"Bob\", \"name_y\":\"Bob\", \"test\": \"yes\"}")
+  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines3, jsonPath3)
+  df3 <- jsonFile(sqlContext, jsonPath3)
+  expect_error(merge(df, df3),
+               paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
+                     "Please use different suffixes for the intersected columns.", sep = ""))
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -1422,8 +1458,8 @@ test_that("sampleBy() on a DataFrame", {
   fractions <- list("0" = 0.1, "1" = 0.2)
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
-  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -1456,6 +1492,15 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age"])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
+})
+
+test_that("with() on a DataFrame", {
+  df <- createDataFrame(sqlContext, iris)
+  expect_error(Sepal_Length)
+  sum1 <- with(df, list(summary(Sepal_Length), summary(Sepal_Width)))
+  expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
+  sum2 <- with(df, distinct(Sepal_Length))
+  expect_equal(nrow(sum2), 35)
 })
 
 unlink(parquetPath)
