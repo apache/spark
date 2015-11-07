@@ -22,25 +22,27 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.{IntegerType, StructType, MapType, ArrayType}
+import org.apache.spark.sql.types._
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object Utils {
-  // Right now, we do not support complex types in the grouping key schema.
-  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
-    val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
-      case array: ArrayType => true
-      case map: MapType => true
-      case _ => false
-    }
 
-    !hasComplexTypes
+  // Check if the DataType given cannot be part of a group by clause.
+  private def isUnGroupable(dt: DataType): Boolean = dt match {
+    case _: ArrayType | _: MapType => true
+    case s: StructType => s.fields.exists(f => isUnGroupable(f.dataType))
+    case _ => false
   }
+
+  // Right now, we do not support complex types in the grouping key schema.
+  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean =
+    !aggregate.groupingExpressions.exists(e => isUnGroupable(e.dataType))
 
   private def doConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
     case p: Aggregate if supportsGroupingKeySchema(p) =>
+
       val converted = MultipleDistinctRewriter.rewrite(p.transformExpressionsDown {
         case expressions.Average(child) =>
           aggregate.AggregateExpression2(
