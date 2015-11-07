@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
-import org.codehaus.janino.ClassBodyEvaluatoin
-
+import org.codehaus.janino.ClassBodyEvaluator
 /**
  * An object for creating a code generated decision tree model.
  * NodeToTree is used to convert a node to a series if code gen
@@ -29,7 +29,7 @@ import org.codehaus.janino.ClassBodyEvaluatoin
  * getScorer wraps this and provides a function we can use to get
  * the prediction.
  */
-private[spark] object CodeGenerationDecisionTreeModel with logging {
+private[spark] object CodeGenerationDecisionTreeModel extends Logging {
   private val prefix = "mllibCodeGen"
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -40,9 +40,19 @@ private[spark] object CodeGenerationDecisionTreeModel with logging {
    *
    * It will track the time used to compile
    */
-  protected def compile(code: String): Class[_] = {
+  protected def compile(code: String, implements: Array[Class[_]]): Class[_] = {
     val startTime = System.nanoTime()
-    val clazz = new ClassBodyEvaluator(code).getClazz()
+    val evaluator = new ClassBodyEvaluator()
+    val clName = freshName()
+    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setImplementedInterfaces(implements)
+    evaluator.setClassName(clName)
+    evaluator.setDefaultImports(Array(
+      "org.apache.spark.mllib.linalg.Vectors",
+      "org.apache.spark.mllib.linalg.Vector"
+    ))
+    evaluator.cook(s"${clName}.java", code)
+    val clazz = evaluator.getClazz()
     val endTime = System.nanoTime()
     def timeMs: Double = (endTime - startTime).toDouble / 1000000
     logDebug(s"Compiled Java code (${code.size} bytes) in $timeMs ms")
@@ -67,48 +77,50 @@ private[spark] object CodeGenerationDecisionTreeModel with logging {
             val isLeft = split.isLeft
             isLeft match {
               case true => s"""
-                              if (categories.contains(input.get(${split.featureIndex}))) {
-                                ${NodeToTree(node.leftChild)};
+                              if (categories.contains(input.apply(${split.featureIndex}))) {
+                                ${NodeToTree(node.leftChild)}
                               } else {
-                                ${NodeToTree(node.rightChild)};
+                                ${NodeToTree(node.rightChild)}
                               }"""
               case false => s"""
-                               if (categories.contains(input.get(${split.featureIndex}))) {
-                                 ${NodeToTree(node.leftChild)};
+                               if (categories.contains(input.apply(${split.featureIndex}))) {
+                                 ${NodeToTree(node.leftChild)}
                                } else {
-                                 ${NodeToTree(node.rightChild)};
+                                 ${NodeToTree(node.rightChild)}
                                }"""
             }
           }
           case split: ContinuousSplit => {
             s"""
-               if (input.get(${split.featureIndex}) <= ${split.threshold}) {
-                 ${NodeToTree(node.leftChild)};
+               if (input.apply(${split.featureIndex}) <= ${split.threshold}) {
+                 ${NodeToTree(node.leftChild)}
                 } else {
-                 ${NodeToTree(node.rightChild)};
+                 ${NodeToTree(node.rightChild)}
                 }"""
           }
         }
       }
-      case node: LeafNode => q"return ${node.prediction};"
+      case node: LeafNode => s"return ${node.prediction};"
     }
   }
 
   // Create a codegened scorer for a given node
   def getScorer(root: Node): Vector => Double = {
-    val toolbox = currentMirror.mkToolBox()
     val code =
       s"""
-         import org.apache.spark.mllib.linalg.Vectors;
-         import org.apache.spark.mllib.linalg.Vector;
-         import org.apache.spark.api.java.function;
-         class ${freshName() implements Function<Vector, Double> {
-            public Double call(Vector root) {
-              ${NodeToTree(root)}
-            }
-         };
+       @Override
+       public double call(Vector input) throws Exception {
+         ${NodeToTree(root)}
+       }
        """
-    val jfunc = toolbox.eval(code).asInstanceOf[Function[Vector, Double]]
-    (x: Vector => jfunc.call(x))
+    trait CallableVectorDouble {
+      def call(v: Vector): Double
+    }
+    val jfunc = compile(code,
+      Array(classOf[CallableVectorDouble])).newInstance()
+    def func(v: Vector): Double = {
+      jfunc.asInstanceOf[CallableVectorDouble].call(v)
+    }
+    func(_)
   }
 }
