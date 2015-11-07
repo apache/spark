@@ -28,7 +28,8 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.util.Utils
 
@@ -44,7 +45,7 @@ case class ListStringCaseClass(l: Seq[String])
 /**
  * A test suite for Hive custom UDFs.
  */
-class HiveUDFSuite extends QueryTest with TestHiveSingleton {
+class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils{
 
   import hiveContext.{udf, sql}
   import hiveContext.implicits._
@@ -80,7 +81,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     """.
         stripMargin.format(classOf[PairSerDe].getName))
 
-    val location = Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
+    val location= Utils.getSparkClassLoader.getResource("data/files/testUDF").getFile
     sql(s"""
       ALTER TABLE hiveUDFTestTable
       ADD IF NOT EXISTS PARTITION(partition='testUDF')
@@ -355,104 +356,46 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     println("======================================")
     println("EXTERNAL OpenCSVSerde table pointing to LOCATION")
 
-    sql("CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT) " +
-      " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'" +
-      " WITH SERDEPROPERTIES ( " +
-      "   \"separatorChar\" = \",\"," +
-      "   \"quoteChar\"     = \"\\\"\"," +
-      "   \"escapeChar\"    = \"\\\\\") " +
-      " LOCATION 'file:///home/xwu0226/spark-tables/csv_table' ")
+    val location1 = Utils.getSparkClassLoader.getResource("data/files/csv_table").getFile
+    sql(s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+         ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+         WITH SERDEPROPERTIES (
+           \"separatorChar\" = \",\",
+           \"quoteChar\"     = \"\\\"\",
+           \"escapeChar\"    = \"\\\\\")
+         LOCATION '$location1'""")
 
-    sql("SELECT input_file_name() as file FROM csv_table").show(false)
-    sql("SELECT * FROM csv_table").show()
+    val answer1 = sql("select input_file_name() from csv_table").head().getString(0)
+    assert(answer1.contains(location1))
+    assert(sql("select input_file_name() from csv_table").distinct().collect().length == 2)
     sql("DROP TABLE csv_table")
+
 
     println("======================================")
     println("EXTERNAL pointing to LOCATION")
-    sql("select 1, 2").write.save("file:///home/xwu0226/spark-tables/external_test_t5")
 
-    sql("CREATE EXTERNAL table external_t5 (c1 int, c2 int) " +
-      " row format delimited fields terminated by ',' " +
-      " location 'file:///home/xwu0226/spark-tables/external_test_t5'")
+    val location2 = Utils.getSparkClassLoader.getResource("data/files/external_t5").getFile
+    sql(s"""CREATE EXTERNAL table external_t5 (c1 int, c2 int)
+        row format delimited fields terminated by ','
+        location '$location2'""")
 
-    sql("SELECT input_file_name() as file FROM external_t5").show(false)
-    sql("SELECT * FROM external_t5").show
+    val answer2 = sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
+    assert(answer2.contains("external_t5"))
+    assert(sql("SELECT input_file_name() as file FROM external_t5").distinct().collect().length == 1)
     sql("DROP TABLE external_t5")
-
-    println("======================================")
-    println("NON-External pointing to LOCATION")
-
-    sql("select 1, 2").write.save("file:///home/xwu0226/spark-tables/external_test_t4")
-    sql("CREATE table external_t4 (c1 int, c2 int) " +
-      " row format delimited fields terminated by ',' " +
-      " location 'file:///home/xwu0226/spark-tables/external_test_t4'")
-
-    sql("SELECT input_file_name() as file FROM external_t4").show(false)
-    sql("SELECT * FROM external_t4").show
-    sql("DROP TABLE external_t4")
-
-    println("======================================")
-    println("NON-External pointing to /tmp/...")
-
-    sql("CREATE table internal_t1(c1 int, c2 int) " +
-      " row format delimited fields terminated by ',' " +
-      " as select 1, 2")
-
-    sql("SELECT input_file_name() as file FROM internal_t1").show(false)
-    sql("SELECT * FROM internal_t1").show
-    sql("DROP TABLE internal_t1")
-
-    println("======================================")
-    println("External pointing to /tmp/...")
-
-    sql("CREATE EXTERNAL table external_t1(c1 int, c2 int) " +
-      " row format delimited fields terminated by ',' " +
-      " as select 1, 2")
-
-    sql("SELECT input_file_name() as file FROM external_t1").show(false)
-    sql("SELECT * FROM external_t1").show
-    sql("DROP TABLE external_t1")
-
-    println("======================================")
-    println("Non-External parquet pointing to /tmp/...")
-
-    sql("CREATE table internal_parquet_tmp(c1 int, c2 int) " +
-      " stored as parquet " +
-      " as select 1, 2")
-
-    sql("SELECT input_file_name() as file FROM internal_parquet_tmp").show(false)
-    sql("SELECT * FROM internal_parquet_tmp").show
-    sql("DROP TABLE internal_parquet_tmp")
-
-    println("======================================")
-    println("External parquet pointing to /tmp/...")
-
-    sql("CREATE EXTERNAL table external_parquet_tmp(c1 int, c2 int) " +
-      " stored as parquet " +
-      " as select 1, 2")
-
-    sql("SELECT input_file_name() as file FROM external_parquet_tmp").show(false)
-    sql("SELECT * FROM external_parquet_tmp").show
-    sql("DROP TABLE external_parquet_tmp")
 
     println("======================================")
     println("External parquet pointing to LOCATION")
 
-    sql("CREATE table internal_parquet(c1 int, c2 int) " +
-      " stored as parquet " +
-      " as select 1, 2")
+    val location3 = Utils.getSparkClassLoader.getResource("data/files/external_parquet").getFile
+    sql(s"""CREATE EXTERNAL table external_parquet(c1 int, c2 int)
+        stored as parquet
+        LOCATION '$location3'""")
 
-    val df = sql("SELECT * FROM internal_parquet")
-    df.write.parquet("file:///home/xwu0226/spark-tables/external_parquet")
-
-    sql("CREATE EXTERNAL table external_parquet(c1 int, c2 int) " +
-      " stored as parquet " +
-      " LOCATION 'file:///home/xwu0226/spark-tables/external_parquet'")
-
-    sql("SELECT input_file_name() as file FROM external_parquet").show(false)
-    sql("SELECT * FROM external_parquet").show
+    val answer3 = sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
+    assert(answer3.contains("external_parquet"))
+    assert(sql("SELECT input_file_name() as file FROM external_parquet").distinct().collect().length == 1)
     sql("DROP TABLE external_parquet")
-    sql("DROP TABLE internal_parquet")
 
     println("======================================")
     println("Non-External parquet pointing to /tmp/...")
@@ -461,23 +404,26 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
       " stored as parquet " +
       " as select 1, 2")
 
-    sql("SELECT input_file_name() as file FROM internal_parquet_tmp").show(false)
-    sql("SELECT * FROM internal_parquet_tmp").show
+    val answer4 = sql("SELECT input_file_name() as file FROM internal_parquet_tmp").head().getString(0)
+    assert(answer4.contains("internal_parquet_tmp"))
+    assert(sql("SELECT input_file_name() as file FROM internal_parquet_tmp").distinct().collect().length == 1)
     sql("DROP TABLE internal_parquet_tmp")
 
 
     println("======================================")
     println("Non-External parquet pointing to LOCATION")
+    withTempPath { dir =>
+      sql("SELECT 1, 2 ").write.parquet(dir.getCanonicalPath)
 
-    sql("SELECT 1, 2 ").write.parquet("file:///home/xwu0226/spark-tables/NON_external_parquet")
+      sql(s"""CREATE table non_external_parquet(c1 int, c2 int)
+         stored as parquet
+         LOCATION '${dir.getCanonicalPath}'""")
 
-    sql("CREATE table non_external_parquet(c1 int, c2 int) " +
-      " stored as parquet " +
-      " LOCATION 'file:///home/xwu0226/spark-tables/NON_external_parquet'")
-
-    sql("SELECT input_file_name() as file FROM non_external_parquet").show(false)
-    sql("SELECT * FROM non_external_parquet").show
-    sql("DROP TABLE non_external_parquet")
+      val answer5 = sql("SELECT input_file_name() as file FROM non_external_parquet").head().getString(0)
+      assert(answer5.contains(dir.getCanonicalPath))
+      assert(sql("SELECT input_file_name() as file FROM non_external_parquet").distinct().collect().length == 1)
+      sql("DROP TABLE non_external_parquet")
+    }
 
   }
 
