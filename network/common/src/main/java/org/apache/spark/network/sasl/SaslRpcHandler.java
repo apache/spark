@@ -128,4 +128,5 @@ class SaslRpcHandler extends RpcHandler {
   public void exceptionCaught(Throwable cause, TransportClient client) {
     delegate.exceptionCaught(cause, client);
   }
+
 }
