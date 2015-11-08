@@ -22,26 +22,27 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.{IntegerType, StructType, MapType, ArrayType}
+import org.apache.spark.sql.types._
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object Utils {
-  // Right now, we do not support complex types in the grouping key schema.
-  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean = {
-    val hasComplexTypes = aggregate.groupingExpressions.map(_.dataType).exists {
-      case array: ArrayType => true
-      case map: MapType => true
-      case struct: StructType => true
-      case _ => false
-    }
 
-    !hasComplexTypes
+  // Check if the DataType given cannot be part of a group by clause.
+  private def isUnGroupable(dt: DataType): Boolean = dt match {
+    case _: ArrayType | _: MapType => true
+    case s: StructType => s.fields.exists(f => isUnGroupable(f.dataType))
+    case _ => false
   }
+
+  // Right now, we do not support complex types in the grouping key schema.
+  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean =
+    !aggregate.groupingExpressions.exists(e => isUnGroupable(e.dataType))
 
   private def doConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
     case p: Aggregate if supportsGroupingKeySchema(p) =>
+
       val converted = MultipleDistinctRewriter.rewrite(p.transformExpressionsDown {
         case expressions.Average(child) =>
           aggregate.AggregateExpression2(
@@ -55,10 +56,14 @@ object Utils {
             mode = aggregate.Complete,
             isDistinct = false)
 
-        // We do not support multiple COUNT DISTINCT columns for now.
-        case expressions.CountDistinct(children) if children.length == 1 =>
+        case expressions.CountDistinct(children) =>
+          val child = if (children.size > 1) {
+            DropAnyNull(CreateStruct(children))
+          } else {
+            children.head
+          }
           aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(children.head),
+            aggregateFunction = aggregate.Count(child),
             mode = aggregate.Complete,
             isDistinct = true)
 
@@ -320,7 +325,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.prettyName, e.dataType, e.nullable)()
+        case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -365,14 +370,15 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Setup expand for the 'regular' aggregate expressions.
       val regularAggExprs = aggExpressions.filter(!_.isDistinct)
       val regularAggChildren = regularAggExprs.flatMap(_.aggregateFunction.children).distinct
-      val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair).toMap
+      val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
       // Setup aggregates for 'regular' aggregate expressions.
       val regularGroupId = Literal(0)
+      val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
-        val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrMap)
-        val operator = Alias(e.copy(aggregateFunction = af), e.toString)()
+        val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup)
+        val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression2(
@@ -416,7 +422,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Construct the expand operator.
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
-        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.values.toSeq,
+        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
         a.child)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
@@ -457,5 +463,5 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.prettyName, e.dataType, true)()
+    e -> new AttributeReference(e.prettyString, e.dataType, true)()
 }
