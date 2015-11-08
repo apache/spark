@@ -231,12 +231,14 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  // TODO: Re-enable this
-  // @scala.annotation.varargs
-  // def countDistinct(expr: Column, exprs: Column*): Column = withAggregateFunction {
-  //  Count((expr +: exprs).map(_.expr)),
-  //  true
-  // }
+  @scala.annotation.varargs
+  def countDistinct(expr: Column, exprs: Column*): Column = {
+    throw new UnsupportedOperationException("We need to support it before merge SPARK-9830.")
+    // withAggregateFunction {
+    //  Count((expr +: exprs).map(_.expr)),
+    //  true
+    //}
+  }
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -244,10 +246,9 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  // TODO: Re-enable this
-  // @scala.annotation.varargs
-  // def countDistinct(columnName: String, columnNames: String*): Column =
-  //  countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
+  @scala.annotation.varargs
+  def countDistinct(columnName: String, columnNames: String*): Column =
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
    * Aggregate function: returns the first value in a group.
@@ -427,7 +428,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
+  def var_pop(e: Column): Column = withExpr { VariancePop(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions

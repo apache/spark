@@ -154,8 +154,10 @@ package object dsl {
     def sum(e: Expression): Expression = Sum(e)
     def sumDistinct(e: Expression): Expression = withAggregateFunction(Sum(e), true)
     def count(e: Expression): Expression = Count(e)
-    // TODO: re-enable it
-    // def countDistinct(e: Expression*): Expression = CountDistinct(e)
+    def countDistinct(e: Expression*): Expression = {
+      // CountDistinct(e)
+      throw new UnsupportedOperationException("We need to support it before merge SPARK-9830.")
+    }
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
       withAggregateFunction(HyperLogLogPlusPlus(e, rsd), false)
     def avg(e: Expression): Expression = withAggregateFunction(Average(e))
