@@ -560,6 +560,16 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
+    // Note that ...
+    val newJoinExprs = joinExprs.expr.transform {
+      case arLeft: AttributeReference
+        if arLeft.qualifiers.head == this.hashCode.toString =>
+        arLeft.withQualifiers("LEFT_TREE" :: Nil)
+      case arRight: AttributeReference
+        if arRight.qualifiers.head == right.hashCode.toString =>
+        arRight.withQualifiers("RIGHT_TREE" :: Nil)
+      case o => o
+    }
     // Note that in this function, we introduce a hack in the case of self-join to automatically
     // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
     // Consider this case: df.join(df, df("key") === df("key"))
@@ -570,7 +580,7 @@ class DataFrame private[sql](
 
     // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
     // After the cloning, left and right side will have distinct expression ids.
-    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
+    val plan = Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(newJoinExprs))
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
@@ -669,7 +679,11 @@ class DataFrame private[sql](
     case "*" =>
       Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
-      val expr = resolve(colName)
+      val expr = resolve(colName) match {
+        case ar: AttributeReference =>
+          ar.withQualifiers(this.hashCode.toString :: Nil)
+        case o => o
+      }
       Column(expr)
   }
 

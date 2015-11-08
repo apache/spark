@@ -374,7 +374,12 @@ class Analyzer(
                 case a: Attribute => attributeRewrites.get(a).getOrElse(a)
               }
             }
-            j.copy(right = newRight)
+            val newCondition = j.condition.map ( _.transform {
+              case a: AttributeReference if a.resolved && a.qualifiers.head == "RIGHT_TREE" =>
+                attributeRewrites.get(a).getOrElse(a).withQualifiers(Nil)
+              case o => o
+            })
+            j.copy(right = newRight, condition = newCondition )
         }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as

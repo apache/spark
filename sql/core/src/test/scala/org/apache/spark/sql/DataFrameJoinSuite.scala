@@ -106,6 +106,40 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, 1, 1, 1) :: Row(2, 1, 2, 2) :: Nil)
   }
 
+  test("[SPARK-10838] self join - conflicting attributes in condition - incorrect result 1") {
+    val df1 = Seq((1, 3), (2, 1)).toDF("keyCol1", "keyCol2")
+    val df2 = Seq((1, 4), (2, 1)).toDF("keyCol1", "keyCol3")
+
+    val df3 = df1.join(df2, df1("keyCol1") === df2("keyCol1")).select(df1("keyCol1"))
+
+    checkAnswer(
+      df3.join(df1, df1("keyCol2") === df3("keyCol1")),
+      Row(1, 2, 1) :: Nil)
+  }
+
+  test("[SPARK-10838] self join - conflicting attributes in condition - incorrect result 2") {
+    val df1 = Seq((1, 3), (2, 1)).toDF("keyCol1", "keyCol2")
+    val df2 = Seq((1, 4), (2, 1)).toDF("keyCol1", "keyCol3")
+
+    val df3 = df1.join(df2, df1("keyCol1") === df2("keyCol1")).select(df1("keyCol1"), $"keyCol3")
+
+    checkAnswer(
+      df3.join(df1, df3("keyCol3") === df1("keyCol1") && df1("keyCol1") === df3("keyCol3")),
+      Row(2, 1, 1, 3) :: Nil)
+  }
+
+  test("[SPARK-10838] self join - conflicting attributes in condition - exception") {
+    val df1 = Seq((1, 3), (2, 1)).toDF("keyCol1", "keyCol2")
+    val df2 = Seq((1, 4), (2, 1)).toDF("keyCol1", "keyCol3")
+
+    val df3 = df1.join(df2, df1("keyCol1") === df2("keyCol1")).select(df1("keyCol1"), $"keyCol3")
+    val df4 = df2.as("df4")
+
+    checkAnswer(
+      df3.join(df4, df3("keyCol3") === df4("keyCol1") && df3("keyCol3") === df4("keyCol1")),
+      Row(2, 1, 1, 4) :: Nil)
+  }
+
   test("broadcast join hint") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
