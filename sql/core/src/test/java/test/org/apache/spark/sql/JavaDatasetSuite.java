@@ -170,15 +170,15 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, e.INT());
 
-    Dataset<String> mapped = grouped.mapGroups(
-      new Function2<Integer, Iterator<String>, Iterator<String>>() {
+    Dataset<String> mapped = grouped.map(
+      new Function2<Integer, Iterator<String>, String>() {
         @Override
-        public Iterator<String> call(Integer key, Iterator<String> data) throws Exception {
+        public String call(Integer key, Iterator<String> data) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
           while (data.hasNext()) {
             sb.append(data.next());
           }
-          return Collections.singletonList(sb.toString()).iterator();
+          return sb.toString();
         }
       },
       e.STRING());
@@ -224,15 +224,15 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = context.createDataset(data, e.STRING());
     GroupedDataset<Integer, String> grouped = ds.groupBy(length(col("value"))).asKey(e.INT());
 
-    Dataset<String> mapped = grouped.mapGroups(
-      new Function2<Integer, Iterator<String>, Iterator<String>>() {
+    Dataset<String> mapped = grouped.map(
+      new Function2<Integer, Iterator<String>, String>() {
         @Override
-        public Iterator<String> call(Integer key, Iterator<String> data) throws Exception {
+        public String call(Integer key, Iterator<String> data) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
           while (data.hasNext()) {
             sb.append(data.next());
           }
-          return Collections.singletonList(sb.toString()).iterator();
+          return sb.toString();
         }
       },
       e.STRING());
