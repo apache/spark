@@ -260,8 +260,9 @@ def corr(col1, col2):
     >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
     >>> b = range(20)
     >>> corrDf = sqlContext.createDataFrame(zip(a, b))
-    >>> corrDf.agg(corr(corrDf._1, corrDf._2).alias('c')).collect()
-    [Row(c=0.95723391394758572)]
+    >>> corrDf = corrDf.agg(corr(corrDf._1, corrDf._2)).alias('c')
+    >>> corrDf.select(corrDf.c.cast('string').startswith('0.9572339139475857').alias('t')).collect()
+    [Row(t=True)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
