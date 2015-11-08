@@ -70,7 +70,7 @@ class RegexTokenizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     testRegexTokenizer(tokenizer2, dataset2)
   }
 
-  test("RegexTokenizer with toLowercase true"){
+  test("RegexTokenizer with toLowercase true") {
     val tokenizer = new RegexTokenizer()
       .setInputCol("rawText")
       .setOutputCol("tokens")
