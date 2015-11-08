@@ -125,6 +125,9 @@ trait CheckAnalysis {
               case BinaryType =>
                 failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
                   "in grouping expression")
+              case a: ArrayType =>
+                failAnalysis(s"array type expression ${expr.prettyString} cannot be used " +
+                  "in grouping expression")
               case m: MapType =>
                 failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
                   "in grouping expression")
