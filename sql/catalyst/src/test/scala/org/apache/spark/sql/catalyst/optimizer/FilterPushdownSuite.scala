@@ -307,8 +307,8 @@ class FilterPushdownSuite extends PlanTest {
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('a.isNotNull).where('b >= 1)
-    val right = testRelation1.where('d.isNotNull).where('d >= 2)
+    val left = testRelation.where('b >= 1 && 'a.isNotNull)
+    val right = testRelation1.where('d >= 2 && 'd.isNotNull)
     val correctAnswer =
       left.join(right, LeftSemi, Option("a".attr === "d".attr)).analyze
 

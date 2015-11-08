@@ -986,16 +986,6 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
  * For an inner join - remove rows with null keys on both sides
  */
 object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
-  /**
-   * Adds a null filter on given columns, if any
-   */
-  def addNullFilter(columns: Seq[Expression], expr: LogicalPlan): LogicalPlan = {
-    columns.map(IsNotNull)
-      .reduceLeftOption(And)
-      .map(Filter(_, expr))
-      .getOrElse(expr)
-  }
-
   private def hasNullableKeys(leftKeys: Seq[Expression], rightKeys: Seq[Expression]) = {
     leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable)
   }
@@ -1003,12 +993,15 @@ object JoinSkewOptimizer extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case join @ Join(left, right, joinType, originalJoinCondition) =>
       join match {
+        // add a non-null join-key filter on both sides of Inner or LeftSemi join
         case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _)
-          if hasNullableKeys(leftKeys, rightKeys) && Seq(Inner, LeftSemi).contains(joinType) =>
-            // add a non-null join-key filter on both sides of join
-            val newLeft = addNullFilter(leftKeys.filter(_.nullable), left)
-            val newRight = addNullFilter(rightKeys.filter(_.nullable), right)
-            Join(newLeft, newRight, joinType, originalJoinCondition)
+          if Seq(Inner, LeftSemi).contains(joinType) && hasNullableKeys(leftKeys, rightKeys) =>
+            val nullFilters = (leftKeys ++ rightKeys)
+              .filter(_.nullable)
+              .map(IsNotNull)
+            val newJoinCondition = (originalJoinCondition ++ nullFilters).reduceLeftOption(And)
+
+            Join(left, right, joinType, newJoinCondition)
 
         case _ => join
       }
