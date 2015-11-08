@@ -30,13 +30,13 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
- *
- * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
- * to it should be cached by the user.
- */
+  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
+  * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
+  * they are executed together with joint passes over the data for efficiency.
+  *
+  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
+  * to it should be cached by the user.
+  */
 @Since("0.8.0")
 class KMeans private(
                       private var k: Int,
@@ -48,21 +48,21 @@ class KMeans private(
                       private var seed: Long) extends Serializable with Logging {
 
   /**
-   * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
-   */
+    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
+    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
+    */
   @Since("0.8.0")
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
   /**
-   * Number of clusters to create (k).
-   */
+    * Number of clusters to create (k).
+    */
   @Since("1.4.0")
   def getK: Int = k
 
   /**
-   * Set the number of clusters to create (k). Default: 2.
-   */
+    * Set the number of clusters to create (k). Default: 2.
+    */
   @Since("0.8.0")
   def setK(k: Int): this.type = {
     this.k = k
@@ -70,14 +70,14 @@ class KMeans private(
   }
 
   /**
-   * Maximum number of iterations to run.
-   */
+    * Maximum number of iterations to run.
+    */
   @Since("1.4.0")
   def getMaxIterations: Int = maxIterations
 
   /**
-   * Set maximum number of iterations to run. Default: 20.
-   */
+    * Set maximum number of iterations to run. Default: 20.
+    */
   @Since("0.8.0")
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
@@ -85,16 +85,16 @@ class KMeans private(
   }
 
   /**
-   * The initialization algorithm. This can be either "random" or "k-means||".
-   */
+    * The initialization algorithm. This can be either "random" or "k-means||".
+    */
   @Since("1.4.0")
   def getInitializationMode: String = initializationMode
 
   /**
-   * Set the initialization algorithm. This can be either "random" to choose random points as
-   * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
-   * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
-   */
+    * Set the initialization algorithm. This can be either "random" to choose random points as
+    * initial cluster centers, or "k-means||" to use a parallel variant of k-means++
+    * (Bahmani et al., Scalable K-Means++, VLDB 2012). Default: k-means||.
+    */
   @Since("0.8.0")
   def setInitializationMode(initializationMode: String): this.type = {
     KMeans.validateInitMode(initializationMode)
@@ -103,19 +103,19 @@ class KMeans private(
   }
 
   /**
-   * :: Experimental ::
-   * Number of runs of the algorithm to execute in parallel.
-   */
+    * :: Experimental ::
+    * Number of runs of the algorithm to execute in parallel.
+    */
   @Since("1.4.0")
   @Experimental
   def getRuns: Int = runs
 
   /**
-   * :: Experimental ::
-   * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
-   * this many times with random starting conditions (configured by the initialization mode), then
-   * return the best clustering found over any run. Default: 1.
-   */
+    * :: Experimental ::
+    * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
+    * this many times with random starting conditions (configured by the initialization mode), then
+    * return the best clustering found over any run. Default: 1.
+    */
   @Since("0.8.0")
   @Experimental
   def setRuns(runs: Int): this.type = {
@@ -127,15 +127,15 @@ class KMeans private(
   }
 
   /**
-   * Number of steps for the k-means|| initialization mode
-   */
+    * Number of steps for the k-means|| initialization mode
+    */
   @Since("1.4.0")
   def getInitializationSteps: Int = initializationSteps
 
   /**
-   * Set the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Default: 5.
-   */
+    * Set the number of steps for the k-means|| initialization mode. This is an advanced
+    * setting -- the default of 5 is almost always enough. Default: 5.
+    */
   @Since("0.8.0")
   def setInitializationSteps(initializationSteps: Int): this.type = {
     if (initializationSteps <= 0) {
@@ -146,15 +146,15 @@ class KMeans private(
   }
 
   /**
-   * The distance threshold within which we've consider centers to have converged.
-   */
+    * The distance threshold within which we've consider centers to have converged.
+    */
   @Since("1.4.0")
   def getEpsilon: Double = epsilon
 
   /**
-   * Set the distance threshold within which we've consider centers to have converged.
-   * If all centers move less than this Euclidean distance, we stop iterating one run.
-   */
+    * Set the distance threshold within which we've consider centers to have converged.
+    * If all centers move less than this Euclidean distance, we stop iterating one run.
+    */
   @Since("0.8.0")
   def setEpsilon(epsilon: Double): this.type = {
     this.epsilon = epsilon
@@ -162,14 +162,14 @@ class KMeans private(
   }
 
   /**
-   * The random seed for cluster initialization.
-   */
+    * The random seed for cluster initialization.
+    */
   @Since("1.4.0")
   def getSeed: Long = seed
 
   /**
-   * Set the random seed for cluster initialization.
-   */
+    * Set the random seed for cluster initialization.
+    */
   @Since("1.4.0")
   def setSeed(seed: Long): this.type = {
     this.seed = seed
@@ -181,10 +181,10 @@ class KMeans private(
   private var initialModel: Option[KMeansModel] = None
 
   /**
-   * Set the initial starting point, bypassing the random initialization or k-means||
-   * The condition model.k == this.k must be met, failure results
-   * in an IllegalArgumentException.
-   */
+    * Set the initial starting point, bypassing the random initialization or k-means||
+    * The condition model.k == this.k must be met, failure results
+    * in an IllegalArgumentException.
+    */
   @Since("1.4.0")
   def setInitialModel(model: KMeansModel): this.type = {
     require(model.k == k, "mismatched cluster count")
@@ -193,9 +193,9 @@ class KMeans private(
   }
 
   /**
-   * Train a K-means model on the given set of points; `data` should be cached for high
-   * performance, because this is an iterative algorithm.
-   */
+    * Train a K-means model on the given set of points; `data` should be cached for high
+    * performance, because this is an iterative algorithm.
+    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
 
@@ -222,8 +222,8 @@ class KMeans private(
   }
 
   /**
-   * Implementation of K-Means algorithm.
-   */
+    * Implementation of K-Means algorithm.
+    */
   private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
 
     val sc = data.sparkContext
@@ -277,7 +277,7 @@ class KMeans private(
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
 
-      type WeightedPoint = (Vector, Long)
+      type WeightedPoint = (Vector, Double)
       // this is the function that will be used in the reduce phase
       def mergeContribs(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
         // y += a * x
@@ -311,8 +311,8 @@ class KMeans private(
 
         // sums are zero (per runs per each dimension)
         val sums = Array.fill(runs, k)(Vectors.zeros(dims))
-        // counts are zero  (per run per each dimension)
-        val counts = Array.fill(runs, k)(0L)
+        // fuzzyCounts are zero  (per run per each dimension)
+        val fuzzyCounts = Array.fill(runs, k)(0.0)
 
         // ++++++++++++++++++++++++++++++++++++++++++++++++++++++
         // Here we assign points to clusters
@@ -321,17 +321,23 @@ class KMeans private(
         points.foreach { point =>
           (0 until runs).foreach { i =>
             // WE ARE IN THE CONTEXT OF A SPECIFIC RUN HERE
-            // Returns the index of the closest center to the given point, as well as the squared distance.
-            // TODO - here we need something different for CMeans
-            val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
-            val membershipDegrees = KMeans.degreesOfMembership(thisActiveCenters(i), point)
-            // the total cost increases
-            costAccums(i) += cost
-            // add the current point to the cluster sum
-            val sum = sums(i)(bestCenter)
-            axpy(1.0, point.vector, sum)
-            // increase point count for current cluster
-            counts(i)(bestCenter) += 1
+            // Returns the index of the closest center to the given point,
+            // as well as the squared distance.
+            // val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
+            val (mbrpDegree, distances) = KMeans.degreesOfMembership(thisActiveCenters(i), point)
+            // compute membership based cost - ignore "almost zeros"
+            mbrpDegree.zipWithIndex.
+              filter(_._1 > epsilon * epsilon).
+              foreach { degreeWithIndex =>
+                val (deg, ind) = degreeWithIndex
+                // the total cost increases
+                costAccums(i) += deg * distances(ind)
+                // add the current point to the cluster sum
+                val sum = sums(i)(ind)
+                axpy(deg, point.vector, sum)
+                // increase point count for current cluster
+                fuzzyCounts(i)(ind) += deg
+              }
           }
         }
 
@@ -339,7 +345,7 @@ class KMeans private(
 
         // For every run and every cluster the sum and count are emitted
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
-          ((i, j), (sums(i)(j), counts(i)(j)))
+          ((i, j), (sums(i)(j), fuzzyCounts(i)(j)))
         }
         contribs.iterator
         // The key is a combination of run and cluster
@@ -400,8 +406,8 @@ class KMeans private(
   }
 
   /**
-   * Initialize `runs` sets of cluster centers at random.
-   */
+    * Initialize `runs` sets of cluster centers at random.
+    */
   private def initRandom(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
@@ -412,14 +418,14 @@ class KMeans private(
   }
 
   /**
-   * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
-   * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
-   * to find with dissimilar cluster centers by starting with a random center and then doing
-   * passes where more centers are chosen with probability proportional to their squared distance
-   * to the current cluster set. It results in a provable approximation to an optimal clustering.
-   *
-   * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
-   */
+    * Initialize `runs` sets of cluster centers using the k-means|| algorithm by Bahmani et al.
+    * (Bahmani et al., Scalable K-Means++, VLDB 2012). This is a variant of k-means++ that tries
+    * to find with dissimilar cluster centers by starting with a random center and then doing
+    * passes where more centers are chosen with probability proportional to their squared distance
+    * to the current cluster set. It results in a provable approximation to an optimal clustering.
+    *
+    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
+    */
   private def initKMeansParallel(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
     // Initialize empty centers and point costs.
@@ -515,8 +521,8 @@ class KMeans private(
 
 
 /**
- * Top-level methods for calling K-means clustering.
- */
+  * Top-level methods for calling K-means clustering.
+  */
 @Since("0.8.0")
 object KMeans {
 
@@ -527,15 +533,15 @@ object KMeans {
   val K_MEANS_PARALLEL = "k-means||"
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed random seed value for cluster initialization
-   */
+    * Trains a k-means model using the given set of parameters.
+    *
+    * @param data training points stored as `RDD[Vector]`
+    * @param k number of clusters
+    * @param maxIterations max number of iterations
+    * @param runs number of parallel runs, defaults to 1. The best model is returned.
+    * @param initializationMode initialization model, either "random" or "k-means||" (default).
+    * @param seed random seed value for cluster initialization
+    */
   @Since("1.3.0")
   def train(
              data: RDD[Vector],
@@ -553,14 +559,14 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   */
+    * Trains a k-means model using the given set of parameters.
+    *
+    * @param data training points stored as `RDD[Vector]`
+    * @param k number of clusters
+    * @param maxIterations max number of iterations
+    * @param runs number of parallel runs, defaults to 1. The best model is returned.
+    * @param initializationMode initialization model, either "random" or "k-means||" (default).
+    */
   @Since("0.8.0")
   def train(
              data: RDD[Vector],
@@ -576,8 +582,8 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
+    * Trains a k-means model using specified parameters and the default values for unspecified.
+    */
   @Since("0.8.0")
   def train(
              data: RDD[Vector],
@@ -587,8 +593,8 @@ object KMeans {
   }
 
   /**
-   * Trains a k-means model using specified parameters and the default values for unspecified.
-   */
+    * Trains a k-means model using specified parameters and the default values for unspecified.
+    */
   @Since("0.8.0")
   def train(
              data: RDD[Vector],
@@ -599,8 +605,8 @@ object KMeans {
   }
 
   /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
-   */
+    * Returns the index of the closest center to the given point, as well as the squared distance.
+    */
   private[mllib] def findClosest(
                                   centers: TraversableOnce[VectorWithNorm],
                                   point: VectorWithNorm): (Int, Double) = {
@@ -625,11 +631,12 @@ object KMeans {
   }
 
   /**
-   * Returns the degree of membership of the point to each of the clusters
-   */
+    * Returns the degree of membership of the point to each of the clusters
+    * Along with the array of distances from the point to each centroid
+    */
   private[mllib] def degreesOfMembership(
                                           centers: Array[VectorWithNorm],
-                                          point: VectorWithNorm): Array[Double] = {
+                                          point: VectorWithNorm): (Array[Double], Array[Double]) = {
     // TODO - make fuzzifier a parameter of the algorithm
     val fuzzifier = 2
 
@@ -639,29 +646,29 @@ object KMeans {
     // If at least one of the distances is 0
     val perfectMatches = distances.count(d => d == 0.0)
     if (perfectMatches > 0) {
-      distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0)
+      (distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0), distances)
     } else {
       // Initialize membershipDegrees
       val membershipDegrees = distances
-      membershipDegrees map (m =>
+      (membershipDegrees map (m =>
         1.0 / distances.foldLeft(0.0)((s, d) =>
-          s + Math.pow(m / d, 2.0 / (fuzzifier - 1.0))))
+          s + Math.pow(m / d, 2.0 / (fuzzifier - 1.0)))), distances)
     }
   }
 
 
   /**
-   * Returns the K-means cost of a given point against the given cluster centers.
-   */
+    * Returns the K-means cost of a given point against the given cluster centers.
+    */
   private[mllib] def pointCost(
                                 centers: TraversableOnce[VectorWithNorm],
                                 point: VectorWithNorm): Double =
     findClosest(centers, point)._2
 
   /**
-   * Returns the squared Euclidean distance between two vectors computed by
-   * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
-   */
+    * Returns the squared Euclidean distance between two vectors computed by
+    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
+    */
   private[clustering] def fastSquaredDistance(
                                                v1: VectorWithNorm,
                                                v2: VectorWithNorm): Double = {
@@ -678,10 +685,10 @@ object KMeans {
 }
 
 /**
- * A vector with its norm for fast distance computation.
- *
- * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
- */
+  * A vector with its norm for fast distance computation.
+  *
+  * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
+  */
 private[clustering]
 class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
 
