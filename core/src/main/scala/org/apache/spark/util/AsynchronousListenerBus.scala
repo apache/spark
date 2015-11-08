@@ -66,6 +66,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
         self.synchronized {
           processingEvent = true
         }
+        if (stopped.get()) return
         try {
           val event = eventQueue.poll
           if (event == null) {
