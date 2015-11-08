@@ -59,7 +59,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("foreach") {
     val ds = Seq(1, 2, 3).toDS()
     val acc = sparkContext.accumulator(0)
-    ds.foreach(acc +=)
+    ds.foreach(acc += _)
     assert(acc.value == 6)
   }
 
