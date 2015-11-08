@@ -806,15 +806,16 @@ class SparkContext(object):
             import importlib
             importlib.invalidate_caches()
 
-    def addJar(self, path, addToCurrentThread=False):
+    def addJar(self, path, addToCurrentClassLoader=False):
         """
         Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
         The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
         filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
-        If addToCurrentThread is true, attempt to add the new class to the current threads class
-        loader.
+        If addToCurrentClassLoader is true, attempt to add the new class to the current threads'
+        class loader. In general adding to the current threads' class loader will impact all other
+        application threads unless they have explicitly changed their class loader.
         """
-        self._jsc.sc().addJar(path, addToCurrentThread)
+        self._jsc.sc().addJar(path, addToCurrentClassLoader)
 
     def _loadClass(self, className):
         """
