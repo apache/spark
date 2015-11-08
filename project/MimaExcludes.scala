@@ -76,7 +76,7 @@ object MimaExcludes {
           "org.apache.spark.scheduler.AskPermissionToCommitOutput.apply")
       ) ++ Seq(
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup")
+          "org.apache.spark.shuffle.FileShuffleBlockResolver$ShuffleFileGroup"),
         // SPARK-11401 Superseded by generic ClassificationPMMLModelExport
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.mllib.pmml.export.BinaryClassificationPMMLModelExport")
