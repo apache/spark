@@ -37,6 +37,7 @@ object Main extends Logging {
   // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
+  var useHiveContext: Boolean = conf.getBoolean("spark.sql.useHiveContext", true)
   var interp = new SparkILoop // this is a public var because tests reset it.
 
   private var hasErrors = false
@@ -66,7 +67,8 @@ object Main extends Logging {
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
     if (envJars.isDefined) {
-      logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
+      logWarning("ADD_JARS environment variable is deprecated, " +
+        "use --jar spark submit argument instead")
     }
     val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
     val jars = propJars.orElse(envJars).getOrElse("")
@@ -98,16 +100,28 @@ object Main extends Logging {
   }
 
   def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
+    val name = {
+      if (useHiveContext) "org.apache.spark.sql.hive.HiveContext"
+      else "org.apache.spark.sql.SQLContext"
+    }
+
     val loader = Utils.getContextOrSparkClassLoader
     try {
       sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
         .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
+      if (useHiveContext) {
+        logInfo("Created sql context (with Hive support). To use sqlContext (without Hive), " +
+          "set spark.sql.useHiveContext to false before launching spark-shell.")
+      }
+      else {
+        logInfo("Created sql context.")
+      }
     } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
+      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError
+        if useHiveContext =>
         sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
+        logInfo("Created sql context without Hive support, " +
+          "build Spark with -Phive to enable Hive support.")
     }
     sqlContext
   }
