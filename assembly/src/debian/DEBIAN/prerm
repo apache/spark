@@ -1,0 +1,4 @@
+#!/bin/sh
+
+systemctl stop spark-master
+systemctl stop "spark-slave@*"

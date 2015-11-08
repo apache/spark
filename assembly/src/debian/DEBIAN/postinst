@@ -1,0 +1,5 @@
+#!/bin/sh
+
+systemctl daemon-reload
+groupadd --system apache-spark
+useradd --system --gid apache-spark --shell "/bin/false" -c "Apache Spark daemons" apache-spark

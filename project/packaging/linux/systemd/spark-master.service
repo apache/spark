@@ -1,0 +1,10 @@
+[Unit]
+Description=Spark Master
+Requires=network.target
+After=network.target
+
+[Service]
+Environment="SPARK_DONT_DAEMONIZE=1"
+ExecStart=/usr/share/apache-spark/sbin/start-master.sh
+User=apache-spark
+Group=apache-spark
