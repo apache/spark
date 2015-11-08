@@ -15,21 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.memory;
 
-import java.util.Properties
+import org.apache.spark.annotation.Private;
 
-/**
- * A set of tasks submitted together to the low-level TaskScheduler, usually representing
- * missing partitions of a particular stage.
- */
-private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
-    val stageId: Int,
-    val stageAttemptId: Int,
-    val priority: Int,
-    val properties: Properties) {
-  val id: String = stageId + "." + stageAttemptId
-
-  override def toString: String = "TaskSet " + id
+@Private
+public enum MemoryMode {
+  ON_HEAP,
+  OFF_HEAP
 }

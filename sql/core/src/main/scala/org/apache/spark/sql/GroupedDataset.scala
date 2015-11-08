@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.{Iterator => JIterator}
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.function.{Function2 => JFunction2, Function3 => JFunction3, _}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, Encoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
@@ -102,6 +106,12 @@ class GroupedDataset[K, T] private[sql](
     new Dataset[U](
       sqlContext,
       MapGroups(f, groupingAttributes, logicalPlan))
+  }
+
+  def mapGroups[U](
+      f: JFunction2[K, JIterator[T], JIterator[U]],
+      encoder: Encoder[U]): Dataset[U] = {
+    mapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   // To ensure valid overloading.
@@ -195,5 +205,12 @@ class GroupedDataset[K, T] private[sql](
         other.groupingAttributes,
         this.logicalPlan,
         other.logicalPlan))
+  }
+
+  def cogroup[U, R](
+      other: GroupedDataset[K, U],
+      f: JFunction3[K, JIterator[T], JIterator[U], JIterator[R]],
+      encoder: Encoder[R]): Dataset[R] = {
+    cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 }

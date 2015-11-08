@@ -49,4 +49,6 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   )
 
   override val evaluateExpression = Cast(count, LongType)
+
+  override def defaultResult: Option[Literal] = Option(Literal(0L))
 }
