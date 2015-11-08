@@ -325,7 +325,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.prettyName, e.dataType, e.nullable)()
+        case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -377,7 +377,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrMap)
-        val operator = Alias(e.copy(aggregateFunction = af), e.toString)()
+        val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression2(
@@ -462,5 +462,5 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.prettyName, e.dataType, true)()
+    e -> new AttributeReference(e.prettyString, e.dataType, true)()
 }
