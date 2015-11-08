@@ -193,7 +193,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     parCols.map { col =>
       df.logicalPlan.output
         .map(_.name)
-        .find(df.queryExecution.analyzer.resolver(_, col))
+        .find(df.sqlContext.analyzer.resolver(_, col))
         .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
           s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
     }
