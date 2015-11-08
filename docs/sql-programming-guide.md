@@ -1089,15 +1089,6 @@ for (teenName in collect(teenNames)) {
 
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.sql("REFRESH TABLE my_table")
-{% endhighlight %}
-
-</div>
-
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
