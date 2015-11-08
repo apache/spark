@@ -55,16 +55,19 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportResponseHandler responseHandler;
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
+  private final boolean isCloseIdleConnections;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
-      long requestTimeoutMs) {
+      long requestTimeoutMs,
+      boolean isCloseIdleConnections) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.isCloseIdleConnections = isCloseIdleConnections;
   }
 
   public TransportClient getClient() {
@@ -115,13 +118,13 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         if (responseHandler.numOutstandingRequests() > 0) {
           // In addition to ensuring we only timeout while there are outstanding requests, we also
           // do a secondary consistency check to ensure there's no race between the idle timeout
-          // and incrementing the numOutstandingRequests.
+          // and incrementing the numOutstandingRequests(see SPARK-7003).
           String address = NettyUtils.getRemoteAddress(ctx.channel());
           logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
             "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
             "is wrong.", address, requestTimeoutNs / 1000 / 1000);
           ctx.close();
-        } else if (requestHandler.isCloseIdleConnections()) {
+        } else if (isCloseIdleConnections) {
           // While CloseIdleConnections is enable, we also close idle connection
           ctx.close();
         }

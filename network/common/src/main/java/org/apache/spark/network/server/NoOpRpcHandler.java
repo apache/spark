@@ -35,9 +35,4 @@ public class NoOpRpcHandler extends RpcHandler {
 
   @Override
   public StreamManager getStreamManager() { return streamManager; }
-
-  @Override
-  public boolean isCloseIdleConnections() {
-    return true;
-  }
 }

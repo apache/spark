@@ -58,15 +58,24 @@ public class TransportContext {
 
   private final TransportConf conf;
   private final RpcHandler rpcHandler;
+  private final boolean isCloseIdleConnections;
 
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
+    this(conf, rpcHandler, false);
+  }
+
+  public TransportContext(
+      TransportConf conf,
+      RpcHandler rpcHandler,
+      boolean isCloseIdleConnections) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
+    this.isCloseIdleConnections = isCloseIdleConnections;
   }
 
   /**
@@ -143,7 +152,7 @@ public class TransportContext {
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
       rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs());
+      conf.connectionTimeoutMs(), isCloseIdleConnections);
   }
 
   public TransportConf getConf() { return conf; }
