@@ -237,7 +237,7 @@ object functions {
     // withAggregateFunction {
     //  Count((expr +: exprs).map(_.expr)),
     //  true
-    //}
+    // }
   }
 
   /**

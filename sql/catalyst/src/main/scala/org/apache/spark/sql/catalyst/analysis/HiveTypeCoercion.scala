@@ -301,7 +301,7 @@ object HiveTypeCoercion {
       case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
       case VariancePop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
         VariancePop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
-      case VarianceSamp(e @ StringType(),mutableAggBufferOffset, inputAggBufferOffset) =>
+      case VarianceSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
         VarianceSamp(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
       case Skewness(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
         Skewness(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
