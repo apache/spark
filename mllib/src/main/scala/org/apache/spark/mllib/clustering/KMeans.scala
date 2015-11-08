@@ -673,16 +673,16 @@ object KMeans {
       // Distances from the point to each centroid
       val distances = centers map (fastSquaredDistance(_, point))
 
-      // If at least one of the distances is 0
       val perfectMatches = distances.count(d => d == 0.0)
       if (perfectMatches > 0) {
+        // If at least one of the distances is 0 the membershib divides between
+        // the perfect mathces
         (distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0), distances)
       } else {
-        // Initialize membershipDegrees
-        def fuzzyMembership: (Double) => Double = x =>
-          1.0 / distances.foldLeft(0.0)((s, d) => s + Math.pow(x / d, 2.0 / (fuzzifier - 1.0)))
-        val membershipDegrees = distances
-        (membershipDegrees map (m => Math.pow(fuzzyMembership(m), fuzzifier)), distances)
+        // Standard formula
+        val pow = 2.0 / (fuzzifier - 1.0)
+        val denom = distances.foldLeft(0.0)((sum, dik) => sum + Math.pow(1 / dik, pow))
+        (distances map (dij => 1 / (Math.pow(dij, pow) * denom)), distances)
       }
     }
   }
