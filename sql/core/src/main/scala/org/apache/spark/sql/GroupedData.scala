@@ -94,30 +94,30 @@ class GroupedData protected[sql](
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
     val exprToFunc: (Expression => AggregateFunction2) = {
-      (child: Expression) => expr.toLowerCase match {
-        case "avg" | "average" | "mean" => Average(child)
-        case "max" => Max(child)
-        case "min" => Min(child)
-        case "stddev" | "std" => StddevSamp(child)
-        case "stddev_pop" => StddevPop(child)
-        case "stddev_samp" => StddevSamp(child)
-        case "variance" => VarianceSamp(child, 0, 0)
-        case "var_pop" => VariancePop(child, 0, 0)
-        case "var_samp" => VarianceSamp(child, 0, 0)
-        case "sum" => Sum(child)
-        case "skewness" => Skewness(child, 0, 0)
-        case "kurtosis" => Kurtosis(child, 0, 0)
+      (inputExpr: Expression) => expr.toLowerCase match {
+        case "avg" | "average" | "mean" => Average(inputExpr)
+        case "max" => Max(inputExpr)
+        case "min" => Min(inputExpr)
+        case "stddev" | "std" => StddevSamp(inputExpr)
+        case "stddev_pop" => StddevPop(inputExpr)
+        case "stddev_samp" => StddevSamp(inputExpr)
+        case "variance" => VarianceSamp(inputExpr, 0, 0)
+        case "var_pop" => VariancePop(inputExpr, 0, 0)
+        case "var_samp" => VarianceSamp(inputExpr, 0, 0)
+        case "sum" => Sum(inputExpr)
+        case "skewness" => Skewness(inputExpr, 0, 0)
+        case "kurtosis" => Kurtosis(inputExpr, 0, 0)
         case "count" | "size" =>
           // Turn count(*) into count(1)
-          (inputExpr: Expression) => inputExpr match {
+          inputExpr match {
             case s: Star => Count(Literal(1))
             case _ => Count(inputExpr)
           }
       }
     }
-    (child: Expression) => {
+    (inputExpr: Expression) => {
       AggregateExpression2(
-        exprToFunc(child),
+        exprToFunc(inputExpr),
         mode = Complete,
         isDistinct = false)
     }

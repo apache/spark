@@ -18,9 +18,9 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.{Column, catalyst}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 
 
 /**
