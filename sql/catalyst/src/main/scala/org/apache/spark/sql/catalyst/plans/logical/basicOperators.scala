@@ -306,6 +306,9 @@ case class Expand(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
   override def statistics: Statistics = {
     // TODO shouldn't we factor in the size of the projection versus the size of the backing child
     //      row?
