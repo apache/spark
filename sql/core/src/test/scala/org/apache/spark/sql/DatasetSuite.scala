@@ -198,60 +198,60 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 1))
   }
 
-  test("groupBy function, mapGroups") {
+  test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g._1, iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("groupBy columns, mapGroups") {
+  test("groupBy function, fatMap") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy(v => (v._1, "word"))
+    val agged = grouped.flatMap { case (g, iter) => Iterator(g._1, iter.map(_._2).sum.toString) }
+
+    checkAnswer(
+      agged,
+      "a", "30", "b", "3", "c", "1")
+  }
+
+  test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1")
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g.getString(0), iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("groupBy columns asKey, mapGroups") {
+  test("groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1").asKey[String]
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g, iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("groupBy columns asKey tuple, mapGroups") {
+  test("groupBy columns asKey tuple, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1", lit(1)).asKey[(String, Int)]
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g, iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
       (("a", 1), 30), (("b", 1), 3), (("c", 1), 1))
   }
 
-  test("groupBy columns asKey class, mapGroups") {
+  test("groupBy columns asKey class, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).asKey[ClassData]
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g, iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,

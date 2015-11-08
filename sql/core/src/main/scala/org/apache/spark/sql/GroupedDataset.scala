@@ -102,16 +102,39 @@ class GroupedDataset[K, T] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    */
-  def mapGroups[U : Encoder](f: (K, Iterator[T]) => Iterator[U]): Dataset[U] = {
+  def flatMap[U : Encoder](f: (K, Iterator[T]) => TraversableOnce[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
       MapGroups(f, groupingAttributes, logicalPlan))
   }
 
-  def mapGroups[U](
+  def flatMap[U](
       f: JFunction2[K, JIterator[T], JIterator[U]],
       encoder: Encoder[U]): Dataset[U] = {
-    mapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
+    flatMap((key, data) => f.call(key, data.asJava).asScala)(encoder)
+  }
+
+  /**
+   * Applies the given function to each group of data.  For each unique group, the function will
+   * be passed the group key and an iterator that contains all of the elements in the group. The
+   * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   */
+  def map[U : Encoder](f: (K, Iterator[T]) => U): Dataset[U] = {
+    val func = (key: K, it: Iterator[T]) => Iterator(f(key, it))
+    new Dataset[U](
+      sqlContext,
+      MapGroups(func, groupingAttributes, logicalPlan))
+  }
+
+  def map[U](
+      f: JFunction2[K, JIterator[T], U],
+      encoder: Encoder[U]): Dataset[U] = {
+    map((key, data) => f.call(key, data.asJava))(encoder)
   }
 
   // To ensure valid overloading.
