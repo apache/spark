@@ -117,7 +117,7 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
       def call(v: Vector): Double
     }
     val jfunc = compile(code,
-      Array(classOf[CallableVectorDouble])).newInstance()
+      Array(classOf[Serializable], classOf[CallableVectorDouble])).newInstance()
     def func(v: Vector): Double = {
       jfunc.asInstanceOf[CallableVectorDouble].call(v)
     }
