@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, StringWriter}
+import java.io.{FilenameFilter, File, StringWriter}
 import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
@@ -31,6 +33,10 @@ import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleTyp
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class TmpFileFilter  extends PathFilter {
+  override def accept(path : Path): Boolean = !path.getName.endsWith(".tmp")
+}
 
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
@@ -1392,5 +1398,51 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         expectedResult
       )
     }
+  }
+  test("SPARK-11544 test pathfilter") {
+    def filterFunc(file: File): Boolean = {
+      val name = file.getCanonicalFile.getName()
+      val ret = !(name.startsWith(".")  || name.startsWith("_"))
+      ret.asInstanceOf[Boolean]
+    }
+
+    val dir = Utils.createTempDir()
+    dir.delete()
+    val path = dir.getCanonicalPath
+    val emps = Seq(
+      Row(1, "Emp-1"),
+      Row(2, "Emp-2")
+    )
+
+    val empRows = sqlContext.sparkContext.parallelize(emps, 1)
+    val empSchema = StructType(
+      Seq(
+        StructField("id", IntegerType, true),
+        StructField("name", StringType, true)
+      )
+    )
+    val empDF = sqlContext.createDataFrame(empRows, empSchema)
+    empDF.write.json(path)
+    val files = dir.listFiles().filter(filterFunc(_))
+    files.map(_.renameTo(new File(path + File.separator + "pathmap.tmp")))
+    FileUtils.copyFile(new File(path + File.separator + "pathmap.tmp"),
+        new File(path + File.separator + "data.json"))
+
+    // Both the files should be read and count should be 4
+    val empDF2 = sqlContext.read.json(path)
+    empDF2.registerTempTable("jsonTable1")
+    checkAnswer(
+      sql("select count(*) from jsonTable1"),
+      Row(4)
+    )
+    // After applying the path filter, only one file should be read and the count should be 2
+    sqlContext.sparkContext.hadoopConfiguration.setClass("mapreduce.input.pathFilter.class",
+      classOf[TmpFileFilter], classOf[PathFilter])
+    val empDF3 = sqlContext.read.json(path)
+    empDF3.registerTempTable("jsonTable2")
+    checkAnswer(
+      sql("select count(*) from jsonTable2"),
+      Row(2)
+    )
   }
 }
