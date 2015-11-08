@@ -392,43 +392,6 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     promise
   }
 
-  test("BatchedWriteAheadLog - records get added to a queue") {
-    val numSuccess = new AtomicInteger()
-    val numFail = new AtomicInteger()
-    val wal = new BatchedWriteAheadLog(fileBasedWAL, sparkConf)
-
-    val promise = writeBlockingPromise(fileBasedWAL)
-
-    // make sure queue is empty initially
-    assert(wal.getQueueLength === 0)
-    val event1 = "hello"
-    val event2 = "world"
-    val event3 = "this"
-    val event4 = "is"
-    val event5 = "doge"
-
-    eventFuture(wal, event1, 5L, numSuccess, numFail)
-    eventFuture(wal, event2, 10L, numSuccess, numFail)
-    eventFuture(wal, event3, 11L, numSuccess, numFail)
-    eventFuture(wal, event4, 12L, numSuccess, numFail)
-    eventFuture(wal, event5, 20L, numSuccess, numFail)
-
-    eventually(Eventually.timeout(2 seconds)) {
-      // the first element will immediately be taken and the rest will get queued
-      assert(wal.getQueueLength() > 0)
-    }
-    assert(numSuccess.get() === 0)
-    assert(numFail.get() === 0)
-    // remove block so that the writes are made
-    promise.success(null)
-
-    eventually(Eventually.timeout(2 seconds)) {
-      assert(wal.getQueueLength() == 0)
-      assert(numSuccess.get() === 5)
-      assert(numFail.get() == 0)
-    }
-  }
-
   test("BatchedWriteAheadLog - name log with aggregated entries with the timestamp of last entry") {
     val wal = new BatchedWriteAheadLog(fileBasedWAL, sparkConf)
     // block the write so that we can batch some records

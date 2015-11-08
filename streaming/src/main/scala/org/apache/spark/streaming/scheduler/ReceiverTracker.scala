@@ -442,6 +442,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("wal-batching-thread-pool"))
 
+    private var active: Boolean = true
+
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
       case StartAllReceivers(receivers) =>
@@ -492,8 +494,24 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
-          val f = Future(addBlock(receivedBlockInfo))(walBatchingThreadPool)
-          f.onComplete(result => context.reply(result.get))(walBatchingThreadPool)
+          val f = Future {
+            synchronized {
+              if (active) {
+                addBlock(receivedBlockInfo)
+              } else {
+                throw new IllegalStateException("Receiver Tracker Endpoint shutdown.")
+              }
+            }
+          }(walBatchingThreadPool)
+          f.onComplete { result =>
+            synchronized {
+              if (active) {
+                context.reply(result.get)
+              } else {
+                context.reply(new IllegalStateException("Receiver Tracker Endpoint shutdown."))
+              }
+            }
+          }(walBatchingThreadPool)
         } else {
           context.reply(addBlock(receivedBlockInfo))
         }
@@ -607,6 +625,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def onStop(): Unit = {
       submitJobThreadPool.shutdownNow()
+      synchronized {
+        active = false
+      }
       walBatchingThreadPool.shutdown()
     }
 
