@@ -491,3 +491,24 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
       s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
   }
 }
+
+case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
+  extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val row = child.gen(ctx)
+    s"""
+      ${row.code}
+      final boolean ${ev.isNull} = ${row.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
+      }
+    """
+  }
+}

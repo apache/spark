@@ -378,6 +378,7 @@ class LogisticRegression(override val uid: String)
       model.transform(dataset),
       $(probabilityCol),
       $(labelCol),
+      $(featuresCol),
       objectiveHistory)
     model.setSummary(logRegSummary)
   }
@@ -452,7 +453,8 @@ class LogisticRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
-    new BinaryLogisticRegressionSummary(this.transform(dataset), $(probabilityCol), $(labelCol))
+    new BinaryLogisticRegressionSummary(
+      this.transform(dataset), $(probabilityCol), $(labelCol), $(featuresCol))
   }
 
   /**
@@ -614,8 +616,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /** Field in "predictions" which gives the calibrated probability of each instance as a vector. */
   def probabilityCol: String
 
-  /** Field in "predictions" which gives the the true label of each instance. */
+  /** Field in "predictions" which gives the true label of each instance. */
   def labelCol: String
+
+  /** Field in "predictions" which gives the features of each instance as a vector. */
+  def featuresCol: String
 
 }
 
@@ -626,6 +631,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
@@ -633,8 +639,9 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
     predictions: DataFrame,
     probabilityCol: String,
     labelCol: String,
+    featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol)
+  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {
 
 }
@@ -646,12 +653,14 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance.
  * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
 @Experimental
 class BinaryLogisticRegressionSummary private[classification] (
     @transient override val predictions: DataFrame,
     override val probabilityCol: String,
-    override val labelCol: String) extends LogisticRegressionSummary {
+    override val labelCol: String,
+    override val featuresCol: String) extends LogisticRegressionSummary {
 
   private val sqlContext = predictions.sqlContext
   import sqlContext.implicits._

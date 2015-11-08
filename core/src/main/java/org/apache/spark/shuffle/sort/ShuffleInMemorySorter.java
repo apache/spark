@@ -19,11 +19,14 @@ package org.apache.spark.shuffle.sort;
 
 import java.util.Comparator;
 
+import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.util.collection.Sorter;
 
 final class ShuffleInMemorySorter {
 
-  private final Sorter<PackedRecordPointer, long[]> sorter;
+  private final Sorter<PackedRecordPointer, LongArray> sorter;
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
     @Override
     public int compare(PackedRecordPointer left, PackedRecordPointer right) {
@@ -32,22 +35,32 @@ final class ShuffleInMemorySorter {
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
 
+  private final MemoryConsumer consumer;
+
   /**
    * An array of record pointers and partition ids that have been encoded by
    * {@link PackedRecordPointer}. The sort operates on this array instead of directly manipulating
    * records.
    */
-  private long[] array;
+  private LongArray array;
 
   /**
    * The position in the pointer array where new records can be inserted.
    */
   private int pos = 0;
 
-  public ShuffleInMemorySorter(int initialSize) {
+  public ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
+    this.consumer = consumer;
     assert (initialSize > 0);
-    this.array = new long[initialSize];
+    this.array = consumer.allocateArray(initialSize);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
+  }
+
+  public void free() {
+    if (array != null) {
+      consumer.freeArray(array);
+      array = null;
+    }
   }
 
   public int numRecords() {
@@ -58,30 +71,25 @@ final class ShuffleInMemorySorter {
     pos = 0;
   }
 
-  private int newLength() {
-    // Guard against overflow:
-    return array.length <= Integer.MAX_VALUE / 2 ? (array.length * 2) : Integer.MAX_VALUE;
-  }
-
-  /**
-   * Returns the memory needed to expand
-   */
-  public long getMemoryToExpand() {
-    return ((long) (newLength() - array.length)) * 8;
-  }
-
-  public void expandPointerArray() {
-    final long[] oldArray = array;
-    array = new long[newLength()];
-    System.arraycopy(oldArray, 0, array, 0, oldArray.length);
+  public void expandPointerArray(LongArray newArray) {
+    assert(newArray.size() > array.size());
+    Platform.copyMemory(
+      array.getBaseObject(),
+      array.getBaseOffset(),
+      newArray.getBaseObject(),
+      newArray.getBaseOffset(),
+      array.size() * 8L
+    );
+    consumer.freeArray(array);
+    array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.length;
+    return pos < array.size();
   }
 
   public long getMemoryUsage() {
-    return array.length * 8L;
+    return array.size() * 8L;
   }
 
   /**
@@ -96,14 +104,9 @@ final class ShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      if (array.length == Integer.MAX_VALUE) {
-        throw new IllegalStateException("Sort pointer array has reached maximum size");
-      } else {
-        expandPointerArray();
-      }
+      expandPointerArray(consumer.allocateArray(array.size() * 2));
     }
-    array[pos] =
-        PackedRecordPointer.packPointer(recordPointer, partitionId);
+    array.set(pos, PackedRecordPointer.packPointer(recordPointer, partitionId));
     pos++;
   }
 
@@ -112,12 +115,12 @@ final class ShuffleInMemorySorter {
    */
   public static final class ShuffleSorterIterator {
 
-    private final long[] pointerArray;
+    private final LongArray pointerArray;
     private final int numRecords;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    public ShuffleSorterIterator(int numRecords, long[] pointerArray) {
+    public ShuffleSorterIterator(int numRecords, LongArray pointerArray) {
       this.numRecords = numRecords;
       this.pointerArray = pointerArray;
     }
@@ -127,7 +130,7 @@ final class ShuffleInMemorySorter {
     }
 
     public void loadNext() {
-      packedRecordPointer.set(pointerArray[position]);
+      packedRecordPointer.set(pointerArray.get(position));
       position++;
     }
   }
