@@ -40,6 +40,7 @@ import org.apache.spark.util.random.XORShiftRandom
 @Since("0.8.0")
 class KMeans private(
                       private var k: Int,
+                      private var m: Double,
                       private var maxIterations: Int,
                       private var runs: Int,
                       private var initializationMode: String,
@@ -48,11 +49,11 @@ class KMeans private(
                       private var seed: Long) extends Serializable with Logging {
 
   /**
-    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
+    * Constructs a KMeans instance with default parameters: {k: 2, m: 1, maxIterations: 20, runs: 1,
     * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
     */
   @Since("0.8.0")
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
+  def this() = this(2, 1, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
   /**
     * Number of clusters to create (k).
@@ -66,6 +67,22 @@ class KMeans private(
   @Since("0.8.0")
   def setK(k: Int): this.type = {
     this.k = k
+    this
+  }
+
+  /**
+    * The level of cluster fuzziness (m)
+    * Check -> https://en.wikipedia.org/wiki/Fuzzy_clustering
+    */
+  @Since("1.6.0")
+  def getM: Double = m
+
+  /**
+    * Set the level of cluster fuzziness (m). Default: 1 (hard clustering)
+    */
+  @Since("1.6.0")
+  def setM(m: Double): this.type = {
+    this.m = m
     this
   }
 
@@ -294,6 +311,9 @@ class KMeans private(
       // broadcast the centers
       val bcActiveCenters = sc.broadcast(activeCenters)
 
+      // broadcast the fuzzifier
+      val bcM = sc.broadcast(m)
+
       // mapPartitions - Return a new RDD by applying a function to each partition of this RDD
       // reduceByKey - Merge the values for each key using an associative reduce function
       // Find the sum and count of points mapping to each center
@@ -308,6 +328,8 @@ class KMeans private(
         val k = thisActiveCenters(0).length
         // the space dimension (number of coordinates)
         val dims = thisActiveCenters(0)(0).vector.size
+        // the level of cluster fuzziness
+        val m = bcM.value
 
         // sums are zero (per runs per each dimension)
         val sums = Array.fill(runs, k)(Vectors.zeros(dims))
@@ -321,7 +343,7 @@ class KMeans private(
         points.foreach { point =>
           (0 until runs).foreach { i =>
             // WE ARE IN THE CONTEXT OF A SPECIFIC RUN HERE
-            val (mbrpDegree, distances) = KMeans.degreesOfMembership(thisActiveCenters(i), point)
+            val (mbrpDegree, distances) = KMeans.degreesOfMembership(thisActiveCenters(i), point, m)
             // compute membership based cost - ignore "almost zeros"
             mbrpDegree.zipWithIndex.
               filter(_._1 > epsilon * epsilon).
@@ -633,23 +655,35 @@ object KMeans {
     */
   private[mllib] def degreesOfMembership(
                                           centers: Array[VectorWithNorm],
-                                          point: VectorWithNorm): (Array[Double], Array[Double]) = {
-    // TODO - make fuzzifier a parameter of the algorithm
-    val fuzzifier = 25
+                                          point: VectorWithNorm,
+                                          fuzzifier: Double): (Array[Double], Array[Double]) = {
 
-    // Distances from the point to each centroid
-    val distances = centers map (fastSquaredDistance(_, point))
+    if (fuzzifier == 1) {
 
-    // If at least one of the distances is 0
-    val perfectMatches = distances.count(d => d == 0.0)
-    if (perfectMatches > 0) {
-      (distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0), distances)
-    } else {
-      // Initialize membershipDegrees
-      def fuzzyMembership: (Double) => Double = x =>
-        1.0 / distances.foldLeft(0.0)((s, d) => s + Math.pow(x / d, 2.0 / (fuzzifier - 1.0)))
+      // This is classical hard clustering
+      val (bestIndex, bestDistance) = findClosest(centers, point)
+      val distances = Array.fill(centers.length)(0.0)
       val membershipDegrees = distances
-      (membershipDegrees map (m => Math.pow(fuzzyMembership(m), fuzzifier)), distances)
+      distances(bestIndex) = bestDistance
+      membershipDegrees(bestIndex) = 1
+      (membershipDegrees, distances)
+
+    } else {
+
+      // Distances from the point to each centroid
+      val distances = centers map (fastSquaredDistance(_, point))
+
+      // If at least one of the distances is 0
+      val perfectMatches = distances.count(d => d == 0.0)
+      if (perfectMatches > 0) {
+        (distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0), distances)
+      } else {
+        // Initialize membershipDegrees
+        def fuzzyMembership: (Double) => Double = x =>
+          1.0 / distances.foldLeft(0.0)((s, d) => s + Math.pow(x / d, 2.0 / (fuzzifier - 1.0)))
+        val membershipDegrees = distances
+        (membershipDegrees map (m => Math.pow(fuzzyMembership(m), fuzzifier)), distances)
+      }
     }
   }
 
