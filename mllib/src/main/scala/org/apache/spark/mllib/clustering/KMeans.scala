@@ -321,9 +321,6 @@ class KMeans private(
         points.foreach { point =>
           (0 until runs).foreach { i =>
             // WE ARE IN THE CONTEXT OF A SPECIFIC RUN HERE
-            // Returns the index of the closest center to the given point,
-            // as well as the squared distance.
-            // val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
             val (mbrpDegree, distances) = KMeans.degreesOfMembership(thisActiveCenters(i), point)
             // compute membership based cost - ignore "almost zeros"
             mbrpDegree.zipWithIndex.
@@ -360,11 +357,11 @@ class KMeans private(
         var changed = false
         var j = 0
         while (j < k) {
-          val (sum, count) = totalContribs((i, j))
-          if (count != 0) {
+          val (sum, fuzzyCount) = totalContribs((i, j))
+          if (fuzzyCount != 0) {
             // x = a * x - multiplies a vector with a scalar
             // Compute new center
-            scal(1.0 / count, sum)
+            scal(1.0 / fuzzyCount, sum)
             val newCenter = new VectorWithNorm(sum)
             // Changed - (distance greater than epsilon squared)
             if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
@@ -638,7 +635,7 @@ object KMeans {
                                           centers: Array[VectorWithNorm],
                                           point: VectorWithNorm): (Array[Double], Array[Double]) = {
     // TODO - make fuzzifier a parameter of the algorithm
-    val fuzzifier = 2
+    val fuzzifier = 25
 
     // Distances from the point to each centroid
     val distances = centers map (fastSquaredDistance(_, point))
@@ -649,10 +646,10 @@ object KMeans {
       (distances map (d => if (d == 0.0) 1.0 / perfectMatches else 0.0), distances)
     } else {
       // Initialize membershipDegrees
+      def fuzzyMembership: (Double) => Double = x =>
+        1.0 / distances.foldLeft(0.0)((s, d) => s + Math.pow(x / d, 2.0 / (fuzzifier - 1.0)))
       val membershipDegrees = distances
-      (membershipDegrees map (m =>
-        1.0 / distances.foldLeft(0.0)((s, d) =>
-          s + Math.pow(m / d, 2.0 / (fuzzifier - 1.0)))), distances)
+      (membershipDegrees map (m => Math.pow(fuzzyMembership(m), fuzzifier)), distances)
     }
   }
 
