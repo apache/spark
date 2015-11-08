@@ -526,7 +526,7 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
-                // DISTINCT is not meaningful with Max and Min.
+                // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct => max
                 case min: Min if isDistinct => min
                 // We get an aggregate function built based on AggregateFunction2 interface.

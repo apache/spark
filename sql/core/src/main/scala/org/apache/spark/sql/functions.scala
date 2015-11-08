@@ -57,7 +57,7 @@ object functions {
   private def withAggregateFunction(
       func: AggregateFunction2,
       isDistinct: Boolean = false): Column = {
-    Column(AggregateExpression2(func, mode = Complete, isDistinct))
+    Column(func.toAggregateExpression(isDistinct))
   }
 
   /**

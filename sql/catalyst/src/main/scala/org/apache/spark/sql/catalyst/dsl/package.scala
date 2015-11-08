@@ -145,26 +145,20 @@ package object dsl {
       }
     }
 
-    private def withAggregateFunction(
-        func: AggregateFunction2,
-        isDistinct: Boolean = false): Expression = {
-      AggregateExpression2(func, mode = Complete, isDistinct)
-    }
-
-    def sum(e: Expression): Expression = Sum(e)
-    def sumDistinct(e: Expression): Expression = withAggregateFunction(Sum(e), true)
-    def count(e: Expression): Expression = Count(e)
+    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
+    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
+    def count(e: Expression): Expression = Count(e).toAggregateExpression()
     def countDistinct(e: Expression*): Expression = {
       // CountDistinct(e)
       throw new UnsupportedOperationException("We need to support it before merge SPARK-9830.")
     }
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      withAggregateFunction(HyperLogLogPlusPlus(e, rsd), false)
-    def avg(e: Expression): Expression = withAggregateFunction(Average(e))
-    def first(e: Expression): Expression = withAggregateFunction(new First(e))
-    def last(e: Expression): Expression = withAggregateFunction(new Last(e))
-    def min(e: Expression): Expression = withAggregateFunction(Min(e))
-    def max(e: Expression): Expression = withAggregateFunction(Max(e))
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
+    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
+    def first(e: Expression): Expression = new First(e).toAggregateExpression()
+    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
+    def min(e: Expression): Expression = Min(e).toAggregateExpression()
+    def max(e: Expression): Expression = Max(e).toAggregateExpression()
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)

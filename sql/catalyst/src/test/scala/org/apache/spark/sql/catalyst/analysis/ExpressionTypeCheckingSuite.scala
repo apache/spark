@@ -141,15 +141,15 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   test("check types for aggregates") {
     // We will cast String to Double for sum and average
-    assertSuccess(Sum('stringField))
-    assertSuccess(SumDistinct('stringField))
-    assertSuccess(Average('stringField))
+    assertSuccess(sum('stringField))
+    assertSuccess(sumDistinct('stringField))
+    assertSuccess(avg('stringField))
 
-    assertError(Min('complexField), "min does not support ordering on type")
-    assertError(Max('complexField), "max does not support ordering on type")
-    assertError(Sum('booleanField), "function sum requires numeric type")
-    assertError(SumDistinct('booleanField), "function sumDistinct requires numeric type")
-    assertError(Average('booleanField), "function average requires numeric type")
+    assertError(min('complexField), "min does not support ordering on type")
+    assertError(max('complexField), "max does not support ordering on type")
+    assertError(sum('booleanField), "function sum requires numeric type")
+    assertError(sumDistinct('booleanField), "function sumDistinct requires numeric type")
+    assertError(avg('booleanField), "function average requires numeric type")
   }
 
   test("check types for others") {

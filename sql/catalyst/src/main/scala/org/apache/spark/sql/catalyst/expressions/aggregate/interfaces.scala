@@ -143,6 +143,12 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+
+  def toAggregateExpression(): AggregateExpression2 = toAggregateExpression(isDistinct = false)
+
+  def toAggregateExpression(isDistinct: Boolean): AggregateExpression2 = {
+    AggregateExpression2(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  }
 }
 
 /**

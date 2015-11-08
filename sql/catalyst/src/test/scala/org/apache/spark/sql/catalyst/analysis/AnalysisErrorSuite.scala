@@ -174,7 +174,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan =
       Aggregate(
         Nil,
-        Alias(Sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
+        Alias(sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
         LocalRelation(
           AttributeReference("a", IntegerType)(exprId = ExprId(2))))
 
@@ -196,7 +196,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan =
       Aggregate(
         AttributeReference("a", BinaryType)(exprId = ExprId(2)) :: Nil,
-        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        Alias(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
         LocalRelation(
           AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
@@ -207,13 +207,24 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan2 =
       Aggregate(
         AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)) :: Nil,
-        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        Alias(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
         LocalRelation(
           AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
     assertAnalysisError(plan2,
       "map type expression a cannot be used in grouping expression" :: Nil)
+
+    val plan3 =
+      Aggregate(
+        AttributeReference("a", ArrayType(IntegerType))(exprId = ExprId(2)) :: Nil,
+        Alias(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        LocalRelation(
+          AttributeReference("a", ArrayType(IntegerType))(exprId = ExprId(2)),
+          AttributeReference("b", IntegerType)(exprId = ExprId(1))))
+
+    assertAnalysisError(plan3,
+      "array type expression a cannot be used in grouping expression" :: Nil)
   }
 
   test("Join can't work on binary and map types") {
