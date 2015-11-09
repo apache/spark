@@ -647,11 +647,11 @@ test_that("sample on a DataFrame", {
   sampled <- sample(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
   expect_is(sampled, "DataFrame")
-  sampled2 <- sample(df, FALSE, 0.1)
+  sampled2 <- sample(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled2) < 3)
 
   # Also test sample_frac
-  sampled3 <- sample_frac(df, FALSE, 0.1)
+  sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 })
 
