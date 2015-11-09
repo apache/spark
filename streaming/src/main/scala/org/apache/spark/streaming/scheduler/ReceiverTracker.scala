@@ -621,9 +621,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def onStop(): Unit = {
       submitJobThreadPool.shutdownNow()
-      synchronized {
-        active = false
-      }
+      active = false
       walBatchingThreadPool.shutdown()
     }
 
