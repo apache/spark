@@ -18,6 +18,7 @@
 package org.apache.spark.rpc.akka
 
 import java.io.File
+import java.nio.channels.ReadableByteChannel
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
@@ -249,7 +250,7 @@ private[spark] class AkkaRpcEnv private[akka] (
     }
   }
 
-  override def fetchFile(uri: String, dest: File, overwrite: Boolean): Unit = {
+  override def openChannel(uri: String): ReadableByteChannel = {
     throw new UnsupportedOperationException(
       "AkkaRpcEnv's files should be retrieved using an HTTP client.")
   }

@@ -21,6 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
@@ -541,7 +542,9 @@ private[spark] object Utils extends Logging {
           throw new IllegalStateException(
             "Cannot retrieve files with 'spark' scheme without an active SparkEnv.")
         }
-        SparkEnv.get.rpcEnv.fetchFile(url, new File(targetDir, filename), fileOverwrite)
+        val source = SparkEnv.get.rpcEnv.openChannel(url)
+        val is = Channels.newInputStream(source)
+        downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {

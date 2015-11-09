@@ -18,6 +18,7 @@
 package org.apache.spark.rpc
 
 import java.io.File
+import java.nio.channels.ReadableByteChannel
 
 import scala.concurrent.Future
 
@@ -142,14 +143,13 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def fileServer: RpcEnvFileServer
 
   /**
-   * Fetch a file from the given URI. If the URIs returned by the RpcEnvFileServer use the "spark"
-   * scheme, this method will be called to retrieve the files.
+   * Open a channel to download a file from the given URI. If the URIs returned by the
+   * RpcEnvFileServer use the "spark" scheme, this method will be called by the Utils class to
+   * retrieve the files.
    *
    * @param uri URI with location of the file.
-   * @param dest Local destination of file.
-   * @param overwrite Whether to overwrite the target file if it exists.
    */
-  def fetchFile(uri: String, dest: File, overwrite: Boolean): Unit
+  def openChannel(uri: String): ReadableByteChannel
 
 }
 

@@ -20,8 +20,7 @@ import java.io._
 import java.lang.{Boolean => JBoolean}
 import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.file.StandardOpenOption
+import java.nio.channels.{Pipe, ReadableByteChannel, WritableByteChannel}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.Nullable
@@ -328,26 +327,26 @@ private[netty] class NettyRpcEnv(
 
   override def fileServer: RpcEnvFileServer = streamManager
 
-  override def fetchFile(uri: String, dest: File, overwrite: Boolean): Unit = {
+  override def openChannel(uri: String): ReadableByteChannel = {
     val parsedUri = new URI(uri)
     require(parsedUri.getHost() != null, "Host name must be defined.")
     require(parsedUri.getPort() > 0, "Port must be defined.")
     require(parsedUri.getPath() != null && parsedUri.getPath().nonEmpty, "Path must be defined.")
 
-    val t1 = System.currentTimeMillis()
-    val callback = new FileDownloadCallback(dest, overwrite)
+    val pipe = Pipe.open()
+    val source = new FileDownloadChannel(pipe.source())
     try {
+      val callback = new FileDownloadCallback(pipe.sink(), source)
       val client = fileDownloadClient(parsedUri.getHost(), parsedUri.getPort())
-      val t2 = System.currentTimeMillis()
       client.stream(parsedUri.getPath(), callback)
-      callback.waitForCompletion()
-      val t3 = System.currentTimeMillis()
-      logDebug(s"Downloaded ${parsedUri.getPath()}: " +
-        s"${Utils.bytesToString(callback.transferred)} bytes in " +
-        s"${t3 - t1}ms (${t2 - t1}ms spent in setup)")
-    } finally {
-      callback.dispose()
+    } catch {
+      case e: Exception =>
+        pipe.sink().close()
+        source.close()
+        throw e
     }
+
+    source
   }
 
   private def fileDownloadClient(host: String, port: Int): TransportClient = synchronized {
@@ -384,76 +383,43 @@ private[netty] class NettyRpcEnv(
 
   }
 
-  private class FileDownloadCallback(dest: File, overwrite: Boolean) extends StreamCallback {
+  private class FileDownloadChannel(source: ReadableByteChannel) extends ReadableByteChannel {
 
-    @volatile var error: Throwable = null
-    @volatile var transferred = 0L
+    @volatile private var error: Throwable = _
 
-    private val temp = File.createTempFile(dest.getName(), ".tmp", dest.getParentFile())
-    private val out = FileChannel.open(temp.toPath(), StandardOpenOption.WRITE)
-    private val lock = new Object()
-    @volatile private var complete = false
+    def setError(e: Throwable): Unit = error = e
 
-    override def onData(streamId: String, buf: ByteBuffer): Unit = {
-      val count = buf.remaining()
-      while (buf.remaining() > 0) {
-        out.write(buf)
-      }
-      transferred += count
-    }
-
-    override def onComplete(streamId: String): Unit = {
-      try {
-        out.close()
-        if (dest.exists()) {
-          if (overwrite) {
-            // Explicitly delete the file since `renameTo` doesn't work on Win32 if the target
-            // already exists.
-            require(dest.delete(), s"Failed to delete $dest.")
-          } else {
-            throw new IOException(s"Destination file $dest already exists.")
-          }
-        }
-        if (!temp.renameTo(dest)) {
-          throw new IOException(s"Failed to rename temp file to $dest.")
-        }
-      } catch {
-        case e: Exception =>
-          temp.delete()
-          throw e
-      } finally {
-        finish()
-      }
-    }
-
-    override def onFailure(streamId: String, cause: Throwable): Unit = {
-      error = cause
-      dispose()
-      finish()
-    }
-
-    def waitForCompletion(): Unit = {
-      lock.synchronized {
-        while (!complete) {
-          lock.wait(TimeUnit.SECONDS.toMillis(5))
-          logDebug(s"${dest.getName()}: transferred ${Utils.bytesToString(transferred)} bytes.")
-        }
-      }
+    override def read(dst: ByteBuffer): Int = {
       if (error != null) {
         throw error
       }
+      source.read(dst)
     }
 
-    def dispose(): Unit = {
-      Utils.tryLogNonFatalError { out.close() }
-      temp.delete()
-    }
+    override def close(): Unit = source.close()
 
-    private def finish(): Unit = {
-      complete = true
-      lock.synchronized {
-        lock.notifyAll()
+    override def isOpen(): Boolean = source.isOpen()
+
+  }
+
+  private class FileDownloadCallback(
+      sink: WritableByteChannel,
+      source: FileDownloadChannel) extends StreamCallback {
+
+    override def onData(streamId: String, buf: ByteBuffer): Unit = {
+      while (buf.remaining() > 0) {
+        sink.write(buf)
       }
+    }
+
+    override def onComplete(streamId: String): Unit = {
+      sink.close()
+    }
+
+    override def onFailure(streamId: String, cause: Throwable): Unit = {
+      logError(s"Error downloading stream $streamId.", cause)
+      source.setError(cause)
+      sink.close()
     }
 
   }
