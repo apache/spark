@@ -27,6 +27,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.ConvertToUnsafe
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -510,21 +511,39 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  // HadoopFsRelation.discoverPartitions() called by refresh(), which will ignore
-  // the given partition data type.
-  ignore("Partition column type casting") {
+  test("SPARK-9735 Partition column type casting") {
     withTempPath { file =>
-      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+      val df = (for {
+        i <- 1 to 3
+        p2 <- Seq("foo", "bar")
+      } yield (i, s"val_$i", 1.0d, p2, 123, 123.123f)).toDF("a", "b", "p1", "p2", "p3", "f")
 
-      input
-        .write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("ps", "p2")
-        .saveAsTable("t")
+      val input = df.select(
+        'a,
+        'b,
+        'p1.cast(StringType).as('ps1),
+        'p2,
+        'p3.cast(FloatType).as('pf1),
+        'f)
 
       withTempTable("t") {
-        checkAnswer(sqlContext.table("t"), input.collect())
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Overwrite)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Append)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        val realData = input.collect()
+
+        checkAnswer(sqlContext.table("t"), realData ++ realData)
       }
     }
   }
@@ -667,6 +686,36 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       hadoopConfiguration.clear()
       clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
+    }
+  }
+
+  test("HadoopFsRelation produces UnsafeRow") {
+    withTempTable("test_unsafe") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sqlContext.range(3).write.format(dataSourceName).save(path)
+        sqlContext.read
+          .format(dataSourceName)
+          .option("dataSchema", new StructType().add("id", LongType, nullable = false).json)
+          .load(path)
+          .registerTempTable("test_unsafe")
+
+        val df = sqlContext.sql(
+          """SELECT COUNT(*)
+            |FROM test_unsafe a JOIN test_unsafe b
+            |WHERE a.id = b.id
+          """.stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+
+        assert(
+          plan.collect { case plan: ConvertToUnsafe => plan }.isEmpty,
+          s"""Query plan shouldn't have ${classOf[ConvertToUnsafe].getSimpleName} node(s):
+             |$plan
+           """.stripMargin)
+
+        checkAnswer(df, Row(3))
+      }
     }
   }
 }

@@ -38,7 +38,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
     
 For more information on usage, run `./make-distribution.sh --help`
 
@@ -215,6 +215,11 @@ The SBT build is derived from the Maven POM files, and so the same Maven profile
 can be set to control the SBT build. For example:
 
     build/sbt -Pyarn -Phadoop-2.3 assembly
+
+To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
+in interactive mode by running `build/sbt`, and then run all build commands at the command
+prompt. For more recommendations on reducing build time, refer to the
+[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
 
 # Testing with SBT
 

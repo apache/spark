@@ -111,6 +111,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
+    testCallsite(CallSite("happy", "birthday"))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
@@ -152,7 +153,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
-    testTaskEndReason(ExecutorLostFailure("100", true))
+    testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -162,6 +163,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
   }
+
+  /* ============================== *
+   |  Backward compatibility tests  |
+   * ============================== */
 
   test("ExceptionFailure backward compatibility") {
     val exceptionFailure = ExceptionFailure("To be", "or not to be", stackTrace, null,
@@ -303,10 +308,10 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ExecutorLostFailure backward compatibility") {
     // ExecutorLostFailure in Spark 1.1.0 does not have an "Executor ID" property.
-    val executorLostFailure = ExecutorLostFailure("100", true)
+    val executorLostFailure = ExecutorLostFailure("100", true, Some("Induced failure"))
     val oldEvent = JsonProtocol.taskEndReasonToJson(executorLostFailure)
       .removeField({ _._1 == "Executor ID" })
-    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true)
+    val expectedExecutorLostFailure = ExecutorLostFailure("Unknown", true, Some("Induced failure"))
     assert(expectedExecutorLostFailure === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -341,14 +346,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedJobEnd, JsonProtocol.jobEndFromJson(oldEndEvent))
   }
 
-  test("RDDInfo backward compatibility (scope, parent IDs)") {
-    // Prior to Spark 1.4.0, RDDInfo did not have the "Scope" and "Parent IDs" properties
-    val rddInfo = new RDDInfo(
-      1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8), Some(new RDDOperationScope("fable")))
+  test("RDDInfo backward compatibility (scope, parent IDs, callsite)") {
+    // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
+    // "Callsite" was introduced in Spark 1.6.0
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8),
+      CallSite("short", "long"), Some(new RDDOperationScope("fable")))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Parent IDs"})
       .removeField({ _._1 == "Scope"})
-    val expectedRddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq.empty, scope = None)
+      .removeField({ _._1 == "Callsite"})
+    val expectedRddInfo = new RDDInfo(
+      1, "one", 100, StorageLevel.NONE, Seq.empty, CallSite.empty, scope = None)
     assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
   }
 
@@ -371,6 +379,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
+  test("AccumulableInfo backward compatibility") {
+    // "Internal" property of AccumulableInfo were added after 1.5.1.
+    val accumulableInfo = makeAccumulableInfo(1)
+    val oldJson = JsonProtocol.accumulableInfoToJson(accumulableInfo)
+      .removeField({ _._1 == "Internal" })
+    val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
+    assert(false === oldInfo.internal)
+  }
+
   /** -------------------------- *
    | Helper test running methods |
    * --------------------------- */
@@ -385,6 +402,11 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def testRDDInfo(info: RDDInfo) {
     val newInfo = JsonProtocol.rddInfoFromJson(JsonProtocol.rddInfoToJson(info))
     assertEquals(info, newInfo)
+  }
+
+  private def testCallsite(callsite: CallSite): Unit = {
+    val newCallsite = JsonProtocol.callsiteFromJson(JsonProtocol.callsiteToJson(callsite))
+    assert(callsite === newCallsite)
   }
 
   private def testStageInfo(info: StageInfo) {
@@ -601,10 +623,11 @@ class JsonProtocolSuite extends SparkFunSuite {
         assert(jobId1 === jobId2)
         assert(partitionId1 === partitionId2)
         assert(attemptNumber1 === attemptNumber2)
-      case (ExecutorLostFailure(execId1, isNormalExit1),
-          ExecutorLostFailure(execId2, isNormalExit2)) =>
+      case (ExecutorLostFailure(execId1, exit1CausedByApp, reason1),
+          ExecutorLostFailure(execId2, exit2CausedByApp, reason2)) =>
         assert(execId1 === execId2)
-        assert(isNormalExit1 === isNormalExit2)
+        assert(exit1CausedByApp === exit2CausedByApp)
+        assert(reason1 === reason2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }
@@ -710,7 +733,8 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7))
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK,
+      Seq(1, 4, 7), CallSite(a.toString, b.toString))
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -730,15 +754,15 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
       speculative)
     val (acc1, acc2, acc3) =
-      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3))
+      (makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true))
     taskInfo.accumulables += acc1
     taskInfo.accumulables += acc2
     taskInfo.accumulables += acc3
     taskInfo
   }
 
-  private def makeAccumulableInfo(id: Int): AccumulableInfo =
-    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id)
+  private def makeAccumulableInfo(id: Int, internal: Boolean = false): AccumulableInfo =
+    AccumulableInfo(id, " Accumulable " + id, Some("delta" + id), "val" + id, internal)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -819,13 +843,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  },
@@ -851,6 +877,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
+      |        "Callsite": {"Short Form": "101", "Long Form": "201"},
       |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
@@ -873,13 +900,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      }
       |    ]
       |  }
@@ -909,19 +938,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -949,19 +981,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  }
@@ -995,19 +1030,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1081,19 +1119,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1164,19 +1205,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        "ID": 1,
       |        "Name": "Accumulable1",
       |        "Update": "delta1",
-      |        "Value": "val1"
+      |        "Value": "val1",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 2,
       |        "Name": "Accumulable2",
       |        "Update": "delta2",
-      |        "Value": "val2"
+      |        "Value": "val2",
+      |        "Internal": false
       |      },
       |      {
       |        "ID": 3,
       |        "Name": "Accumulable3",
       |        "Update": "delta3",
-      |        "Value": "val3"
+      |        "Value": "val3",
+      |        "Internal": true
       |      }
       |    ]
       |  },
@@ -1236,6 +1280,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 1,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "1", "Long Form": "200"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1258,13 +1303,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1277,6 +1324,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 2,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "2", "Long Form": "400"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1294,6 +1342,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "3", "Long Form": "401"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1316,13 +1365,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1335,6 +1386,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "3", "Long Form": "600"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1352,6 +1404,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "4", "Long Form": "601"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1369,6 +1422,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "5", "Long Form": "602"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1391,13 +1445,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    },
@@ -1410,6 +1466,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "4", "Long Form": "800"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1427,6 +1484,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "5", "Long Form": "801"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1444,6 +1502,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 6,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "6", "Long Form": "802"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1461,6 +1520,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 7,
       |          "Name": "mayor",
+      |          "Callsite": {"Short Form": "7", "Long Form": "803"},
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1483,13 +1543,15 @@ class JsonProtocolSuite extends SparkFunSuite {
       |          "ID": 2,
       |          "Name": " Accumulable 2",
       |          "Update": "delta2",
-      |          "Value": "val2"
+      |          "Value": "val2",
+      |          "Internal": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": " Accumulable 1",
       |          "Update": "delta1",
-      |          "Value": "val1"
+      |          "Value": "val1",
+      |          "Internal": false
       |        }
       |      ]
       |    }

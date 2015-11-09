@@ -23,12 +23,12 @@ import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -252,11 +252,13 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         .setMaster("local")
         .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
         .set("spark.shuffle.compress", shuffleCompress.toString)
-        .set("spark.shuffle.memoryFraction", "0.001")
       resetSparkContext()
       sc = new SparkContext(myConf)
+      val diskBlockManager = sc.env.blockManager.diskBlockManager
       try {
-        sc.parallelize(0 until 100000).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().isEmpty)
+        sc.parallelize(0 until 10).map(i => (i / 4, i)).groupByKey().collect()
+        assert(diskBlockManager.getAllFiles().nonEmpty)
       } catch {
         case e: Exception =>
           val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
@@ -328,7 +330,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       sc = new SparkContext("local", "test", multipleAttemptConf)
       val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
       val manager = sc.env.shuffleManager
-      val taskMemoryManager = new TaskMemoryManager(sc.env.executorMemoryManager)
+      val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
       val metricsSystem = sc.env.metricsSystem
       val shuffleMapRdd = new MyRDD(sc, 1, Nil)
       val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))

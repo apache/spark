@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -26,6 +27,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   setupTestData()
+
+  def statisticSizeInByte(df: DataFrame): BigInt = {
+    df.queryExecution.optimizedPlan.statistics.sizeInBytes
+  }
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
@@ -359,8 +364,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     upperCaseData.where('N <= 4).registerTempTable("left")
     upperCaseData.where('N >= 3).registerTempTable("right")
 
-    val left = UnresolvedRelation(Seq("left"), None)
-    val right = UnresolvedRelation(Seq("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"), None)
+    val right = UnresolvedRelation(TableIdentifier("right"), None)
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),
@@ -460,6 +465,94 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ).foreach {
         case (query, joinClass) => assertJoin(query, joinClass)
       }
+    }
+
+    sql("UNCACHE TABLE testData")
+  }
+
+  test("cross join with broadcast") {
+    sql("CACHE TABLE testData")
+
+    val sizeInByteOfTestData = statisticSizeInByte(sqlContext.table("testData"))
+
+    // we set the threshold is greater than statistic of the cached table testData
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString()) {
+
+      assert(statisticSizeInByte(sqlContext.table("testData2")) >
+        sqlContext.conf.autoBroadcastJoinThreshold)
+
+      assert(statisticSizeInByte(sqlContext.table("testData")) <
+        sqlContext.conf.autoBroadcastJoinThreshold)
+
+      Seq(
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[LeftSemiJoinHash]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2",
+          classOf[LeftSemiJoinBNL]),
+        ("SELECT * FROM testData JOIN testData2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key > a",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData left JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData right JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData full JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y WHERE x.key = 2
+          """.stripMargin),
+        Row("2", 1, 1) ::
+        Row("2", 1, 2) ::
+        Row("2", 2, 1) ::
+        Row("2", 2, 2) ::
+        Row("2", 3, 1) ::
+        Row("2", 3, 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y WHERE x.key < y.a
+          """.stripMargin),
+        Row("1", 2, 1) ::
+        Row("1", 2, 2) ::
+        Row("1", 3, 1) ::
+        Row("1", 3, 2) ::
+        Row("2", 3, 1) ::
+        Row("2", 3, 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y ON x.key < y.a
+          """.stripMargin),
+        Row("1", 2, 1) ::
+          Row("1", 2, 2) ::
+          Row("1", 3, 1) ::
+          Row("1", 3, 2) ::
+          Row("2", 3, 1) ::
+          Row("2", 3, 2) :: Nil)
     }
 
     sql("UNCACHE TABLE testData")

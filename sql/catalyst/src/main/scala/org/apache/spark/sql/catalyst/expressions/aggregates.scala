@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -548,7 +549,7 @@ case class SumDistinct(child: Expression) extends UnaryExpression with PartialAg
     case _ =>
       child.dataType
   }
-  override def toString: String = s"SUM(DISTINCT $child)"
+  override def toString: String = s"sum(distinct $child)"
   override def newInstance(): SumDistinctFunction = new SumDistinctFunction(child, this)
 
   override def asPartial: SplitEvaluation = {
@@ -630,65 +631,137 @@ case class CombineSetsAndSumFunction(
   }
 }
 
-case class First(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class First(
+    child: Expression,
+    ignoreNullsExpr: Expression)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
+
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"FIRST($child)"
+  override def toString: String = s"first(${child}${if (ignoreNulls) " ignore nulls"})"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(First(child), "PartialFirst")()
+    val partialFirst = Alias(First(child, ignoreNulls), "PartialFirst")()
     SplitEvaluation(
-      First(partialFirst.toAttribute),
+      First(partialFirst.toAttribute, ignoreNulls),
       partialFirst :: Nil)
   }
-  override def newInstance(): FirstFunction = new FirstFunction(child, this)
+  override def newInstance(): FirstFunction = new FirstFunction(child, ignoreNulls, this)
 }
 
-case class FirstFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object First {
+  def apply(child: Expression): First = First(child, ignoreNulls = false)
 
-  var result: Any = null
+  def apply(child: Expression, ignoreNulls: Boolean): First =
+    First(child, Literal.create(ignoreNulls, BooleanType))
+}
+
+case class FirstFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
+
+  private[this] var result: Any = null
+
+  private[this] var valueSet: Boolean = false
 
   override def update(input: InternalRow): Unit = {
-    // We ignore null values.
-    if (result == null) {
-      result = expr.eval(input)
+    if (!valueSet) {
+      val value = expr.eval(input)
+      // When we have not set the result, we will set the result if we respect nulls
+      // (i.e. ignoreNulls is false), or we ignore nulls and the evaluated value is not null.
+      if (!ignoreNulls || (ignoreNulls && value != null)) {
+        result = value
+        valueSet = true
+      }
     }
   }
 
   override def eval(input: InternalRow): Any = result
 }
 
-case class Last(child: Expression) extends UnaryExpression with PartialAggregate1 {
+case class Last(
+    child: Expression,
+    ignoreNullsExpr: Expression)
+  extends UnaryExpression with PartialAggregate1 {
+
+  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+
+  private val ignoreNulls: Boolean = ignoreNullsExpr match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ =>
+      throw new AnalysisException("The second argument of First should be a boolean literal.")
+  }
+
   override def references: AttributeSet = child.references
   override def nullable: Boolean = true
   override def dataType: DataType = child.dataType
-  override def toString: String = s"LAST($child)"
+  override def toString: String = s"last($child)${if (ignoreNulls) " ignore nulls"}"
 
   override def asPartial: SplitEvaluation = {
-    val partialLast = Alias(Last(child), "PartialLast")()
+    val partialLast = Alias(Last(child, ignoreNulls), "PartialLast")()
     SplitEvaluation(
-      Last(partialLast.toAttribute),
+      Last(partialLast.toAttribute, ignoreNulls),
       partialLast :: Nil)
   }
-  override def newInstance(): LastFunction = new LastFunction(child, this)
+  override def newInstance(): LastFunction = new LastFunction(child, ignoreNulls, this)
 }
 
-case class LastFunction(expr: Expression, base: AggregateExpression1) extends AggregateFunction1 {
-  def this() = this(null, null) // Required for serialization.
+object Last {
+  def apply(child: Expression): Last = Last(child, ignoreNulls = false)
+
+  def apply(child: Expression, ignoreNulls: Boolean): Last =
+    Last(child, Literal.create(ignoreNulls, BooleanType))
+}
+
+case class LastFunction(
+    expr: Expression,
+    ignoreNulls: Boolean,
+    base: AggregateExpression1)
+  extends AggregateFunction1 {
+
+  def this() = this(null, null.asInstanceOf[Boolean], null) // Required for serialization.
 
   var result: Any = null
 
   override def update(input: InternalRow): Unit = {
     val value = expr.eval(input)
-    // We ignore null values.
-    if (value != null) {
+    if (!ignoreNulls || (ignoreNulls && value != null)) {
       result = value
     }
   }
 
   override def eval(input: InternalRow): Any = {
     result
+  }
+}
+
+/**
+ * Calculate Pearson Correlation Coefficient for the given columns.
+ * Only support AggregateExpression2.
+ *
+ */
+case class Corr(left: Expression, right: Expression)
+    extends BinaryExpression with AggregateExpression1 with ImplicitCastInputTypes {
+  override def nullable: Boolean = false
+  override def dataType: DoubleType.type = DoubleType
+  override def toString: String = s"corr($left, $right)"
+  override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException(
+      "Corr only supports the new AggregateExpression2 and can only be used " +
+        "when spark.sql.useAggregate2 = true")
   }
 }
 
@@ -712,42 +785,36 @@ abstract class StddevAgg1(child: Expression) extends UnaryExpression with Partia
 
 }
 
-// Compute the sample standard deviation of a column
-case class Stddev(child: Expression) extends StddevAgg1(child) {
-
-  override def toString: String = s"STDDEV($child)"
-  override def isSample: Boolean = true
-}
-
 // Compute the population standard deviation of a column
 case class StddevPop(child: Expression) extends StddevAgg1(child) {
 
-  override def toString: String = s"STDDEV_POP($child)"
+  override def toString: String = s"stddev_pop($child)"
   override def isSample: Boolean = false
 }
 
 // Compute the sample standard deviation of a column
 case class StddevSamp(child: Expression) extends StddevAgg1(child) {
 
-  override def toString: String = s"STDDEV_SAMP($child)"
+  override def toString: String = s"stddev_samp($child)"
   override def isSample: Boolean = true
 }
 
 case class ComputePartialStd(child: Expression) extends UnaryExpression with AggregateExpression1 {
-    def this() = this(null)
+  def this() = this(null)
 
-    override def children: Seq[Expression] = child :: Nil
-    override def nullable: Boolean = false
-    override def dataType: DataType = ArrayType(DoubleType)
-    override def toString: String = s"computePartialStddev($child)"
-    override def newInstance(): ComputePartialStdFunction =
-      new ComputePartialStdFunction(child, this)
+  override def children: Seq[Expression] = child :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = ArrayType(DoubleType)
+  override def toString: String = s"computePartialStddev($child)"
+  override def newInstance(): ComputePartialStdFunction =
+    new ComputePartialStdFunction(child, this)
 }
 
 case class ComputePartialStdFunction (
     expr: Expression,
     base: AggregateExpression1
-) extends AggregateFunction1 {
+  ) extends AggregateFunction1 {
+
   def this() = this(null, null)  // Required for serialization
 
   private val computeType = DoubleType
@@ -935,4 +1002,72 @@ case class StddevFunction(
       Sqrt(varCol).eval(null)
     }
   }
+}
+
+// placeholder
+case class Kurtosis(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "kurtosis"
+}
+
+// placeholder
+case class Skewness(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "skewness"
+}
+
+// placeholder
+case class VariancePop(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "var_pop"
+}
+
+// placeholder
+case class VarianceSamp(child: Expression) extends UnaryExpression with AggregateExpression1 {
+
+  override def newInstance(): AggregateFunction1 = {
+    throw new UnsupportedOperationException("AggregateExpression1 is no longer supported, " +
+      "please set spark.sql.useAggregate2 = true")
+  }
+
+  override def nullable: Boolean = false
+
+  override def dataType: DoubleType.type = DoubleType
+
+  override def foldable: Boolean = false
+
+  override def prettyName: String = "var_samp"
 }

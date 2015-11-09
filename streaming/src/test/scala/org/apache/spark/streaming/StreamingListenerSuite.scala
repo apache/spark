@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -221,7 +221,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     _ssc.stop()
-    failureReasonsCollector.failureReasons
+    failureReasonsCollector.failureReasons.toMap
   }
 
   /** Check if a sequence of numbers is in increasing order */
@@ -307,14 +307,16 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
 }
 
 /**
- * A StreamingListener that saves the latest `failureReasons` in `BatchInfo` to the `failureReasons`
- * field.
+ * A StreamingListener that saves all latest `failureReasons` in a batch.
  */
 class FailureReasonsCollector extends StreamingListener {
 
-  @volatile var failureReasons: Map[Int, String] = null
+  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String]
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-    failureReasons = batchCompleted.batchInfo.failureReasons
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
+      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+    }
   }
 }
