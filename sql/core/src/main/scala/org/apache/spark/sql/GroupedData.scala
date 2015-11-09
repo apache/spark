@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Pivot, Rollup, Cube, Aggregate}
-import org.apache.spark.sql.types.NumericType
+import org.apache.spark.sql.types.{StringType, NumericType}
 
 
 /**
@@ -288,10 +288,13 @@ class GroupedData protected[sql](
     * {{{
     *   // Compute the sum of earnings for each year by course with each course as a separate column
     *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
+    *   // Or without specifying column values
+    *   df.groupBy($"year").pivot($"course").agg(sum($"earnings"))
     * }}}
     * @param pivotColumn Column to pivot
-    * @param values Values of pivotColumn that will be translated to columns in the output data
-    *                    frame.
+    * @param values Optional list of values of pivotColumn that will be translated to columns in the
+    *               output data frame. If values are not provided the method with do an immediate
+    *               call to .distinct() on the pivot column.
     * @since 1.6.0
     */
   @scala.annotation.varargs
@@ -299,7 +302,16 @@ class GroupedData protected[sql](
     case _: GroupedData.PivotType =>
       throw new UnsupportedOperationException("repeated pivots are not supported")
     case GroupedData.GroupByType =>
-      new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, values.toSeq))
+      val pivotValues = if (values.nonEmpty) {
+        values
+      } else {
+        // Get the distinct values of the column and sort them so its consistent
+        df.select(pivotColumn.cast(StringType))
+          .distinct()
+          .map(_.getString(0))
+          .collect().sorted.toSeq
+      }
+      new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, pivotValues))
     case _ =>
       throw new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
@@ -309,10 +321,13 @@ class GroupedData protected[sql](
     * {{{
     *   // Compute the sum of earnings for each year by course with each course as a separate column
     *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
+    *   // Or without specifying column values
+    *   df.groupBy("year").pivot("course").sum("earnings")
     * }}}
     * @param pivotColumn Column to pivot
-    * @param values Values of pivotColumn that will be translated to columns in the output data
-    *                    frame.
+    * @param values Optional list of values of pivotColumn that will be translated to columns in the
+    *               output data frame. If values are not provided the method with do an immediate
+    *               call to .distinct() on the pivot column.
     * @since 1.6.0
     */
   @scala.annotation.varargs

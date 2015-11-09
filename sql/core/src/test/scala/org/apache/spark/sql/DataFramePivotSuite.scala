@@ -66,4 +66,19 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
+
+  test("pivot courses groupBy with no values") {
+    // Note Java comes before dotNet in sorted order
+    checkAnswer(
+      courseSales.groupBy($"year").pivot($"course").agg(sum($"earnings")),
+      Row(2012, 20000.0, 15000.0) :: Row(2013, 30000.0, 48000.0) :: Nil
+    )
+  }
+
+  test("pivot year groupBy with no values") {
+    checkAnswer(
+      courseSales.groupBy($"course").pivot($"year").agg(sum($"earnings")),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
 }
