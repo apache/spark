@@ -78,11 +78,11 @@ class MapStatusSuite extends SparkFunSuite {
   }
 
   test("large tasks with sparse non-empty blocks should use " +
-    classOf[MapStatusTrackingNoEmptyBlocks].getName) {
+    classOf[MapStatusTrackingEmptyBlocks].getName) {
     val sizes = Array.fill[Long](2001)(0L)
     sizes(0) = 1L
     val status = MapStatus(null, sizes)
-    assert(status.isInstanceOf[MapStatusTrackingNoEmptyBlocks])
+    assert(status.isInstanceOf[MapStatusTrackingEmptyBlocks])
     assert(status.getSizeForBlock(0) === 1L)
     assert(status.getSizeForBlock(50) === 0L)
     assert(status.getSizeForBlock(99) === 0L)

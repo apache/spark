@@ -35,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.scheduler.{MapStatusTrackingEmptyBlocks, MapStatusTrackingNoEmptyBlocks, CompressedMapStatus, HighlyCompressedMapStatus}
+import org.apache.spark.scheduler.{MapStatusTrackingEmptyBlocks, CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
@@ -363,7 +363,6 @@ private[serializer] object KryoSerializer {
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
     classOf[BitSet],
-    classOf[MapStatusTrackingNoEmptyBlocks],
     classOf[MapStatusTrackingEmptyBlocks],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
