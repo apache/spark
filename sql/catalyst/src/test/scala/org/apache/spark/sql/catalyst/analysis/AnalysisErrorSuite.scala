@@ -171,16 +171,18 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
+    // Since we manually construct the logical plan at here and Sum only accetp
+    // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val plan =
       Aggregate(
         Nil,
-        Alias(sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
+        Alias(sum(AttributeReference("a", LongType)(exprId = ExprId(1))), "b")() :: Nil,
         LocalRelation(
-          AttributeReference("a", IntegerType)(exprId = ExprId(2))))
+          AttributeReference("a", LongType)(exprId = ExprId(2))))
 
     assert(plan.resolved)
 
-    assertAnalysisError(plan, "resolved attribute(s) a#1 missing from a#2" :: Nil)
+    assertAnalysisError(plan, "resolved attribute(s) a#1L missing from a#2L" :: Nil)
   }
 
   test("error test for self-join") {

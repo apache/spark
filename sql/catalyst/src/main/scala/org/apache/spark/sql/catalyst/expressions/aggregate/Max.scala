@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 case class Max(child: Expression) extends DeclarativeAggregate {
@@ -31,6 +33,9 @@ case class Max(child: Expression) extends DeclarativeAggregate {
 
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForOrderingExpr(child.dataType, "function max")
 
   private lazy val max = AttributeReference("max", child.dataType)()
 

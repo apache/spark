@@ -22,6 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{TypeCollection, StringType}
 
@@ -140,16 +141,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for aggregates") {
-    // We will cast String to Double for sum and average
-    assertSuccess(sum('stringField))
-    assertSuccess(sumDistinct('stringField))
-    assertSuccess(avg('stringField))
+    // We use AggregateFunction directly at here because the error will be thrown from it
+    // instead of from AggregateExpression, which is the wrapper of an AggregateFunction.
 
-    assertError(min('complexField), "min does not support ordering on type")
-    assertError(max('complexField), "max does not support ordering on type")
-    assertError(sum('booleanField), "function sum requires numeric type")
-    assertError(sumDistinct('booleanField), "function sumDistinct requires numeric type")
-    assertError(avg('booleanField), "function average requires numeric type")
+    // We will cast String to Double for sum and average
+    assertSuccess(Sum('stringField))
+    assertSuccess(Average('stringField))
+
+    assertError(Min('complexField), "min does not support ordering on type")
+    assertError(Max('complexField), "max does not support ordering on type")
+    assertError(Sum('booleanField), "function sum requires numeric type")
+    assertError(Average('booleanField), "function average requires numeric type")
   }
 
   test("check types for others") {

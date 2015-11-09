@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 case class Average(child: Expression) extends DeclarativeAggregate {
@@ -32,13 +34,10 @@ case class Average(child: Expression) extends DeclarativeAggregate {
   // Return data type.
   override def dataType: DataType = resultType
 
-  // Expected input data type.
-  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
-  // new version at planning time (after analysis phase). For now, NullType is added at here
-  // to make it resolved when we have cases like `select avg(null)`.
-  // We can use our analyzer to cast NullType to the default data type of the NumericType once
-  // we remove the old aggregate functions. Then, we will not need NullType at here.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType))
+
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function average")
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
