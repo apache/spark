@@ -50,6 +50,9 @@ object RowEncoder {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => inputObject
 
+    case udt: UserDefinedType[_]  =>
+      Invoke(inputObject, "serialize", udt.sqlType, inputObject :: Nil)
+
     case TimestampType =>
       StaticInvoke(
         DateTimeUtils,
@@ -129,6 +132,7 @@ object RowEncoder {
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
+    case udt: UserDefinedType[_] => ObjectType(udt.userClass)
   }
 
   private def constructorFor(schema: StructType): Expression = {
@@ -146,6 +150,14 @@ object RowEncoder {
   private def constructorFor(input: Expression, dataType: DataType): Expression = dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
+
+    case udt: UserDefinedType[_]  =>
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        false,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
       StaticInvoke(

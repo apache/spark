@@ -43,7 +43,7 @@ case class ScalaUDF(
   def userDefinedFunc(): AnyRef = function
   def getChildren(): Seq[Expression] = children
 
-  val inputSchema: StructType = {
+  lazy val inputSchema: StructType = {
       val fields = if (inputTypes == Nil) {
         // from the deprecated callUDF codepath
         children.zipWithIndex.map { case (e, i) =>
@@ -372,8 +372,9 @@ case class ScalaUDF(
   }
 
   override def eval(input: InternalRow): Any = {
+    val projected = InternalRow.fromSeq(children.map(_.eval(input)))
     val outputEncoder: ExpressionEncoder[Row] =
       RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
-    outputEncoder.toRow(Row(f(input)))
+    outputEncoder.toRow(Row(f(projected))).asInstanceOf[InternalRow].get(0, dataType)
   }
 }
