@@ -61,7 +61,8 @@ public class JavaAFTSurvivalRegressionExample {
     AFTSurvivalRegressionModel model = aft.fit(training);
 
     // Print the coefficients, intercept and scale parameter for AFT survival regression
-    System.out.println("Coefficients: " + model.coefficients() + " Intercept: " + model.intercept() + " Scale: " + model.scale());
+    System.out.println("Coefficients: " + model.coefficients() + " Intercept: "
+      + model.intercept() + " Scale: " + model.scale());
     model.transform(training).show(false);
     // $example off$
 
