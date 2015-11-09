@@ -593,19 +593,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
 
   /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
     * receiving system events related to streaming.
-    *
-    * @deprecated As of 1.6.0, replaced by `addStreamingListener(JavaStreamingListener)`.
     */
-  @deprecated("Use `addStreamingListener(JavaStreamingListener)` instead", "1.6.0")
   def addStreamingListener(streamingListener: StreamingListener) {
     ssc.addStreamingListener(streamingListener)
-  }
-
-  /** Add a [[JavaStreamingListener]] object for
-    * receiving system events related to streaming.
-    */
-  def addStreamingListener(streamingListener: JavaStreamingListener) {
-    ssc.addStreamingListener(new JavaStreamingListenerWrapper(streamingListener))
   }
 
   /**

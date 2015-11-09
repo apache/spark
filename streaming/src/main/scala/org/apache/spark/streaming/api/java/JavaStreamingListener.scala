@@ -17,15 +17,12 @@
 
 package org.apache.spark.streaming.api.java
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.scheduler._
 
 /**
  * A listener interface for receiving information about an ongoing streaming  computation.
  */
-@DeveloperApi
-abstract class JavaStreamingListener {
+private[streaming] class JavaStreamingListener {
 
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: JavaStreamingListenerReceiverStarted): Unit = { }
@@ -55,46 +52,35 @@ abstract class JavaStreamingListener {
 }
 
 /**
- * :: DeveloperApi ::
  * Base trait for events related to JavaStreamingListener
  */
-@DeveloperApi
-sealed trait JavaStreamingListenerEvent
+private[streaming] sealed trait JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerBatchSubmitted(val batchInfo: JavaBatchInfo)
+private[streaming] class JavaStreamingListenerBatchSubmitted(val batchInfo: JavaBatchInfo)
   extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerBatchCompleted(val batchInfo: JavaBatchInfo)
+private[streaming] class JavaStreamingListenerBatchCompleted(val batchInfo: JavaBatchInfo)
   extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerBatchStarted(val batchInfo: JavaBatchInfo)
+private[streaming] class JavaStreamingListenerBatchStarted(val batchInfo: JavaBatchInfo)
   extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerOutputOperationStarted(val outputOperationInfo: JavaOutputOperationInfo)
-  extends JavaStreamingListenerEvent
-
-@DeveloperApi
-class JavaStreamingListenerOutputOperationCompleted(
+private[streaming] class JavaStreamingListenerOutputOperationStarted(
     val outputOperationInfo: JavaOutputOperationInfo) extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerReceiverStarted(val receiverInfo: JavaReceiverInfo)
+private[streaming] class JavaStreamingListenerOutputOperationCompleted(
+    val outputOperationInfo: JavaOutputOperationInfo) extends JavaStreamingListenerEvent
+
+private[streaming] class JavaStreamingListenerReceiverStarted(val receiverInfo: JavaReceiverInfo)
   extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerReceiverError(val receiverInfo: JavaReceiverInfo)
+private[streaming] class JavaStreamingListenerReceiverError(val receiverInfo: JavaReceiverInfo)
   extends JavaStreamingListenerEvent
 
-@DeveloperApi
-class JavaStreamingListenerReceiverStopped(val receiverInfo: JavaReceiverInfo)
+private[streaming] class JavaStreamingListenerReceiverStopped(val receiverInfo: JavaReceiverInfo)
   extends JavaStreamingListenerEvent
 
 /**
- * :: DeveloperApi ::
  * Class having information on batches.
  *
  * @param batchTime Time of the batch
@@ -119,8 +105,7 @@ class JavaStreamingListenerReceiverStopped(val receiverInfo: JavaReceiverInfo)
  * @param numRecords The number of recorders received by the receivers in this batch
  * @param outputOperationInfos The output operations in this batch
  */
-@DeveloperApi
-case class JavaBatchInfo(
+private[streaming] case class JavaBatchInfo(
     batchTime: Time,
     streamIdToInputInfo: java.util.Map[Int, JavaStreamInputInfo],
     submissionTime: Long,
@@ -133,7 +118,6 @@ case class JavaBatchInfo(
     outputOperationInfos: java.util.Map[Int, JavaOutputOperationInfo])
 
 /**
- * :: DeveloperApi ::
  * Track the information of input stream at specified batch time.
  *
  * @param inputStreamId the input stream id
@@ -142,19 +126,16 @@ case class JavaBatchInfo(
  *                 "Description" which maps to the content that will be shown in the UI.
  * @param metadataDescription description of this input stream
  */
-@DeveloperApi
-case class JavaStreamInputInfo(
+private[streaming] case class JavaStreamInputInfo(
     inputStreamId: Int,
     numRecords: Long,
     metadata: java.util.Map[String, Any],
     metadataDescription: String)
 
 /**
- * :: DeveloperApi ::
  * Class having information about a receiver
  */
-@DeveloperApi
-case class JavaReceiverInfo(
+private[streaming] case class JavaReceiverInfo(
     streamId: Int,
     name: String,
     active: Boolean,
@@ -164,7 +145,6 @@ case class JavaReceiverInfo(
     lastErrorTime: Long)
 
 /**
- * :: DeveloperApi ::
  * Class having information on output operations.
  *
  * @param batchTime Time of the batch
@@ -178,8 +158,7 @@ case class JavaReceiverInfo(
  * @param failureReason Failure reason if this output operation fails. If the output operation is
  *                      successful, this field is `null`.
  */
-@DeveloperApi
-case class JavaOutputOperationInfo(
+private[streaming] case class JavaOutputOperationInfo(
     batchTime: Time,
     id: Int,
     name: String,
