@@ -78,7 +78,7 @@ def action_logging(f):
     def wrapper(*args, **kwargs):
         session = settings.Session()
 
-        if hasattr(login.current_user, 'username'):
+        if login and hasattr(login.current_user, 'username'):
             user = login.current_user.username
         else:
             user = 'anonymous'
