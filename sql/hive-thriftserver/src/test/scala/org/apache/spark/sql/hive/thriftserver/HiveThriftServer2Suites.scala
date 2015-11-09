@@ -41,6 +41,7 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -460,6 +461,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+    }
+  }
+
+  test("SPARK-11191 add jar using path with URL scheme") {
+    withJdbcStatement { statement =>
+      val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+      val jarURL = s"file:///$funcJar"
+      statement.executeQuery(s"ADD JAR $jarURL")
     }
   }
 }
