@@ -286,7 +286,7 @@ class GroupedData protected[sql](
     * (Scala-specific) Pivots a column of the current [[DataFrame]] and preform the specified
     * aggregation.
     * {{{
-    *   // Compute the sum of earnings for each year by course with each course as a separate column.
+    *   // Compute the sum of earnings for each year by course with each course as a separate column
     *   df.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings"))
     * }}}
     * @param pivotColumn Column to pivot
@@ -307,7 +307,7 @@ class GroupedData protected[sql](
   /**
     * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
     * {{{
-    *   // Compute the sum of earnings for each year by course with each course as a separate column.
+    *   // Compute the sum of earnings for each year by course with each course as a separate column
     *   df.groupBy("year").pivot("course", "dotNET", "Java").sum("earnings")
     * }}}
     * @param pivotColumn Column to pivot
