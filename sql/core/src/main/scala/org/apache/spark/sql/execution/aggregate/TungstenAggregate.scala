@@ -28,15 +28,15 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, UnsafeFixedWidthAgg
 import org.apache.spark.sql.types.StructType
 
 case class TungstenAggregate(
-                              requiredChildDistributionExpressions: Option[Seq[Expression]],
-                              groupingExpressions: Seq[NamedExpression],
-                              nonCompleteAggregateExpressions: Seq[AggregateExpression],
-                              nonCompleteAggregateAttributes: Seq[Attribute],
-                              completeAggregateExpressions: Seq[AggregateExpression],
-                              completeAggregateAttributes: Seq[Attribute],
-                              initialInputBufferOffset: Int,
-                              resultExpressions: Seq[NamedExpression],
-                              child: SparkPlan)
+    requiredChildDistributionExpressions: Option[Seq[Expression]],
+    groupingExpressions: Seq[NamedExpression],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
+    nonCompleteAggregateAttributes: Seq[Attribute],
+    completeAggregateExpressions: Seq[AggregateExpression],
+    completeAggregateAttributes: Seq[Attribute],
+    initialInputBufferOffset: Int,
+    resultExpressions: Seq[NamedExpression],
+    child: SparkPlan)
   extends UnaryNode {
 
   private[this] val aggregateBufferAttributes = {

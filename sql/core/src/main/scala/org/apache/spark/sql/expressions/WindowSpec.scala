@@ -141,6 +141,9 @@ class WindowSpec private[sql](
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
     val windowExpr = aggregate.expr match {
+      // First, we check if we get an aggregate function without the DISTINCT keyword.
+      // Right now, we do not support using a DISTINCT aggregate function as a
+      // window function.
       case AggregateExpression(aggregateFunction, _, isDistinct) if !isDistinct =>
         aggregateFunction match {
           case Average(child) => WindowExpression(
@@ -170,15 +173,22 @@ class WindowSpec private[sql](
           case Max(child) => WindowExpression(
             UnresolvedWindowFunction("max", child :: Nil),
             WindowSpecDefinition(partitionSpec, orderSpec, frame))
-          case wf: WindowFunction => WindowExpression(
-            wf,
-            WindowSpecDefinition(partitionSpec, orderSpec, frame))
           case x =>
             throw new UnsupportedOperationException(s"$x is not supported in window operation.")
         }
-      case x =>
+
+      case AggregateExpression(aggregateFunction, _, isDistinct) if isDistinct =>
         throw new UnsupportedOperationException(
-          s"Distinct aggregate function $x is not supported in window operation.")
+          s"Distinct aggregate function ${aggregateFunction} is not supported " +
+            s"in window operation.")
+
+      case wf: WindowFunction =>
+        WindowExpression(
+          wf,
+          WindowSpecDefinition(partitionSpec, orderSpec, frame))
+
+      case x =>
+        throw new UnsupportedOperationException(s"$x is not supported in window operation.")
     }
 
     new Column(windowExpr)
