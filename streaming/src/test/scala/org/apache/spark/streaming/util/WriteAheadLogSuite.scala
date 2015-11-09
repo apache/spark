@@ -18,7 +18,7 @@ package org.apache.spark.streaming.util
 
 import java.io._
 import java.nio.ByteBuffer
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.{ExecutionException, ThreadPoolExecutor}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -366,19 +366,13 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   }
 
   // we make the write requests in separate threads so that we don't block the test thread
-  private def writeEventWithFuture(
-      wal: WriteAheadLog,
-      event: String,
-      time: Long,
-      numSuccess: AtomicInteger = null,
-      numFail: AtomicInteger = null): Unit = {
-    val f = Future(wal.write(event, time))(walBatchingExecutionContext)
-    f.onComplete {
-      case Success(v) =>
-        assert(v === walHandle) // return our mock handle after the write
-        if (numSuccess != null) numSuccess.incrementAndGet()
-      case Failure(v) => if (numFail != null) numFail.incrementAndGet()
-    }(walBatchingExecutionContext)
+  private def promiseWriteEvent(wal: WriteAheadLog, event: String, time: Long): Promise[Unit] = {
+    val p = Promise[Unit]()
+    p.completeWith(Future {
+      val v = wal.write(event, time)
+      assert(v === walHandle)
+    }(walBatchingExecutionContext))
+    p
   }
 
   /**
@@ -412,12 +406,12 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
 
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
-    writeEventWithFuture(batchedWal, event1, 3L)
+    promiseWriteEvent(batchedWal, event1, 3L)
     // rest of the records will be batched while it takes 3 to get written
-    writeEventWithFuture(batchedWal, event2, 5L)
-    writeEventWithFuture(batchedWal, event3, 8L)
-    writeEventWithFuture(batchedWal, event4, 12L)
-    writeEventWithFuture(batchedWal, event5, 10L)
+    promiseWriteEvent(batchedWal, event2, 5L)
+    promiseWriteEvent(batchedWal, event3, 8L)
+    promiseWriteEvent(batchedWal, event4, 12L)
+    promiseWriteEvent(batchedWal, event5, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
     }
@@ -448,28 +442,26 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // block the write so that we can batch some records
     writeBlockingPromise(wal)
 
-    val event1 = "hello"
-    val event2 = "world"
-    val event3 = "this"
-    val event4 = "is"
-    val event5 = "doge"
-
-    val numFail = new AtomicInteger()
+    val event1 = ("hello", 3L)
+    val event2 = ("world", 5L)
+    val event3 = ("this", 8L)
+    val event4 = ("is", 9L)
+    val event5 = ("doge", 10L)
 
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
-    writeEventWithFuture(batchedWal, event1, 3L, null, numFail)
-    writeEventWithFuture(batchedWal, event2, 5L, null, numFail)
-    writeEventWithFuture(batchedWal, event3, 8L, null, numFail)
-    writeEventWithFuture(batchedWal, event4, 9L, null, numFail)
-    writeEventWithFuture(batchedWal, event5, 10L, null, numFail)
+    val writePromises = Seq(event1, event2, event3, event4, event5).map { event =>
+      promiseWriteEvent(batchedWal, event._1, event._2)
+    }
+
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
     }
 
     batchedWal.close()
     eventually(timeout(1 second)) {
-      assert(numFail.get() === 5)
+      assert(writePromises.forall(_.isCompleted))
+      assert(writePromises.forall(_.future.value.get.isFailure)) // all should have failed
     }
   }
 }
