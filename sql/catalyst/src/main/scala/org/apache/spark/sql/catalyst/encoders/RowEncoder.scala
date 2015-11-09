@@ -50,7 +50,7 @@ object RowEncoder {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => inputObject
 
-    case udt: UserDefinedType[_]  =>
+    case udt: UserDefinedType[_] =>
       Invoke(inputObject, "serialize", udt.sqlType, inputObject :: Nil)
 
     case TimestampType =>
@@ -151,7 +151,7 @@ object RowEncoder {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
 
-    case udt: UserDefinedType[_]  =>
+    case udt: UserDefinedType[_] =>
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
