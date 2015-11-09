@@ -527,7 +527,7 @@ case class MapGroups[K, T, U](
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
   def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
-      func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+      func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
       left: LogicalPlan,
@@ -551,7 +551,7 @@ object CoGroup {
  * right children.
  */
 case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
     kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],

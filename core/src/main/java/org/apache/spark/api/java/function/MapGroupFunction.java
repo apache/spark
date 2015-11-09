@@ -18,10 +18,11 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
- * A function that takes two inputs and returns zero or more output records.
+ * Base interface for a map function used in GroupedDataset's map function.
  */
-public interface FlatMapFunction2<T1, T2, R> extends Serializable {
-  Iterable<R> call(T1 t1, T2 t2) throws Exception;
+public interface MapGroupFunction<K, V, R> extends Serializable {
+  R call(K key, Iterator<V> values) throws Exception;
 }

@@ -23,5 +23,5 @@ import java.io.Serializable;
  * A function that returns zero or more output records from each input record.
  */
 public interface FlatMapFunction<T, R> extends Serializable {
-  public Iterable<R> call(T t) throws Exception;
+  Iterable<R> call(T t) throws Exception;
 }
