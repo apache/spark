@@ -721,7 +721,7 @@ private[ml] class FeedForwardTrainer(
     val outputSize: Int) extends Serializable {
 
   private var _seed = 11L
-  private var _weights = topology.getInstance(_seed).weights()
+  private var _weights: Vector = null
   private var _stackSize = 128
   private var dataStacker = new DataStacker(_stackSize, inputSize, outputSize)
   private var _gradient: Gradient = new ANNGradient(topology, dataStacker)
@@ -837,7 +837,8 @@ private[ml] class FeedForwardTrainer(
    * @return model
    */
   def train(data: RDD[(Vector, Vector)]): TopologyModel = {
-    val newWeights = optimizer.optimize(dataStacker.stack(data), getWeights)
+    val w = if (getWeights == null) topology.getInstance(_seed).weights() else getWeights
+    val newWeights = optimizer.optimize(dataStacker.stack(data), w)
     topology.getInstance(newWeights)
   }
 
