@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, Encoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
-import org.apache.spark.sql.execution.aggregate.SumOf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -49,7 +48,7 @@ import org.apache.spark.util.Utils
  * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
  * [[DataFrame]] operations when the return type for a given function is statically known.
  */
-abstract class LegacyFunctions {
+private[sql] abstract class LegacyFunctions {
   def count(columnName: String): Column
 }
 
@@ -387,15 +386,6 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def stddev_pop(e: Column): Column = withExpr { StddevPop(e.expr) }
-
-  /**
-   * Aggregate function: returns the sum of all values returned by the given function.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] =
-    new SumOf(f).toColumn
 
   /**
    * Aggregate function: returns the sum of all values in the expression.

@@ -266,25 +266,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("typed aggregation: TypedAggregator") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkAnswer(
-      ds.groupBy(_._1).agg(sum(_._2)),
-      ("a", 30), ("b", 3), ("c", 1))
-  }
-
-  test("typed aggregation: TypedAggregator, expr, expr") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkAnswer(
-      ds.groupBy(_._1).agg(
-        sum(_._2),
-        expr("sum(_2)").as[Int],
-        count("*")),
-      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
-  }
-
   test("typed aggregation: expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 

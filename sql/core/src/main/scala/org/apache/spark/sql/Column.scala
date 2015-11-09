@@ -41,6 +41,9 @@ private[sql] object Column {
 /**
  * A [[Column]] where an [[Encoder]] has been given for the expected input and return type.
  * @since 1.6.0
+ * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
+ *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U The output type of this column.
  */
 class TypedColumn[-T, U](expr: Expression, val encoder: Encoder[U]) extends Column(expr)
 

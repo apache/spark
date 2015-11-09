@@ -17,15 +17,3 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.expressions.Aggregator
-
-/** An `Aggregator` that adds up any numeric type returned by the given function. */
-class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
-  val numeric = implicitly[Numeric[N]]
-
-  override def zero = numeric.zero
-
-  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
-
-  override def present(reduction: N): N = reduction
-}
