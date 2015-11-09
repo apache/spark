@@ -20,8 +20,8 @@ package org.apache.spark.api.java.function;
 import java.io.Serializable;
 
 /**
- * A zero-argument function that returns an R.
+ * Base interface for a map function used in Dataset's map function.
  */
-public interface Function0<R> extends Serializable {
-  R call() throws Exception;
+public interface MapFunction<T, U> extends Serializable {
+  U call(T value) throws Exception;
 }
