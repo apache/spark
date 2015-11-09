@@ -407,7 +407,8 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val event4 = "is"
     val event5 = "doge"
 
-    writeEventWithFuture(batchedWal, event1, 3L) // 3 will automatically be flushed for the first write
+    // 3 will automatically be flushed for the first write
+    writeEventWithFuture(batchedWal, event1, 3L)
     // rest of the records will be batched while it takes 3 to get written
     writeEventWithFuture(batchedWal, event2, 5L)
     writeEventWithFuture(batchedWal, event3, 8L)
