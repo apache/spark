@@ -51,7 +51,12 @@ object RowEncoder {
          FloatType | DoubleType | BinaryType => inputObject
 
     case udt: UserDefinedType[_] =>
-      Invoke(inputObject, "serialize", udt.sqlType, inputObject :: Nil)
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        false,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
     case TimestampType =>
       StaticInvoke(
