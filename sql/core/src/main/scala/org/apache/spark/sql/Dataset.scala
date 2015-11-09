@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, _}
+import org.apache.spark.api.java.function._
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -75,7 +75,11 @@ class Dataset[T] private[sql](
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
 
-  /** Returns the schema of the encoded form of the objects in this [[Dataset]]. */
+  /**
+   * Returns the schema of the encoded form of the objects in this [[Dataset]].
+   *
+   * @since 1.6.0
+   */
   def schema: StructType = encoder.schema
 
   /* ************* *
@@ -103,6 +107,7 @@ class Dataset[T] private[sql](
   /**
    * Applies a logical alias to this [[Dataset]] that can be used to disambiguate columns that have
    * the same name after two Datasets have been joined.
+   * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withPlan(Subquery(alias, _))
 
@@ -166,8 +171,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    * @since 1.6.0
    */
-  def filter(func: JFunction[T, java.lang.Boolean]): Dataset[T] =
-    filter(t => func.call(t).booleanValue())
+  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
 
   /**
    * (Scala-specific)
@@ -181,7 +185,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
-  def map[U](func: JFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
     map(t => func.call(t))(encoder)
 
   /**
@@ -205,10 +209,8 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
-  def mapPartitions[U](
-      f: FlatMapFunction[java.util.Iterator[T], U],
-      encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator().asScala
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator.asScala
     mapPartitions(func)(encoder)
   }
 
@@ -248,7 +250,7 @@ class Dataset[T] private[sql](
    * Runs `func` on each element of this Dataset.
    * @since 1.6.0
    */
-  def foreach(func: VoidFunction[T]): Unit = foreach(func.call(_))
+  def foreach(func: ForeachFunction[T]): Unit = foreach(func.call(_))
 
   /**
    * (Scala-specific)
@@ -262,7 +264,7 @@ class Dataset[T] private[sql](
    * Runs `func` on each partition of this Dataset.
    * @since 1.6.0
    */
-  def foreachPartition(func: VoidFunction[java.util.Iterator[T]]): Unit =
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
     foreachPartition(it => func.call(it.asJava))
 
   /* ************* *
@@ -271,7 +273,7 @@ class Dataset[T] private[sql](
 
   /**
    * (Scala-specific)
-   * Reduces the elements of this Dataset using the specified  binary function.  The given function
+   * Reduces the elements of this Dataset using the specified binary function.  The given function
    * must be commutative and associative or the result may be non-deterministic.
    * @since 1.6.0
    */
@@ -279,33 +281,11 @@ class Dataset[T] private[sql](
 
   /**
    * (Java-specific)
-   * Reduces the elements of this Dataset using the specified  binary function.  The given function
+   * Reduces the elements of this Dataset using the specified binary function.  The given function
    * must be commutative and associative or the result may be non-deterministic.
    * @since 1.6.0
    */
-  def reduce(func: JFunction2[T, T, T]): T = reduce(func.call(_, _))
-
-  /**
-   * (Scala-specific)
-   * Aggregates the elements of each partition, and then the results for all the partitions, using a
-   * given associative and commutative function and a neutral "zero value".
-   *
-   * This behaves somewhat differently than the fold operations implemented for non-distributed
-   * collections in functional languages like Scala. This fold operation may be applied to
-   * partitions individually, and then those results will be folded into the final result.
-   * If op is not commutative, then the result may differ from that of a fold applied to a
-   * non-distributed collection.
-   * @since 1.6.0
-   */
-  def fold(zeroValue: T)(op: (T, T) => T): T = rdd.fold(zeroValue)(op)
-
-  /**
-   * (Java-specific)
-   * Aggregates the elements of each partition, and then the results for all the partitions, using a
-   * given associative and commutative function and a neutral "zero value".
-   * @since 1.6.0
-   */
-  def fold(zeroValue: T, func: JFunction2[T, T, T]): T = fold(zeroValue)(func.call(_, _))
+  def reduce(func: ReduceFunction[T]): T = reduce(func.call(_, _))
 
   /**
    * (Scala-specific)
@@ -351,7 +331,7 @@ class Dataset[T] private[sql](
    * Returns a [[GroupedDataset]] where the data is grouped by the given key function.
    * @since 1.6.0
    */
-  def groupBy[K](f: JFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
+  def groupBy[K](f: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
     groupBy(f.call(_))(encoder)
 
   /* ****************** *
@@ -367,7 +347,7 @@ class Dataset[T] private[sql](
    */
   // Copied from Dataframe to make sure we don't have invalid overloads.
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = toDF().select(cols: _*)
+  protected def select(cols: Column*): DataFrame = toDF().select(cols: _*)
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
@@ -462,8 +442,7 @@ class Dataset[T] private[sql](
    * and thus is not affected by a custom `equals` function defined on `T`.
    * @since 1.6.0
    */
-  def intersect(other: Dataset[T]): Dataset[T] =
-    withPlan[T](other)(Intersect)
+  def intersect(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Intersect)
 
   /**
    * Returns a new [[Dataset]] that contains the elements of both this and the `other` [[Dataset]]
@@ -473,8 +452,7 @@ class Dataset[T] private[sql](
    * duplicate items.  As such, it is analagous to `UNION ALL` in SQL.
    * @since 1.6.0
    */
-  def union(other: Dataset[T]): Dataset[T] =
-    withPlan[T](other)(Union)
+  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Union)
 
   /**
    * Returns a new [[Dataset]] where any elements present in `other` have been removed.
@@ -542,26 +520,46 @@ class Dataset[T] private[sql](
   def first(): T = rdd.first()
 
   /**
-   * Collects the elements to an Array.
+   * Returns an array that contains all the elements in this [[Dataset]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
   def collect(): Array[T] = rdd.collect()
 
   /**
-   * (Java-specific)
-   * Collects the elements to a Java list.
+   * Returns an array that contains all the elements in this [[Dataset]].
    *
-   * Due to the incompatibility problem between Scala and Java, the return type of [[collect()]] at
-   * Java side is `java.lang.Object`, which is not easy to use.  Java user can use this method
-   * instead and keep the generic type for result.
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   * @since 1.6.0
+   */
+  def collectAsList(): java.util.List[T] = rdd.collect().toSeq.asJava
+
+  /**
+   * Returns the first `num` elements of this [[Dataset]] as an array.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
    *
    * @since 1.6.0
    */
-  def collectAsList(): java.util.List[T] =
-    rdd.collect().toSeq.asJava
-
-  /** Returns the first `num` elements of this [[Dataset]] as an Array. */
   def take(num: Int): Array[T] = rdd.take(num)
+
+  /**
+   * Returns the first `num` elements of this [[Dataset]] as an array.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @since 1.6.0
+   */
+  def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
 
   /* ******************** *
    *  Internal Functions  *
