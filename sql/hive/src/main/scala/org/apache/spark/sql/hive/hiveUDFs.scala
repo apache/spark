@@ -642,6 +642,6 @@ private[hive] case class HiveUDAFFunction(
 
   override def supportsPartial: Boolean = false
 
-  override val dataType: DataType = inspectorToDataType(returnInspector)
+  override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 }
 

@@ -33,24 +33,24 @@ case class Min(child: Expression) extends DeclarativeAggregate {
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val min = AttributeReference("min", child.dataType)()
+  private lazy val min = AttributeReference("min", child.dataType)()
 
-  override val aggBufferAttributes: Seq[AttributeReference] = min :: Nil
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = min :: Nil
 
-  override val initialValues: Seq[Expression] = Seq(
+  override lazy val initialValues: Seq[Expression] = Seq(
     /* min = */ Literal.create(null, child.dataType)
   )
 
-  override val updateExpressions: Seq[Expression] = Seq(
+  override lazy val updateExpressions: Seq[Expression] = Seq(
     /* min = */ If(IsNull(child), min, If(IsNull(min), child, Least(Seq(min, child))))
   )
 
-  override val mergeExpressions: Seq[Expression] = {
+  override lazy val mergeExpressions: Seq[Expression] = {
     val least = Least(Seq(min.left, min.right))
     Seq(
       /* min = */ If(IsNull(min.right), min.left, If(IsNull(min.left), min.right, least))
     )
   }
 
-  override val evaluateExpression: AttributeReference = min
+  override lazy val evaluateExpression: AttributeReference = min
 }

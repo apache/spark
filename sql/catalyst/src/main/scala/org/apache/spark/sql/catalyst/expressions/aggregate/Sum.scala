@@ -38,7 +38,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, DoubleType, DecimalType, NullType))
 
-  private val resultType = child.dataType match {
+  private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
     // TODO: Remove this line once we remove the NullType from inputTypes.
@@ -46,24 +46,24 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
     case _ => child.dataType
   }
 
-  private val sumDataType = resultType
+  private lazy val sumDataType = resultType
 
-  private val sum = AttributeReference("sum", sumDataType)()
+  private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private val zero = Cast(Literal(0), sumDataType)
+  private lazy val zero = Cast(Literal(0), sumDataType)
 
-  override val aggBufferAttributes = sum :: Nil
+  override lazy val aggBufferAttributes = sum :: Nil
 
-  override val initialValues: Seq[Expression] = Seq(
+  override lazy val initialValues: Seq[Expression] = Seq(
     /* sum = */ Literal.create(null, sumDataType)
   )
 
-  override val updateExpressions: Seq[Expression] = Seq(
+  override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
     Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
   )
 
-  override val mergeExpressions: Seq[Expression] = {
+  override lazy val mergeExpressions: Seq[Expression] = {
     val add = Add(Coalesce(Seq(sum.left, zero)), Cast(sum.right, sumDataType))
     Seq(
       /* sum = */
@@ -71,5 +71,5 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
     )
   }
 
-  override val evaluateExpression: Expression = Cast(sum, resultType)
+  override lazy val evaluateExpression: Expression = Cast(sum, resultType)
 }

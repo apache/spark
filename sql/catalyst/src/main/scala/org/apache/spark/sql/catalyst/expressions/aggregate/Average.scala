@@ -40,28 +40,28 @@ case class Average(child: Expression) extends DeclarativeAggregate {
   // we remove the old aggregate functions. Then, we will not need NullType at here.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
-  private val resultType = child.dataType match {
+  private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
     case _ => DoubleType
   }
 
-  private val sumDataType = child.dataType match {
+  private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
     case _ => DoubleType
   }
 
-  private val sum = AttributeReference("sum", sumDataType)()
-  private val count = AttributeReference("count", LongType)()
+  private lazy val sum = AttributeReference("sum", sumDataType)()
+  private lazy val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = sum :: count :: Nil
+  override lazy val aggBufferAttributes = sum :: count :: Nil
 
-  override val initialValues = Seq(
+  override lazy val initialValues = Seq(
     /* sum = */ Cast(Literal(0), sumDataType),
     /* count = */ Literal(0L)
   )
 
-  override val updateExpressions = Seq(
+  override lazy val updateExpressions = Seq(
     /* sum = */
     Add(
       sum,
@@ -69,13 +69,13 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     /* count = */ If(IsNull(child), count, count + 1L)
   )
 
-  override val mergeExpressions = Seq(
+  override lazy val mergeExpressions = Seq(
     /* sum = */ sum.left + sum.right,
     /* count = */ count.left + count.right
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
-  override val evaluateExpression = child.dataType match {
+  override lazy val evaluateExpression = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)

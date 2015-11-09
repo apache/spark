@@ -56,21 +56,21 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
   // we remove the old aggregate functions. Then, we will not need NullType at here.
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
 
-  private val resultType = DoubleType
+  private lazy val resultType = DoubleType
 
-  private val count = AttributeReference("count", resultType)()
-  private val avg = AttributeReference("avg", resultType)()
-  private val mk = AttributeReference("mk", resultType)()
+  private lazy val count = AttributeReference("count", resultType)()
+  private lazy val avg = AttributeReference("avg", resultType)()
+  private lazy val mk = AttributeReference("mk", resultType)()
 
-  override val aggBufferAttributes = count :: avg :: mk :: Nil
+  override lazy val aggBufferAttributes = count :: avg :: mk :: Nil
 
-  override val initialValues: Seq[Expression] = Seq(
+  override lazy val initialValues: Seq[Expression] = Seq(
     /* count = */ Cast(Literal(0), resultType),
     /* avg = */ Cast(Literal(0), resultType),
     /* mk = */ Cast(Literal(0), resultType)
   )
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     val value = Cast(child, resultType)
     val newCount = count + Cast(Literal(1), resultType)
 
@@ -89,7 +89,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     )
   }
 
-  override val mergeExpressions: Seq[Expression] = {
+  override lazy val mergeExpressions: Seq[Expression] = {
 
     // count merge
     val newCount = count.left + count.right
@@ -114,7 +114,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     )
   }
 
-  override val evaluateExpression: Expression = {
+  override lazy val evaluateExpression: Expression = {
     // when count == 0, return null
     // when count == 1, return 0
     // when count >1
