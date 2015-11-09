@@ -30,9 +30,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object LBFGSExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
-    val conf = new SparkConf().setAppName("SimpleFPGrowth")
+    val conf = new SparkConf().setAppName("LBFGSExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -86,6 +86,5 @@ object LBFGSExample {
     println("Area under ROC = " + auROC)
     // $example off$
   }
-
 }
 // scalastyle:on println
