@@ -264,7 +264,7 @@ def upgradedb():
     config.set_main_option('script_location', directory)
     config.set_main_option('sqlalchemy.url',
                            configuration.get('core', 'SQL_ALCHEMY_CONN'))
-    command.upgrade(config, 'head')
+    command.upgrade(config, 'heads')
 
 
 def resetdb():
