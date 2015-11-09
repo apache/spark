@@ -31,8 +31,8 @@ import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
  *   case class Data(i: Int)
  *
  *   val customSummer =  new Aggregator[Data, Int, Int] {
- *     def prepare(d: Data) = d.i
- *     def reduce(l: Int, r: Int) = l + r
+ *     def zero = 0
+ *     def reduce(b: Int, a: Data) = b + a.i
  *     def present(r: Int) = r
  *   }.toColumn()
  *
@@ -53,7 +53,7 @@ abstract class Aggregator[-A, B, C] {
 
   /**
    * Combine two values to produce a new value.  For performance, the function may modify `b` and
-   * return it instead of passing in a new value for b.
+   * return it instead of constructing new object for b.
    */
   def reduce(b: B, a: A): B
 
