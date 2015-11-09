@@ -17,184 +17,166 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{Vector => BV, norm => breezeNorm}
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("run") {
-    val k = 123
-    val algo = new BisectingKMeans().setK(k).setSeed(1)
-    val localSeed: Seq[Vector] = (0 to 999).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
-    val data = sc.parallelize(localSeed, 2)
-    val model = algo.run(data)
-    assert(model.getClusters.length == 123)
-    assert(model.node.getHeight ~== 702.8641 absTol 10E-4)
-
-    // check the relations between a parent cluster and its children
-    assert(model.node.getParent === None)
-    assert(model.node.getChildren.head.getParent.get === model.node)
-    assert(model.node.getChildren.apply(1).getParent.get === model.node)
-    assert(model.getClusters.forall(_.getParent.isDefined))
-
-    val predicted = model.predict(data)
-    assert(predicted.distinct.count() === k)
+  test("default values") {
+    val bkm0 = new BisectingKMeans()
+    assert(bkm0.getK === 4)
+    assert(bkm0.getMaxIterations === 20)
+    assert(bkm0.getMinDivisibleClusterSize === 1.0)
+    val bkm1 = new BisectingKMeans()
+    assert(bkm0.getSeed === bkm1.getSeed, "The default seed should be constant.")
   }
 
-  test("run with too many cluster size than the records") {
-    val algo = new BisectingKMeans().setK(123).setSeed(1)
-    val localSeed: Seq[Vector] = (0 to 99).map(i => Vectors.dense(i.toDouble, i.toDouble)).toSeq
-    val data = sc.parallelize(localSeed)
-    val model = algo.run(data)
-    assert(model.getClusters.length == 100)
-    assert(model.node.getHeight ~== 72.12489 absTol 10E-4)
-  }
+  test("setter/getter") {
+    val bkm = new BisectingKMeans()
 
-  test("setNumClusters") {
-    val algo = new BisectingKMeans()
-    assert(algo.getK == 2)
-    algo.setK(1000)
-    assert(algo.getK == 1000)
-  }
+    val k = 10
+    assert(bkm.getK !== k)
+    assert(bkm.setK(k).getK === k)
+    val maxIter = 100
+    assert(bkm.getMaxIterations !== maxIter)
+    assert(bkm.setMaxIterations(maxIter).getMaxIterations === maxIter)
+    val minSize = 2.0
+    assert(bkm.getMinDivisibleClusterSize !== minSize)
+    assert(bkm.setMinDivisibleClusterSize(minSize).getMinDivisibleClusterSize === minSize)
+    val seed = 10L
+    assert(bkm.getSeed !== seed)
+    assert(bkm.setSeed(seed).getSeed === seed)
 
-  test("setSubIterations") {
-    val algo = new BisectingKMeans()
-    assert(algo.getMaxIterations == 20)
-    algo.setMaxIterations(15)
-    assert(algo.getMaxIterations == 15)
-  }
-
-  test("setSeed") {
-    val algo = new BisectingKMeans()
-    assert(algo.getSeed == 1)
-    algo.setSeed(987)
-    assert(algo.getSeed == 987)
-  }
-
-  test("summarize center stats") {
-    val algo = new BisectingKMeans
-    val local = Seq(
-      (4L, Vectors.dense(1.5, 1.5).toBreeze),
-      (4L, Vectors.dense(2.5, 2.5).toBreeze),
-      (5L, Vectors.dense(11.5, 11.5).toBreeze),
-      (5L, Vectors.dense(12.5, 12.5).toBreeze),
-      (6L, Vectors.dense(21.5, 21.5).toBreeze),
-      (6L, Vectors.dense(22.5, 22.5).toBreeze),
-      (7L, Vectors.dense(31.5, 31.5).toBreeze),
-      (7L, Vectors.dense(32.5, 32.5).toBreeze)
-    )
-    val data = sc.parallelize(local)
-
-    val clusterStats = BisectingKMeans.summarizeClusters(data)
-    assert(clusterStats.size === 4)
-    assert(clusterStats(4).mean === Vectors.dense(2.0, 2.0).toBreeze)
-    assert(clusterStats(4).sumOfSquares ~== 1.0 absTol 10e-4)
-    assert(clusterStats(4).rows === 2)
-    assert(clusterStats(5).mean === Vectors.dense(12.0, 12.0).toBreeze)
-    assert(clusterStats(5).sumOfSquares ~== 1.0 absTol 10e-4)
-    assert(clusterStats(5).rows === 2)
-    assert(clusterStats(6).mean === Vectors.dense(22.0, 22.0).toBreeze)
-    assert(clusterStats(6).sumOfSquares ~== 1.0 absTol 10e-4)
-    assert(clusterStats(6).rows === 2)
-    assert(clusterStats(7).mean === Vectors.dense(32.0, 32.0).toBreeze)
-    assert(clusterStats(7).sumOfSquares ~== 1.0 absTol 10e-4)
-    assert(clusterStats(7).rows === 2)
-  }
-
-  test("initialize centers at next step") {
-    val local = Seq(
-      (2L, BV[Double](0.9, 0.9)), (2L, BV[Double](1.1, 1.1)),
-      (3L, BV[Double](1.9, 1.9)), (2L, BV[Double](2.1, 2.1))
-    )
-    val data = sc.parallelize(local)
-    val stats = Map[Long, BisectingClusterStat](
-      2L -> new BisectingClusterStat(2, BV[Double](1.0, 1.0) * 2.0, 0.0),
-      3L -> new BisectingClusterStat(2, BV[Double](2.0, 2.0) * 2.0, 0.0)
-    )
-    val initNextCenters = BisectingKMeans.initNextCenters(stats, 1)
-    assert(initNextCenters.size === 4)
-    assert(initNextCenters.keySet === Set(4, 5, 6, 7))
-  }
-
-  test("should assign each data to new clusters") {
-    val seed = Seq(
-      (2L, Vectors.dense(0.0, 0.0)), (2L, Vectors.dense(1.0, 1.0)),
-      (2L, Vectors.dense(2.0, 2.0)), (2L, Vectors.dense(3.0, 3.0)),
-      (2L, Vectors.dense(4.0, 4.0)), (2L, Vectors.dense(5.0, 5.0)),
-      (3L, Vectors.dense(6.0, 6.0)), (3L, Vectors.dense(7.0, 7.0)),
-      (3L, Vectors.dense(8.0, 8.0)), (3L, Vectors.dense(9.0, 9.0)),
-      (3L, Vectors.dense(10.0, 10.0)), (3L, Vectors.dense(11.0, 11.0))
-    ).map { case (idx, vector) => (idx, vector.toBreeze) }
-    val variance = breezeNorm(Vectors.dense(1.0, 1.0).toBreeze, 2.0)
-    val newClusterStats = Map(
-      4L -> new BisectingClusterStat(3L, BV[Double](1.0, 1.0) :* 3.0, variance),
-      5L -> new BisectingClusterStat(3L, BV[Double](4.0, 4.0) :* 3.0, variance),
-      6L -> new BisectingClusterStat(3L, BV[Double](7.0, 7.0) :* 3.0, variance),
-      7L -> new BisectingClusterStat(3L, BV[Double](10.0, 10.0) :* 3.0, variance)
-    )
-    val data = sc.parallelize(seed, 1)
-    val leafClusterStats = BisectingKMeans.summarizeClusters(data)
-    val dividableLeafClusters = leafClusterStats.filter(_._2.isDividable)
-    val result = BisectingKMeans.divideClusters(data, dividableLeafClusters, 20, 1).collect()
-
-    val expected = Seq(
-      (4, Vectors.dense(0.0, 0.0)), (4, Vectors.dense(1.0, 1.0)), (4, Vectors.dense(2.0, 2.0)),
-      (5, Vectors.dense(3.0, 3.0)), (5, Vectors.dense(4.0, 4.0)), (5, Vectors.dense(5.0, 5.0)),
-      (6, Vectors.dense(6.0, 6.0)), (6, Vectors.dense(7.0, 7.0)), (6, Vectors.dense(8.0, 8.0)),
-      (7, Vectors.dense(9.0, 9.0)), (7, Vectors.dense(10.0, 10.0)), (7, Vectors.dense(11.0, 11.0))
-    ).map { case (idx, vector) => (idx, vector.toBreeze) }
-    assert(result === expected)
-  }
-
-  test("findClosestCenter") {
-    val metric = (bv1: BV[Double], bv2: BV[Double]) => breezeNorm(bv1 - bv2, 2.0)
-    val centers = Seq(
-      Vectors.sparse(5, Array(0, 1, 2), Array(0.0, 1.0, 2.0)).toBreeze,
-      Vectors.sparse(5, Array(1, 2, 3), Array(1.0, 2.0, 3.0)).toBreeze,
-      Vectors.sparse(5, Array(2, 3, 4), Array(2.0, 3.0, 4.0)).toBreeze
-    )
-
-    for (i <- 0 to (centers.size - 1)) {
-      val point = centers(i)
-      val closestIndex = BisectingKMeans.findClosestCenter(metric)(centers)(point)
-      assert(closestIndex === i)
+    intercept[IllegalArgumentException] {
+      bkm.setK(0)
+    }
+    intercept[IllegalArgumentException] {
+      bkm.setMaxIterations(0)
+    }
+    intercept[IllegalArgumentException] {
+      bkm.setMinDivisibleClusterSize(0.0)
     }
   }
 
-  test("should be equal to math.pow") {
-    (1 to 1000).foreach { k =>
-      // the minimum number of nodes of a binary tree by given parameter
-      val multiplier = math.ceil(math.log(k) / math.log(2.0)) + 1
-      val expected = math.pow(2, multiplier).toInt
-      val result = BisectingKMeans.getMinimumNumNodesInTree(k)
-      assert(result === expected)
+  test("1D data") {
+    val points = Vectors.sparse(1, Array.empty, Array.empty) +:
+      (1 until 8).map(i => Vectors.dense(i))
+    val data = sc.parallelize(points, 2)
+    val bkm = new BisectingKMeans()
+      .setK(4)
+      .setMaxIterations(1)
+      .setSeed(1L)
+    // The clusters should be
+    // (0, 1, 2, 3, 4, 5, 6, 7)
+    //   - (0, 1, 2, 3)
+    //     - (0, 1)
+    //     - (2, 3)
+    //   - (4, 5, 6, 7)
+    //     - (4, 5)
+    //     - (6, 7)
+    val model = bkm.run(data)
+    assert(model.k === 4)
+    // The total cost should be 8 * 0.5 * 0.5 = 2.0.
+    assert(model.computeCost(data) ~== 2.0 relTol 1e-12)
+    val predictions = data.map(v => (v(0), model.predict(v))).collectAsMap()
+    Range(0, 8, 2).foreach { i =>
+      assert(predictions(i) === predictions(i + 1),
+        s"$i and ${i + 1} should belong to the same cluster.")
+    }
+    val root = model.root
+    assert(root.center(0) ~== 3.5 relTol 1e-12)
+    assert(root.height ~== 2.0 relTol 1e-12)
+    assert(root.children.length === 2)
+    assert(root.children(0).height ~== 1.0 relTol 1e-12)
+    assert(root.children(1).height ~== 1.0 relTol 1e-12)
+  }
+
+  test("points are the same") {
+    val data = sc.parallelize(Seq.fill(8)(Vectors.dense(1.0, 1.0)), 2)
+    val bkm = new BisectingKMeans()
+      .setK(2)
+      .setMaxIterations(1)
+      .setSeed(1L)
+    val model = bkm.run(data)
+    assert(model.k === 1)
+  }
+
+  test("more desired clusters than points") {
+    val data = sc.parallelize(Seq.tabulate(4)(i => Vectors.dense(i)), 2)
+    val bkm = new BisectingKMeans()
+      .setK(8)
+      .setMaxIterations(2)
+      .setSeed(1L)
+    val model = bkm.run(data)
+    assert(model.k === 4)
+  }
+
+  test("min divisible cluster") {
+    val data = sc.parallelize(
+      Seq.tabulate(16)(i => Vectors.dense(i)) ++ Seq.tabulate(4)(i => Vectors.dense(-100.0 - i)),
+      2)
+    val bkm = new BisectingKMeans()
+      .setK(4)
+      .setMinDivisibleClusterSize(10)
+      .setMaxIterations(1)
+      .setSeed(1L)
+    val model = bkm.run(data)
+    assert(model.k === 3)
+    assert(model.predict(Vectors.dense(-100)) === model.predict(Vectors.dense(-97)))
+    assert(model.predict(Vectors.dense(7)) !== model.predict(Vectors.dense(8)))
+
+    bkm.setMinDivisibleClusterSize(0.5)
+    val sameModel = bkm.run(data)
+    assert(sameModel.k === 3)
+  }
+
+  test("larger clusters get selected first") {
+    val data = sc.parallelize(
+      Seq.tabulate(16)(i => Vectors.dense(i)) ++ Seq.tabulate(4)(i => Vectors.dense(-100.0 - i)),
+      2)
+    val bkm = new BisectingKMeans()
+      .setK(3)
+      .setMaxIterations(1)
+      .setSeed(1L)
+    val model = bkm.run(data)
+    assert(model.k === 3)
+    assert(model.predict(Vectors.dense(-100)) === model.predict(Vectors.dense(-97)))
+    assert(model.predict(Vectors.dense(7)) !== model.predict(Vectors.dense(8)))
+  }
+
+  test("2D data") {
+    val points = Seq(
+      (11, 10), (9, 10), (10, 9), (10, 11),
+      (11, -10), (9, -10), (10, -9), (10, -11),
+      (0, 1), (0, -1)
+    ).map { case (x, y) =>
+      if (x == 0) {
+        Vectors.sparse(2, Array(1), Array(y))
+      } else {
+        Vectors.dense(x, y)
+      }
+    }
+    val data = sc.parallelize(points, 2)
+    val bkm = new BisectingKMeans()
+      .setK(3)
+      .setMaxIterations(4)
+      .setSeed(1L)
+    val model = bkm.run(data)
+    assert(model.k === 3)
+    assert(model.root.center ~== Vectors.dense(8, 0) relTol 1e-12)
+    model.root.leafNodes.foreach { node =>
+      if (node.center(0) < 5) {
+        assert(node.size === 2)
+        assert(node.center ~== Vectors.dense(0, 0) relTol 1e-12)
+      } else if (node.center(1) > 0) {
+        assert(node.size === 4)
+        assert(node.center ~== Vectors.dense(10, 10) relTol 1e-12)
+      } else {
+        assert(node.size === 4)
+        assert(node.center ~== Vectors.dense(10, -10) relTol 1e-12)
+      }
     }
   }
-
-  test("should divide clusters correctly") {
-    val local = Seq(
-      (2L, BV[Double](0.9, 0.9)), (2L, BV[Double](1.1, 1.1)),
-      (2L, BV[Double](9.9, 9.9)), (2L, BV[Double](10.1, 10.1)),
-      (3L, BV[Double](99.9, 99.9)), (3L, BV[Double](100.1, 100.1)),
-      (3L, BV[Double](109.9, 109.9)), (3L, BV[Double](110.1, 110.1))
-    )
-    val data = sc.parallelize(local, 1)
-    val stats = BisectingKMeans.summarizeClusters(data)
-    val dividedData = BisectingKMeans.divideClusters(data, stats, 20, 1).collect()
-
-    assert(dividedData(0) == (4L, BV[Double](0.9, 0.9)))
-    assert(dividedData(1) == (4L, BV[Double](1.1, 1.1)))
-    assert(dividedData(2) == (5L, BV[Double](9.9, 9.9)))
-    assert(dividedData(3) == (5L, BV[Double](10.1, 10.1)))
-    assert(dividedData(4) == (6L, BV[Double](99.9, 99.9)))
-    assert(dividedData(5) == (6L, BV[Double](100.1, 100.1)))
-    assert(dividedData(6) == (7L, BV[Double](109.9, 109.9)))
-    assert(dividedData(7) == (7L, BV[Double](110.1, 110.1)))
-  }
-
 }

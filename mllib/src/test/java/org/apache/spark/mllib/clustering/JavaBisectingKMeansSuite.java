@@ -18,13 +18,12 @@
 package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
-import java.util.List;
 
+import com.google.common.collect.Lists;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
-import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -46,63 +45,29 @@ public class JavaBisectingKMeansSuite implements Serializable {
   }
 
   @Test
-  public void runWithSmallData() {
-    List<Vector> points = Lists.newArrayList(
-        Vectors.dense(1.0, 2.0, 6.0),
-        Vectors.dense(1.0, 3.0, 0.0),
-        Vectors.dense(1.0, 4.0, 6.0)
-    );
+  public void twoDimensionalData() {
+    JavaRDD<Vector> points = sc.parallelize(Lists.newArrayList(
+      Vectors.dense(4, -1),
+      Vectors.dense(4, 1),
+      Vectors.sparse(2, new int[] {0}, new double[] {1.0})
+    ), 2);
 
-    Vector expectedCenter = Vectors.dense(1.0, 3.0, 4.0);
-
-    JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setK(1);
-    BisectingKMeansModel model = algo.run(data.rdd());
-    assertEquals(1, model.getCenters().length);
-    assertEquals(expectedCenter, model.getCenters()[0]);
-  }
-
-  @Test
-  public void runWithDenseVectors() {
-    int numClusters = 5;
-    List<Vector> points = Lists.newArrayList();
-    for (int i = 0; i < 99; i++) {
-      Double elm = (double)(i % numClusters);
-      Vector point = Vectors.dense(elm, elm);
-      points.add(point);
+    BisectingKMeans bkm = new BisectingKMeans()
+      .setK(4)
+      .setMaxIterations(2)
+      .setSeed(1L);
+    BisectingKMeansModel model = bkm.run(points);
+    Assert.assertEquals(3, model.k());
+    Assert.assertArrayEquals(new double[] {3.0, 0.0}, model.root().center().toArray(), 1e-12);
+    for (ClusteringTreeNode child: model.root().children()) {
+      double[] center = child.center().toArray();
+      if (center[0] > 2) {
+        Assert.assertEquals(2, child.size());
+        Assert.assertArrayEquals(new double[] {4.0, 0.0}, center, 1e-12);
+      } else {
+        Assert.assertEquals(1, child.size());
+        Assert.assertArrayEquals(new double[] {1.0, 0.0}, center, 1e-12);
+      }
     }
-    JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setK(numClusters);
-    BisectingKMeansModel model = algo.run(data.rdd());
-    Vector[] centers = model.getCenters();
-    assertEquals(numClusters, centers.length);
-    assertEquals(Vectors.dense(0.0, 0.0), centers[0]);
-    assertEquals(Vectors.dense(1.0, 1.0), centers[1]);
-    assertEquals(Vectors.dense(2.0, 2.0), centers[2]);
-    assertEquals(Vectors.dense(3.0, 3.0), centers[3]);
-    assertEquals(Vectors.dense(4.0, 4.0), centers[4]);
-  }
-
-  @Test
-  public void runWithSparseVectors() {
-    int numClusters = 5;
-    List<Vector> points = Lists.newArrayList();
-    for (int i = 0; i < 99; i++) {
-      int elm = i % numClusters;
-      int indexes[] = {elm};
-      double values[] = {elm};
-      Vector point = Vectors.sparse(numClusters, indexes, values);
-      points.add(point);
-    }
-    JavaRDD<Vector> data = sc.parallelize(points, 2);
-    BisectingKMeans algo = new BisectingKMeans().setK(numClusters);
-    BisectingKMeansModel model = algo.run(data.rdd());
-    Vector[] centers = model.getCenters();
-    assertEquals(numClusters, centers.length);
-    assertEquals(points.get(0), centers[0]);
-    assertEquals(points.get(1), centers[1]);
-    assertEquals(points.get(2), centers[2]);
-    assertEquals(points.get(3), centers[3]);
-    assertEquals(points.get(4), centers[4]);
   }
 }
