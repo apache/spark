@@ -20,8 +20,10 @@ package org.apache.spark.api.java.function;
 import java.io.Serializable;
 
 /**
- * A zero-argument function that returns an R.
+ * Base interface for a function used in Dataset's filter function.
+ *
+ * If the function returns true, the element is discarded in the returned Dataset.
  */
-public interface Function0<R> extends Serializable {
-  R call() throws Exception;
+public interface FilterFunction<T> extends Serializable {
+  boolean call(T value) throws Exception;
 }

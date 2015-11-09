@@ -18,10 +18,11 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
- * A zero-argument function that returns an R.
+ * Base interface for function used in Dataset's mapPartitions.
  */
-public interface Function0<R> extends Serializable {
-  R call() throws Exception;
+public interface MapPartitionsFunction<T, U> extends Serializable {
+  Iterable<U> call(Iterator<T> input) throws Exception;
 }

@@ -20,8 +20,10 @@ package org.apache.spark.api.java.function;
 import java.io.Serializable;
 
 /**
- * A zero-argument function that returns an R.
+ * Base interface for a function used in Dataset's foreach function.
+ *
+ * Spark will invoke the call function on each element in the input Dataset.
  */
-public interface Function0<R> extends Serializable {
-  R call() throws Exception;
+public interface ForeachFunction<T> extends Serializable {
+  void call(T t) throws Exception;
 }

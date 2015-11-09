@@ -1478,17 +1478,53 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
+   *
+   * Running take requires moving data into the application's driver process, and doing so on a
+   * very large dataset can crash the driver process with OutOfMemoryError.
+   *
    * @group action
    * @since 1.3.0
    */
   def take(n: Int): Array[Row] = head(n)
 
   /**
+   * Returns the first `n` rows in the [[DataFrame]] as a list.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.6.0
+   */
+  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n) : _*)
+
+  /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   *
    * @group action
    * @since 1.3.0
    */
   def collect(): Array[Row] = collect(needCallback = true)
+
+  /**
+   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.3.0
+   */
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+    withNewExecutionId {
+      java.util.Arrays.asList(rdd.collect() : _*)
+    }
+  }
 
   private def collect(needCallback: Boolean): Array[Row] = {
     def execute(): Array[Row] = withNewExecutionId {
@@ -1499,17 +1535,6 @@ class DataFrame private[sql](
       withCallback("collect", this)(_ => execute())
     } else {
       execute()
-    }
-  }
-
-  /**
-   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
-   * @group action
-   * @since 1.3.0
-   */
-  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
-    withNewExecutionId {
-      java.util.Arrays.asList(rdd.collect() : _*)
     }
   }
 
