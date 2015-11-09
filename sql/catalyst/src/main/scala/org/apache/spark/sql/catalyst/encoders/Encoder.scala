@@ -131,7 +131,7 @@ object Encoder {
   }
 
 
-  def typeTagOfTuple2[T1 : TypeTag, T2 : TypeTag]: TypeTag[(T1, T2)] = typeTag[(T1, T2)]
+  private def typeTagOfTuple2[T1 : TypeTag, T2 : TypeTag]: TypeTag[(T1, T2)] = typeTag[(T1, T2)]
 
   private def getTypeTag[T](c: Class[T]): TypeTag[T] = {
     import scala.reflect.api
@@ -146,11 +146,5 @@ object Encoder {
         else throw new IllegalArgumentException(
           s"Type tag defined in $mirror cannot be migrated to other mirrors.")
     })
-  }
-
-  def forTuple2[T1, T2](c1: Class[T1], c2: Class[T2]): Encoder[(T1, T2)] = {
-    implicit val typeTag1 = getTypeTag(c1)
-    implicit val typeTag2 = getTypeTag(c2)
-    ExpressionEncoder[(T1, T2)]()
   }
 }

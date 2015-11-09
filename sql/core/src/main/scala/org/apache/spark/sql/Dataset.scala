@@ -367,7 +367,7 @@ class Dataset[T] private[sql](
    */
   // Copied from Dataframe to make sure we don't have invalid overloads.
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = toDF().select(cols: _*)
+  protected def select(cols: Column*): DataFrame = toDF().select(cols: _*)
 
   /**
    * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
@@ -378,7 +378,7 @@ class Dataset[T] private[sql](
    * }}}
    * @since 1.6.0
    */
-  def select[U1: Encoder](c1: TypedColumn[U1]): Dataset[U1] = {
+  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
     new Dataset[U1](sqlContext, Project(Alias(c1.expr, "_1")() :: Nil, logicalPlan))
   }
 
@@ -387,7 +387,7 @@ class Dataset[T] private[sql](
    * code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
-  protected def selectUntyped(columns: TypedColumn[_]*): Dataset[_] = {
+  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
     val unresolvedPlan = Project(aliases, logicalPlan)
     val execution = new QueryExecution(sqlContext, unresolvedPlan)
@@ -405,7 +405,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] =
+  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
   /**
@@ -413,9 +413,9 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
     selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
 
   /**
@@ -423,10 +423,10 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3],
-      c4: TypedColumn[U4]): Dataset[(U1, U2, U3, U4)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
     selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
 
   /**
@@ -434,11 +434,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4, U5](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3],
-      c4: TypedColumn[U4],
-      c5: TypedColumn[U5]): Dataset[(U1, U2, U3, U4, U5)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /* **************** *
