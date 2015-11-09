@@ -73,7 +73,7 @@ test_that("summary coefficients match with native glm", {
   training <- createDataFrame(sqlContext, iris)
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, solver = "normal"))
   coefs <- unlist(stats$Coefficients)
-  devianceResiduals <- as.vector(stats$DevianceResiduals)
+  devianceResiduals <- unlist(stats$DevianceResiduals)
 
   rCoefs <- as.vector(coef(glm(Sepal.Width ~ Sepal.Length + Species, data = iris)))
   rStdError <- c(0.23536, 0.04630, 0.07207, 0.09331)
