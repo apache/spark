@@ -410,7 +410,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(null, null, 5, "E") ::
             Row(null, null, 6, "F") :: Nil)
 
-        // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
+        // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+        // operator.
         checkAnswer(
           sql(
             """
@@ -422,37 +423,37 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(
           null, 10))
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT r.N, count(*)
-            |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-            |GROUP BY r.N
-          """.stripMargin),
-        Row
-          (1, 1) ::
-          Row(2, 1) ::
-          Row(3, 1) ::
-          Row(4, 1) ::
-          Row(5, 1) ::
-          Row(6, 1) ::
-          Row(null, 4) :: Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT r.N, count(*)
+              |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+              |GROUP BY r.N
+            """.stripMargin),
+          Row
+            (1, 1) ::
+            Row(2, 1) ::
+            Row(3, 1) ::
+            Row(4, 1) ::
+            Row(5, 1) ::
+            Row(6, 1) ::
+            Row(null, 4) :: Nil)
 
-      checkAnswer(
-        sql(
-          """
-            |SELECT l.N, count(*)
-            |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-            |GROUP BY l.N
-          """.stripMargin),
-        Row(1
-          , 1) ::
-          Row(2, 1) ::
-          Row(3, 1) ::
-          Row(4, 1) ::
-          Row(5, 1) ::
-          Row(6, 1) ::
-          Row(null, 4) :: Nil)
+        checkAnswer(
+          sql(
+            """
+              |SELECT l.N, count(*)
+              |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+              |GROUP BY l.N
+            """.stripMargin),
+          Row(1
+            , 1) ::
+            Row(2, 1) ::
+            Row(3, 1) ::
+            Row(4, 1) ::
+            Row(5, 1) ::
+            Row(6, 1) ::
+            Row(null, 4) :: Nil)
 
         checkAnswer(
           sql(
@@ -463,7 +464,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           """.
               stripMargin),
           Row(null, 10))
-        }
+      }
     }
   }
 
