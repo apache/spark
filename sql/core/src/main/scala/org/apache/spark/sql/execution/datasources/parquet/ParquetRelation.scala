@@ -398,7 +398,7 @@ private[sql] class ParquetRelation(
         val leaves = currentLeafStatuses.filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }.toArray
+        }.toArray.sortWith(_.getPath.toString < _.getPath.toString)
 
         dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
         metadataStatuses =
@@ -465,17 +465,18 @@ private[sql] class ParquetRelation(
           // the ordering of the output columns. There are several things to mention here.
           //
           //  1. If mergeRespectSummaries config is false, then it merges schemas by reducing from
-          //     the first part-file so that the columns of the first file show first.
+          //     the first part-file so that the columns of the lexicographically first file show
+          //     first.
           //
           //  2. If mergeRespectSummaries config is true, then there should be, at least,
-          //     "_metadata"s for all given files. So, we can ensure the columns of the first file
-          //     show first.
+          //     "_metadata"s for all given files, so that we can ensure the columns of
+          //     the lexicographically first file show first.
           //
           //  3. If shouldMergeSchemas is false, but when multiple files are given, there is
           //     no guarantee of the output order, since there might not be a summary file for the
-          //     first file, which ends up putting ahead the columns of the other files. However,
-          //     this should be okay since not enabling shouldMergeSchemas means (assumes) all the
-          //     files have the same schemas.
+          //     lexicographically first file, which ends up putting ahead the columns of
+          //     the other files. However, this should be okay since not enabling
+          //     shouldMergeSchemas means (assumes) all the files have the same schemas.
 
           val needMerged: Seq[FileStatus] =
             if (mergeRespectSummaries) {

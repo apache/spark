@@ -787,10 +787,10 @@ private[sql] object HadoopFsRelation extends Logging {
         status.getAccessTime)
     }.collect()
 
-    val fakeStatusesSeq = fakeStatuses.map { f =>
+    val hadoopFakeStatuses = fakeStatuses.map { f =>
       new FileStatus(
         f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
     }
-    mutable.LinkedHashSet(fakeStatusesSeq: _*)
+    mutable.LinkedHashSet(hadoopFakeStatuses: _*)
   }
 }
