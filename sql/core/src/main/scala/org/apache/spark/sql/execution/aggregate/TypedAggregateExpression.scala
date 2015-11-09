@@ -100,18 +100,15 @@ case class TypedAggregateExpression(
   override def initialize(buffer: MutableRow): Unit = {
     // TODO: We need to either force Aggregator to have a zero or we need to eliminate the need for
     // this in execution.
-    buffer.setInt(mutableAggBufferOffset, 0)
+    buffer.setInt(mutableAggBufferOffset, aggregator.zero.asInstanceOf[Int])
   }
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val inputA = boundA.fromRow(input)
-    val inputB = aggregator.prepare(inputA)
-
     val currentB = boundB.fromRow(buffer)
-    val merged = aggregator.reduce(currentB, inputB)
+    val merged = aggregator.reduce(currentB, inputA)
     val returned = boundB.toRow(merged)
-
-    buffer.setLong(mutableAggBufferOffset, returned.getLong(0))
+    buffer.setInt(mutableAggBufferOffset, returned.getInt(0))
   }
 
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {

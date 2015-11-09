@@ -23,9 +23,9 @@ import org.apache.spark.sql.expressions.Aggregator
 class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
   val numeric = implicitly[Numeric[N]]
 
-  override def prepare(input: I): N = if (input == null) numeric.zero else f(input)
+  override def zero = numeric.zero
 
-  override def reduce(l: N, r: N): N = numeric.plus(l, r)
+  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
 
   override def present(reduction: N): N = reduction
 }

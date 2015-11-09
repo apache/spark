@@ -47,15 +47,15 @@ import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
  * @tparam C The type of the final result.
  */
 abstract class Aggregator[-A, B, C] {
-  /**
-   * Transform the input before the reduction.
-   */
-  def prepare(input: A): B
+
+  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
+  def zero: B
 
   /**
-   * Combine two values to produce a new value.
+   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * return it instead of passing in a new value for b.
    */
-  def reduce(l: B, r: B): B
+  def reduce(b: B, a: A): B
 
   /**
    * Transform the output of the reduction.
