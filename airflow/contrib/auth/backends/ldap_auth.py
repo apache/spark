@@ -5,10 +5,8 @@ from wtforms import (
     Form, PasswordField, StringField)
 from wtforms.validators import InputRequired
 
-# pykerberos should be used as it verifies the KDC, the "kerberos" module does not do so
-# and make it possible to spoof the KDC
-import kerberos
-import airflow.security.utils as utils
+from ldap3 import Server, Connection, Tls, LEVEL
+import ssl
 
 from flask import url_for, redirect
 
@@ -16,34 +14,65 @@ from airflow import settings
 from airflow import models
 from airflow import configuration
 
-import logging
-
 DEFAULT_USERNAME = 'airflow'
 
 login_manager = flask_login.LoginManager()
 login_manager.login_view = 'airflow.login'  # Calls login() bellow
 login_manager.login_message = None
 
+
 class AuthenticationError(Exception):
     pass
 
 
-class User(models.BaseUser):
+def get_ldap_connection(dn=None, password=None):
+    tls_configuration = None
+    use_ssl = False
+    try:
+        cacert = configuration.get("ldap", "cacert")
+        tls_configuration = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=cacert)
+        use_ssl = True
+    except:
+        pass
+
+    server = Server(configuration.get("ldap", "uri"), use_ssl, tls_configuration)
+    conn = Connection(server, dn, password)
+
+    if not conn.bind():
+        raise AuthenticationError("Username or password incorrect")
+
+    return conn
+
+
+class LdapUser(models.User):
+    def __init__(self, user):
+        self.user = user
+
     @staticmethod
-    def authenticate(username, password):
-        service_principal = "%s/%s" % (configuration.get('kerberos', 'principal'), utils.get_fqdn())
-        realm = configuration.get("kerberos", "default_realm")
-        user_principal = utils.principal_from_username(username)
+    def try_login(username, password):
+        conn = get_ldap_connection(configuration.get("ldap", "bind_user"), configuration.get("ldap", "bind_password"))
 
-        try:
-            # this is pykerberos specific, verify = True is needed to prevent KDC spoofing
-            if not kerberos.checkPassword(user_principal, password, service_principal, realm, True):
-                raise AuthenticationError()
-        except kerberos.KrbError as e:
-            logging.error('Password validation for principal %s failed %s', user_principal, e)
-            raise AuthenticationError(e)
+        search_filter = "(&({0})({1}={2}))".format(
+            configuration.get("ldap", "user_filter"),
+            configuration.get("ldap", "user_name_attr"),
+            username
+        )
 
-        return
+        # todo: BASE or ONELEVEL?
+
+        res = conn.search(configuration.get("ldap", "basedn"), search_filter, search_scope=LEVEL)
+
+        # todo: use list or result?
+        if not res:
+            raise AuthenticationError("Invalid username or password")
+
+        entry = conn.response[0]
+
+        conn.unbind()
+        conn = get_ldap_connection(entry['dn'], password)
+
+        if not conn:
+            raise AuthenticationError("Invalid username or password")
 
     def is_active(self):
         '''Required by flask_login'''
@@ -65,9 +94,6 @@ class User(models.BaseUser):
         '''Access all the things'''
         return True
 
-models.User = User  # hack!
-del User
-
 
 @login_manager.user_loader
 def load_user(userid):
@@ -76,7 +102,7 @@ def load_user(userid):
     session.expunge_all()
     session.commit()
     session.close()
-    return user
+    return LdapUser(user)
 
 
 def login(self, request):
@@ -99,7 +125,7 @@ def login(self, request):
                            form=form)
 
     try:
-        models.User.authenticate(username, password)
+        LdapUser.try_login(username, password)
 
         session = settings.Session()
         user = session.query(models.User).filter(
@@ -112,16 +138,17 @@ def login(self, request):
 
         session.merge(user)
         session.commit()
-        flask_login.login_user(user)
+        flask_login.login_user(LdapUser(user))
         session.commit()
         session.close()
 
-        return redirect(request.args.get("next") or url_for("index"))
+        return redirect(request.args.get("next") or url_for("admin.index"))
     except AuthenticationError:
         flash("Incorrect login details")
         return self.render('airflow/login.html',
                            title="Airflow - Login",
                            form=form)
+
 
 class LoginForm(Form):
     username = StringField('Username', [InputRequired()])

@@ -1,5 +1,5 @@
 from airflow.hooks.base_hook import BaseHook
-from airflow.configuration import conf
+from airflow import configuration
 
 try:
     snakebite_imported = True
@@ -32,7 +32,7 @@ class HDFSHook(BaseHook):
         Returns a snakebite HDFSClient object.
         '''
         use_sasl = False
-        if conf.get('core', 'security') == 'kerberos':
+        if configuration.get('core', 'security') == 'kerberos':
             use_sasl = True
 
         connections = self.get_connections(self.hdfs_conn_id)

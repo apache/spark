@@ -1,6 +1,6 @@
 import logging
 
-from airflow.configuration import conf
+from airflow import configuration
 from airflow.executors.base_executor import BaseExecutor
 from airflow.executors.local_executor import LocalExecutor
 from airflow.executors.sequential_executor import SequentialExecutor
@@ -17,7 +17,7 @@ except:
 
 from airflow.utils import AirflowException
 
-_EXECUTOR = conf.get('core', 'EXECUTOR')
+_EXECUTOR = configuration.get('core', 'EXECUTOR')
 
 if _EXECUTOR == 'LocalExecutor':
     DEFAULT_EXECUTOR = LocalExecutor()

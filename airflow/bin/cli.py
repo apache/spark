@@ -11,12 +11,12 @@ import dateutil.parser
 
 import airflow
 from airflow import jobs, settings, utils
-from airflow.configuration import conf
+from airflow import configuration
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.models import DagBag, TaskInstance, DagPickle
 from airflow.utils import AirflowException
 
-DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
 
 # Common help text across subcommands
 mark_success_help = "Mark jobs as succeeded without running them"
@@ -24,7 +24,7 @@ subdir_help = "File location or directory from which to look for the dag"
 
 
 def process_subdir(subdir):
-    dags_folder = conf.get("core", "DAGS_FOLDER")
+    dags_folder = configuration.get("core", "DAGS_FOLDER")
     dags_folder = os.path.expanduser(dags_folder)
     if subdir:
         subdir = os.path.expanduser(subdir)
@@ -84,7 +84,7 @@ def backfill(args):
             mark_success=args.mark_success,
             include_adhoc=args.include_adhoc,
             local=args.local,
-            donot_pickle=(args.donot_pickle or conf.getboolean('core', 'donot_pickle')),
+            donot_pickle=(args.donot_pickle or configuration.getboolean('core', 'donot_pickle')),
             ignore_dependencies=args.ignore_dependencies,
             pool=args.pool)
 
@@ -93,7 +93,7 @@ def run(args):
 
     utils.pessimistic_connection_handling()
     # Setting up logging
-    log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+    log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
     directory = log + "/{args.dag_id}/{args.task_id}".format(args=args)
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -186,9 +186,9 @@ def run(args):
         executor.heartbeat()
         executor.end()
 
-    if conf.get('core', 'S3_LOG_FOLDER').startswith('s3:'):
+    if configuration.get('core', 'S3_LOG_FOLDER').startswith('s3:'):
         import boto
-        s3_log = filename.replace(log, conf.get('core', 'S3_LOG_FOLDER'))
+        s3_log = filename.replace(log, configuration.get('core', 'S3_LOG_FOLDER'))
         bucket, key = s3_log.lstrip('s3:/').split('/', 1)
         if os.path.exists(filename):
 
@@ -298,8 +298,8 @@ def webserver(args):
     print(settings.HEADER)
     log_to_stdout()
     from airflow.www.app import cached_app
-    app = cached_app(conf)
-    threads = args.threads or conf.get('webserver', 'threads')
+    app = cached_app(configuration)
+    threads = args.threads or configuration.get('webserver', 'threads')
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
@@ -335,14 +335,14 @@ def serve_logs(args):
 
     @flask_app.route('/log/<path:filename>')
     def serve_logs(filename):
-        log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+        log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
         return flask.send_from_directory(
             log,
             filename,
             mimetype="application/json",
             as_attachment=False)
     WORKER_LOG_SERVER_PORT = \
-        int(conf.get('celery', 'WORKER_LOG_SERVER_PORT'))
+        int(configuration.get('celery', 'WORKER_LOG_SERVER_PORT'))
     flask_app.run(
         host='0.0.0.0', port=WORKER_LOG_SERVER_PORT)
 
@@ -369,13 +369,13 @@ def worker(args):
 
 
 def initdb(args):
-    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
     utils.initdb()
     print("Done.")
 
 
 def resetdb(args):
-    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
     if input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
@@ -387,7 +387,7 @@ def resetdb(args):
 
 
 def upgradedb(args):
-    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
     utils.upgradedb()
 
 
@@ -396,8 +396,8 @@ def version(args):
 
 
 def flower(args):
-    broka = conf.get('celery', 'BROKER_URL')
-    args.port = args.port or conf.get('celery', 'FLOWER_PORT')
+    broka = configuration.get('celery', 'BROKER_URL')
+    args.port = args.port or configuration.get('celery', 'FLOWER_PORT')
     port = '--port=' + args.port
     api = ''
     if args.broker_api:
@@ -561,17 +561,17 @@ def get_parser():
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
         "-p", "--port",
-        default=conf.get('webserver', 'WEB_SERVER_PORT'),
+        default=configuration.get('webserver', 'WEB_SERVER_PORT'),
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.add_argument(
         "-w", "--threads",
-        default=conf.get('webserver', 'THREADS'),
+        default=configuration.get('webserver', 'THREADS'),
         type=int,
         help="Number of threads to run the webserver on")
     parser_webserver.add_argument(
         "-hn", "--hostname",
-        default=conf.get('webserver', 'WEB_SERVER_HOST'),
+        default=configuration.get('webserver', 'WEB_SERVER_HOST'),
         help="Set the hostname on which to run the web server")
     ht = "Use the server that ships with Flask in debug mode"
     parser_webserver.add_argument(
@@ -635,12 +635,12 @@ def get_parser():
     parser_worker.add_argument(
         "-q", "--queues",
         help="Comma delimited list of queues to serve",
-        default=conf.get('celery', 'DEFAULT_QUEUE'))
+        default=configuration.get('celery', 'DEFAULT_QUEUE'))
     parser_worker.add_argument(
         "-c", "--concurrency",
         type=int,
         help="The number of worker processes",
-        default=conf.get('celery', 'celeryd_concurrency'))
+        default=configuration.get('celery', 'celeryd_concurrency'))
     parser_worker.set_defaults(func=worker)
 
     ht = "Serve logs generate by worker"
@@ -662,10 +662,10 @@ def get_parser():
     parser_kerberos = subparsers.add_parser('kerberos', help=ht)
     parser_kerberos.add_argument(
         "-kt", "--keytab", help="keytab",
-        nargs='?', default=conf.get('kerberos', 'keytab'))
+        nargs='?', default=configuration.get('kerberos', 'keytab'))
     parser_kerberos.add_argument(
         "principal", help="kerberos principal",
-        nargs='?', default=conf.get('kerberos', 'principal'))
+        nargs='?', default=configuration.get('kerberos', 'principal'))
     parser_kerberos.set_defaults(func=kerberos)
 
     return parser

@@ -1,10 +1,10 @@
 from airflow.hooks.base_hook import BaseHook
-from airflow.configuration import conf
+from airflow import configuration
 import logging
 
 from hdfs import InsecureClient, HdfsError
 
-_kerberos_security_mode = conf.get("core", "security") == "kerberos"
+_kerberos_security_mode = configuration.get("core", "security") == "kerberos"
 if _kerberos_security_mode:
   try:
     from hdfs.ext.kerberos import KerberosClient

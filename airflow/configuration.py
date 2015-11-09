@@ -405,3 +405,19 @@ def test_mode():
 
 conf = ConfigParserWithDefaults(defaults)
 conf.read(AIRFLOW_CONFIG)
+
+
+def get(section, key, **kwargs):
+    return conf.get(section, key, **kwargs)
+
+
+def getboolean(section, key):
+    return conf.getboolean(section, key)
+
+
+def getfloat(section, key):
+    return conf.getfloat(section, key)
+
+
+def getint(section, key):
+    return conf.getint(section, key)

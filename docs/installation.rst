@@ -199,31 +199,3 @@ The logs for airflow tasks can be seen in airflow UI as usual.
 
 For more information about mesos, refer `mesos documentation <http://mesos.apache.org/documentation/latest/>`_.
 For any queries/bugs on MesosExecutor, please contact `@kapil-malik <https://github.com/kapil-malik>`_.
-
-
-Web Authentication
-''''''''''''''''''
-
-By default, all gates are opened. An easy way to restrict access
-to the web application is to do it at the network level, or by using
-SSH tunnels.
-
-However, it is possible to switch on
-authentication and define exactly how your users should login
-to your Airflow environment. Airflow uses ``flask_login`` and
-exposes a set of hooks in the ``airflow.default_login`` module. You can
-alter the content of this module by overriding it as a ``airflow_login``
-module. To do this, you would typically copy/paste ``airflow.default_login``
-in a ``airflow_login.py`` and put it directly in your ``PYTHONPATH``.
-You also need to set webserver.authenticate as true in your ``airflow.cfg``
-
-
-Multi-tenancy
-'''''''''''''
-
-You can filter the list of dags in webserver by owner name, when authentication
-is turned on, by setting webserver.filter_by_owner as true in your ``airflow.cfg``
-With this, when a user authenticates and logs into webserver, it will see only the dags
-which it is owner of. A super_user, will be able to see all the dags although.
-This makes the web UI a multi-tenant UI, where a user will only be able to see dags
-created by itself.

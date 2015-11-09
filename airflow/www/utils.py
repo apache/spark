@@ -12,9 +12,9 @@ from flask_login import current_user
 import wtforms
 from wtforms.compat import text_type
 
-from airflow.configuration import conf
+from airflow import configuration
 from airflow import login, models, settings
-AUTHENTICATE = conf.getboolean('webserver', 'AUTHENTICATE')
+AUTHENTICATE = configuration.getboolean('webserver', 'AUTHENTICATE')
 
 
 class LoginMixin(object):

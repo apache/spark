@@ -34,21 +34,21 @@ from sqlalchemy.orm import relationship, synonym
 
 from airflow import settings, utils
 from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
-from airflow.configuration import conf
+from airflow import configuration
 from airflow.utils import (
     AirflowException, State, apply_defaults, provide_session,
     is_container, as_tuple, TriggerRule)
 
 Base = declarative_base()
 ID_LEN = 250
-SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
-DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
+SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
 XCOM_RETURN_KEY = 'return_value'
 
 ENCRYPTION_ON = False
 try:
     from cryptography.fernet import Fernet
-    FERNET = Fernet(conf.get('core', 'FERNET_KEY').encode('utf-8'))
+    FERNET = Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
     ENCRYPTION_ON = True
 except:
     pass
@@ -104,7 +104,7 @@ class DagBag(object):
             self,
             dag_folder=None,
             executor=DEFAULT_EXECUTOR,
-            include_examples=conf.getboolean('core', 'LOAD_EXAMPLES'),
+            include_examples=configuration.getboolean('core', 'LOAD_EXAMPLES'),
             sync_to_db=False):
 
         dag_folder = dag_folder or DAGS_FOLDER
@@ -203,7 +203,7 @@ class DagBag(object):
         """
         from airflow.jobs import LocalTaskJob as LJ
         logging.info("Finding 'running' jobs without a recent heartbeat")
-        secs = (conf.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
+        secs = (configuration.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
         limit_dttm = datetime.now() - timedelta(seconds=secs)
         print("Failing jobs without heartbeat after {}".format(limit_dttm))
         jobs = (
@@ -321,18 +321,22 @@ class DagBag(object):
         return dag_ids
 
 
-class BaseUser(Base):
+class User(Base):
     __tablename__ = "user"
 
     id = Column(Integer, primary_key=True)
     username = Column(String(ID_LEN), unique=True)
     email = Column(String(500))
+    superuser = False
 
     def __repr__(self):
         return self.username
 
     def get_id(self):
         return str(self.id)
+
+    def is_superuser(self):
+        return self.superuser
 
 
 class Connection(Base):
@@ -563,14 +567,14 @@ class TaskInstance(Base):
     @property
     def log_filepath(self):
         iso = self.execution_date.isoformat()
-        log = os.path.expanduser(conf.get('core', 'BASE_LOG_FOLDER'))
+        log = os.path.expanduser(configuration.get('core', 'BASE_LOG_FOLDER'))
         return (
             "{log}/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals()))
 
     @property
     def log_url(self):
         iso = self.execution_date.isoformat()
-        BASE_URL = conf.get('webserver', 'BASE_URL')
+        BASE_URL = configuration.get('webserver', 'BASE_URL')
         return BASE_URL + (
             "/admin/airflow/log"
             "?dag_id={self.dag_id}"
@@ -581,7 +585,7 @@ class TaskInstance(Base):
     @property
     def mark_success_url(self):
         iso = self.execution_date.isoformat()
-        BASE_URL = conf.get('webserver', 'BASE_URL')
+        BASE_URL = configuration.get('webserver', 'BASE_URL')
         return BASE_URL + (
             "/admin/airflow/action"
             "?action=success"
@@ -1072,7 +1076,7 @@ class TaskInstance(Base):
             'task_instance': self,
             'ti': self,
             'task_instance_key_str': ti_key_str,
-            'conf': conf,
+            'conf': configuration,
         }
 
     def render_templates(self):
@@ -1364,7 +1368,7 @@ class BaseOperator(object):
             default_args=None,
             adhoc=False,
             priority_weight=1,
-            queue=conf.get('celery', 'default_queue'),
+            queue=configuration.get('celery', 'default_queue'),
             pool=None,
             sla=None,
             execution_timeout=None,
@@ -2267,7 +2271,7 @@ class DAG(object):
     def run(
             self, start_date=None, end_date=None, mark_success=False,
             include_adhoc=False, local=False, executor=None,
-            donot_pickle=conf.getboolean('core', 'donot_pickle'), 
+            donot_pickle=configuration.getboolean('core', 'donot_pickle'),
             ignore_dependencies=False,
             pool=None):
         from airflow.jobs import BackfillJob
