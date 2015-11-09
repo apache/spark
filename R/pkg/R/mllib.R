@@ -91,12 +91,26 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'}
 setMethod("summary", signature(x = "PipelineModel"),
           function(x, ...) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelName", x@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelFeatures", x@model)
             coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelCoefficients", x@model)
-            coefficients <- as.matrix(unlist(coefficients))
-            colnames(coefficients) <- c("Estimate")
-            rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+            if (modelName == "LinearRegressionModel") {
+              devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                               "getModelDevianceResiduals", x@model)
+              devianceResiduals <- matrix(devianceResiduals, nrow = 1)
+              colnames(devianceResiduals) <- c("Min", "Max")
+              rownames(devianceResiduals) <- rep("", times = 1)
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+              return(list(DevianceResiduals = devianceResiduals, Coefficients = coefficients))
+            } else {
+              coefficients <- as.matrix(unlist(coefficients))
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
+            }
           })
