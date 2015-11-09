@@ -25,6 +25,8 @@ import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.feature.Tokenizer
+import org.apache.spark.ml.feature.Word2Vec
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.sql.DataFrame
@@ -95,6 +97,19 @@ class PipelineSuite extends SparkFunSuite {
     val copied = model.copy(ParamMap(hashingTF.numFeatures -> 10))
     require(copied.stages(0).asInstanceOf[HashingTF].getNumFeatures === 10,
       "copy should handle extra stage params")
+  }
+
+  test("Pipeline with seed Param") {
+    val tok = new Tokenizer().setInputCol("text").setOutputCol("words")
+    val w2v1 = new Word2Vec().setInputCol("text").setOutputCol("w2v")
+    val pipeline1 = new Pipeline().setStages(Array(tok, w2v1)).setSeed(42L)
+    assert(pipeline1.getSeed === 42L)
+    assert(w2v1.getSeed === 42L)
+
+    val w2v2 = new Word2Vec().setInputCol("text").setOutputCol("w2v").setSeed(98L)
+    val pipeline2 = new Pipeline().setStages(Array(tok, w2v2)).setSeed(42L)
+    assert(pipeline2.getSeed === 42L)
+    assert(w2v2.getSeed === 98L)
   }
 
   test("pipeline model constructors") {

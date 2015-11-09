@@ -25,6 +25,7 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -82,7 +83,7 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @Experimental
-class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
+class Pipeline(override val uid: String) extends Estimator[PipelineModel] with HasSeed {
 
   def this() = this(Identifiable.randomUID("pipeline"))
 
@@ -99,6 +100,15 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] {
   // the Param value in the Pipeline.
   /** @group getParam */
   def getStages: Array[PipelineStage] = $(stages).clone()
+
+  /** @group setParam */
+  def setSeed(value: Long) : this.type = {
+    set(seed, value)
+    $(stages).filter(_.hasParam("seed"))
+      .filter(x => !x.isSet(x.getParam("seed")))
+      .foreach(_.set("seed", $(seed)))
+    this
+  }
 
   override def validateParams(): Unit = {
     super.validateParams()
