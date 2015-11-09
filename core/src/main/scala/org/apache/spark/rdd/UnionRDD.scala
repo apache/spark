@@ -28,8 +28,6 @@ import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, T
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
-import com.google.common.base.Preconditions
-
 /**
  * Partition for UnionRDD.
  *
@@ -70,9 +68,7 @@ class UnionRDD[T: ClassTag](
   // val in `RDD`.
   private lazy val evaluatePartitions: Unit = {
     val threshold = conf.getInt("spark.rdd.parallelListingThreshold", 10)
-    Preconditions.checkArgument(threshold > 0,
-      "spark.rdd.parallelListingThreshold must be positive: %s", threshold.toString)
-    if (rdds.length > threshold) {
+    if (threshold > 0 && rdds.length > threshold) {
       val parArray = rdds.toParArray
       parArray.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(threshold))
       parArray.foreach(_.partitions)
