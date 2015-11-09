@@ -17,12 +17,13 @@
 
 import java.io._
 
-import scala.util.Properties
+import scala.util.{Properties, Try}
 import scala.collection.JavaConverters._
 
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
+import sbt.Tests._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
@@ -572,6 +573,25 @@ object Unidoc {
 object TestSettings {
   import BuildCommons._
 
+  // Maximum number of concurrent tests to run, defaults to 1
+  val maxConcurrentTests: Int = {
+    val concurrency = Try(sys.env("CONCURRENT_TESTS").toInt).getOrElse(1)
+    if (concurrency > 1) {
+      println(s"CONCURRENT_TESTS set to $concurrency")
+    }
+    concurrency
+  }
+
+  // Define a method to group tests, in this case a single test per group
+  def singleTests(tests: Seq[TestDefinition], javaOptions: Seq[String]) = {
+    tests map { test =>
+      new Group(
+        name = test.name.split('.').last,
+        tests = Seq(test),
+        runPolicy = SubProcess(javaOptions))
+    }
+  }
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -614,8 +634,10 @@ object TestSettings {
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
-    // Only allow one test at a time, even across projects, since they run in the same JVM
-    parallelExecution in Test := false,
+    parallelExecution in Test := maxConcurrentTests > 1,
+    testForkedParallel in Test := false,
+    concurrentRestrictions in Test += Tags.limit(Tags.Test, maxConcurrentTests),
+    testGrouping in Test := singleTests((definedTests in Test).value, (javaOptions in Test).value),
     // Make sure the test temp directory exists.
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
       if (!new File(testTempDir).isDirectory()) {
@@ -623,7 +645,7 @@ object TestSettings {
       }
       Seq[File]()
     },
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
       "-groups",
