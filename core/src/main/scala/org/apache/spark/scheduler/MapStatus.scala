@@ -121,52 +121,7 @@ private[spark] class CompressedMapStatus(
   }
 }
 
-/**
- * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
- * is compressed.
- *
- * @param loc location where the task is being executed
- * @param numNonEmptyBlocks the number of non-empty blocks
- * @param emptyBlocks a bitmap tracking which blocks are empty
- * @param avgSize average size of the non-empty blocks
- */
-private[spark] class HighlyCompressedMapStatus private (
-    private[this] var loc: BlockManagerId,
-    private[this] var numNonEmptyBlocks: Int,
-    private[this] var emptyBlocks: BitSet,
-    private[this] var avgSize: Long)
-  extends MapStatus with Externalizable {
 
-  // loc could be null when the default constructor is called during deserialization
-  require(loc == null || avgSize > 0 || numNonEmptyBlocks == 0,
-    "Average size can only be zero for map stages that produced no output")
-
-  protected def this() = this(null, -1, null, -1)  // For deserialization only
-
-  override def location: BlockManagerId = loc
-
-  override def getSizeForBlock(reduceId: Int): Long = {
-    if (emptyBlocks.get(reduceId)) {
-      0
-    } else {
-      avgSize
-    }
-  }
-
-  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    loc.writeExternal(out)
-    emptyBlocks.writeExternal(out)
-    out.writeLong(avgSize)
-  }
-
-  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    loc = BlockManagerId(in)
-    emptyBlocks = new BitSet
-    emptyBlocks.readExternal(in)
-    avgSize = in.readLong()
-  }
-}
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
@@ -211,6 +166,13 @@ private[spark] class MapStatusTrackingNoEmptyBlocks private (
     nonEmptyBlocks = new mutable.HashSet[Int]
     nonEmptyBlocks = in.readObject().asInstanceOf[mutable.HashSet[Int]]
     avgSize = in.readLong()
+  }
+}
+
+private[spark] object MapStatusTrackingNoEmptyBlocks {
+  def apply(loc: BlockManagerId, numNonEmptyBlocks: Int , nonEmptyBlocks: mutable.HashSet[Int], avgSize: Long): MapStatusTrackingNoEmptyBlocks =
+  {
+    new MapStatusTrackingNoEmptyBlocks(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize )
   }
 }
 
@@ -261,8 +223,62 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
   }
 }
 
+private[spark] object MapStatusTrackingEmptyBlocks {
+  def apply(loc: BlockManagerId, numNonEmptyBlocks: Int , emptyBlocksHashSet: mutable.HashSet[Int], avgSize: Long): MapStatusTrackingEmptyBlocks =
+  {
+    new MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, emptyBlocksHashSet, avgSize )
+  }
+}
+
+/**
+ * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
+ * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
+ * is compressed.
+ *
+ * @param loc location where the task is being executed
+ * @param numNonEmptyBlocks the number of non-empty blocks
+ * @param emptyBlocks a bitmap tracking which blocks are empty
+ * @param avgSize average size of the non-empty blocks
+ */
+private[spark] class HighlyCompressedMapStatus private (
+                                                         private[this] var loc: BlockManagerId,
+                                                         private[this] var numNonEmptyBlocks: Int,
+                                                         private[this] var emptyBlocks: BitSet,
+                                                         private[this] var avgSize: Long)
+  extends MapStatus with Externalizable {
+
+  // loc could be null when the default constructor is called during deserialization
+  require(loc == null || avgSize > 0 || numNonEmptyBlocks == 0,
+    "Average size can only be zero for map stages that produced no output")
+
+  protected def this() = this(null, -1, null, -1)  // For deserialization only
+
+  override def location: BlockManagerId = loc
+
+  override def getSizeForBlock(reduceId: Int): Long = {
+    if (emptyBlocks.get(reduceId)) {
+      0
+    } else {
+      avgSize
+    }
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
+    loc.writeExternal(out)
+    emptyBlocks.writeExternal(out)
+    out.writeLong(avgSize)
+  }
+
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
+    loc = BlockManagerId(in)
+    emptyBlocks = new BitSet
+    emptyBlocks.readExternal(in)
+    avgSize = in.readLong()
+  }
+}
+
 private[spark] object HighlyCompressedMapStatus {
-  def apply(loc: BlockManagerId, uncompressedSizes: Array[Long]): MapStatus = {
+  def apply[T >: MapStatus](loc: BlockManagerId, uncompressedSizes: Array[Long]): T = {
     // We must keep track of which blocks are empty so that we don't report a zero-sized
     // block as being non-empty (or vice-versa) when using the average block size.
     var i = 0
@@ -293,10 +309,10 @@ private[spark] object HighlyCompressedMapStatus {
       0
     }
     if(numNonEmptyBlocks * 32 < totalNumBlocks){
-      new MapStatusTrackingNoEmptyBlocks(loc, nonEmptyBlocks, nonEmptyBlocks, avgSize )
+      MapStatusTrackingNoEmptyBlocks(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize )
     }
     else if ((totalNumBlocks - numNonEmptyBlocks) * 32 < totalNumBlocks){
-      new MapStatusTrackingEmptyBlocks(loc, nonEmptyBlocks, emptyBlocksHashSet, avgSize )
+      MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, emptyBlocksHashSet, avgSize)
     }
     else {
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
