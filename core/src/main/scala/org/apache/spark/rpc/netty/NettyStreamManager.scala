@@ -31,6 +31,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
 
   private val files = new ConcurrentHashMap[String, File]()
   private val jars = new ConcurrentHashMap[String, File]()
+  private val dirs = new ConcurrentHashMap[String, File]()
 
   override def getChunk(streamId: Long, chunkIndex: Int): ManagedBuffer = {
     throw new UnsupportedOperationException()
@@ -41,10 +42,13 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     val file = ftype match {
       case "files" => files.get(fname)
       case "jars" => jars.get(fname)
-      case _ => throw new IllegalArgumentException(s"Invalid file type: $ftype")
+      case  other =>
+        val dir = dirs.get(ftype)
+        require(dir != null, s"Invalid stream URI: $ftype not found.")
+        new File(dir, fname)
     }
 
-    require(file != null, s"File not found: $streamId")
+    require(file != null && file.isFile(), s"File not found: $streamId")
     new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
   }
 
@@ -58,6 +62,13 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     require(jars.putIfAbsent(file.getName(), file) == null,
       s"JAR ${file.getName()} already registered.")
     s"${rpcEnv.address.toSparkURL}/jars/${file.getName()}"
+  }
+
+  override def addDirectory(baseUri: String, path: File): String = {
+    val fixedBaseUri = validateDirectoryUri(baseUri)
+    require(dirs.putIfAbsent(fixedBaseUri.stripPrefix("/"), path) == null,
+      s"URI '$fixedBaseUri' already registered.")
+    s"${rpcEnv.address.toSparkURL}$fixedBaseUri"
   }
 
 }

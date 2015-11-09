@@ -732,20 +732,42 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val jar = new File(tempDir, "jar")
     Files.write(UUID.randomUUID().toString(), jar, UTF_8)
 
+    val dir1 = new File(tempDir, "dir1")
+    assert(dir1.mkdir())
+    val subFile1 = new File(dir1, "file1")
+    Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
+
+    val dir2 = new File(tempDir, "dir2")
+    assert(dir2.mkdir())
+    val subFile2 = new File(dir2, "file2")
+    Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
+
     val fileUri = env.fileServer.addFile(file)
     val jarUri = env.fileServer.addJar(jar)
+    val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
+    val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
 
     val destDir = Utils.createTempDir()
-    val destFile = new File(destDir, file.getName())
-    val destJar = new File(destDir, jar.getName())
-
     val sm = new SecurityManager(conf)
     val hc = SparkHadoopUtil.get.conf
-    Utils.fetchFile(fileUri, destDir, conf, sm, hc, 0L, false)
-    Utils.fetchFile(jarUri, destDir, conf, sm, hc, 0L, false)
+    val files = Seq(
+      (file, fileUri),
+      (jar, jarUri),
+      (subFile1, dir1Uri + "/file1"),
+      (subFile2, dir2Uri + "/file2"))
+    files.foreach { case (f, uri) =>
+      val destFile = new File(destDir, f.getName())
+      Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+      assert(Files.equal(f, destFile))
+    }
 
-    assert(Files.equal(file, destFile))
-    assert(Files.equal(jar, destJar))
+    // Try to download files that do not exist.
+    Seq("files", "jars", "dir1").foreach { root =>
+      intercept[Exception] {
+        val uri = env.address.toSparkURL + s"/$root/doesNotExist"
+        Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+      }
+    }
   }
 
 }

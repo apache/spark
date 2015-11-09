@@ -19,6 +19,7 @@ package org.apache.spark.repl
 
 import java.io.{IOException, ByteArrayOutputStream, InputStream}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
+import java.nio.channels.Channels
 
 import scala.util.control.NonFatal
 
@@ -36,7 +37,11 @@ import org.apache.spark.util.ParentClassLoader
  * used to load classes defined by the interpreter when the REPL is used.
  * Allows the user to specify if user class path should be first
  */
-class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
+class ExecutorClassLoader(
+    conf: SparkConf,
+    env: SparkEnv,
+    classUri: String,
+    parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
@@ -46,13 +51,12 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
   // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
   private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
 
-  // Hadoop FileSystem object for our URI, if it isn't using HTTP
-  var fileSystem: FileSystem = {
-    if (Set("http", "https", "ftp").contains(uri.getScheme)) {
-      null
-    } else {
-      FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
-    }
+  private val fetchFn: (String) => InputStream = uri.getScheme() match {
+    case "spark" => getClassFileInputStreamFromSpark
+    case "http" | "https" | "ftp" => getClassFileInputStreamFromHttpServer
+    case _ =>
+      val fileSystem = FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
+      getClassFileInputStreamFromFileSystem(fileSystem)
   }
 
   override def findClass(name: String): Class[_] = {
@@ -78,6 +82,11 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
         }
       }
     }
+  }
+
+  private def getClassFileInputStreamFromSpark(path: String): InputStream = {
+    val channel = env.rpcEnv.openChannel(s"$classUri/$path")
+    Channels.newInputStream(channel)
   }
 
   private def getClassFileInputStreamFromHttpServer(pathInDirectory: String): InputStream = {
@@ -116,7 +125,8 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     }
   }
 
-  private def getClassFileInputStreamFromFileSystem(pathInDirectory: String): InputStream = {
+  private def getClassFileInputStreamFromFileSystem(fileSystem: FileSystem)(
+      pathInDirectory: String): InputStream = {
     val path = new Path(directory, pathInDirectory)
     if (fileSystem.exists(path)) {
       fileSystem.open(path)
@@ -129,13 +139,7 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     val pathInDirectory = name.replace('.', '/') + ".class"
     var inputStream: InputStream = null
     try {
-      inputStream = {
-        if (fileSystem != null) {
-          getClassFileInputStreamFromFileSystem(pathInDirectory)
-        } else {
-          getClassFileInputStreamFromHttpServer(pathInDirectory)
-        }
-      }
+      inputStream = fetchFn(pathInDirectory)
       val bytes = readAndTransformClass(name, inputStream)
       Some(defineClass(name, bytes, 0, bytes.length))
     } catch {
