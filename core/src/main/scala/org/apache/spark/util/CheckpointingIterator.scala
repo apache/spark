@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io.IOException
+import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.ClassTag
@@ -53,14 +54,12 @@ private[spark] class CheckpointingIterator[T: ClassTag](
 
   private[this] var completed = false
 
-  context.addTaskCompletionListener { ctx =>
-    // We don't know if the task is successful. So it's possible that we still checkpoint the
-    // remaining values even if the task is failed.
-    // TODO optimize the failure case if we can know the task status
-    complete()
-  }
+  // We don't know if the task is successful. So it's possible that we still checkpoint the
+  // remaining values even if the task is failed.
+  // TODO optimize the failure case if we can know the task status
+  context.addTaskCompletionListener { _ => complete() }
 
-  private[this] val fileOutputStream = {
+  private[this] val fileOutputStream: OutputStream = {
     val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
     if (blockSize < 0) {
       fs.create(tempOutputPath, false, bufferSize)
@@ -74,7 +73,7 @@ private[spark] class CheckpointingIterator[T: ClassTag](
     SparkEnv.get.serializer.newInstance().serializeStream(fileOutputStream)
 
   /**
-   * Called when this iterator is on the latest element by `hasNext`.
+   * Called when this iterator is on the last element by `hasNext`.
    * This method will rename temporary output path to final output path of checkpoint data.
    */
   private[this] def complete(): Unit = {
@@ -120,13 +119,9 @@ private[spark] class CheckpointingIterator[T: ClassTag](
     fs.delete(tempOutputPath, false)
   }
 
-  override def hasNext: Boolean = {
+  private[this] def cleanupOnFailure[A](body: => A): A = {
     try {
-      val r = values.hasNext
-      if (!r) {
-        complete()
-      }
-      r
+      body
     } catch {
       case e: Throwable =>
         try {
@@ -140,22 +135,18 @@ private[spark] class CheckpointingIterator[T: ClassTag](
     }
   }
 
-  override def next(): T = {
-    try {
-      val value = values.next()
-      serializeStream.writeObject(value)
-      value
-    } catch {
-      case e: Throwable =>
-        try {
-          cleanup()
-        } catch {
-          case NonFatal(e1) =>
-            // Log `e1` since we should not override `e`
-            logError(e1.getMessage, e1)
-        }
-        throw e
+  override def hasNext: Boolean = cleanupOnFailure {
+    val r = values.hasNext
+    if (!r) {
+      complete()
     }
+    r
+  }
+
+  override def next(): T = cleanupOnFailure {
+    val value = values.next()
+    serializeStream.writeObject(value)
+    value
   }
 }
 
@@ -178,6 +169,15 @@ private[spark] object CheckpointingIterator {
     checkpointingRDDPartitions.remove(id)
   }
 
+  /**
+   * Create a `CheckpointingIterator` to wrap the original `Iterator` so that when the wrapper is
+   * consumed, it will checkpoint the values. Even if the wrapper is not drained, we will still
+   * drain the remaining values when a task is completed.
+   *
+   * If this method is called multiple times for the same partition of an `RDD`, only one `Iterator`
+   * that gets the lock will be wrapped. For other `Iterator`s that don't get the lock or find the
+   * partition has been checkpointed, we just return the original `Iterator`.
+   */
   def apply[T: ClassTag](
       rdd: RDD[T],
       values: Iterator[T],
@@ -218,7 +218,7 @@ private[spark] object CheckpointingIterator {
           throw e
       }
     } else {
-      values
+      values // Iterator is being checkpointed, so just return the values
     }
 
   }

@@ -39,8 +39,8 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
     val _cpDir = ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
       .getOrElse {
-      throw new SparkException("Checkpoint dir must be specified.")
-    }
+        throw new SparkException("Checkpoint dir must be specified.")
+      }
     val path = new Path(_cpDir)
     val fs = new Path(_cpDir).getFileSystem(rdd.context.hadoopConfiguration)
     if (!fs.mkdirs(path)) {
@@ -71,7 +71,10 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
    * Note: this is called in executor.
    */
   def getCheckpointIterator(
-      rdd: RDD[T], values: Iterator[T], context: TaskContext, partitionIndex: Int): Iterator[T] = {
+      rdd: RDD[T],
+      values: Iterator[T],
+      context: TaskContext,
+      partitionIndex: Int): Iterator[T] = {
     if (cpState == Initialized) {
       CheckpointingIterator[T](
         rdd,
@@ -100,12 +103,11 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
 
     val checkpointedPartitionFiles = fs.listStatus(path).map(_.getPath.getName).toSet
     // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we
-    // must checkpoint any missing partitions. TODO: avoid running another job here (SPARK-8582).
+    // must checkpoint any missing partitions.
     val missingPartitionIndices = rdd.partitions.map(_.index).filter { i =>
       !checkpointedPartitionFiles(ReliableCheckpointRDD.checkpointFileName(i))
     }
     if (missingPartitionIndices.nonEmpty) {
-      // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
       rdd.context.runJob(
         rdd,
         ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _,
