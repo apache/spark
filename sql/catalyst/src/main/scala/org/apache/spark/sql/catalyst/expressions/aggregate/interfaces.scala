@@ -92,6 +92,8 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
+  override def prettyString: String = aggregateFunction.prettyString
+
   override def toString: String = s"(${aggregateFunction},mode=$mode,isDistinct=$isDistinct)"
 }
 
