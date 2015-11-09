@@ -463,14 +463,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
     }
   }
-
-  test("SPARK-11191 add jar using path with URL scheme") {
-    withJdbcStatement { statement =>
-      val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
-      val jarURL = s"file:///$funcJar"
-      statement.executeQuery(s"ADD JAR $jarURL")
-    }
-  }
 }
 
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
