@@ -299,6 +299,7 @@ class PipelineModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
   }
 

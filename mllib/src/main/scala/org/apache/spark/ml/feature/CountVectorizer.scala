@@ -167,6 +167,7 @@ class CountVectorizer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -236,6 +237,7 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 

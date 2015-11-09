@@ -113,6 +113,7 @@ abstract class Predictor[
   private[ml] def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
   }
 

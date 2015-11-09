@@ -213,6 +213,7 @@ class ALSModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
@@ -380,6 +381,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 

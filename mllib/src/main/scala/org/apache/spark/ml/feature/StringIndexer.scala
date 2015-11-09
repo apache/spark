@@ -89,6 +89,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -175,6 +176,7 @@ class StringIndexerModel (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     if (schema.fieldNames.contains($(inputCol))) {
       validateAndTransformSchema(schema)
     } else {
@@ -272,6 +274,7 @@ class IndexToString private[ml] (override val uid: String)
   final def getLabels: Array[String] = $(labels)
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
     require(inputDataType.isInstanceOf[NumericType],

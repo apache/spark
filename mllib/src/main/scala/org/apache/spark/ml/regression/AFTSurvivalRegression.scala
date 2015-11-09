@@ -237,6 +237,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema, fitting = true)
   }
 
@@ -312,6 +313,7 @@ class AFTSurvivalRegressionModel private[ml] (
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema, fitting = false)
   }
 

@@ -84,6 +84,7 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -122,6 +123,7 @@ class IDFModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 

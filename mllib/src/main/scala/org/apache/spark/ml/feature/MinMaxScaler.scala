@@ -181,6 +181,7 @@ class MinMaxScalerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 

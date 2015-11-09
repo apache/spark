@@ -151,6 +151,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -244,6 +245,7 @@ class Word2VecModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     validateAndTransformSchema(schema)
   }
 
