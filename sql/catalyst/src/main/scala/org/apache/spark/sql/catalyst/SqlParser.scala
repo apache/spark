@@ -273,7 +273,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val function: Parser[Expression] =
     ( ident <~ ("(" ~ "*" ~ ")") ^^ { case udfName =>
       if (lexical.normalizeKeyword(udfName) == "count") {
-        AggregateExpression2(Count(Literal(1)), mode = Complete, isDistinct = false)
+        AggregateExpression(Count(Literal(1)), mode = Complete, isDistinct = false)
       } else {
         throw new AnalysisException(s"invalid expression $udfName(*)")
       }
@@ -289,7 +289,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
     | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
       if (lexical.normalizeKeyword(udfName) == "count") {
-        AggregateExpression2(new HyperLogLogPlusPlus(exp), mode = Complete, isDistinct = false)
+        AggregateExpression(new HyperLogLogPlusPlus(exp), mode = Complete, isDistinct = false)
       } else {
         throw new AnalysisException(s"invalid function approximate $udfName")
       }
@@ -297,7 +297,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | APPROXIMATE ~> "(" ~> unsignedFloat ~ ")" ~ ident ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
       { case s ~ _ ~ udfName ~ _ ~ _ ~ exp =>
         if (lexical.normalizeKeyword(udfName) == "count") {
-          AggregateExpression2(
+          AggregateExpression(
             HyperLogLogPlusPlus(exp, s.toDouble, 0, 0),
             mode = Complete,
             isDistinct = false)

@@ -112,7 +112,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // Collect all aggregate expressions.
     val aggExpressions = a.aggregateExpressions.flatMap { e =>
       e.collect {
-        case ae: AggregateExpression2 => ae
+        case ae: AggregateExpression => ae
       }
     }
 
@@ -134,11 +134,11 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Functions used to modify aggregate functions and their inputs.
       def evalWithinGroup(id: Literal, e: Expression) = If(EqualTo(gid, id), e, nullify(e))
       def patchAggregateFunctionChildren(
-          af: AggregateFunction2)(
-          attrs: Expression => Expression): AggregateFunction2 = {
+          af: AggregateFunction)(
+          attrs: Expression => Expression): AggregateFunction = {
         af.withNewChildren(af.children.map {
           case afc => attrs(afc)
-        }).asInstanceOf[AggregateFunction2]
+        }).asInstanceOf[AggregateFunction]
       }
 
       // Setup unique distinct aggregate children.
@@ -183,7 +183,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
         val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
 
         // Select the result of the first aggregate in the last aggregate.
-        val result = AggregateExpression2(
+        val result = AggregateExpression(
           aggregate.First(evalWithinGroup(regularGroupId, operator.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)

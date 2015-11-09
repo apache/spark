@@ -71,7 +71,7 @@ class GroupedData protected[sql](
     }
   }
 
-  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction2)
+  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
     : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
@@ -93,7 +93,7 @@ class GroupedData protected[sql](
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
-    val exprToFunc: (Expression => AggregateFunction2) = {
+    val exprToFunc: (Expression => AggregateFunction) = {
       (inputExpr: Expression) => expr.toLowerCase match {
         case "avg" | "average" | "mean" => Average(inputExpr)
         case "max" => Max(inputExpr)

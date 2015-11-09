@@ -55,8 +55,8 @@ object functions {
   private def withExpr(expr: Expression): Column = Column(expr)
 
   private def withAggregateFunction(
-      func: AggregateFunction2,
-      isDistinct: Boolean = false): Column = {
+                                     func: AggregateFunction,
+                                     isDistinct: Boolean = false): Column = {
     Column(func.toAggregateExpression(isDistinct))
   }
 

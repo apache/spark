@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
@@ -159,7 +159,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // aggregate function which actually gets computed.
         val aggregateExpressions = resultExpressions.flatMap { expr =>
           expr.collect {
-            case agg: AggregateExpression2 => agg
+            case agg: AggregateExpression => agg
           }
         }.distinct
         // For those distinct aggregate expressions, we create a map from the
@@ -199,7 +199,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // the attributes of the final result projection's input row:
         val rewrittenResultExpressions = resultExpressions.map { expr =>
           expr.transformDown {
-            case AggregateExpression2(aggregateFunction, _, isDistinct) =>
+            case AggregateExpression(aggregateFunction, _, isDistinct) =>
               // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
               // so replace each aggregate expression by its corresponding attribute in the set:
               aggregateFunctionToAttribute(aggregateFunction, isDistinct)

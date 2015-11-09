@@ -528,12 +528,12 @@ class Analyzer(
               registry.lookupFunction(name, children) match {
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
-                  AggregateExpression2(max, Complete, isDistinct = false)
+                  AggregateExpression(max, Complete, isDistinct = false)
                 case min: Min if isDistinct =>
-                  AggregateExpression2(min, Complete, isDistinct = false)
+                  AggregateExpression(min, Complete, isDistinct = false)
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
-                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
+                case agg2: AggregateFunction => AggregateExpression(agg2, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other
               }
@@ -553,7 +553,7 @@ class Analyzer(
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
-        case agg: AggregateExpression2 => return true
+        case agg: AggregateExpression => return true
         case _ =>
       })
       false
@@ -647,7 +647,7 @@ class Analyzer(
     }
 
     protected def containsAggregate(condition: Expression): Boolean = {
-      condition.find(_.isInstanceOf[AggregateExpression2]).isDefined
+      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
   }
 
@@ -842,7 +842,7 @@ class Analyzer(
 
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
-          case agg: AggregateExpression2 =>
+          case agg: AggregateExpression =>
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute

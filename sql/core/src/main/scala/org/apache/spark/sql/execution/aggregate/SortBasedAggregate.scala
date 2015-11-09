@@ -27,15 +27,15 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 case class SortBasedAggregate(
-    requiredChildDistributionExpressions: Option[Seq[Expression]],
-    groupingExpressions: Seq[NamedExpression],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression2],
-    nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression2],
-    completeAggregateAttributes: Seq[Attribute],
-    initialInputBufferOffset: Int,
-    resultExpressions: Seq[NamedExpression],
-    child: SparkPlan)
+                               requiredChildDistributionExpressions: Option[Seq[Expression]],
+                               groupingExpressions: Seq[NamedExpression],
+                               nonCompleteAggregateExpressions: Seq[AggregateExpression],
+                               nonCompleteAggregateAttributes: Seq[Attribute],
+                               completeAggregateExpressions: Seq[AggregateExpression],
+                               completeAggregateAttributes: Seq[Attribute],
+                               initialInputBufferOffset: Int,
+                               resultExpressions: Seq[NamedExpression],
+                               child: SparkPlan)
   extends UnaryNode {
 
   override private[sql] lazy val metrics = Map(

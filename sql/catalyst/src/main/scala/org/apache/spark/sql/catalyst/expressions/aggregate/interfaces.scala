@@ -22,18 +22,18 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCod
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
-/** The mode of an [[AggregateFunction2]]. */
+/** The mode of an [[AggregateFunction]]. */
 private[sql] sealed trait AggregateMode
 
 /**
- * An [[AggregateFunction2]] with [[Partial]] mode is used for partial aggregation.
+ * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
 private[sql] case object Partial extends AggregateMode
 
 /**
- * An [[AggregateFunction2]] with [[PartialMerge]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
  * containing intermediate results for this function.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
@@ -41,7 +41,7 @@ private[sql] case object Partial extends AggregateMode
 private[sql] case object PartialMerge extends AggregateMode
 
 /**
- * An [[AggregateFunction2]] with [[Final]] mode is used to merge aggregation buffers
+ * An [[AggregateFunction]] with [[Final]] mode is used to merge aggregation buffers
  * containing intermediate results for this function and then generate final result.
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
@@ -49,7 +49,7 @@ private[sql] case object PartialMerge extends AggregateMode
 private[sql] case object Final extends AggregateMode
 
 /**
- * An [[AggregateFunction2]] with [[Complete]] mode is used to evaluate this function directly
+ * An [[AggregateFunction]] with [[Complete]] mode is used to evaluate this function directly
  * from original input rows without any partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the final result of this function is returned.
@@ -67,11 +67,11 @@ private[sql] case object NoOp extends Expression with Unevaluable {
 }
 
 /**
- * A container for an [[AggregateFunction2]] with its [[AggregateMode]] and a field
+ * A container for an [[AggregateFunction]] with its [[AggregateMode]] and a field
  * (`isDistinct`) indicating if DISTINCT keyword is specified for this function.
  */
-private[sql] case class AggregateExpression2(
-    aggregateFunction: AggregateFunction2,
+private[sql] case class AggregateExpression(
+    aggregateFunction: AggregateFunction,
     mode: AggregateMode,
     isDistinct: Boolean)
   extends Expression
@@ -108,10 +108,10 @@ private[sql] case class AggregateExpression2(
  * combined aggregation buffer which concatenates the aggregation buffers of the individual
  * aggregate functions.
  *
- * Code which accepts [[AggregateFunction2]] instances should be prepared to handle both types of
+ * Code which accepts [[AggregateFunction]] instances should be prepared to handle both types of
  * aggregate functions.
  */
-sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInputTypes {
+sealed abstract class AggregateFunction extends Expression with ImplicitCastInputTypes {
 
   /** An aggregate function is not foldable. */
   final override def foldable: Boolean = false
@@ -144,10 +144,10 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  def toAggregateExpression(): AggregateExpression2 = toAggregateExpression(isDistinct = false)
+  def toAggregateExpression(): AggregateExpression = toAggregateExpression(isDistinct = false)
 
-  def toAggregateExpression(isDistinct: Boolean): AggregateExpression2 = {
-    AggregateExpression2(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
+    AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }
 }
 
@@ -169,7 +169,7 @@ sealed abstract class AggregateFunction2 extends Expression with ImplicitCastInp
  * `inputAggBufferOffset`, but not on the correctness of the attribute ids in `aggBufferAttributes`
  * and `inputAggBufferAttributes`.
  */
-abstract class ImperativeAggregate extends AggregateFunction2 {
+abstract class ImperativeAggregate extends AggregateFunction {
 
   /**
    * The offset of this function's first buffer value in the underlying shared mutable aggregation
@@ -268,7 +268,7 @@ abstract class ImperativeAggregate extends AggregateFunction2 {
  * `evaluateExpressions`.
  */
 abstract class DeclarativeAggregate
-  extends AggregateFunction2
+  extends AggregateFunction
   with Serializable
   with Unevaluable {
 

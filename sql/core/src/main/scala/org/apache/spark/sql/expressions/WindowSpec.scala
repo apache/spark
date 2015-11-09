@@ -141,7 +141,7 @@ class WindowSpec private[sql](
    */
   private[sql] def withAggregate(aggregate: Column): Column = {
     val windowExpr = aggregate.expr match {
-      case AggregateExpression2(aggregateFunction, _, isDistinct) if !isDistinct =>
+      case AggregateExpression(aggregateFunction, _, isDistinct) if !isDistinct =>
         aggregateFunction match {
           case Average(child) => WindowExpression(
             UnresolvedWindowFunction("avg", child :: Nil),
