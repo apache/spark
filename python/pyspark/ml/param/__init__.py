@@ -250,21 +250,22 @@ class Params(Identifiable):
         for param, value in kwargs.items():
             p = getattr(self, param)
             if (p.expectedType is not None):
-                if type(value) == p.expectedType || value is None:
+                if p.expectedType is None or type(value) == p.expectedType or value is None:
                     self._paramMap[getattr(self, param)] = value
                 else:
                     try:
                         # Try and do "safe" conversions that don't lose information
                         if p.expectedType == float:
                             self._paramMap[getattr(self, param)] = float(value)
+                        elif p.expectedType == long and type(value) == int:
+                            self._paramMap[getattr(self, param)] = long(value)
                         else:
-                            raise Exception("Provided type " + type(value) + " incompatable with " +
-                                            " required type " + p.expectedType + " for param " +
-                                            p)
+                            raise Exception(
+                                "Provided type {0} incompatable with type {1} for param {2}"
+                                            .format(type(value), p.expectedType, p))
                     except ValueError:
-                        raise Exception("Failed to convert " + type(value) +
-                                        " to required type " + p.expectedType +
-                                        " for param " + p)
+                        raise Exception(("Failed to convert {0} to type {1} for param {2}"
+                                         .format(type(value), p.expectedType, p)))
             else:
                 self._paramMap[getattr(self, param)] = value
         return self
