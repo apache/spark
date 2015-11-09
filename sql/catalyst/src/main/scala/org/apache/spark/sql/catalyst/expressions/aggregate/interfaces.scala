@@ -266,6 +266,11 @@ abstract class ImperativeAggregate extends AggregateFunction {
  * `bufferAttributes`, defining attributes for the fields of the mutable aggregation buffer. You
  * can then use these attributes when defining `updateExpressions`, `mergeExpressions`, and
  * `evaluateExpressions`.
+ *
+ * Please note that children of an aggregate function can be unresolved (it will happen when
+ * we create this function in DataFrame API). So, if there is any fields in
+ * the implemented class that need to access fields of its children, please make
+ * those fields `lazy val`s.
  */
 abstract class DeclarativeAggregate
   extends AggregateFunction
