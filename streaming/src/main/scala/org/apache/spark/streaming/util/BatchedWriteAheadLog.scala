@@ -172,6 +172,9 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       }
       buffer.foreach(_.promise.success(segment))
     } catch {
+      case e: InterruptedException =>
+        logWarning("BatchedWriteAheadLog Writer queue interrupted.", e)
+        buffer.foreach(_.promise.failure(e))
       case NonFatal(e) =>
         logWarning(s"BatchedWriteAheadLog Writer failed to write $buffer", e)
         buffer.foreach(_.promise.failure(e))
@@ -179,9 +182,6 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       buffer.clear()
     }
   }
-
-  /** Method for querying the queue length during tests. */
-  private[util] def getQueueLength(): Int = walWriteQueue.size()
 }
 
 /** Static methods for aggregating and de-aggregating records. */
