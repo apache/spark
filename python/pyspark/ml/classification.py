@@ -215,6 +215,7 @@ class LogisticRegressionModel(JavaModel):
         return self._call_java("coefficients")
 
     @property
+    @since("1.4.0")
     def intercept(self):
         """
         Model intercept.
