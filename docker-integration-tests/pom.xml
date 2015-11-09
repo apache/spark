@@ -36,9 +36,15 @@
 
   <dependencies>
     <dependency>
+      <groupId>com.spotify</groupId>
+      <artifactId>docker-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -51,6 +57,7 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -65,12 +72,6 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.spotify</groupId>
-      <artifactId>docker-client</artifactId>
-      <classifier>shaded</classifier>
-      <scope>test</scope>
-    </dependency>
     <!-- Jersey dependencies, used to override version.
      See https://github.com/apache/spark/pull/9503#issuecomment-154369560 for
      background on why we need to use a newer Jersey only in this test module;
@@ -80,24 +81,25 @@
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-server</artifactId>
       <version>1.19</version>
-      <scope>${hadoop.deps.scope}</scope>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-core</artifactId>
       <version>1.19</version>
-      <scope>${hadoop.deps.scope}</scope>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-servlet</artifactId>
       <version>1.19</version>
-      <scope>${hadoop.deps.scope}</scope>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-json</artifactId>
       <version>1.19</version>
+      <scope>test</scope>
       <exclusions>
         <exclusion>
           <groupId>stax</groupId>
