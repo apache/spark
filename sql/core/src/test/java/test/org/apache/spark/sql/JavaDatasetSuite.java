@@ -68,8 +68,16 @@ public class JavaDatasetSuite implements Serializable {
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = context.createDataset(data, e.STRING());
-    String[] collected = (String[]) ds.collect();
-    Assert.assertEquals(Arrays.asList("hello", "world"), Arrays.asList(collected));
+    List<String> collected = ds.collectAsList();
+    Assert.assertEquals(Arrays.asList("hello", "world"), collected);
+  }
+
+  @Test
+  public void testTake() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = context.createDataset(data, e.STRING());
+    List<String> collected = ds.takeAsList(1);
+    Assert.assertEquals(Arrays.asList("hello"), collected);
   }
 
   @Test
@@ -78,16 +86,16 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = context.createDataset(data, e.STRING());
     Assert.assertEquals("hello", ds.first());
 
-    Dataset<String> filtered = ds.filter(new Function<String, Boolean>() {
+    Dataset<String> filtered = ds.filter(new FilterFunction<String>() {
       @Override
-      public Boolean call(String v) throws Exception {
+      public boolean call(String v) throws Exception {
         return v.startsWith("h");
       }
     });
     Assert.assertEquals(Arrays.asList("hello"), filtered.collectAsList());
 
 
-    Dataset<Integer> mapped = ds.map(new Function<String, Integer>() {
+    Dataset<Integer> mapped = ds.map(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -95,7 +103,7 @@ public class JavaDatasetSuite implements Serializable {
     }, e.INT());
     Assert.assertEquals(Arrays.asList(5, 5), mapped.collectAsList());
 
-    Dataset<String> parMapped = ds.mapPartitions(new FlatMapFunction<Iterator<String>, String>() {
+    Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
       @Override
       public Iterable<String> call(Iterator<String> it) throws Exception {
         List<String> ls = new LinkedList<String>();
@@ -128,7 +136,7 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "b", "c");
     Dataset<String> ds = context.createDataset(data, e.STRING());
 
-    ds.foreach(new VoidFunction<String>() {
+    ds.foreach(new ForeachFunction<String>() {
       @Override
       public void call(String s) throws Exception {
         accum.add(1);
@@ -142,28 +150,20 @@ public class JavaDatasetSuite implements Serializable {
     List<Integer> data = Arrays.asList(1, 2, 3);
     Dataset<Integer> ds = context.createDataset(data, e.INT());
 
-    int reduced = ds.reduce(new Function2<Integer, Integer, Integer>() {
+    int reduced = ds.reduce(new ReduceFunction<Integer>() {
       @Override
       public Integer call(Integer v1, Integer v2) throws Exception {
         return v1 + v2;
       }
     });
     Assert.assertEquals(6, reduced);
-
-    int folded = ds.fold(1, new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer call(Integer v1, Integer v2) throws Exception {
-        return v1 * v2;
-      }
-    });
-    Assert.assertEquals(6, folded);
   }
 
   @Test
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, e.STRING());
-    GroupedDataset<Integer, String> grouped = ds.groupBy(new Function<String, Integer>() {
+    GroupedDataset<Integer, String> grouped = ds.groupBy(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -187,7 +187,7 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, e.INT());
-    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new Function<Integer, Integer>() {
+    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
