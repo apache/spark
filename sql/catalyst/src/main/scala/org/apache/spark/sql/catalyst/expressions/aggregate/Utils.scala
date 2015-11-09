@@ -127,7 +127,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.prettyName, e.dataType, e.nullable)()
+        case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -172,14 +172,15 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Setup expand for the 'regular' aggregate expressions.
       val regularAggExprs = aggExpressions.filter(!_.isDistinct)
       val regularAggChildren = regularAggExprs.flatMap(_.aggregateFunction.children).distinct
-      val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair).toMap
+      val regularAggChildAttrMap = regularAggChildren.map(expressionAttributePair)
 
       // Setup aggregates for 'regular' aggregate expressions.
       val regularGroupId = Literal(0)
+      val regularAggChildAttrLookup = regularAggChildAttrMap.toMap
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
-        val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrMap)
-        val operator = Alias(e.copy(aggregateFunction = af), e.toString)()
+        val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup)
+        val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression2(
@@ -223,7 +224,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Construct the expand operator.
       val expand = Expand(
         regularAggProjection ++ distinctAggProjections,
-        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.values.toSeq,
+        groupByAttrs ++ distinctAggChildAttrs ++ Seq(gid) ++ regularAggChildAttrMap.map(_._2),
         a.child)
 
       // Construct the first aggregate operator. This de-duplicates the all the children of
@@ -264,5 +265,5 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.prettyName, e.dataType, true)()
+    e -> new AttributeReference(e.prettyString, e.dataType, true)()
 }

@@ -304,6 +304,9 @@ case class Expand(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
   override def statistics: Statistics = {
     // TODO shouldn't we factor in the size of the projection versus the size of the backing child
     //      row?
@@ -495,7 +498,7 @@ case class AppendColumn[T, U](
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
   def apply[K : Encoder, T : Encoder, U : Encoder](
-      func: (K, Iterator[T]) => Iterator[U],
+      func: (K, Iterator[T]) => TraversableOnce[U],
       groupingAttributes: Seq[Attribute],
       child: LogicalPlan): MapGroups[K, T, U] = {
     new MapGroups(
@@ -515,7 +518,7 @@ object MapGroups {
  * object representation of all the rows with that key.
  */
 case class MapGroups[K, T, U](
-    func: (K, Iterator[T]) => Iterator[U],
+    func: (K, Iterator[T]) => TraversableOnce[U],
     kEncoder: ExpressionEncoder[K],
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],

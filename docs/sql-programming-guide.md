@@ -1089,15 +1089,6 @@ for (teenName in collect(teenNames)) {
 
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.sql("REFRESH TABLE my_table")
-{% endhighlight %}
-
-</div>
-
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -1636,8 +1627,10 @@ YARN cluster. The convenient way to do this is adding them through the `--jars` 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a `HiveContext`.  When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
-directory.
+hive-site.xml, the context automatically creates `metastore_db` in the current directory and
+creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
+Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
+the spark application.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
