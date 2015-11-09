@@ -275,7 +275,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  def createCode(ctx: CodeGenContext, expressions: Seq[Expression],
+  def createCode(
+      ctx: CodeGenContext,
+      expressions: Seq[Expression],
       useSubexprElimination: Boolean = false): GeneratedExpressionCode = {
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)

@@ -204,7 +204,7 @@ case class AttributeReference(
   }
 
   override def semanticHash(): Int = {
-   this.exprId.hashCode()
+    this.exprId.hashCode()
   }
 
   override def hashCode: Int = {

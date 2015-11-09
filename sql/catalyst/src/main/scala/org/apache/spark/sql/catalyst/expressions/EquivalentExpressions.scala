@@ -86,9 +86,7 @@ class EquivalentExpressions {
    * Returns all the equivalent sets of expressions.
    */
   def getAllEquivalentExprs: Seq[Seq[Expression]] = {
-    equivalenceMap.map { case(k, v) => {
-      v.toList
-    } }.toList
+    equivalenceMap.values.map(_.toSeq).toSeq
   }
 
   /**
