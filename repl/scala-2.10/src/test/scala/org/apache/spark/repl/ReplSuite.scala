@@ -337,4 +337,49 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[(Int, Iterable[Foo])] = Array((1,", output)
   }
+
+  test("SPARK-11594 create UDAF in REPL") {
+    val output = runInterpreter("local",
+      """
+        |import org.apache.spark.sql.Row
+        |import org.apache.spark.sql.types.{DataType, LongType, StructType}
+        |import org.apache.spark.sql.expressions.MutableAggregationBuffer
+        |import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+        |
+        |class LongProductSum extends UserDefinedAggregateFunction {
+        |  def inputSchema: StructType = new StructType()
+        |    .add("a", LongType)
+        |    .add("b", LongType)
+        |
+        |  def bufferSchema: StructType = new StructType()
+        |    .add("product", LongType)
+        |
+        |  def dataType: DataType = LongType
+        |
+        |  def deterministic: Boolean = true
+        |
+        |  def initialize(buffer: MutableAggregationBuffer): Unit = {
+        |    buffer(0) = 0L
+        |  }
+        |
+        |  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+        |    if (!(input.isNullAt(0) || input.isNullAt(1))) {
+        |      buffer(0) = buffer.getLong(0) + input.getLong(0) * input.getLong(1)
+        |    }
+        |  }
+        |
+        |  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+        |    buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
+        |  }
+        |
+        |  def evaluate(buffer: Row): Any =
+        |    buffer.getLong(0)
+        |
+        |  override def name = "product_sum"
+        |}
+        |val productSum = sqlContext.udf.register("longProductSum", new LongProductSum)
+        |val data = sqlContext.range(1, 5).select(productSum($"id", $"id" + 1)).collect()
+      """.stripMargin)
+    assertContains("data: Array[org.apache.spark.sql.Row] = Array([40])", output)
+  }
 }

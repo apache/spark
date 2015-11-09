@@ -129,6 +129,13 @@ abstract class UserDefinedAggregateFunction extends Serializable {
         isDistinct = true)
     Column(aggregateExpression)
   }
+
+  /**
+    * The name of the UDAF. This is currently the simple name of class. This can create an
+    * [[java.lang.InternalError]] if the UDAF class was created in the REPL; override this method
+    * in these cases.
+    */
+  def name: String = getClass.getSimpleName
 }
 
 /**

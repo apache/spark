@@ -452,7 +452,7 @@ private[sql] case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""${udaf.getClass.getSimpleName}(${children.mkString(",")})"""
+    s"""${udaf.name}(${children.mkString(",")})"""
   }
 
   override def nodeName: String = udaf.getClass.getSimpleName
