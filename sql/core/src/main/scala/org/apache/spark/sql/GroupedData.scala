@@ -71,7 +71,7 @@ class GroupedData protected[sql](
     }
   }
 
-  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => Expression)
+  private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction2)
     : DataFrame = {
 
     val columnExprs = if (colNames.isEmpty) {
@@ -89,7 +89,7 @@ class GroupedData protected[sql](
         namedExpr
       }
     }
-    toDF(columnExprs.map(f))
+    toDF(columnExprs.map(expr => f(expr).toAggregateExpression()))
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
@@ -115,12 +115,7 @@ class GroupedData protected[sql](
           }
       }
     }
-    (inputExpr: Expression) => {
-      AggregateExpression2(
-        exprToFunc(inputExpr),
-        mode = Complete,
-        isDistinct = false)
-    }
+    (inputExpr: Expression) => exprToFunc(inputExpr).toAggregateExpression()
   }
 
   /**

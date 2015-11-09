@@ -282,10 +282,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       { case udfName ~ exprs => UnresolvedFunction(udfName, exprs, isDistinct = false) }
     | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
       lexical.normalizeKeyword(udfName) match {
-        case "sum" => AggregateExpression2(Sum(exprs.head), mode = Complete, isDistinct = true)
         case "count" =>
-          // CountDistinct(exprs)
-          throw new UnsupportedOperationException("We need to support it before merge SPARK-9830.")
+          aggregate.Count(exprs).toAggregateExpression(isDistinct = true)
         case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
       }
     }

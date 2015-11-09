@@ -1382,11 +1382,11 @@ class DataFrame private[sql](
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
-      "count" -> Count,
-      "mean" -> Average,
-      "stddev" -> StddevSamp,
-      "min" -> Min,
-      "max" -> Max)
+      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
+      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
+      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
+      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 

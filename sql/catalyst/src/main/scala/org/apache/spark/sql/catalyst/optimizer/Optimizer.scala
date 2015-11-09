@@ -860,12 +860,15 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   private val MAX_DOUBLE_DIGITS = 15
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
-      MakeDecimal(Sum(UnscaledValue(e)), prec + 10, scale)
+    case AggregateExpression2(Sum(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+      if prec + 10 <= MAX_LONG_DIGITS =>
+      MakeDecimal(AggregateExpression2(Sum(UnscaledValue(e)), mode, isDistinct), prec + 10, scale)
 
-    case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+    case AggregateExpression2(Average(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+      if prec + 4 <= MAX_DOUBLE_DIGITS =>
+      val newAggExpr = AggregateExpression2(Average(UnscaledValue(e)), mode, isDistinct)
       Cast(
-        Divide(Average(UnscaledValue(e)), Literal.create(math.pow(10.0, scale), DoubleType)),
+        Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
         DecimalType(prec + 4, scale + 4))
   }
 }

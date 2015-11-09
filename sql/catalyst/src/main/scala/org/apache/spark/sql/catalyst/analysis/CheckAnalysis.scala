@@ -116,7 +116,7 @@ trait CheckAnalysis {
                   case child if !child.deterministic =>
                     failAnalysis(
                       s"nondeterministic expression ${expr.prettyString} are not allowed " +
-                      s"in grouping expression.")
+                        s"in grouping expression.")
                   case child => // OK
                 }
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>

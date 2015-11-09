@@ -52,3 +52,14 @@ case class Count(child: Expression) extends DeclarativeAggregate {
 
   override def defaultResult: Option[Literal] = Option(Literal(0L))
 }
+
+object Count {
+  def apply(children: Seq[Expression]): Count = {
+    val child = if (children.size > 1) {
+      DropAnyNull(CreateStruct(children))
+    } else {
+      children.head
+    }
+    Count(child)
+  }
+}

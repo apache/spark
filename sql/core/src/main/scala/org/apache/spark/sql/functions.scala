@@ -233,11 +233,7 @@ object functions {
    */
   @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column = {
-    throw new UnsupportedOperationException("We need to support it before merge SPARK-9830.")
-    // withAggregateFunction {
-    //  Count((expr +: exprs).map(_.expr)),
-    //  true
-    // }
+    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
   }
 
   /**
@@ -428,7 +424,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_pop(e: Column): Column = withExpr { VariancePop(e.expr) }
+  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions

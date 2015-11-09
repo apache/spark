@@ -1509,8 +1509,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
 
     /* Aggregate Functions */
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
     case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
-      AggregateExpression2(Count(Literal(1)), mode = Complete, isDistinct = false)
+      Count(Literal(1)).toAggregateExpression()
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
