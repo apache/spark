@@ -165,7 +165,7 @@ class BisectingKMeans private (
     val random = new Random(seed)
     var numLeafClustersNeeded = k - 1
     var level = 1
-    while (activeClusters.nonEmpty && numLeafClustersNeeded > 0 && level < 63) {
+    while (activeClusters.nonEmpty && numLeafClustersNeeded > 0 && level < LEVEL_LIMIT) {
       // Divisible clusters are sufficiently large and have non-trivial cost.
       var divisibleClusters = activeClusters.filter { case (_, summary) =>
         (summary.size >= minSize) && (summary.cost > MLUtils.EPSILON * summary.size)
@@ -225,6 +225,8 @@ private object BisectingKMeans extends Serializable {
   private val ROOT_INDEX: Long = 1
 
   private val MAX_DIVISIBLE_CLUSTER_INDEX: Long = Long.MaxValue / 2
+
+  private val LEVEL_LIMIT = math.log10(Long.MaxValue) / math.log10(2)
 
   /** Returns the left child index of the given node index. */
   private def leftChildIndex(index: Long): Long = {
