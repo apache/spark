@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
@@ -24,7 +25,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * This rule rewrites an aggregate query with multiple distinct clauses into an expanded double
+ * This rule rewrites an aggregate query with distinct aggregations into an expanded double
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
@@ -99,7 +100,7 @@ import org.apache.spark.sql.types.IntegerType
  * we could improve this in the current rule by applying more advanced expression cannocalization
  * techniques.
  */
-object MultipleDistinctRewriter extends Rule[LogicalPlan] {
+case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case p if !p.resolved => p
@@ -122,8 +123,15 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    // Only continue to rewrite if there is more than one distinct group.
-    if (distinctAggGroups.size > 1) {
+    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
+      // When the flag is set to specialize single distinct agg planning,
+      // we will rely on our Aggregation strategy to handle queries with a single
+      // distinct column and this aggregate operator does have grouping expressions.
+      distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && a.groupingExpressions.isEmpty)
+    } else {
+      distinctAggGroups.size >= 1
+    }
+    if (shouldRewrite) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
