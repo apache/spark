@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.spark.mllib.regression.StreamingDecay;
 import scala.Tuple2;
 
 import org.junit.After;
@@ -72,7 +73,9 @@ public class JavaStreamingLogisticRegressionSuite implements Serializable {
       attachTestInputStream(ssc, Arrays.asList(testBatch, testBatch), 2));
     StreamingLogisticRegressionWithSGD slr = new StreamingLogisticRegressionWithSGD()
       .setNumIterations(2)
-      .setInitialWeights(Vectors.dense(0.0));
+      .setInitialWeights(Vectors.dense(0.0))
+      .setDecayFactor(0.5)
+      .setTimeUnit("POINTS");
     slr.trainOn(training);
     JavaPairDStream<Integer, Double> prediction = slr.predictOnValues(test);
     attachTestOutputStream(prediction.count());

@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.mllib.regression.StreamingDecay.{TimeUnit, BATCHES, POINTS}
+import org.apache.spark.mllib.regression.StreamingDecay.{BATCHES, POINTS}
 
 /**
  * :: Experimental ::
@@ -31,7 +31,7 @@ import org.apache.spark.mllib.regression.StreamingDecay.{TimeUnit, BATCHES, POIN
 @Experimental
 private[mllib] trait StreamingDecay extends Logging{
   private var decayFactor: Double = 0
-  private var timeUnit: TimeUnit = BATCHES
+  private var timeUnit: String = StreamingDecay.BATCHES
 
   /**
    * Set the decay factor for the forgetful algorithms.
@@ -73,7 +73,10 @@ private[mllib] trait StreamingDecay extends Logging{
    * @param timeUnit the time unit
    */
   @Since("1.6.0")
-  def setTimeUnit(timeUnit: TimeUnit): this.type = {
+  def setTimeUnit(timeUnit: String): this.type = {
+    if (timeUnit != StreamingDecay.BATCHES && timeUnit != StreamingDecay.POINTS) {
+      throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
+    }
     this.timeUnit = timeUnit
     this
   }
@@ -96,15 +99,14 @@ private[mllib] trait StreamingDecay extends Logging{
 @Experimental
 @Since("1.6.0")
 object StreamingDecay {
-  private[mllib] sealed trait TimeUnit
   /**
    * Each RDD in the DStream will be treated as 1 time unit.
    */
   @Since("1.6.0")
-  case object BATCHES extends TimeUnit
+  final val BATCHES = "BATCHES"
   /**
    * Each data point will be treated as 1 time unit.
    */
   @Since("1.6.0")
-  case object POINTS extends TimeUnit
+  final val POINTS = "POINTS"
 }

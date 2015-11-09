@@ -19,7 +19,6 @@ package org.apache.spark.mllib.regression
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.StreamingDecay.TimeUnit
 
 /**
  * Train or predict a linear regression model on streaming data. Training uses
@@ -109,6 +108,21 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   @Since("1.5.0")
   def setConvergenceTol(tolerance: Double): this.type = {
     this.algorithm.optimizer.setConvergenceTol(tolerance)
+    this
+  }
+
+  override def setDecayFactor(decayFactor: Double): this.type = {
+    super.setDecayFactor(decayFactor)
+    this
+  }
+
+  override def setHalfLife(halfLife: Double): this.type = {
+    super.setHalfLife(halfLife)
+    this
+  }
+
+  override def setTimeUnit(timeUnit: String): this.type = {
+    super.setTimeUnit(timeUnit)
     this
   }
 }

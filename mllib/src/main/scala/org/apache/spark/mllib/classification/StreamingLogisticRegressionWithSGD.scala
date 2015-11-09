@@ -19,7 +19,6 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.StreamingDecay.TimeUnit
 import org.apache.spark.mllib.regression.StreamingLinearAlgorithm
 
 /**
@@ -103,6 +102,21 @@ class StreamingLogisticRegressionWithSGD private[mllib] (
   @Since("1.3.0")
   def setInitialWeights(initialWeights: Vector): this.type = {
     this.model = Some(algorithm.createModel(initialWeights, 0.0))
+    this
+  }
+
+  override def setDecayFactor(decayFactor: Double): this.type = {
+    super.setDecayFactor(decayFactor)
+    this
+  }
+
+  override def setHalfLife(halfLife: Double): this.type = {
+    super.setHalfLife(halfLife)
+    this
+  }
+
+  override def setTimeUnit(timeUnit: String): this.type = {
+    super.setTimeUnit(timeUnit)
     this
   }
 }
