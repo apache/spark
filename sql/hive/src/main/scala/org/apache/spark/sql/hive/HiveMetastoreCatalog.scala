@@ -270,7 +270,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         partitionColumns = Nil,
         tableType = tableType,
         properties = tableProperties.toMap,
-        serdeProperties = options)
+        serdeProperties = options,
+        isTemporary = false)
     }
 
     def newHiveCompatibleMetastoreTable(relation: HadoopFsRelation, serde: HiveSerDe): HiveTable = {
@@ -298,7 +299,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
         viewText = None, // TODO We need to place the SQL string here.
         inputFormat = serde.inputFormat,
         outputFormat = serde.outputFormat,
-        serde = serde.serde)
+        serde = serde.serde,
+        isTemporary = false)
     }
 
     // TODO: Support persisting partitioned data source relations in Hive compatible format
@@ -491,10 +493,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
   }
 
-  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
+  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {hive
     val db = databaseName.getOrElse(client.currentDatabase)
+    client.listTables(db).map(tableName => getTable(db, tableName))
+  }
 
-    client.listTables(db).map(tableName => (tableName, false))
+  private def getTable(databaseName: String, tableName: String) : (String, Boolean) = {
+    val table = client.getTable(databaseName, tableName)
+    (tableName, table.isTemporary)
   }
 
   /**

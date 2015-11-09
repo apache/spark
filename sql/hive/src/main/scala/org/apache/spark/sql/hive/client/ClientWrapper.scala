@@ -322,7 +322,8 @@ private[hive] class ClientWrapper(
         inputFormat = Option(h.getInputFormatClass).map(_.getName),
         outputFormat = Option(h.getOutputFormatClass).map(_.getName),
         serde = Option(h.getSerializationLib),
-        viewText = Option(h.getViewExpandedText)).withClient(this)
+        viewText = Option(h.getViewExpandedText),
+        isTemporary = shim.isTemporary(h)).withClient(this)
     }
     converted
   }

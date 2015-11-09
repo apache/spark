@@ -57,7 +57,8 @@ private[hive] case class HiveTable(
     inputFormat: Option[String] = None,
     outputFormat: Option[String] = None,
     serde: Option[String] = None,
-    viewText: Option[String] = None) {
+    viewText: Option[String] = None,
+    isTemporary: Boolean) {
 
   @transient
   private[client] var client: ClientInterface = _

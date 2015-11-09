@@ -103,6 +103,8 @@ private[client] sealed abstract class Shim {
 
   def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit
 
+  def isTemporary(table: Table): Boolean
+
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
     require(Modifier.isStatic(method.getModifiers()),
@@ -213,6 +215,11 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       "Please use Hive 0.13 or higher.")
     getAllPartitions(hive, table)
   }
+
+  override def isTemporary(table: Table): Boolean = {
+    false
+  }
+
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
     getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
@@ -417,7 +424,10 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
       "getTimeVar",
       classOf[HiveConf.ConfVars],
       classOf[TimeUnit])
-
+  private lazy val isTemporaryMethod =
+    findMethod(
+      classOf[Table],
+      "isTemporary")
   override def loadPartition(
       hive: Hive,
       loadPath: Path,
@@ -466,6 +476,10 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
     val localFs = FileSystem.getLocal(conf)
     val pathFs = FileSystem.get(path.toUri(), conf)
     localFs.getUri() == pathFs.getUri()
+  }
+
+  override def isTemporary(table: Table): Boolean = {
+    isTemporaryMethod.invoke(table).asInstanceOf[Boolean]
   }
 
 }

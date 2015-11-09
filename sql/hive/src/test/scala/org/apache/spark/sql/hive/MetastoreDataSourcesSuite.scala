@@ -734,7 +734,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           "EXTERNAL" -> "FALSE"),
         tableType = ManagedTable,
         serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))))
+          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))),
+        isTemporary = false)
 
       catalog.client.createTable(hiveTable)
 
