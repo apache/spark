@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression2
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction2, AggregateExpression2}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -109,7 +109,16 @@ trait CheckAnalysis {
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case _: AggregateExpression2 => // OK
+              case aggExpr: AggregateExpression2 =>
+                // TODO: Is it possible that the child of a agg function is another
+                // agg function?
+                aggExpr.aggregateFunction.children.foreach {
+                  case child if !child.deterministic =>
+                    failAnalysis(
+                      s"nondeterministic expression ${expr.prettyString} are not allowed " +
+                      s"in grouping expression.")
+                  case child => // OK
+                }
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.prettyString}' is neither present in the group by, " +
@@ -121,17 +130,23 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            def checkValidGroupingExprs(expr: Expression): Unit = expr.dataType match {
-              case BinaryType =>
-                failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
-                  "in grouping expression")
-              case a: ArrayType =>
-                failAnalysis(s"array type expression ${expr.prettyString} cannot be used " +
-                  "in grouping expression")
-              case m: MapType =>
-                failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
-                  "in grouping expression")
-              case _ => // OK
+            def checkValidGroupingExprs(expr: Expression): Unit = {
+              expr.dataType match {
+                case BinaryType =>
+                  failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
+                    "in grouping expression")
+                case a: ArrayType =>
+                  failAnalysis(s"array type expression ${expr.prettyString} cannot be used " +
+                    "in grouping expression")
+                case m: MapType =>
+                  failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
+                    "in grouping expression")
+                case _ => // OK
+              }
+              if (!expr.deterministic) {
+                failAnalysis(s"nondeterministic expression ${expr.prettyString} should not " +
+                  s"appear in grouping expression.")
+              }
             }
 
             aggregateExprs.foreach(checkValidAggregateExpression)
@@ -183,7 +198,8 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] =>
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] & !o.isInstanceOf[Aggregate] =>
+            // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in Project or Filter, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
