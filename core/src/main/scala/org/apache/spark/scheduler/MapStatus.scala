@@ -126,6 +126,8 @@ private[spark] class CompressedMapStatus(
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
  * plus a hashset for tracking which blocks are not empty.
+ * In this case, no-empty blocks are very sparse,
+ * using a HashSet[Int] can save more memory usage than BitSet
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
@@ -178,8 +180,9 @@ private[spark] object MapStatusTrackingNoEmptyBlocks {
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
- * is compressed.
+ * plus a hashset for tracking which blocks are empty.
+ * In this case, no-empty blocks are very dense,
+ * using a HashSet[Int] can save more memory usage than BitSet
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
@@ -241,10 +244,10 @@ private[spark] object MapStatusTrackingEmptyBlocks {
  * @param avgSize average size of the non-empty blocks
  */
 private[spark] class HighlyCompressedMapStatus private (
-                                                         private[this] var loc: BlockManagerId,
-                                                         private[this] var numNonEmptyBlocks: Int,
-                                                         private[this] var emptyBlocks: BitSet,
-                                                         private[this] var avgSize: Long)
+    private[this] var loc: BlockManagerId,
+    private[this] var numNonEmptyBlocks: Int,
+    private[this] var emptyBlocks: BitSet,
+    private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
