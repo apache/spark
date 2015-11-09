@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{Row, DataFrame, QueryTest}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.scalatest.BeforeAndAfterAll
@@ -32,7 +32,7 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
   private var testData: DataFrame = _
 
   override def beforeAll() {
-    testData = Seq((1, 2), (2, 4)).toDF("a", "b")
+    testData = Seq((1, 2), (2, 4), (2, 9)).toDF("a", "b")
     hiveContext.registerDataFrameAsTable(testData, "mytable")
   }
 
@@ -40,27 +40,160 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
     hiveContext.dropTempTable("mytable")
   }
 
-  test("rollup") {
-    checkAnswer(
-      testData.rollup($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-      sql("select a + b, b, sum(a - b) from mytable group by a + b, b with rollup").collect()
-    )
+  test("rollup: aggregation input parameters overlap with the non-attribute expressions in group by") {
+    val sqlRollUp = sql(
+      """
+        SELECT a + b, b, sum(a + b) as ab, (a + b) as c FROM mytable GROUP BY a + b, b WITH ROLLUP
+      """.stripMargin)
+
+    val res = sqlRollUp.collect()
+
+    val expected =
+      Row ( null, null, 20,  null) ::
+      Row ( 3,    null,  3,  3   ) ::
+      Row ( 6,    null,  6,  6   ) ::
+      Row (11,    null, 11, 11   ) ::
+      Row ( 3,    2,     3,  3   ) ::
+      Row ( 6,    4,     6,  6   ) ::
+      Row (11,    9,    11, 11   ) :: Nil
+
+    checkAnswer(sqlRollUp, expected)
 
     checkAnswer(
-      testData.rollup("a", "b").agg(sum("b")),
-      sql("select a, b, sum(b) from mytable group by a, b with rollup").collect()
+      testData.rollup($"a" + $"b", $"b").agg(sum($"a" + $"b"), $"a" + $"b"),
+      expected
     )
   }
 
-  test("cube") {
-    checkAnswer(
-      testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
-      sql("select a + b, b, sum(a - b) from mytable group by a + b, b with cube").collect()
-    )
+  test("rollup: group by function") {
+    val sqlRollUp = sql(
+      """
+        |SELECT a + b, b, sum(a - b) as ab
+        |FROM mytable
+        |GROUP BY a + b, b WITH ROLLUP
+      """.stripMargin)
+
+    val expected =
+      Row (null, null, -10) ::
+      Row (3,    null, -1)  ::
+      Row (6,    null, -2)  ::
+      Row (11,   null, -7)  ::
+      Row (3,    2,    -1)  ::
+      Row (6,    4,    -2)  ::
+      Row (11,   9,    -7)  :: Nil
+
+    checkAnswer(sqlRollUp, expected)
 
     checkAnswer(
-      testData.cube("a", "b").agg(sum("b")),
-      sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
+      testData.rollup($"a" + $"b", $"b").agg(sum($"a" - $"b")),
+      expected
+    )
+  }
+
+  test("rollup: aggregation function parameters overlap with the group by columns") {
+    val sqlRollUp = sql(
+      """
+        |SELECT a, b, sum(b), max(b), min(b+b)
+        |FROM mytable
+        |GROUP BY a, b WITH ROLLUP
+      """.stripMargin)
+
+    val expected =
+      Row (null, null, 15, 9, 4)  ::
+      Row (1,    null, 2,  2, 4)  ::
+      Row (2,    null, 13, 9, 8)  ::
+      Row (1,    2,    2,  2, 4)  ::
+      Row (2,    4,    4,  4, 8)  ::
+      Row (2,    9,    9,  9, 18) :: Nil
+
+    checkAnswer(sqlRollUp, expected)
+
+    checkAnswer(
+      testData.rollup("a", "b").agg(sum("b"), max("b"), min($"b" + $"b")),
+      expected
+    )
+  }
+
+  test("cube: aggregation input parameters overlap with the non-attribute expressions in group by") {
+    val sqlCube = sql(
+      """
+        SELECT a + b, b, sum(a + b) as ab, (a + b) as c FROM mytable GROUP BY a + b, b WITH CUBE
+      """.stripMargin)
+
+    val res = sqlCube.collect()
+
+    val expected =
+      Row ( null, 2,     3,  null) ::
+      Row ( null, 4,     6,  null) ::
+      Row ( null, 9,    11,  null) ::
+      Row ( null, null, 20,  null) ::
+      Row ( 3,    null,  3,  3   ) ::
+      Row ( 6,    null,  6,  6   ) ::
+      Row (11,    null, 11, 11   ) ::
+      Row ( 3,    2,     3,  3   ) ::
+      Row ( 6,    4,     6,  6   ) ::
+      Row (11,    9,    11, 11   ) :: Nil
+
+    checkAnswer(sqlCube, expected)
+
+    checkAnswer(
+      testData.cube($"a" + $"b", $"b").agg(sum($"a" + $"b"), $"a" + $"b"),
+      expected
+    )
+  }
+
+  test("cube: group by function") {
+    val sqlCube = sql(
+      """
+        |SELECT a + b, b, sum(a - b) as ab
+        |FROM mytable
+        |GROUP BY a + b, b WITH CUBE
+      """.stripMargin)
+
+    val expected =
+      Row (null, 2,     -1) ::
+      Row (null, 4,     -2) ::
+      Row (null, 9,     -7) ::
+      Row (null, null, -10) ::
+      Row (3,    null,  -1) ::
+      Row (6,    null,  -2) ::
+      Row (11,   null,  -7) ::
+      Row (3,    2,     -1) ::
+      Row (6,    4,     -2) ::
+      Row (11,   9,     -7) :: Nil
+
+    checkAnswer(sqlCube, expected)
+
+    checkAnswer(
+      testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
+      expected
+    )
+  }
+
+  test("cube: aggregation function parameters overlap with the group by columns") {
+    val sqlCube = sql(
+      """
+        |SELECT a, b, sum(b), max(b), min(b+b)
+        |FROM mytable
+        |GROUP BY a, b WITH CUBE
+      """.stripMargin)
+
+    val expected =
+      Row (null, 2,     2, 2,  4) ::
+      Row (null, 4,     4, 4,  8) ::
+      Row (null, 9,     9, 9, 18) ::
+      Row (null, null, 15, 9,  4) ::
+      Row (1,    null,  2, 2,  4) ::
+      Row (2,    null, 13, 9,  8) ::
+      Row (1,    2,     2, 2,  4) ::
+      Row (2,    4,     4, 4,  8) ::
+      Row (2,    9,     9, 9, 18) :: Nil
+
+    checkAnswer(sqlCube, expected)
+
+    checkAnswer(
+      testData.cube("a", "b").agg(sum("b"), max("b"), min($"b" + $"b")),
+      expected
     )
   }
 }

@@ -208,31 +208,34 @@ class Analyzer(
         // We will insert another Projection if the GROUP BY keys contains the
         // non-attribute expressions. And the top operators can references those
         // expressions by its alias.
-        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 ==>
-        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a
+        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 with rollup ==>
+        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a with rollup
 
         // find all of the non-attribute expressions in the GROUP BY keys
         val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
 
         // The pair of (the original GROUP BY key, associated attribute)
-        val groupByExprPairs = x.groupByExprs.map(_ match {
+        val groupByExprPairs = x.groupByExprs.map {
           case e: NamedExpression => (e, e.toAttribute)
           case other => {
             val alias = Alias(other, other.toString)()
             nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
             (other, alias.toAttribute)
           }
-        })
+        }
 
-        // substitute the non-attribute expressions for aggregations.
+        // substitute the non-attribute expressions in aggregations
+        // by the generated aliases. Here, it does not include the ones that
+        // function as the input parameters in the other expressions.
         val aggregation = x.aggregations.map(expr => expr.transformDown {
-          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
+          case alias @ Alias(e: Expression, _) =>
+            groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(alias)
         }.asInstanceOf[NamedExpression])
 
         // substitute the group by expressions.
         val newGroupByExprs = groupByExprPairs.map(_._2)
 
-        val child = if (nonAttributeGroupByExpressions.length > 0) {
+        val child = if (nonAttributeGroupByExpressions.nonEmpty) {
           // insert additional projection if contains the
           // non-attribute expressions in the GROUP BY keys
           Project(x.child.output ++ nonAttributeGroupByExpressions, x.child)
@@ -240,10 +243,57 @@ class Analyzer(
           x.child
         }
 
+        // When expanding the input rows during evaluation, the column values will be set to
+        // null for the grouping sets that contains null (e.g., (null, null)). If these values
+        // are also used in aggregation, the aggregated values are always null.
+        // Thus, we will insert another Projection if the GROUP BY keys are contained in the
+        // aggregation. And the top operators can references those keys by its alias.
+        // e.g. SELECT a, b, sum(a) FROM src GROUP BY a, b with rollup ==>
+        //      SELECT a, b, sum(a1) FROM (SELECT a, b, a AS a1 FROM src) GROUP BY a, b with rollup
+
+        // collect all the distinct attributes that are in both aggregation functions and
+        // group by clauses
+        val attrInAggregatedFuncAndGroupBy = aggregation.collect {
+          case aggFunc: Alias => aggFunc.collect {
+            case a : Attribute if newGroupByExprs.contains(a) => a}
+        }.flatten.distinct
+
+        val alias4AttrInAggregatedFuncAndGroupBy = new ArrayBuffer[Alias]()
+
+        // generate alias for each attribute in attrInAggregatedFuncAndGroupBy
+        val attrInAggregatedFuncPairs = attrInAggregatedFuncAndGroupBy.map(a => {
+          val alias = Alias(a, a.toString)()
+          alias4AttrInAggregatedFuncAndGroupBy += alias
+          (a, alias.toAttribute)
+        })
+
+        val nonAttributeGroupByExpressionsToAttribute =
+          nonAttributeGroupByExpressions.map(a => a.toAttribute)
+
+        val newAggregation = aggregation.map {
+          case a : Alias => a.transform {
+            // Must avoid replace the alias replaced by the first step;
+            // otherwise, the following case will fail:
+            //    select a + b, b, sum(a - b) from test group by a + b, b with cube
+            case e => attrInAggregatedFuncPairs.find(
+              _._1==e && !nonAttributeGroupByExpressionsToAttribute.contains(e)).
+              map(_._2).getOrElse(e)
+          }.asInstanceOf[NamedExpression]
+          case other => other
+        }
+
+        val newChild = if (alias4AttrInAggregatedFuncAndGroupBy.nonEmpty) {
+          // When applying this rule, two Projections could be generated.
+          // Here, we expect the optimizer can collapse them.
+          Project(child.output ++ alias4AttrInAggregatedFuncAndGroupBy, child)
+        } else {
+          child
+        }
+
         Aggregate(
           newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
-          aggregation,
-          Expand(x.bitmasks, newGroupByExprs, gid, child))
+          newAggregation,
+          Expand(x.bitmasks, newGroupByExprs, gid, newChild))
     }
   }
 
