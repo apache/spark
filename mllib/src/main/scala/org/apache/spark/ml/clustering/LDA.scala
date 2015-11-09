@@ -38,11 +38,12 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   with HasSeed with HasCheckpointInterval {
 
   /**
-   * Param for the number of topics (clusters). Must be > 1. Default: 10.
+   * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
    * @group param
    */
   @Since("1.6.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", ParamValidators.gt(1))
+  final val k = new IntParam(this, "k", "number of topics (clusters) to infer",
+    ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -94,13 +95,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getDocConcentration: Array[Double] = $(docConcentration)
 
   /**
-   * Alias for [[getDocConcentration]]
-   * @group getParam
-   */
-  @Since("1.6.0")
-  def getAlpha: Array[Double] = getDocConcentration
-
-  /**
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
    * distributions over terms.
    *
@@ -133,13 +127,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getTopicConcentration: Double = $(topicConcentration)
 
   /**
-   * Alias for [[getTopicConcentration]]
-   * @group getParam
-   */
-  @Since("1.6.0")
-  def getBeta: Double = getTopicConcentration
-
-  /**
    * Optimizer or inference algorithm used to estimate the LDA model, specified as a
    * [[LDAOptimizer]] type.
    * Currently supported:
@@ -154,26 +141,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /** @group getParam */
   @Since("1.6.0")
   def getOptimizer: LDAOptimizer = $(optimizer)
-
-  // Developers should override these setOptimizer() methods.  These are defined here to
-  // ensure identical behavior when setting the optimizer using a String.
-  /** @group setParam */
-  @Since("1.6.0")
-  def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
-
-  /**
-   * Set [[optimizer]] by name (case-insensitive):
-   *  - "online" = [[OnlineLDAOptimizer]]
-   *  - "em" = [[EMLDAOptimizer]]
-   * @group setParam
-   */
-  @Since("1.6.0")
-  def setOptimizer(value: String): this.type = value.toLowerCase match {
-    case "online" => setOptimizer(new OnlineLDAOptimizer)
-    case "em" => setOptimizer(new EMLDAOptimizer)
-    case _ => throw new IllegalArgumentException(
-      s"LDA was given unknown optimizer '$value'.  Supported values: em, online")
-  }
 
   /**
    * Output column with estimates of the topic mixture distribution for each document (often called
@@ -246,7 +213,11 @@ class LDAModel private[ml] (
         " but the underlying model is missing.")
   }
 
-  /** @group setParam */
+  /**
+   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The vector should be of length vocabSize, with counts for each term (word).
+   * @group setParam
+   */
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
@@ -279,8 +250,8 @@ class LDAModel private[ml] (
 
   /**
    * Value for [[docConcentration]] estimated from data.
-   * If [[estimatedDocConcentration]] was set to false, then this returns the fixed (given) value
-   * for the [[docConcentration]] parameter.
+   * If [[OnlineLDAOptimizer]] was used and [[OnlineLDAOptimizer.optimizeDocConcentration]] was set
+   * to false, then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
   @Since("1.6.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
@@ -304,7 +275,7 @@ class LDAModel private[ml] (
   /**
    * Calculates a lower bound on the log likelihood of the entire corpus.
    *
-   * See Equation (16) in original Online LDA paper.
+   * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
    * WARNING: If this model was learned via a [[DistributedLDAModel]], this involves collecting
    *          a large [[topicsMatrix]] to the driver.  This implementation may be changed in the
@@ -326,7 +297,7 @@ class LDAModel private[ml] (
 
   /**
    * Calculate an upper bound bound on perplexity.  (Lower is better.)
-   * See Equation (16) in original Online LDA paper.
+   * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
    * @param dataset test corpus to use for calculating perplexity
    * @return Variational upper bound on log perplexity per token.
@@ -437,7 +408,7 @@ class DistributedLDAModel private[ml] (
   /**
    * Log likelihood of the observed tokens in the training set,
    * given the current parameter estimates:
-   *  log P(docs | topics, topic distributions for docs, alpha, eta)
+   *  log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
    *
    * Notes:
    *  - This excludes the prior; for that, use [[logPrior]].
@@ -452,7 +423,7 @@ class DistributedLDAModel private[ml] (
 
   /**
    * Log probability of the current parameter estimate:
-   * log P(topics, topic distributions for docs | alpha, eta)
+   * log P(topics, topic distributions for docs | Dirichlet hyperparameters)
    */
   @Since("1.6.0")
   lazy val logPrior: Double = oldDistributedModel.logPrior
@@ -474,6 +445,13 @@ class DistributedLDAModel private[ml] (
  *  - Original LDA paper (journal version):
  *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
+ * Input data (featuresCol):
+ *  LDA is given a collection of documents as input data, via the featuresCol parameter.
+ *  Each document is specified as a [[Vector]] of length vocabSize, where each entry is the
+ *  count for the corresponding term (word) in the document.  Feature transformers such as
+ *  [[org.apache.spark.ml.feature.Tokenizer]] and [[org.apache.spark.ml.feature.CountVectorizer]]
+ *  can be useful for converting text to word count vectors.
+ *
  * @see [[http://en.wikipedia.org/wiki/Latent_Dirichlet_allocation Latent Dirichlet allocation
  *       (Wikipedia)]]
  */
@@ -488,7 +466,11 @@ class LDA @Since("1.6.0") (
   setDefault(k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
     optimizer -> new OnlineLDAOptimizer)
 
-  /** @group setParam */
+  /**
+   * The features for LDA should be a [[Vector]] representing the word counts in a document.
+   * The vector should be of length vocabSize, with counts for each term (word).
+   * @group setParam
+   */
   @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
@@ -518,19 +500,25 @@ class LDA @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setAlpha(value: Array[Double]): this.type = set(docConcentration, value)
-
-  /** @group setParam */
-  @Since("1.6.0")
   def setTopicConcentration(value: Double): this.type = set(topicConcentration, value)
 
   /** @group setParam */
   @Since("1.6.0")
-  def setBeta(value: Double): this.type = set(topicConcentration, value)
+  def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
 
-  override def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
-
-  override def setOptimizer(value: String): this.type = super.setOptimizer(value)
+  /**
+   * Set [[optimizer]] by name (case-insensitive):
+   *  - "online" = [[OnlineLDAOptimizer]]
+   *  - "em" = [[EMLDAOptimizer]]
+   * @group setParam
+   */
+  @Since("1.6.0")
+  def setOptimizer(value: String): this.type = value.toLowerCase match {
+    case "online" => setOptimizer(new OnlineLDAOptimizer)
+    case "em" => setOptimizer(new EMLDAOptimizer)
+    case _ => throw new IllegalArgumentException(
+      s"LDA was given unknown optimizer '$value'.  Supported values: em, online")
+  }
 
   /** @group setParam */
   @Since("1.6.0")
@@ -623,6 +611,11 @@ class EMLDAOptimizer @Since("1.6.0") (
  *
  * Online Variational Bayes [[LDA.optimizer]].
  * This class may be used for specifying optimizer-specific Params.
+ *
+ * For details, see the original Online LDA paper:
+ *   Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
+ *   Neural Information Processing Systems, 2010.
+ *   [[http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf]]
  */
 @Since("1.6.0")
 @Experimental
@@ -646,7 +639,7 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
-   * Default: 1024, following the original Online LDA paper.
+   * Default: 1024, following the Online LDA paper (Hoffman et al., 2010).
    * @group param
    */
   @Since("1.6.0")
@@ -667,7 +660,7 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   /**
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
-   * Default: 0.51, based on the original Online LDA paper.
+   * Default: 0.51, based on the Online LDA paper (Hoffman et al., 2010).
    * @group param
    */
   @Since("1.6.0")
@@ -709,8 +702,6 @@ class OnlineLDAOptimizer @Since("1.6.0") (
   /** @group getParam */
   @Since("1.6.0")
   def getSubsamplingRate: Double = $(subsamplingRate)
-
-  // TODO: MOVE TO SHARED PARAMS
 
   /** @group setParam */
   @Since("1.6.0")
