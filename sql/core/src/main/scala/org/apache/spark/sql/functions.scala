@@ -175,6 +175,26 @@ object functions {
   def avg(columnName: String): Column = avg(Column(columnName))
 
   /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * For now this is an alias for the collect_list Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_list(e: Column): Column = callUDF("collect_list", e)
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * For now this is an alias for the collect_set Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_set(e: Column): Column = callUDF("collect_set", e)
+
+  /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
    * @group agg_funcs
