@@ -22,7 +22,6 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
-import scala.collection.mutable
 import scala.language.reflectiveCalls
 import scala.util.Try
 
@@ -30,10 +29,9 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitUtils
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
-
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader {
@@ -190,9 +188,8 @@ private[hive] class IsolatedClientLoader(
     new NonClosableMutableURLClassLoader(isolatedClassLoader)
   }
 
-  private[hive] def addJar(path: String): Unit = synchronized {
-    val jarURL = new java.io.File(path).toURI.toURL
-    classLoader.addURL(jarURL)
+  private[hive] def addJar(path: URL): Unit = synchronized {
+    classLoader.addURL(path)
   }
 
   /** The isolated client interface to Hive. */

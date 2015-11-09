@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
@@ -548,7 +547,15 @@ private[hive] class ClientWrapper(
   }
 
   def addJar(path: String): Unit = {
-    clientLoader.addJar(path)
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    clientLoader.addJar(jarURL)
     runSqlHive(s"ADD JAR $path")
   }
 

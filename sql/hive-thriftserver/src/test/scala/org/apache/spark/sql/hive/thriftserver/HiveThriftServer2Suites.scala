@@ -41,6 +41,7 @@ import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
