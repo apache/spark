@@ -105,32 +105,25 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    */
   override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
     logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    // We want to return a checkpointer based on the shutdown cause. If we want to terminate,
-    // then we want to use the given checkpointer to checkpoint one last time. In other cases,
-    // we return a `null` so that we don't checkpoint one last time.
-    val cp: IRecordProcessorCheckpointer = reason match {
+    reason match {
       /*
        * TERMINATE Use Case.  Checkpoint.
        * Checkpoint to indicate that all records from the shard have been drained and processed.
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
       case ShutdownReason.TERMINATE =>
-        checkpointer
+        receiver.removeCheckpointer(shardId, checkpointer)
 
       /*
-       * ZOMBIE Use Case.  NoOp.
+       * ZOMBIE Use Case or Unknown reason.  NoOp.
        * No checkpoint because other workers may have taken over and already started processing
        *    the same records.
        * This may lead to records being processed more than once.
        */
-      case ShutdownReason.ZOMBIE =>
-        null // return null so that we don't checkpoint
-
-      /* Unknown reason.  NoOp */
       case _ =>
-        null // return null so that we don't checkpoint
+        receiver.removeCheckpointer(shardId, null) // return null so that we don't checkpoint
     }
-    receiver.removeCheckpointer(shardId, cp)
+
   }
 }
 

@@ -61,11 +61,12 @@ private[kinesis] class KinesisCheckpointer(
    * we will use that to make the final checkpoint. If `null` is provided, we will not make the
    * checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
    */
-  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit =
+  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
     synchronized {
       checkpointers.remove(shardId)
       checkpoint(shardId, checkpointer)
     }
+  }
 
   /** Perform the checkpoint. */
   private def checkpoint(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
