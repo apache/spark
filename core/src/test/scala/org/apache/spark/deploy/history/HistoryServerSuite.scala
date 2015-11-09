@@ -80,9 +80,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
-    server.initialize()
     server.bind()
     port = server.boundPort
+    provider.checkForLogs()
   }
 
   def stop(): Unit = {

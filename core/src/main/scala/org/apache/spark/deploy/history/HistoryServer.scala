@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -69,6 +70,7 @@ class HistoryServer(
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
+  private val initialized = new AtomicBoolean(false)
   private[history] val metrics = new MetricRegistry()
   private[history] val health = new HealthCheckRegistry()
 
@@ -136,34 +138,36 @@ class HistoryServer(
   /**
    * Initialize the history server.
    *
-   * This starts a background thread that periodically synchronizes information displayed on
-   * this UI with the event logs in the provided base directory.
+   * This calls [[ApplicationHistoryProvider.start()]] to start the history provider.
    */
   def initialize() {
-    attachPage(new HistoryPage(this))
+    if (!initialized.getAndSet(true)) {
+      attachPage(new HistoryPage(this))
 
-    attachHandler(ApiRootResource.getServletHandler(this))
+      attachHandler(ApiRootResource.getServletHandler(this))
 
-    attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
+      attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
 
-    val contextHandler = new ServletContextHandler
-    contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
-    contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
-    attachHandler(contextHandler)
+      val contextHandler = new ServletContextHandler
+      contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
+      contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
+      attachHandler(contextHandler)
 
-    // hook up Codahale metrics
-    val registry = metrics
-    val metricsHandler = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
-    metricsHandler.addServlet(new ServletHolder(new HealthCheckServlet(health)),
-      HistoryServer.METRICS_PATH_PREFIX)
-    metricsHandler.addServlet(new ServletHolder(new ThreadDumpServlet()),
-      HistoryServer.THREADS_SUBPATH)
-    metricsHandler.addServlet(new ServletHolder(new MetricsServlet(registry)),
-      HistoryServer.HEALTH_SUBPATH)
-    attachHandler(metricsHandler)
-    registry.registerAll(new ThreadStatesGaugeSet());
-    registry.registerAll(new MemoryUsageGaugeSet());
-    registry.registerAll(new GarbageCollectorMetricSet());
+      // hook up Codahale metrics
+      val metricsHandler = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
+      metricsHandler.addServlet(new ServletHolder(new HealthCheckServlet(health)),
+        HistoryServer.METRICS_PATH_PREFIX)
+      metricsHandler.addServlet(new ServletHolder(new ThreadDumpServlet()),
+        HistoryServer.THREADS_SUBPATH)
+      metricsHandler.addServlet(new ServletHolder(new MetricsServlet(metrics)),
+        HistoryServer.HEALTH_SUBPATH)
+      attachHandler(metricsHandler)
+      metrics.registerAll(new ThreadStatesGaugeSet());
+      metrics.registerAll(new MemoryUsageGaugeSet());
+      metrics.registerAll(new GarbageCollectorMetricSet());
+      // start the provider against the metrics binding
+      provider.start(new ApplicationHistoryBinding(metrics, health))
+    }
   }
 
   /** Bind to the HTTP server behind this web interface. */
@@ -171,11 +175,18 @@ class HistoryServer(
     super.bind()
   }
 
-  /** Stop the server and close the file system. */
+  /** Stop the server and close the history provider. */
   override def stop() {
     super.stop()
     provider.stop()
-    appCache.stop()
+    try {
+      super.stop()
+    } finally {
+      appCache.stop()
+      if (provider != null) {
+        provider.stop()
+      }
+    }
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
@@ -320,8 +331,6 @@ object HistoryServer extends Logging {
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
-    val binding = new ApplicationHistoryBinding(server.metrics, server.health)
-    provider.start(binding)
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
