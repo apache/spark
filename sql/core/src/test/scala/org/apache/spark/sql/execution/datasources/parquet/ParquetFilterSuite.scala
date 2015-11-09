@@ -54,12 +54,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
-      val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
         case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation, _)) => filters
-      }.flatten
-      assert(analyzedPredicate.nonEmpty)
+      }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined)
 
-      val selectedFilters = analyzedPredicate.flatMap(DataSourceStrategy.translateFilter)
+      val selectedFilters = maybeAnalyzedPredicate.flatMap(DataSourceStrategy.translateFilter)
       assert(selectedFilters.nonEmpty)
 
       selectedFilters.foreach { pred =>
