@@ -421,3 +421,7 @@ def getfloat(section, key):
 
 def getint(section, key):
     return conf.getint(section, key)
+
+def has_option(section, key):
+    return conf.has_option(section, key)
+
