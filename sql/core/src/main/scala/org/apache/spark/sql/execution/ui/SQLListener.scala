@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricValue, SQLMetricParam}
 import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
@@ -58,8 +59,6 @@ private[sql] class SQLEventRegister extends SparkListenerEventRegister {
 }
 
 private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Logging {
-
-  val EXECUTION_ID_KEY = "spark.sql.execution.id"
 
   private val retainedExecutions = conf.getInt("spark.sql.ui.retainedExecutions", 1000)
 
@@ -112,7 +111,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-    val executionIdString = jobStart.properties.getProperty(EXECUTION_ID_KEY)
+    val executionIdString = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
     if (executionIdString == null) {
       // This is not a job created by SQL
       return

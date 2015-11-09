@@ -56,6 +56,7 @@ trait SharedSQLContext extends SQLTestUtils {
     try {
       if (_ctx != null) {
         _ctx.sparkContext.stop()
+        SQLContext.clearSqlListener(_ctx.listener)
         _ctx = null
       }
     } finally {

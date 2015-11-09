@@ -1285,6 +1285,10 @@ object SQLContext {
     Option(instantiatedContext.get())
   }
 
+  private[sql] def clearSqlListener(listener: SQLListener): Unit = {
+    sqlListener.compareAndSet(listener, null)
+  }
+
   /**
    * Changes the SQLContext that will be returned in this thread and its children when
    * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
@@ -1335,9 +1339,10 @@ object SQLContext {
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
     if (sqlListener.get() == null) {
       val listener = new SQLListener(sc.conf)
-      sqlListener.compareAndSet(null, listener)
-      sc.addSparkListener(listener)
-      sc.ui.foreach(new SQLTab(listener, _))
+      if (sqlListener.compareAndSet(null, listener)) {
+        sc.addSparkListener(listener)
+        sc.ui.foreach(new SQLTab(listener, _))
+      }
     }
     sqlListener.get()
   }
