@@ -494,20 +494,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
         if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
-          val f = Future {
-            if (active) {
-              addBlock(receivedBlockInfo)
-            } else {
-              throw new IllegalStateException("Receiver Tracker Endpoint shut down.")
-            }
-          }(walBatchingThreadPool)
-          f.onComplete { result =>
+          walBatchingThreadPool.execute(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
               if (active) {
-                context.reply(result.get)
+                context.reply(addBlock(receivedBlockInfo))
               } else {
-                throw new IllegalStateException("Receiver Tracker Endpoint shut down.")
+                throw new IllegalStateException("ReceiverTracker RpcEndpoint shut down.")
               }
-          }(walBatchingThreadPool)
+            }
+          })
         } else {
           context.reply(addBlock(receivedBlockInfo))
         }
