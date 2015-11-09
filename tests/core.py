@@ -55,14 +55,12 @@ class CoreTest(unittest.TestCase):
             dag_folder=DEV_NULL, include_examples=True)
         dags = [
             dag for dag in self.dagbag.dags.values()
-            #if dag.dag_id not in ('example_http_operator',)]
             if dag.dag_id in ('example_bash_operator',)]
         for dag in dags:
             dag.clear(
                 start_date=DEFAULT_DATE,
                 end_date=DEFAULT_DATE)
         for dag in dags:
-            print(dag.tasks)
             job = jobs.BackfillJob(
                 dag=dag,
                 start_date=DEFAULT_DATE,
@@ -381,8 +379,8 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/rendered?'
             'task_id=runme_1&dag_id=example_bash_operator&'
-            'execution_date={}'.format(DEFAULT_DATE_DS))
-        assert "example_bash_operator__runme_1" in response.data.decode('utf-8')
+            'execution_date={}'.format(DEFAULT_DATE_ISO))
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/log?task_id=run_this_last&'
             'dag_id=example_bash_operator&execution_date={}'
@@ -391,46 +389,39 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/task?'
             'task_id=runme_0&dag_id=example_bash_operator&'
-            'execution_date='.format(DEFAULT_DATE_DS))
+            'execution_date={}'.format(DEFAULT_DATE_DS))
         assert "Attributes" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/dag_stats')
         assert "example_bash_operator" in response.data.decode('utf-8')
+        url = (
+            "/admin/airflow/success?task_id=run_this_last&"
+            "dag_id=example_bash_operator&upstream=false&downstream=false&"
+            "future=false&past=false&execution_date={}&"
+            "origin=/admin".format(DEFAULT_DATE_DS))
+        response = self.app.get(url)
+        assert "Wait a minute" in response.data.decode('utf-8')
+        response = self.app.get(url + "&confirmed=true")
         response = self.app.get(
             '/admin/airflow/clear?task_id=run_this_last&'
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
-            'execution_date=2015-01-01T00:00:00&'
-            'origin=/admin')
+            'execution_date={}&'
+            'origin=/admin'.format(DEFAULT_DATE_DS))
         assert "Wait a minute" in response.data.decode('utf-8')
-        url = (
-            "/admin/airflow/success?task_id=run_this_last&"
-            "dag_id=example_bash_operator&upstream=false&downstream=false&"
-            "future=false&past=false&execution_date=2017-01-12T00:00:00&"
-            "origin=/admin")
-        response = self.app.get(url)
-        assert "Wait a minute" in response.data.decode('utf-8')
-        response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/clear?task_id=runme_1&"
             "dag_id=example_bash_operator&future=false&past=false&"
             "upstream=false&downstream=true&"
             "execution_date={}&"
             "origin=/admin".format(DEFAULT_DATE_DS))
-        clear_url_confirmed = clear_url + "&confirmed=true"
-
-        response = self.app.get(success_url_confirmed)
-        response = self.app.get(clear_url)
+        response = self.app.get(url)
         assert "Wait a minute" in response.data.decode('utf-8')
-        response = self.app.get(clear_url_confirmed)
-        response = self.app.get(success_url)
-        print("clear_url_confirmed: " + clear_url_confirmed)
-        print("success_url: " + success_url)
-        assert "Wait a minute" in response.data.decode('utf-8')
+        response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/run?task_id=runme_0&"
             "dag_id=example_bash_operator&force=true&deps=true&"
-            "execution_date={}&origin=/admin").format(DEFAULT_DATE_ISO)
+            "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")

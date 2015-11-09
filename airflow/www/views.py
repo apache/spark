@@ -951,10 +951,6 @@ class Airflow(BaseView):
         else:
             start_date = execution_date
 
-        if execution_date < start_date or end_date < start_date:
-            flash("Selected date before DAG start date", 'error')
-            return redirect(origin)
-
         start_date = execution_date if not past else start_date
 
         if downstream:
@@ -966,7 +962,7 @@ class Airflow(BaseView):
                 t.task_id
                 for t in task.get_flat_relatives(upstream=True)]
         TI = models.TaskInstance
-        dates = utils.date_range(start_date, end_date)
+        dates = dag.date_range(start_date, end_date=end_date)
         tis = session.query(TI).filter(
             TI.dag_id == dag_id,
             TI.execution_date.in_(dates),
