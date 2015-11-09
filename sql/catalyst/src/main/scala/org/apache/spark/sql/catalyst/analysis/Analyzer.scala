@@ -527,8 +527,10 @@ class Analyzer(
             withPosition(u) {
               registry.lookupFunction(name, children) match {
                 // DISTINCT is not meaningful for a Max or a Min.
-                case max: Max if isDistinct => max
-                case min: Min if isDistinct => min
+                case max: Max if isDistinct =>
+                  AggregateExpression2(max, Complete, isDistinct = false)
+                case min: Min if isDistinct =>
+                  AggregateExpression2(min, Complete, isDistinct = false)
                 // We get an aggregate function built based on AggregateFunction2 interface.
                 // So, we wrap it in AggregateExpression2.
                 case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)

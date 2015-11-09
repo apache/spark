@@ -669,48 +669,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
-
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      val errorMessage = intercept[SparkException] {
-        val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
-        val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
-      }.getMessage
-      assert(errorMessage.contains("java.lang.UnsupportedOperationException: " +
-        "Corr only supports the new AggregateExpression2"))
-    }
-  }
-
-  test("test Last implemented based on AggregateExpression1") {
-    // TODO: Remove this test once we remove AggregateExpression1.
-    import org.apache.spark.sql.functions._
-    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
-    withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-
-      checkAnswer(
-        df.groupBy("i").agg(last("j")),
-        df
-      )
-    }
-  }
-
-  test("error handling") {
-    withSQLConf("spark.sql.useAggregate2" -> "false") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  sum(value + 1.5 * key),
-            |  mydoublesum(value),
-            |  mydoubleavg(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-    }
   }
 
   test("no aggregation function (SPARK-11486)") {

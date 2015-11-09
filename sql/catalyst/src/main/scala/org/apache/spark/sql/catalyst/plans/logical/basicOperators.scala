@@ -310,6 +310,12 @@ case class Expand(
     val sizeInBytes = child.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  // Since output expressions are part of the constructor,
+  // we need to take them out from references.
+  override def references: AttributeSet = {
+    AttributeSet(expressions.flatMap(_.references)) -- AttributeSet(output)
+  }
 }
 
 trait GroupingAnalytics extends UnaryNode {

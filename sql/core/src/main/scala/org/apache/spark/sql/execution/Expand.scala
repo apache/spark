@@ -45,6 +45,12 @@ case class Expand(
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
+  // Since output expressions are part of the constructor,
+  // we need to take them out from references.
+  override def references: AttributeSet = {
+    AttributeSet(expressions.flatMap(_.references)) -- AttributeSet(output)
+  }
+
   private[this] val projection = {
     if (outputsUnsafeRows) {
       (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
