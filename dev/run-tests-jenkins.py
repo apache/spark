@@ -156,6 +156,7 @@ def main():
     ghprb_pull_title = os.environ["ghprbPullTitle"]
     sha1 = os.environ["sha1"]
 
+    os.environ["CONCURRENT_TESTS"] = "8"
     # Marks this build as a pull request build.
     os.environ["AMP_JENKINS_PRB"] = "true"
     # Switch to a Maven-based build if the PR title contains "test-maven":
