@@ -127,13 +127,15 @@ class KinesisCheckpointerSuite extends TestSuiteBase
       .thenReturn(someSeqNum).thenReturn(someOtherSeqNum)
     when(checkpointerMock.checkpoint(anyString)).thenAnswer(new Answer[Unit] {
       override def answer(invocations: InvocationOnMock): Unit = {
-        clock.waitTillTime(clock.getTimeMillis() + 100)
+        clock.waitTillTime(clock.getTimeMillis() + checkpointInterval.milliseconds / 2)
       }
     })
 
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
     clock.advance(checkpointInterval.milliseconds)
-    verify(checkpointerMock, times(0)).checkpoint(anyString())
+    eventually(timeout(1 second)) {
+      verify(checkpointerMock, times(1)).checkpoint(anyString())
+    }
     // don't block test thread
     val f = Future(kinesisCheckpointer.removeCheckpointer(shardId, checkpointerMock))(
       ExecutionContext.global)
@@ -141,14 +143,8 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     intercept[TimeoutException] {
       Await.ready(f, 50 millis)
     }
-    Future(kinesisCheckpointer.removeCheckpointer(shardId, checkpointerMock))(
-      ExecutionContext.global)
 
-    clock.advance(100)
-    eventually(timeout(1 second)) {
-      verify(checkpointerMock, times(1)).checkpoint(anyString())
-    }
-    clock.advance(100)
+    clock.advance(checkpointInterval.milliseconds / 2)
     eventually(timeout(1 second)) {
       verify(checkpointerMock, times(2)).checkpoint(anyString())
     }
