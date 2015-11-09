@@ -66,7 +66,8 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("large tasks with dense non-empty blocks should use " + classOf[MapStatusTrackingEmptyBlocks].getName) {
+  test("large tasks with dense non-empty blocks should use" +
+    classOf[MapStatusTrackingEmptyBlocks].getName) {
     val sizes = Array.fill[Long](2001)(150L)
     val status = MapStatus(null, sizes)
     assert(status.isInstanceOf[MapStatusTrackingEmptyBlocks])
@@ -76,7 +77,8 @@ class MapStatusSuite extends SparkFunSuite {
     assert(status.getSizeForBlock(2000) === 150L)
   }
 
-  test("large tasks with sparse non-empty blocks should use " + classOf[MapStatusTrackingNoEmptyBlocks].getName) {
+  test("large tasks with sparse non-empty blocks should use " +
+    classOf[MapStatusTrackingNoEmptyBlocks].getName) {
     val sizes = Array.fill[Long](2001)(0L)
     sizes(0) = 1L
     val status = MapStatus(null, sizes)
@@ -87,10 +89,11 @@ class MapStatusSuite extends SparkFunSuite {
     assert(status.getSizeForBlock(2000) === 0L)
   }
 
-  test("large tasks with not dense or sparse non-empty blocks should use " + classOf[HighlyCompressedMapStatus].getName) {
+  test("large tasks with not dense or sparse non-empty blocks should use " +
+    classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(0L)
     for(i <- 0 to sizes.length - 1){
-      if(i % 2 == 1){
+      if (i % 2 == 1) {
         sizes(i) = 1L
       }
     }

@@ -172,8 +172,11 @@ private[spark] class MapStatusTrackingNoEmptyBlocks private (
 }
 
 private[spark] object MapStatusTrackingNoEmptyBlocks {
-  def apply(loc: BlockManagerId, numNonEmptyBlocks: Int , nonEmptyBlocks: mutable.HashSet[Int], avgSize: Long): MapStatusTrackingNoEmptyBlocks =
-  {
+  def apply(
+    loc: BlockManagerId,
+    numNonEmptyBlocks: Int,
+    nonEmptyBlocks: mutable.HashSet[Int],
+    avgSize: Long): MapStatusTrackingNoEmptyBlocks = {
     new MapStatusTrackingNoEmptyBlocks(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize )
   }
 }
@@ -227,8 +230,11 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
 }
 
 private[spark] object MapStatusTrackingEmptyBlocks {
-  def apply(loc: BlockManagerId, numNonEmptyBlocks: Int , emptyBlocksHashSet: mutable.HashSet[Int], avgSize: Long): MapStatusTrackingEmptyBlocks =
-  {
+  def apply(
+    loc: BlockManagerId,
+    numNonEmptyBlocks: Int ,
+    emptyBlocksHashSet: mutable.HashSet[Int],
+    avgSize: Long): MapStatusTrackingEmptyBlocks = {
     new MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, emptyBlocksHashSet, avgSize )
   }
 }
