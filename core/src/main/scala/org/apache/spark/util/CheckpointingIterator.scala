@@ -22,7 +22,7 @@ import java.io.OutputStream
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.ClassTag
-import scala.util.control.NonFatal
+import scala.util.control.{ControlThrowable, NonFatal}
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
@@ -123,6 +123,7 @@ private[spark] class CheckpointingIterator[T: ClassTag](
     try {
       body
     } catch {
+      case e: ControlThrowable => throw e
       case e: Throwable =>
         try {
           cleanup()
@@ -213,6 +214,7 @@ private[spark] object CheckpointingIterator {
           context,
           blockSize)
       } catch {
+        case e: ControlThrowable => throw e
         case e: Throwable =>
           releaseLockForPartition(id)
           throw e
