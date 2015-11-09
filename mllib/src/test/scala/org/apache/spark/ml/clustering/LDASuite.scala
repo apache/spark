@@ -28,14 +28,14 @@ object LDASuite {
   def generateLDAData(
       sql: SQLContext,
       rows: Int,
-      dim: Int,
       k: Int,
       vocabSize: Int): DataFrame = {
+    val avgWC = 1  // average instances of each word in a doc
     val sc = sql.sparkContext
     val rng = new java.util.Random()
     rng.setSeed(1)
     val rdd = sc.parallelize(1 to rows).map { i =>
-      Vectors.dense(Array.fill(dim)(rng.nextInt(vocabSize).toDouble))
+      Vectors.dense(Array.fill(vocabSize)(rng.nextInt(2 * avgWC).toDouble))
     }.map(v => new TestRow(v))
     sql.createDataFrame(rdd)
   }
@@ -44,16 +44,13 @@ object LDASuite {
 
 class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  val k = 5
+  val k: Int = 5
+  val vocabSize: Int = 30
   @transient var dataset: DataFrame = _
-  @transient var vocabSize: Int = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    dataset = LDASuite.generateLDAData(sqlContext, 50, 3, k, 30)
-    vocabSize = dataset.flatMap(_.getAs[Vector](0).toArray.map(_.toInt).toSet)
-      .distinct().count().toInt
+    dataset = LDASuite.generateLDAData(sqlContext, 50, k, vocabSize)
   }
 
   test("default parameters") {
@@ -62,7 +59,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lda.getFeaturesCol === "features")
     assert(lda.getMaxIter === 20)
     assert(lda.isDefined(lda.seed))
-    assert(!lda.isDefined(lda.checkpointInterval))
+    assert(lda.getCheckpointInterval === 10)
     assert(lda.getK === 10)
     assert(lda.getDocConcentration === Array(-1.0))
     assert(lda.getTopicConcentration === -1.0)
@@ -129,9 +126,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // validateParams()
     lda.setDocConcentration(-1)
-    assert(lda.getDocConcentration === -1)
+    assert(lda.getDocConcentration === Array(-1.0))
     lda.validateParams()
-    lda.setDocConcentration(0.1)
+    lda.setDocConcentration(1.1)
     lda.validateParams()
     lda.setDocConcentration(Range(0, lda.getK).map(_ + 2.0).toArray)
     lda.validateParams()
@@ -178,7 +175,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
       val topicDistribution = r.getAs[Vector](0)
-      assert(topicDistribution.size === vocabSize)
+      assert(topicDistribution.size === k)
       assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
     }
 
@@ -192,14 +189,14 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val topics = model.describeTopics(3)
     assert(topics.count() === k)
     assert(topics.select("topic").map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
-    assert(topics.select("termIndices").collect().forall { case r: Row =>
-      val termIndices = r.getAs[Array[Int]](0)
-      termIndices.length === 3 && termIndices.toSet.size === 3
-    })
-    assert(topics.select("termWeights").collect().forall { case r: Row =>
-      val termWeights = r.getAs[Array[Double]](0)
-      termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0)
-    })
+    topics.select("termIndices").collect().foreach { case r: Row =>
+      val termIndices = r.getAs[Seq[Int]](0)
+      assert(termIndices.length === 3 && termIndices.toSet.size === 3)
+    }
+    topics.select("termWeights").collect().foreach { case r: Row =>
+      val termWeights = r.getAs[Seq[Double]](0)
+      assert(termWeights.length === 3 && termWeights.forall(w => w >= 0.0 && w <= 1.0))
+    }
   }
 
   test("fit & transform with EM LDA") {
@@ -223,6 +220,6 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     val ll = model.trainingLogLikelihood
     assert(ll <= 0.0 && ll != Double.NegativeInfinity)
     val lp = model.logPrior
-    assert(lp >= 0.0 && lp != Double.PositiveInfinity)
+    assert(lp <= 0.0 && lp != Double.NegativeInfinity)
   }
 }

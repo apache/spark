@@ -171,6 +171,14 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
+
+  override def validateParams(): Unit = {
+    if (getDocConcentration.length != 1) {
+      require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
+        s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
+        s" length 1 (scalar) or an array of length k.")
+    }
+  }
 }
 
 
@@ -194,14 +202,6 @@ class LDAModel private[ml] (
     @Since("1.6.0") protected var oldLocalModel: Option[OldLocalLDAModel],
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
   extends Model[LDAModel] with LDAParams with Logging {
-
-  override def validateParams(): Unit = {
-    if (getDocConcentration.length != 1) {
-      require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
-        s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
-        s" length 1 (scalar) or an array of length k.")
-    }
-  }
 
   /** Returns underlying spark.mllib model */
   @Since("1.6.0")
@@ -328,7 +328,7 @@ class LDAModel private[ml] (
   def describeTopics(maxTermsPerTopic: Int): DataFrame = {
     val topics = getModel.describeTopics(maxTermsPerTopic).zipWithIndex.map {
       case ((termIndices, termWeights), topic) =>
-        (topic, termIndices, termWeights)
+        (topic, termIndices.toSeq, termWeights.toSeq)
     }
     sqlContext.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
   }
@@ -463,8 +463,8 @@ class LDA @Since("1.6.0") (
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
 
-  setDefault(k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
-    optimizer -> new OnlineLDAOptimizer)
+  setDefault(maxIter -> 20, k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
+    optimizer -> new OnlineLDAOptimizer, checkpointInterval -> 10)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
