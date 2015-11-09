@@ -23,6 +23,9 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.health.HealthCheckRegistry
+
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -45,9 +48,13 @@ import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
   private var testDir: File = null
+  private var metrics: MetricRegistry = _
+  private var health: HealthCheckRegistry = _
 
   before {
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
+    metrics = new MetricRegistry()
+    health = new HealthCheckRegistry()
   }
 
   after {
@@ -69,6 +76,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("Parse application logs") {
     val clock = new ManualClock(12345678)
     val provider = new FsHistoryProvider(createTestConf(), clock)
+    val provider = createHistoryProvider()
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -130,6 +138,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
+  private def createHistoryProvider(): FsHistoryProvider = {
+    val provider = new FsHistoryProvider(createTestConf())
+    val binding = new ApplicationHistoryBinding(metrics, health)
+    provider.start(binding)
+    provider
+  }
+
   test("SPARK-3697: ignore directories that cannot be read.") {
     // setReadable(...) does not work on Windows. Please refer JDK-6728842.
     assume(!Utils.isWindows)
@@ -145,14 +160,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       )
     logFile2.setReadable(false, false)
 
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
     updateAndCheck(provider) { list =>
       list.size should be (1)
     }
   }
 
   test("history file is renamed from inprogress to completed") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -186,7 +201,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-5582: empty log directory") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -202,7 +217,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("apps with multiple attempts with order") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
     writeFile(attempt1, true, None,
@@ -347,7 +362,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Event log copy") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
     val logs = (1 to 2).map { i =>
       val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
       writeFile(log, true, None,
@@ -382,7 +397,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-8372: new logs with no app ID are ignored") {
-    val provider = new FsHistoryProvider(createTestConf())
+    val provider = createHistoryProvider()
 
     // Write a new log file without an app id, to make sure it's ignored.
     val logFile1 = newLogFile("app1", None, inProgress = true)

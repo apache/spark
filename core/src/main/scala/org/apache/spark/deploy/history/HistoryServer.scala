@@ -24,6 +24,13 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.health.HealthCheckRegistry
+import com.codahale.metrics.jvm.{ThreadStatesGaugeSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
+import com.codahale.metrics.servlets.HealthCheckServlet
+import com.codahale.metrics.servlets.MetricsServlet
+import com.codahale.metrics.servlets.ThreadDumpServlet
+import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -62,6 +69,20 @@ class HistoryServer(
 
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
+  private[history] val metrics = new MetricRegistry()
+  private[history] val health = new HealthCheckRegistry()
+
+  private val appLoader = new CacheLoader[String, SparkUI] {
+    override def load(key: String): SparkUI = {
+      val parts = key.split("/")
+      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
+      val ui = provider
+        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
+        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
+      attachSparkUI(ui)
+      ui
+    }
+  }
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics
@@ -129,6 +150,20 @@ class HistoryServer(
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
     contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
     attachHandler(contextHandler)
+
+    // hook up Codahale metrics
+    val registry = metrics
+    val metricsHandler = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
+    metricsHandler.addServlet(new ServletHolder(new HealthCheckServlet(health)),
+      HistoryServer.METRICS_PATH_PREFIX)
+    metricsHandler.addServlet(new ServletHolder(new ThreadDumpServlet()),
+      HistoryServer.THREADS_SUBPATH)
+    metricsHandler.addServlet(new ServletHolder(new MetricsServlet(registry)),
+      HistoryServer.HEALTH_SUBPATH)
+    attachHandler(metricsHandler)
+    registry.registerAll(new ThreadStatesGaugeSet());
+    registry.registerAll(new MemoryUsageGaugeSet());
+    registry.registerAll(new GarbageCollectorMetricSet());
   }
 
   /** Bind to the HTTP server behind this web interface. */
@@ -264,6 +299,9 @@ object HistoryServer extends Logging {
   private val conf = new SparkConf
 
   val UI_PATH_PREFIX = "/history"
+  val METRICS_PATH_PREFIX = "/metrics"
+  val HEALTH_SUBPATH = "/health"
+  val THREADS_SUBPATH = "/threads"
 
   def main(argStrings: Array[String]): Unit = {
     Utils.initDaemon(log)
@@ -282,6 +320,8 @@ object HistoryServer extends Logging {
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
+    val binding = new ApplicationHistoryBinding(server.metrics, server.health)
+    provider.start(binding)
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 

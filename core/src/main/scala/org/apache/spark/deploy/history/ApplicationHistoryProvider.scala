@@ -20,6 +20,8 @@ package org.apache.spark.deploy.history
 import java.util.zip.ZipOutputStream
 
 import scala.xml.Node
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.health.HealthCheckRegistry
 
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
@@ -72,6 +74,11 @@ private[history] case class LoadedAppUI(
     ui: SparkUI,
     updateProbe: () => Boolean)
 
+
+private[history] case class ApplicationHistoryBinding(metrics: MetricRegistry,
+    health: HealthCheckRegistry) {
+}
+
 private[history] abstract class ApplicationHistoryProvider {
 
   /**
@@ -97,6 +104,13 @@ private[history] abstract class ApplicationHistoryProvider {
   def getLastUpdatedTime(): Long = {
     return 0;
   }
+
+  /**
+   * Bind to the History Server: threads should be started here; exceptions may be raised
+   * if the history provider cannot be started.
+   * @param binding binding information
+   */
+  def start(binding: ApplicationHistoryBinding): Unit = {}
 
   /**
    * Returns a list of applications available for the history server to show.

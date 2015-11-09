@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+import com.codahale.metrics.{MetricRegistry, Metric, MetricFilter}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -211,6 +211,8 @@ private[spark] class MetricsSystem private (
       }
     }
   }
+
+  private[spark] def getMetricRegistry(): MetricRegistry = { registry }
 }
 
 private[spark] object MetricsSystem {
