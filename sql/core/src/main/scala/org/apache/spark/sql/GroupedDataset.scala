@@ -108,9 +108,7 @@ class GroupedDataset[K, T] private[sql](
       MapGroups(f, groupingAttributes, logicalPlan))
   }
 
-  def flatMap[U](
-      f: JFunction2[K, JIterator[T], JIterator[U]],
-      encoder: Encoder[U]): Dataset[U] = {
+  def flatMap[U](f: FlatMapGroupFunction[K, T, U], encoder: Encoder[U]): Dataset[U] = {
     flatMap((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
@@ -131,9 +129,7 @@ class GroupedDataset[K, T] private[sql](
       MapGroups(func, groupingAttributes, logicalPlan))
   }
 
-  def map[U](
-      f: JFunction2[K, JIterator[T], U],
-      encoder: Encoder[U]): Dataset[U] = {
+  def map[U](f: MapGroupFunction[K, T, U], encoder: Encoder[U]): Dataset[U] = {
     map((key, data) => f.call(key, data.asJava))(encoder)
   }
 
@@ -218,7 +214,7 @@ class GroupedDataset[K, T] private[sql](
    */
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
-      f: (K, Iterator[T], Iterator[U]) => Iterator[R]): Dataset[R] = {
+      f: (K, Iterator[T], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit def uEnc: Encoder[U] = other.tEncoder
     new Dataset[R](
       sqlContext,
@@ -232,7 +228,7 @@ class GroupedDataset[K, T] private[sql](
 
   def cogroup[U, R](
       other: GroupedDataset[K, U],
-      f: JFunction3[K, JIterator[T], JIterator[U], JIterator[R]],
+      f: CoGroupFunction[K, T, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }

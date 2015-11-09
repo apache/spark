@@ -18,10 +18,12 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
- * A function that takes two inputs and returns zero or more output records.
+ * A function that returns zero or more output records from each grouping key and its values from 2
+ * Datasets.
  */
-public interface FlatMapFunction2<T1, T2, R> extends Serializable {
-  Iterable<R> call(T1 t1, T2 t2) throws Exception;
+public interface CoGroupFunction<K, V1, V2, R> extends Serializable {
+  Iterable<R> call(K key, Iterator<V1> left, Iterator<V2> right) throws Exception;
 }
