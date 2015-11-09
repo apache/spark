@@ -63,12 +63,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lda.getK === 10)
     assert(lda.getDocConcentration === Array(-1.0))
     assert(lda.getTopicConcentration === -1.0)
-    assert(lda.getOptimizer.isInstanceOf[OnlineLDAOptimizer])
-    val optimizer = lda.getOptimizer.asInstanceOf[OnlineLDAOptimizer]
-    assert(optimizer.getKappa === 0.51)
-    assert(optimizer.getTau0 === 1024)
-    assert(optimizer.getSubsamplingRate === 0.05)
-    assert(optimizer.getOptimizeDocConcentration)
+    assert(lda.getOptimizer === "online")
+    assert(lda.getKappa === 0.51)
+    assert(lda.getTau0 === 1024)
+    assert(lda.getSubsamplingRate === 0.05)
+    assert(lda.getOptimizeDocConcentration)
     assert(lda.getTopicDistributionCol === "topicDistribution")
   }
 
@@ -93,18 +92,17 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // setOptimizer
     lda.setOptimizer("em")
-    assert(lda.getOptimizer.isInstanceOf[EMLDAOptimizer])
+    assert(lda.getOptimizer === "em")
     lda.setOptimizer("online")
-    assert(lda.getOptimizer.isInstanceOf[OnlineLDAOptimizer])
-    val optimizer = lda.getOptimizer.asInstanceOf[OnlineLDAOptimizer]
-    optimizer.setKappa(0.53)
-    assert(optimizer.getKappa === 0.53)
-    optimizer.setTau0(1027)
-    assert(optimizer.getTau0 === 1027)
-    optimizer.setSubsamplingRate(0.06)
-    assert(optimizer.getSubsamplingRate === 0.06)
-    optimizer.setOptimizeDocConcentration(false)
-    assert(!optimizer.getOptimizeDocConcentration)
+    assert(lda.getOptimizer === "online")
+    lda.setKappa(0.53)
+    assert(lda.getKappa === 0.53)
+    lda.setTau0(1027)
+    assert(lda.getTau0 === 1027)
+    lda.setSubsamplingRate(0.06)
+    assert(lda.getSubsamplingRate === 0.06)
+    lda.setOptimizeDocConcentration(false)
+    assert(!lda.getOptimizeDocConcentration)
   }
 
   test("parameters validation") {
@@ -139,18 +137,18 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
       }
     }
 
-    // OnlineLDAOptimizer
+    // Online LDA
     intercept[IllegalArgumentException] {
-      new OnlineLDAOptimizer().setTau0(0)
+      new LDA().setTau0(0)
     }
     intercept[IllegalArgumentException] {
-      new OnlineLDAOptimizer().setKappa(0)
+      new LDA().setKappa(0)
     }
     intercept[IllegalArgumentException] {
-      new OnlineLDAOptimizer().setSubsamplingRate(0)
+      new LDA().setSubsamplingRate(0)
     }
     intercept[IllegalArgumentException] {
-      new OnlineLDAOptimizer().setSubsamplingRate(1.1)
+      new LDA().setSubsamplingRate(1.1)
     }
   }
 

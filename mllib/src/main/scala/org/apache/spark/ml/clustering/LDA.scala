@@ -126,21 +126,35 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   def getTopicConcentration: Double = $(topicConcentration)
 
+  /** Supported values for Param [[optimizer]]. */
+  final val supportedOptimizers: Array[String] = Array("online", "em")
+
   /**
-   * Optimizer or inference algorithm used to estimate the LDA model, specified as a
-   * [[LDAOptimizer]] type.
-   * Currently supported:
-   *  - Online Variational Bayes: [[OnlineLDAOptimizer]] (default)
-   *  - Expectation-Maximization (EM): [[EMLDAOptimizer]]
+   * Optimizer or inference algorithm used to estimate the LDA model.
+   * Currently supported (case-insensitive):
+   *  - "online": Online Variational Bayes (default)
+   *  - "em": Expectation-Maximization
+   *
+   * For details, see the following papers:
+   *  - Online LDA:
+   *     Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
+   *     Neural Information Processing Systems, 2010.
+   *     [[http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf]]
+   *  - EM:
+   *     Asuncion et al.  "On Smoothing and Inference for Topic Models."
+   *     Uncertainty in Artificial Intelligence, 2009.
+   *     [[http://arxiv.org/pdf/1205.2662.pdf]]
+   *
    * @group param
    */
   @Since("1.6.0")
-  final val optimizer = new Param[LDAOptimizer](this, "optimizer", "Optimizer or inference" +
-    " algorithm used to estimate the LDA model")
+  final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
+    " algorithm used to estimate the LDA model.  Supported: " + supportedOptimizers.mkString(", "),
+    (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
 
   /** @group getParam */
   @Since("1.6.0")
-  def getOptimizer: LDAOptimizer = $(optimizer)
+  def getOptimizer: String = $(optimizer)
 
   /**
    * Output column with estimates of the topic mixture distribution for each document (often called
@@ -163,6 +177,75 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getTopicDistributionCol: String = $(topicDistributionCol)
 
   /**
+   * A (positive) learning parameter that downweights early iterations. Larger values make early
+   * iterations count less.
+   * Default: 1024, following the Online LDA paper (Hoffman et al., 2010).
+   * @group expertParam
+   */
+  @Since("1.6.0")
+  final val tau0 = new DoubleParam(this, "tau0", "A (positive) learning parameter that" +
+    " downweights early iterations. Larger values make early iterations count less.",
+    ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  @Since("1.6.0")
+  def getTau0: Double = $(tau0)
+
+  /**
+   * Learning rate, set as an exponential decay rate.
+   * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
+   * Default: 0.51, based on the Online LDA paper (Hoffman et al., 2010).
+   * @group expertParam
+   */
+  @Since("1.6.0")
+  final val kappa = new DoubleParam(this, "kappa", "Learning rate, set as an exponential decay" +
+    " rate. This should be between (0.5, 1.0] to guarantee asymptotic convergence.",
+    ParamValidators.gt(0))
+
+  /** @group expertGetParam */
+  @Since("1.6.0")
+  def getKappa: Double = $(kappa)
+
+  /**
+   * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
+   * in range (0, 1].
+   *
+   * Note that this should be adjusted in synch with [[LDA.maxIter]]
+   * so the entire corpus is used.  Specifically, set both so that
+   * maxIterations * miniBatchFraction >= 1.
+   *
+   * Note: This is the same as the `miniBatchFraction` parameter in
+   *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
+   *
+   * Default: 0.05, i.e., 5% of total documents.
+   * @group param
+   */
+  @Since("1.6.0")
+  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "Fraction of the corpus" +
+    " to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1].",
+    ParamValidators.inRange(0.0, 1.0, lowerInclusive = false, upperInclusive = true))
+
+  /** @group getParam */
+  @Since("1.6.0")
+  def getSubsamplingRate: Double = $(subsamplingRate)
+
+  /**
+   * Indicates whether the docConcentration (Dirichlet parameter for
+   * document-topic distribution) will be optimized during training.
+   * Setting this to true will make the model more expressive and fit the training data better.
+   * Default: false
+   * @group expertParam
+   */
+  @Since("1.6.0")
+  final val optimizeDocConcentration = new BooleanParam(this, "optimizeDocConcentration",
+    "Indicates whether the docConcentration (Dirichlet parameter for document-topic" +
+      " distribution) will be optimized during training.")
+
+  /** @group expertGetParam */
+  @Since("1.6.0")
+  def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
+
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
@@ -179,6 +262,17 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
         s" length 1 (scalar) or an array of length k.")
     }
   }
+
+  private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {
+    case "online" =>
+      new OldOnlineLDAOptimizer()
+        .setTau0($(tau0))
+        .setKappa($(kappa))
+        .setMiniBatchFraction($(subsamplingRate))
+        .setOptimizeDocConcentration($(optimizeDocConcentration))
+    case "em" =>
+      new OldEMLDAOptimizer()
+  }
 }
 
 
@@ -188,9 +282,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  *
  * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
  * @param oldLocalModel  Underlying spark.mllib model.
- *                       If this model was produced by [[OnlineLDAOptimizer]], then this is the
+ *                       If this model was produced by Online LDA, then this is the
  *                       only model representation.
- *                       If this model was produced by [[EMLDAOptimizer]], then this local
+ *                       If this model was produced by EM, then this local
  *                       representation may be built lazily.
  * @param sqlContext  Used to construct local DataFrames for returning query results
  */
@@ -250,8 +344,8 @@ class LDAModel private[ml] (
 
   /**
    * Value for [[docConcentration]] estimated from data.
-   * If [[OnlineLDAOptimizer]] was used and [[OnlineLDAOptimizer.optimizeDocConcentration]] was set
-   * to false, then this returns the fixed (given) value for the [[docConcentration]] parameter.
+   * If Online LDA was used and [[optimizeDocConcentration]] was set to false,
+   * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
   @Since("1.6.0")
   def estimatedDocConcentration: Vector = getModel.docConcentration
@@ -261,7 +355,7 @@ class LDAModel private[ml] (
    * This is a matrix of size vocabSize x k, where each column is a topic.
    * No guarantees are given about the ordering of the topics.
    *
-   * WARNING: If this model is actually a [[DistributedLDAModel]] instance from [[EMLDAOptimizer]],
+   * WARNING: If this model is actually a [[DistributedLDAModel]] instance from EM,
    *          then this method could involve collecting a large amount of data to the driver
    *          (on the order of vocabSize x k).
    */
@@ -341,7 +435,7 @@ class LDAModel private[ml] (
 /**
  * :: Experimental ::
  *
- * Distributed model fitted by [[LDA]] using the [[EMLDAOptimizer]].
+ * Distributed model fitted by [[LDA]] using Expectation-Maximization (EM).
  *
  * This model stores the inferred topics, the full training dataset, and the topic distribution
  * for each training document.
@@ -464,7 +558,8 @@ class LDA @Since("1.6.0") (
   def this() = this(Identifiable.randomUID("lda"))
 
   setDefault(maxIter -> 20, k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
-    optimizer -> new OnlineLDAOptimizer, checkpointInterval -> 10)
+    optimizer -> "online", checkpointInterval -> 10, tau0 -> 1024, kappa -> 0.51,
+    subsamplingRate -> 0.05, optimizeDocConcentration -> true)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
@@ -504,25 +599,27 @@ class LDA @Since("1.6.0") (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setOptimizer(value: LDAOptimizer): this.type = set(optimizer, value)
-
-  /**
-   * Set [[optimizer]] by name (case-insensitive):
-   *  - "online" = [[OnlineLDAOptimizer]]
-   *  - "em" = [[EMLDAOptimizer]]
-   * @group setParam
-   */
-  @Since("1.6.0")
-  def setOptimizer(value: String): this.type = value.toLowerCase match {
-    case "online" => setOptimizer(new OnlineLDAOptimizer)
-    case "em" => setOptimizer(new EMLDAOptimizer)
-    case _ => throw new IllegalArgumentException(
-      s"LDA was given unknown optimizer '$value'.  Supported values: em, online")
-  }
+  def setOptimizer(value: String): this.type = set(optimizer, value)
 
   /** @group setParam */
   @Since("1.6.0")
   def setTopicDistributionCol(value: String): this.type = set(topicDistributionCol, value)
+
+  /** @group expertSetParam */
+  @Since("1.6.0")
+  def setTau0(value: Double): this.type = set(tau0, value)
+
+  /** @group expertSetParam */
+  @Since("1.6.0")
+  def setKappa(value: Double): this.type = set(kappa, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
+
+  /** @group expertSetParam */
+  @Since("1.6.0")
+  def setOptimizeDocConcentration(value: Boolean): this.type = set(optimizeDocConcentration, value)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
@@ -537,7 +634,7 @@ class LDA @Since("1.6.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))
-      .setOptimizer($(optimizer).getOldOptimizer)
+      .setOptimizer(getOldOptimizer)
     // TODO: persist here, or in old LDA?
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
     val oldModel = oldLDA.run(oldData)
@@ -568,164 +665,4 @@ private[clustering] object LDA {
         (docId, features)
       }
   }
-}
-
-
-/**
- * :: Experimental ::
- *
- * Abstraction for specifying the [[LDA.optimizer]] Param.
- */
-@Since("1.6.0")
-@Experimental
-sealed abstract class LDAOptimizer extends Params {
-  private[clustering] def getOldOptimizer: OldLDAOptimizer
-}
-
-
-/**
- * :: Experimental ::
- *
- * Expectation-Maximization (EM) [[LDA.optimizer]].
- * This class may be used for specifying optimizer-specific Params.
- */
-@Since("1.6.0")
-@Experimental
-class EMLDAOptimizer @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String) extends LDAOptimizer {
-
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): EMLDAOptimizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  def this() = this(Identifiable.randomUID("EMLDAOpt"))
-
-  private[clustering] override def getOldOptimizer: OldEMLDAOptimizer = {
-    new OldEMLDAOptimizer
-  }
-}
-
-
-/**
- * :: Experimental ::
- *
- * Online Variational Bayes [[LDA.optimizer]].
- * This class may be used for specifying optimizer-specific Params.
- *
- * For details, see the original Online LDA paper:
- *   Hoffman, Blei and Bach.  "Online Learning for Latent Dirichlet Allocation."
- *   Neural Information Processing Systems, 2010.
- *   [[http://www.cs.columbia.edu/~blei/papers/HoffmanBleiBach2010b.pdf]]
- */
-@Since("1.6.0")
-@Experimental
-class OnlineLDAOptimizer @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String) extends LDAOptimizer {
-
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): OnlineLDAOptimizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  def this() = this(Identifiable.randomUID("OnlineLDAOpt"))
-
-  private[clustering] override def getOldOptimizer: OldOnlineLDAOptimizer = {
-    new OldOnlineLDAOptimizer()
-      .setTau0($(tau0))
-      .setKappa($(kappa))
-      .setMiniBatchFraction($(subsamplingRate))
-      .setOptimizeDocConcentration($(optimizeDocConcentration))
-  }
-
-  /**
-   * A (positive) learning parameter that downweights early iterations. Larger values make early
-   * iterations count less.
-   * Default: 1024, following the Online LDA paper (Hoffman et al., 2010).
-   * @group param
-   */
-  @Since("1.6.0")
-  final val tau0 = new DoubleParam(this, "tau0", "A (positive) learning parameter that" +
-    " downweights early iterations. Larger values make early iterations count less.",
-    ParamValidators.gt(0))
-
-  setDefault(tau0 -> 1024)
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getTau0: Double = $(tau0)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setTau0(value: Double): this.type = set(tau0, value)
-
-  /**
-   * Learning rate, set as an exponential decay rate.
-   * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
-   * Default: 0.51, based on the Online LDA paper (Hoffman et al., 2010).
-   * @group param
-   */
-  @Since("1.6.0")
-  final val kappa = new DoubleParam(this, "kappa", "Learning rate, set as an exponential decay" +
-    " rate. This should be between (0.5, 1.0] to guarantee asymptotic convergence.",
-    ParamValidators.gt(0))
-
-  setDefault(kappa -> 0.51)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setKappa(value: Double): this.type = set(kappa, value)
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getKappa: Double = $(kappa)
-
-  /**
-   * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
-   * in range (0, 1].
-   *
-   * Note that this should be adjusted in synch with [[LDA.maxIter]]
-   * so the entire corpus is used.  Specifically, set both so that
-   * maxIterations * miniBatchFraction >= 1.
-   *
-   * Note: This is the same as the `miniBatchFraction` parameter in
-   *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
-   *
-   * Default: 0.05, i.e., 5% of total documents.
-   * @group param
-   */
-  @Since("1.6.0")
-  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "Fraction of the corpus" +
-    " to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1].",
-    ParamValidators.inRange(0.0, 1.0, lowerInclusive = false, upperInclusive = true))
-
-  setDefault(subsamplingRate -> 0.05)
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getSubsamplingRate: Double = $(subsamplingRate)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
-
-  /**
-   * Indicates whether the docConcentration (Dirichlet parameter for
-   * document-topic distribution) will be optimized during training.
-   * Setting this to true will make the model more expressive and fit the training data better.
-   * Default: false
-   * @group param
-   */
-  @Since("1.6.0")
-  final val optimizeDocConcentration = new BooleanParam(this, "optimizeDocConcentration",
-    "Indicates whether the docConcentration (Dirichlet parameter for document-topic" +
-      " distribution) will be optimized during training.")
-
-  setDefault(optimizeDocConcentration -> true)
-
-  /** @group getParam */
-  @Since("1.6.0")
-  def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
-
-  /** @group setParam */
-  @Since("1.6.0")
-  def setOptimizeDocConcentration(value: Boolean): this.type = set(optimizeDocConcentration, value)
 }
