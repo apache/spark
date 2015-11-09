@@ -27,7 +27,7 @@ import scala.concurrent.{Await, Promise}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
@@ -43,8 +43,10 @@ import org.apache.spark.util.Utils
  * a clean up request for timestamp 3, we would clean up the file "log-1", and lose data regarding
  * 5 and 7.
  *
- * In addition, notice that the write method is still a blocking call. This will ensure that a
- * receiver will not be able to submit multiple `AddBlock` calls, jeopardizing the ordering of data.
+ * This means the caller can assume the same write semantics as any other WriteAheadLog
+ * implementation despite the batching in the background - when the write() returns, the data is
+ * written to the WAL and is durable. To take advantage of the batching, the caller can write from
+ * multiple threads, each of which will stay blocked until the corresponding data has been written.
  *
  * All other methods of the WriteAheadLog interface will be passed on to the wrapped WriteAheadLog.
  */
@@ -78,7 +80,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
     if (putSuccessfully) {
       Await.result(promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
     } else {
-      throw new SparkException("close() was called on BatchedWriteAheadLog before " +
+      throw new IllegalStateException("close() was called on BatchedWriteAheadLog before " +
         s"write request with time $time could be fulfilled.")
     }
   }
@@ -123,8 +125,8 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
     batchedWriterThread.join()
     while (!walWriteQueue.isEmpty) {
       val Record(_, time, promise) = walWriteQueue.poll()
-      promise.failure(new SparkException("close() was called on BatchedWriteAheadLog before " +
-        s"write request with time $time could be fulfilled."))
+      promise.failure(new IllegalStateException("close() was called on BatchedWriteAheadLog " +
+        s"before write request with time $time could be fulfilled."))
     }
     wrappedLog.close()
   }
@@ -141,9 +143,9 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
               logWarning("Encountered exception in Batched Writer Thread.", e)
           }
         }
-        logInfo("Batched WAL Writer thread exiting.")
+        logInfo("BatchedWriteAheadLog Writer thread exiting.")
       }
-    }, "Batched WAL Writer")
+    }, "BatchedWriteAheadLog Writer")
     thread.setDaemon(true)
     thread.start()
     thread
@@ -157,7 +159,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       logDebug(s"Received $numBatched records from queue")
     } catch {
       case _: InterruptedException =>
-        logWarning("Batch Write Ahead Log Writer queue interrupted.")
+        logWarning("BatchedWriteAheadLog Writer queue interrupted.")
     }
     try {
       var segment: WriteAheadLogRecordHandle = null
@@ -171,7 +173,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       buffer.foreach(_.promise.success(segment))
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Batch WAL Writer failed to write $buffer", e)
+        logWarning(s"BatchedWriteAheadLog Writer failed to write $buffer", e)
         buffer.foreach(_.promise.failure(e))
     } finally {
       buffer.clear()
