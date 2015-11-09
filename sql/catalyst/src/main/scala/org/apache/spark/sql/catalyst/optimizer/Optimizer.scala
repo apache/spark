@@ -377,8 +377,9 @@ object NullPropagation extends Rule[LogicalPlan] {
         Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
-      case e @ AggregateExpression2(Count(expr), mode, isDistinct) if !expr.nullable =>
-        AggregateExpression2(Count(Literal(1)), mode, isDistinct)
+      case e @ AggregateExpression2(Count(expr), mode, false) if !expr.nullable =>
+        // This rule should be only triggered when isDistinct field is false.
+        AggregateExpression2(Count(Literal(1)), mode, isDistinct = false)
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
