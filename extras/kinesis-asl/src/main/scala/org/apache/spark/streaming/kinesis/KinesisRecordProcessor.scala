@@ -70,11 +70,10 @@ private[kinesis] class KinesisRecordProcessor[T](
    *   in the DStream
    */
   override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
-    logInfo(s"Received batch: $batch. Is receiver alive: ${!receiver.isStopped()}")
     if (!receiver.isStopped()) {
       try {
         receiver.addRecords(shardId, batch)
-        logInfo(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
+        logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
 
         /*
          *

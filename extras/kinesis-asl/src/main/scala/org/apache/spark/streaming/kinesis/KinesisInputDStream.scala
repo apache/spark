@@ -54,7 +54,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
       val seqNumRanges = blockInfos.map {
         _.metadataOption.get.asInstanceOf[SequenceNumberRanges] }.toArray
       val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
-      logInfo(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
+      logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
       new KinesisBackedBlockRDD(
         context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
