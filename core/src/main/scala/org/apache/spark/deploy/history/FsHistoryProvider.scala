@@ -785,7 +785,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     /** Number of App UI load operations */
     val appUILoadCount = new Counter()
 
-    /** Number of App UI load operations that failed*/
+    /** Number of App UI load operations that failed */
     val appUILoadFailureCount = new Counter()
 
     /** Statistics on update duration */
