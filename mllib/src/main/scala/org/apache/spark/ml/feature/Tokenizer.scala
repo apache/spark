@@ -102,7 +102,7 @@ class RegexTokenizer(override val uid: String)
 
   /**
    * Indicates whether to convert all characters to lowercase before tokenizing.
-   * Default: false
+   * Default: true
    * @group param
    */
   final val toLowercase: BooleanParam = new BooleanParam(this, "toLowercase",
