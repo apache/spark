@@ -17,11 +17,11 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentSkipListSet
 import java.util.{Iterator => JIterator}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.{ThreadPoolTaskSupport, ForkJoinTaskSupport}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
@@ -58,8 +58,8 @@ private[streaming] class FileBasedWriteAheadLog(
   private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
 
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
-  implicit private val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor(threadpoolName))
+  private val threadpool = ThreadUtils.newDaemonCachedThreadPool(threadpoolName)
+  private val executionContext = ExecutionContext.fromExecutorService(threadpool)
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
   private var currentLogPath: Option[String] = None
@@ -125,13 +125,21 @@ private[streaming] class FileBasedWriteAheadLog(
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
-    logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
-
-    logFilesToRead.par.map { file =>
+    logInfo("Reading from the logs:\n" + logFilesToRead.mkString("\n"))
+    def readFile(file: String): Iterator[ByteBuffer] = {
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
-    }.flatten.toIterator.asJava
+    }
+    if (!closeFileAfterWrite) {
+      logFilesToRead.iterator.map(readFile).flatten.asJava
+    } else {
+      // For performance gains, it makes sense to parallelize the recovery if
+      // closeFileAfterWrite = true
+      val parallelFilesToRead = logFilesToRead.par
+      parallelFilesToRead.tasksupport = new ThreadPoolTaskSupport(threadpool)
+      parallelFilesToRead.map(readFile).flatten.toIterator.asJava
+    }
   }
 
   /**
@@ -147,10 +155,13 @@ private[streaming] class FileBasedWriteAheadLog(
    * asynchronously.
    */
   def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
-    val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
+    val oldLogFiles = synchronized {
+      val expiredLogs = pastLogs.filter { _.endTime < threshTime }
+      pastLogs --= expiredLogs
+      expiredLogs
+    }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
-    synchronized { pastLogs --= oldLogFiles }
     def deleteFile(walInfo: LogInfo): Unit = {
       try {
         val path = new Path(walInfo.path)
@@ -165,7 +176,7 @@ private[streaming] class FileBasedWriteAheadLog(
     }
     oldLogFiles.foreach { logInfo =>
       if (!executionContext.isShutdown) {
-        val f = Future { deleteFile(logInfo) }
+        val f = Future { deleteFile(logInfo) }(executionContext)
         if (waitForCompletion) {
           import scala.concurrent.duration._
           Await.ready(f, 1 second)

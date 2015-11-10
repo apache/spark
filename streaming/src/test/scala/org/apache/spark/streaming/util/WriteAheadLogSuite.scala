@@ -367,21 +367,6 @@ object WriteAheadLogSuite {
     segments
   }
 
-  /**
-   * Write received block tracker events to a file using the writer class and return an array of
-   * the file segments written.
-   */
-  def writeEventsUsingWriter(
-      filePath: String,
-      events: Seq[ReceivedBlockTrackerLogEvent]): Seq[FileBasedWriteAheadLogSegment] = {
-    val writer = new FileBasedWriteAheadLogWriter(filePath, hadoopConf)
-    val segments = events.map {
-      item => writer.write(ByteBuffer.wrap(Utils.serialize(item)))
-    }
-    writer.close()
-    segments
-  }
-
   /** Write data to rotating files in log directory using the WriteAheadLog class. */
   def writeDataUsingWriteAheadLog(
       logDirectory: String,

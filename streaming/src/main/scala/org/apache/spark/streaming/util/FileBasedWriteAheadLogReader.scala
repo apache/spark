@@ -60,10 +60,10 @@ private[streaming] class FileBasedWriteAheadLogReader(path: String, conf: Config
             "this should be okay.", e)
           close()
           if (HdfsUtils.checkFileExists(path, conf)) {
-            // if file exists, this could be a legitimate error
+            // If file exists, this could be a legitimate error
             throw e
           } else {
-            // file was deleted. This can occur when the daemon cleanup thread takes time to
+            // File was deleted. This can occur when the daemon cleanup thread takes time to
             // delete the file during recovery.
             false
           }
