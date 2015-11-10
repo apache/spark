@@ -1821,6 +1821,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
   def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
     val function = nodes.head
 
@@ -1832,6 +1833,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
         (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        (JsonTuple(children.map(nodeToExpr)), attributes)
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         val functionInfo: FunctionInfo =
