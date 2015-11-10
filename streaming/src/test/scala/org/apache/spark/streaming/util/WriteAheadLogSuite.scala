@@ -37,6 +37,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfter}
 import org.scalatest.mock.MockitoSugar
 
@@ -379,24 +380,26 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
    * In order to block the writes on the writer thread, we mock the write method, and block it
    * for some time with a promise.
    */
-  private def writeBlockingPromise(wal: WriteAheadLog): Promise[Any] = {
+  private def writeBlockingPromise(wal: WriteAheadLog): (Promise[Any], Waiter) = {
     // we would like to block the write so that we can queue requests
     val promise = Promise[Any]()
+    val waiter = new Waiter
     when(wal.write(any[ByteBuffer], any[Long])).thenAnswer(
       new Answer[WriteAheadLogRecordHandle] {
         override def answer(invocation: InvocationOnMock): WriteAheadLogRecordHandle = {
+          waiter.dismiss()
           Await.ready(promise.future, 4.seconds)
           walHandle
         }
       }
     )
-    promise
+    (promise, waiter)
   }
 
   test("BatchedWriteAheadLog - name log with aggregated entries with the timestamp of last entry") {
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
     // block the write so that we can batch some records
-    val promise = writeBlockingPromise(wal)
+    val (promise, waiter) = writeBlockingPromise(wal)
 
     val event1 = "hello"
     val event2 = "world"
@@ -407,6 +410,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
     promiseWriteEvent(batchedWal, event1, 3L)
+    waiter.await()
     // rest of the records will be batched while it takes 3 to get written
     promiseWriteEvent(batchedWal, event2, 5L)
     promiseWriteEvent(batchedWal, event3, 8L)
