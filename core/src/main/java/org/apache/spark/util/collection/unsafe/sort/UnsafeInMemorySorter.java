@@ -180,7 +180,7 @@ public final class UnsafeInMemorySorter {
       this.sortBuffer = sortBuffer;
     }
 
-    public SortedIterator clone () {
+    public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(memoryManager, sortBufferInsertPosition, sortBuffer);
       iter.position = position;
       iter.baseObject = baseObject;
