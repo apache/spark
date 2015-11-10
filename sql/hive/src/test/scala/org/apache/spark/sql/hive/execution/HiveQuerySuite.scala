@@ -20,22 +20,19 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
-
 import scala.util.Try
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
-import org.apache.spark.{SparkFiles, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHiveContext
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.{SparkException, SparkFiles}
 
 case class TestData(a: Int, b: String)
 
@@ -1235,6 +1232,26 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       s2.sql("DROP TABLE IF EXISTS test_b")
     }
 
+  }
+
+  test("lookup hive UDF in another thread") {
+    val e = intercept[AnalysisException] {
+      range(1).selectExpr("not_a_udf()")
+    }
+    assert(e.getMessage.contains("undefined function not_a_udf"))
+    var success = false
+    val t = new Thread("test") {
+      override def run(): Unit = {
+        val e = intercept[AnalysisException] {
+          range(1).selectExpr("not_a_udf()")
+        }
+        assert(e.getMessage.contains("undefined function not_a_udf"))
+        success = true
+      }
+    }
+    t.start()
+    t.join()
+    assert(success)
   }
 
   createQueryTest("select from thrift based table",
