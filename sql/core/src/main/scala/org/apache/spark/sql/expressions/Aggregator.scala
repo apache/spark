@@ -18,7 +18,7 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
 
@@ -70,7 +70,7 @@ abstract class Aggregator[-A, B, C] {
       implicit bEncoder: Encoder[B],
       cEncoder: Encoder[C]): TypedColumn[A, C] = {
     val expr =
-      new AggregateExpression2(
+      new AggregateExpression(
         TypedAggregateExpression(this),
         Complete,
         false)
@@ -78,4 +78,3 @@ abstract class Aggregator[-A, B, C] {
     new TypedColumn[A, C](expr, encoderFor[C])
   }
 }
-
