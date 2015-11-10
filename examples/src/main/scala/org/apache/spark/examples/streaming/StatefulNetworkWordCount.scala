@@ -59,17 +59,16 @@ object StatefulNetworkWordCount {
     val wordDstream = words.map(x => (x, 1))
 
     // Update the cumulative count using updateStateByKey
-    // This will give a Dstream made of state (which is the cumulative count of the words)
-
-    val trackStateFunc = (word: String, one: Option[Int], state: State[Int]) => {
-      val sum = one.getOrElse(0) + state.getOrElse(0)
+    // This will give a DStream made of state (which is the cumulative count of the words)
+    val trackStateFunc = (batchTime: Time, word: String, one: Option[Int], state: State[Int]) => {
+      val sum = one.getOrElse(0) + state.getOption.getOrElse(0)
       val output = (word, sum)
       state.update(sum)
       Some(output)
     }
 
     val stateDstream = wordDstream.trackStateByKey(
-      StateSpec(trackStateFunc).initialState(initialRDD))
+      StateSpec.function(trackStateFunc).initialState(initialRDD))
     stateDstream.print()
     ssc.start()
     ssc.awaitTermination()
