@@ -140,7 +140,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   /**
    * For testing only. Return whether the listener daemon thread is still alive.
    */
-  @VisibleForTesting
+  // VisibleForTesting
   def listenerThreadIsAlive: Boolean = listenerThread.isAlive
 
   /**
