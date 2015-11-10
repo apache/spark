@@ -402,7 +402,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <th style="width: 151px;"></th>
           <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Status</div></th>
-          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Location</div></th>
+          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Executor ID / Host</div></th>
           <th style="width: 166px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Last Error Time</div></th>
           <th>Last Error Message</th>
         </tr>
@@ -430,7 +430,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receiverActive = receiverInfo.map { info =>
       if (info.active) "ACTIVE" else "INACTIVE"
     }.getOrElse(emptyCell)
-    val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
+    val receiverLocation = receiverInfo.map { info =>
+      val executorId = if (info.executorId.isEmpty) emptyCell else info.executorId
+      val location = if (info.location.isEmpty) emptyCell else info.location
+      s"$executorId / $location"
+    }.getOrElse(emptyCell)
     val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
       if (msg.size > 100) msg.take(97) + "..." else msg

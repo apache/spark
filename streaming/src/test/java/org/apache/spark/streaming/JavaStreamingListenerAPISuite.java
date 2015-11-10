@@ -29,6 +29,7 @@ public class JavaStreamingListenerAPISuite extends JavaStreamingListener {
     receiverInfo.name();
     receiverInfo.active();
     receiverInfo.location();
+    receiverInfo.executorId();
     receiverInfo.lastErrorMessage();
     receiverInfo.lastError();
     receiverInfo.lastErrorTime();
@@ -41,6 +42,7 @@ public class JavaStreamingListenerAPISuite extends JavaStreamingListener {
     receiverInfo.name();
     receiverInfo.active();
     receiverInfo.location();
+    receiverInfo.executorId();
     receiverInfo.lastErrorMessage();
     receiverInfo.lastError();
     receiverInfo.lastErrorTime();
@@ -53,6 +55,7 @@ public class JavaStreamingListenerAPISuite extends JavaStreamingListener {
     receiverInfo.name();
     receiverInfo.active();
     receiverInfo.location();
+    receiverInfo.executorId();
     receiverInfo.lastErrorMessage();
     receiverInfo.lastError();
     receiverInfo.lastErrorTime();
