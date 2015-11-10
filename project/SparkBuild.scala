@@ -55,6 +55,8 @@ object BuildCommons {
   val sparkHome = buildLocation
 
   val testTempDir = s"$sparkHome/target/tmp"
+
+  val compilerJVMVersion = settingKey[String]("source and target JVM version for java and scalac")
 }
 
 object SparkBuild extends PomBuild {
@@ -154,9 +156,16 @@ object SparkBuild extends PomBuild {
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
-    javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
+    compilerJVMVersion := "1.7",
+
+    javacOptions in Compile ++= Seq(
+      "-encoding", "UTF-8",
+      "-source", compilerJVMVersion.value,
+      "-target", compilerJVMVersion.value
+    ),
 
     scalacOptions in Compile ++= Seq(
+      s"-target:jvm-${compilerJVMVersion.value}",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -240,6 +249,7 @@ object SparkBuild extends PomBuild {
 
   enable(Flume.settings)(streamingFlumeSink)
 
+  enable(Java8TestSettings.settings)(java8Tests)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -557,6 +567,14 @@ object Unidoc {
         Seq()
       }
     )
+  )
+}
+
+object Java8TestSettings {
+  import BuildCommons._
+
+  lazy val settings = Seq(
+    compilerJVMVersion := "1.8"
   )
 }
 
