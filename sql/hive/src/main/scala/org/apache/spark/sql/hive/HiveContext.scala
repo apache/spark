@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
@@ -310,7 +309,8 @@ class HiveContext private[hive](
           .map(_.toURI.toURL)
 
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using $jars")
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
+          s"using ${jars.mkString(":")}")
       new IsolatedClientLoader(
         version = metaVersion,
         execJars = jars.toSeq,
@@ -356,7 +356,6 @@ class HiveContext private[hive](
    *
    * @since 1.2.0
    */
-  @Experimental
   def analyze(tableName: String) {
     val tableIdent = SqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent))
@@ -553,12 +552,6 @@ class HiveContext private[hive](
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-  }
-
-  protected[sql] override def dialectClassName = if (conf.dialect == "hiveql") {
-    classOf[HiveQLDialect].getCanonicalName
-  } else {
-    super.dialectClassName
   }
 
   protected[sql] override def getSQLDialect(): ParserDialect = {

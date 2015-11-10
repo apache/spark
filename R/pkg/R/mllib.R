@@ -48,8 +48,9 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
             standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
+            formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
+                                 "fitRModelFormula", formula, data@sdf, family, lambda,
                                  alpha, standardize, solver)
             return(new("PipelineModel", model = model))
           })
@@ -90,12 +91,26 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'}
 setMethod("summary", signature(x = "PipelineModel"),
           function(x, ...) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelName", x@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                    "getModelFeatures", x@model)
-            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", x@model)
-            coefficients <- as.matrix(unlist(weights))
-            colnames(coefficients) <- c("Estimate")
-            rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", x@model)
+            if (modelName == "LinearRegressionModel") {
+              devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                               "getModelDevianceResiduals", x@model)
+              devianceResiduals <- matrix(devianceResiduals, nrow = 1)
+              colnames(devianceResiduals) <- c("Min", "Max")
+              rownames(devianceResiduals) <- rep("", times = 1)
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+              return(list(DevianceResiduals = devianceResiduals, Coefficients = coefficients))
+            } else {
+              coefficients <- as.matrix(unlist(coefficients))
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
+            }
           })

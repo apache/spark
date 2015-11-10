@@ -39,6 +39,7 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
@@ -114,8 +115,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.writeMetrics = writeMetrics;
-    acquireMemory(initialSize * 8L);
-    this.inMemSorter = new ShuffleInMemorySorter(initialSize);
+    this.inMemSorter = new ShuffleInMemorySorter(this, initialSize);
     this.peakMemoryUsedBytes = getMemoryUsage();
   }
 
@@ -301,9 +301,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   public void cleanupResources() {
     freeMemory();
     if (inMemSorter != null) {
-      long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+      inMemSorter.free();
       inMemSorter = null;
-      releaseMemory(sorterMemoryUsage);
     }
     for (SpillInfo spill : spills) {
       if (spill.file.exists() && !spill.file.delete()) {
@@ -321,9 +320,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
-      long needed = used + inMemSorter.getMemoryToExpand();
+      LongArray array;
       try {
-        acquireMemory(needed);  // could trigger spilling
+        // could trigger spilling
+        array = allocateArray(used / 8 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         assert(inMemSorter.hasSpaceForAnotherRecord());
@@ -331,16 +331,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
       // check if spilling is triggered or not
       if (inMemSorter.hasSpaceForAnotherRecord()) {
-        releaseMemory(needed);
+        freeArray(array);
       } else {
-        try {
-          inMemSorter.expandPointerArray();
-          releaseMemory(used);
-        } catch (OutOfMemoryError oom) {
-          // Just in case that JVM had run out of memory
-          releaseMemory(needed);
-          spill();
-        }
+        inMemSorter.expandPointerArray(array);
       }
     }
   }
@@ -404,9 +397,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         // Do not count the final file towards the spill count.
         writeSortedFile(true);
         freeMemory();
-        long sorterMemoryUsage = inMemSorter.getMemoryUsage();
+        inMemSorter.free();
         inMemSorter = null;
-        releaseMemory(sorterMemoryUsage);
       }
       return spills.toArray(new SpillInfo[spills.size()]);
     } catch (IOException e) {

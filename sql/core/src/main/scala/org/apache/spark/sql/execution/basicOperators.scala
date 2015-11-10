@@ -67,16 +67,10 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  /** Rewrite the project list to use unsafe expressions as needed. */
-  protected val unsafeProjectList = projectList.map(_ transform {
-    case CreateStruct(children) => CreateStructUnsafe(children)
-    case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-  })
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
     child.execute().mapPartitions { iter =>
-      val project = UnsafeProjection.create(unsafeProjectList, child.output)
+      val project = UnsafeProjection.create(projectList, child.output)
       iter.map { row =>
         numRows += 1
         project(row)
@@ -362,7 +356,7 @@ case class AppendColumns[T, U](
  * being output.
  */
 case class MapGroups[K, T, U](
-    func: (K, Iterator[T]) => Iterator[U],
+    func: (K, Iterator[T]) => TraversableOnce[U],
     kEncoder: ExpressionEncoder[K],
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],
@@ -397,7 +391,7 @@ case class MapGroups[K, T, U](
  * The result of this function is encoded and flattened before being output.
  */
 case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
     kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
