@@ -506,6 +506,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
+    logDebug("Starting DAGScheduler")
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
