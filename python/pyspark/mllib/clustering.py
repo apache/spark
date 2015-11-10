@@ -794,7 +794,6 @@ class BisectingKMeansModel(JavaModelWrapper):
     A clustering model derived from the bisecting k-means method.
 
     >>> from pyspark.mllib.linalg import Vectors
-    >>> from numpy.testing import assert_almost_equal, assert_equal
     >>> data = [
     ...     Vectors.dense([0.9, 0.9]),
     ...     Vectors.dense([1.1, 1.1]),
