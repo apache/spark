@@ -516,6 +516,48 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(3, 4, 4, 3, null) :: Nil)
   }
 
+  test("single distinct multiple columns set") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1, value2)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3) ::
+        Row(1, 3) ::
+        Row(2, 1) ::
+        Row(3, 0) :: Nil)
+  }
+
+  test("multiple distinct multiple columns sets") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1),
+          |  sum(distinct value1),
+          |  count(distinct value2),
+          |  sum(distinct value2),
+          |  count(distinct value1, value2),
+          |  count(value1),
+          |  sum(value1),
+          |  count(value2),
+          |  sum(value2),
+          |  count(*),
+          |  count(1)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3, 30, 3, 60, 3, 3, 30, 3, 60, 4, 4) ::
+        Row(1, 2, 40, 3, -10, 3, 3, 70, 3, -10, 3, 3) ::
+        Row(2, 2, 0, 1, 1, 1, 3, 1, 3, 3, 4, 4) ::
+        Row(3, 0, null, 1, 3, 0, 0, null, 1, 3, 2, 2) :: Nil)
+  }
+
   test("test count") {
     checkAnswer(
       sqlContext.sql(
