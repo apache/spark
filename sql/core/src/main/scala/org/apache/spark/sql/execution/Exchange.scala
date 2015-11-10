@@ -242,7 +242,7 @@ case class Exchange(
     // update the number of post-shuffle partitions.
     specifiedPartitionStartIndices.foreach { indices =>
       assert(newPartitioning.isInstanceOf[HashPartitioning])
-      newPartitioning = newPartitioning.withNumPartitions(indices.length)
+      newPartitioning = UnknownPartitioning(indices.length)
     }
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
@@ -262,7 +262,7 @@ case class Exchange(
 
 object Exchange {
   def apply(newPartitioning: Partitioning, child: SparkPlan): Exchange = {
-    Exchange(newPartitioning, child, None: Option[ExchangeCoordinator])
+    Exchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
   }
 }
 
@@ -315,7 +315,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             child.outputPartitioning match {
               case hash: HashPartitioning => true
               case collection: PartitioningCollection =>
-                collection.partitionings.exists(_.isInstanceOf[HashPartitioning])
+                collection.partitionings.forall(_.isInstanceOf[HashPartitioning])
               case _ => false
             }
         }
@@ -416,28 +416,48 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       // First check if the existing partitions of the children all match. This means they are
       // partitioned by the same partitioning into the same number of partitions. In that case,
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
-      // TODO: this should be a cost based decision. For example, a big relation should probably
-      // maintain its existing number of partitions and smaller partitions should be shuffled.
-      // defaultPartitions is arbitrary.
-      val numPartitions = children.head.outputPartitioning.numPartitions
+      val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
       val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
         case (child, distribution) => {
           child.outputPartitioning.guarantees(
-            createPartitioning(distribution, numPartitions))
+            createPartitioning(distribution, maxChildrenNumPartitions))
         }
       }
 
       children = if (useExistingPartitioning) {
+        // We do not need to shuffle any child's output.
         children
       } else {
+        // We need to shuffle at least one child's output.
+        // Now, we will determine the number of partitions that will be used by created
+        // partitioning schemes.
+        val numPartitions = {
+          // Let's see if we need to shuffle all child's outputs when we use
+          // maxChildrenNumPartitions.
+          val shufflesAllChildren = children.zip(requiredChildDistributions).forall {
+            case (child, distribution) => {
+              !child.outputPartitioning.guarantees(
+                createPartitioning(distribution, maxChildrenNumPartitions))
+            }
+          }
+          // If we need to shuffle all children, we use defaultNumPreShufflePartitions as the
+          // number of partitions. Otherwise, we use maxChildrenNumPartitions.
+          if (shufflesAllChildren) defaultNumPreShufflePartitions else maxChildrenNumPartitions
+        }
+
         children.zip(requiredChildDistributions).map {
           case (child, distribution) => {
             val targetPartitioning =
-              createPartitioning(distribution, defaultNumPreShufflePartitions)
+              createPartitioning(distribution, numPartitions)
             if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
             } else {
-              Exchange(targetPartitioning, child)
+              child match {
+                // If child is an exchange, we replace it with
+                // a new one having targetPartitioning.
+                case Exchange(_, c, _) => Exchange(targetPartitioning, c)
+                case _ => Exchange(targetPartitioning, child)
+              }
             }
           }
         }

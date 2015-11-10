@@ -41,7 +41,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = false, 0.05, seed = 13),
-      Seq(16, 23, 88, 100).map(Row(_))
+      Seq(3, 17, 27, 58, 62).map(Row(_))
     )
   }
 
@@ -186,6 +186,6 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
-      Seq(Row(0, 5), Row(1, 8)))
+      Seq(Row(0, 6), Row(1, 11)))
   }
 }

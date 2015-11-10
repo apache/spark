@@ -32,13 +32,19 @@ public class TestMemoryConsumer extends MemoryConsumer {
   }
 
   void use(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(size, this);
+    long got = taskMemoryManager.acquireExecutionMemory(
+      size,
+      taskMemoryManager.tungstenMemoryMode,
+      this);
     used += got;
   }
 
   void free(long size) {
     used -= size;
-    taskMemoryManager.releaseExecutionMemory(size, this);
+    taskMemoryManager.releaseExecutionMemory(
+      size,
+      taskMemoryManager.tungstenMemoryMode,
+      this);
   }
 }
 
