@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.hash
 
+import java.io.IOException
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
@@ -105,6 +107,19 @@ private[spark] class HashShuffleWriter[K, V](
     val sizes: Array[Long] = shuffle.writers.map { writer: DiskBlockObjectWriter =>
       writer.commitAndClose()
       writer.fileSegment().length
+    }
+    // rename all shuffle files to final paths
+    shuffle.writers.zip(sizes).foreach { case (writer: DiskBlockObjectWriter, size: Long) =>
+      if (size > 0) {
+        val output = blockManager.diskBlockManager.getFile(writer.blockId)
+        if (output.exists()) {
+          writer.file.delete()
+        } else {
+          if (!writer.file.renameTo(output)) {
+            throw new IOException(s"fail to rename ${writer.file} to $output")
+          }
+        }
+      }
     }
     MapStatus(blockManager.shuffleServerId, sizes)
   }

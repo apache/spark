@@ -17,6 +17,9 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.{IOException, File}
+import java.util.UUID
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
@@ -65,10 +68,21 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val tmp = new File(output.getAbsolutePath + "." + UUID.randomUUID())
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, outputFile)
-    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
+    if (!output.exists()) {
+      shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+      if (output.exists()) {
+        output.delete()
+      }
+      if (!tmp.renameTo(output)) {
+        throw new IOException("fail to rename data file " + tmp + " to " + output)
+      }
+    } else {
+      tmp.delete()
+    }
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }

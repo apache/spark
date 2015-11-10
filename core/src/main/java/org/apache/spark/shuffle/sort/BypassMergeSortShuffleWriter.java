@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.UUID;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -155,9 +156,20 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       writer.commitAndClose();
     }
 
-    partitionLengths =
-      writePartitionedFile(shuffleBlockResolver.getDataFile(shuffleId, mapId));
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File tmp = new File(output.getAbsolutePath() + "." + UUID.randomUUID());
+    partitionLengths = writePartitionedFile(tmp);
+    if (!output.exists()) {
+      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+      if (output.exists()) {
+        output.delete();
+      }
+      if (!tmp.renameTo(output)) {
+        throw new IOException("fail to rename data file " + tmp + " to " + output);
+      }
+    } else {
+      tmp.delete();
+    }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 

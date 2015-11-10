@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io._
+import java.util.UUID
 
 import com.google.common.io.ByteStreams
 
@@ -81,7 +82,8 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
    * */
   def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
+    val tmp = new File(indexFile.getAbsolutePath + "." + UUID.randomUUID())
+    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(tmp)))
     Utils.tryWithSafeFinally {
       // We take in lengths of each block, need to convert it to offsets.
       var offset = 0L
@@ -92,6 +94,10 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
       }
     } {
       out.close()
+    }
+    indexFile.deleteOnExit()
+    if (!tmp.renameTo(indexFile)) {
+      throw new IOException(s"fail to rename index file $tmp to $indexFile")
     }
   }
 
