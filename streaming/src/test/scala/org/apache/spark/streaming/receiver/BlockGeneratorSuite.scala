@@ -184,9 +184,10 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     // Verify that the final data is present in the final generated block and
     // pushed before complete stop
     assert(blockGenerator.isStopped() === false) // generator has not stopped yet
-    clock.advance(blockIntervalMs)   // force block generation
-    failAfter(1 second) {
-      thread.join()
+    eventually(timeout(10 seconds), interval(10 milliseconds)) {
+      // Keep calling `advance` to avoid blocking forever in `clock.waitTillTime`
+      clock.advance(blockIntervalMs)
+      assert(thread.isAlive === false)
     }
     assert(blockGenerator.isStopped() === true) // generator has finally been completely stopped
     assert(listener.pushedData === data, "All data not pushed by stop()")

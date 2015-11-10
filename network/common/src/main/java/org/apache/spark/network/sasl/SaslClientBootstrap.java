@@ -77,6 +77,8 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         payload = saslClient.response(response);
       }
 
+      client.setClientId(appId);
+
       if (encrypt) {
         if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslClient.getNegotiatedProperty(Sasl.QOP))) {
           throw new RuntimeException(

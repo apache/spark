@@ -13,9 +13,9 @@ primitives and higher-level pipeline APIs.
 
 It divides into two packages:
 
-* [`spark.mllib`](mllib-guide.html#mllib-types-algorithms-and-utilities) contains the original API
+* [`spark.mllib`](mllib-guide.html#data-types-algorithms-and-utilities) contains the original API
   built on top of [RDDs](programming-guide.html#resilient-distributed-datasets-rdds).
-* [`spark.ml`](mllib-guide.html#sparkml-high-level-apis-for-ml-pipelines) provides higher-level API
+* [`spark.ml`](ml-guide.html) provides higher-level API
   built on top of [DataFrames](sql-programming-guide.html#dataframes) for constructing ML pipelines.
 
 Using `spark.ml` is recommended because with DataFrames the API is more versatile and flexible.

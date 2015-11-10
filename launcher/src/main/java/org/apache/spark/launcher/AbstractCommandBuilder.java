@@ -47,13 +47,17 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
-  String propertiesFile;
+  protected String propertiesFile;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
   final List<String> pyFiles;
   final Map<String, String> childEnv;
   final Map<String, String> conf;
+
+  // The merged configuration for the application. Cached to avoid having to read / parse
+  // properties files multiple times.
+  private Map<String, String> effectiveConfig;
 
   public AbstractCommandBuilder() {
     this.appArgs = new ArrayList<String>();
@@ -114,29 +118,6 @@ abstract class AbstractCommandBuilder {
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     return cmd;
-  }
-
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
-      return;
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
   }
 
   void addOptionString(List<String> cmd, String options) {
@@ -280,12 +261,34 @@ abstract class AbstractCommandBuilder {
     return path;
   }
 
+  String getenv(String key) {
+    return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
+  void setPropertiesFile(String path) {
+    effectiveConfig = null;
+    this.propertiesFile = path;
+  }
+
+  Map<String, String> getEffectiveConfig() throws IOException {
+    if (effectiveConfig == null) {
+      effectiveConfig = new HashMap<>(conf);
+      Properties p = loadPropertiesFile();
+      for (String key : p.stringPropertyNames()) {
+        if (!effectiveConfig.containsKey(key)) {
+          effectiveConfig.put(key, p.getProperty(key));
+        }
+      }
+    }
+    return effectiveConfig;
+  }
+
   /**
    * Loads the configuration file for the application, if it exists. This is either the
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
    */
-  Properties loadPropertiesFile() throws IOException {
+  private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
     if (propertiesFile != null) {
@@ -315,10 +318,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  String getenv(String key) {
-    return firstNonEmpty(childEnv.get(key), System.getenv(key));
   }
 
   private String findAssembly() {

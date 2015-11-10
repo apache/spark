@@ -59,10 +59,9 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.mllib.util.MLUtils
 
 // Load training data
-val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 val lr = new LogisticRegression()
   .setMaxIter(10)
@@ -72,8 +71,8 @@ val lr = new LogisticRegression()
 // Fit the model
 val lrModel = lr.fit(training)
 
-// Print the weights and intercept for logistic regression
-println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
+// Print the coefficients and intercept for logistic regression
+println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 {% endhighlight %}
 </div>
 
@@ -81,8 +80,6 @@ println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
 {% highlight java %}
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.sql.DataFrame;
@@ -98,7 +95,7 @@ public class LogisticRegressionWithElasticNetExample {
     String path = "data/mllib/sample_libsvm_data.txt";
 
     // Load training data
-    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
+    DataFrame training = sqlContext.read.format("libsvm").load(path);
 
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
@@ -108,8 +105,8 @@ public class LogisticRegressionWithElasticNetExample {
     // Fit the model
     LogisticRegressionModel lrModel = lr.fit(training);
 
-    // Print the weights and intercept for logistic regression
-    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
+    // Print the coefficients and intercept for logistic regression
+    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
   }
 }
 {% endhighlight %}
@@ -118,19 +115,17 @@ public class LogisticRegressionWithElasticNetExample {
 <div data-lang="python" markdown="1">
 {% highlight python %}
 from pyspark.ml.classification import LogisticRegression
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.util import MLUtils
 
 # Load training data
-training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 
 # Fit the model
 lrModel = lr.fit(training)
 
-# Print the weights and intercept for logistic regression
-print("Weights: " + str(lrModel.weights))
+# Print the coefficients and intercept for logistic regression
+print("Coefficients: " + str(lrModel.coefficients))
 print("Intercept: " + str(lrModel.intercept))
 {% endhighlight %}
 </div>
@@ -251,10 +246,9 @@ regression model and extracting model summary statistics.
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.mllib.util.MLUtils
 
 // Load training data
-val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+val training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 val lr = new LinearRegression()
   .setMaxIter(10)
@@ -264,8 +258,8 @@ val lr = new LinearRegression()
 // Fit the model
 val lrModel = lr.fit(training)
 
-// Print the weights and intercept for linear regression
-println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
+// Print the coefficients and intercept for linear regression
+println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 
 // Summarize the model over the training set and print out some metrics
 val trainingSummary = lrModel.summary
@@ -283,8 +277,6 @@ import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.regression.LinearRegressionModel;
 import org.apache.spark.ml.regression.LinearRegressionTrainingSummary;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.sql.DataFrame;
@@ -300,7 +292,7 @@ public class LinearRegressionWithElasticNetExample {
     String path = "data/mllib/sample_libsvm_data.txt";
 
     // Load training data
-    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
+    DataFrame training = sqlContext.read.format("libsvm").load(path);
 
     LinearRegression lr = new LinearRegression()
       .setMaxIter(10)
@@ -310,8 +302,8 @@ public class LinearRegressionWithElasticNetExample {
     // Fit the model
     LinearRegressionModel lrModel = lr.fit(training);
 
-    // Print the weights and intercept for linear regression
-    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
+    // Print the coefficients and intercept for linear regression
+    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
 
     // Summarize the model over the training set and print out some metrics
     LinearRegressionTrainingSummary trainingSummary = lrModel.summary();
@@ -329,19 +321,17 @@ public class LinearRegressionWithElasticNetExample {
 <!--- TODO: Add python model summaries once implemented -->
 {% highlight python %}
 from pyspark.ml.regression import LinearRegression
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.util import MLUtils
 
 # Load training data
-training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
 lr = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 
 # Fit the model
 lrModel = lr.fit(training)
 
-# Print the weights and intercept for linear regression
-print("Weights: " + str(lrModel.weights))
+# Print the coefficients and intercept for linear regression
+print("Coefficients: " + str(lrModel.coefficients))
 print("Intercept: " + str(lrModel.intercept))
 
 # Linear regression model summary is not yet supported in Python.

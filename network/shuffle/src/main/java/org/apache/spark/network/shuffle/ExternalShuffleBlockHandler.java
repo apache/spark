@@ -58,7 +58,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
-  ExternalShuffleBlockHandler(
+  public ExternalShuffleBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
     this.streamManager = streamManager;
@@ -77,17 +77,19 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       RpcResponseCallback callback) {
     if (msgObj instanceof OpenBlocks) {
       OpenBlocks msg = (OpenBlocks) msgObj;
-      List<ManagedBuffer> blocks = Lists.newArrayList();
+      checkAuth(client, msg.appId);
 
+      List<ManagedBuffer> blocks = Lists.newArrayList();
       for (String blockId : msg.blockIds) {
         blocks.add(blockManager.getBlockData(msg.appId, msg.execId, blockId));
       }
-      long streamId = streamManager.registerStream(blocks.iterator());
+      long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
       logger.trace("Registered streamId {} with {} buffers", streamId, msg.blockIds.length);
       callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteArray());
 
     } else if (msgObj instanceof RegisterExecutor) {
       RegisterExecutor msg = (RegisterExecutor) msgObj;
+      checkAuth(client, msg.appId);
       blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
       callback.onSuccess(new byte[0]);
 
@@ -126,4 +128,12 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
   public void close() {
     blockManager.close();
   }
+
+  private void checkAuth(TransportClient client, String appId) {
+    if (client.getClientId() != null && !client.getClientId().equals(appId)) {
+      throw new SecurityException(String.format(
+        "Client for %s not authorized for application %s.", client.getClientId(), appId));
+    }
+  }
+
 }

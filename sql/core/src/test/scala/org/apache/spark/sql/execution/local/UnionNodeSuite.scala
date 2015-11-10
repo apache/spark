@@ -17,36 +17,39 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.test.SharedSQLContext
 
-class UnionNodeSuite extends LocalNodeTest with SharedSQLContext {
+class UnionNodeSuite extends LocalNodeTest {
 
-  test("basic") {
-    checkAnswer2(
-      testData,
-      testData,
-      (node1, node2) => UnionNode(Seq(node1, node2)),
-      testData.unionAll(testData).collect()
-    )
+  private def testUnion(inputData: Seq[Array[(Int, Int)]]): Unit = {
+    val inputNodes = inputData.map { data =>
+      new DummyNode(kvIntAttributes, data)
+    }
+    val unionNode = new UnionNode(conf, inputNodes)
+    val expectedOutput = inputData.flatten
+    val actualOutput = unionNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
 
   test("empty") {
-    checkAnswer2(
-      emptyTestData,
-      emptyTestData,
-      (node1, node2) => UnionNode(Seq(node1, node2)),
-      emptyTestData.unionAll(emptyTestData).collect()
-    )
+    testUnion(Seq(Array.empty))
+    testUnion(Seq(Array.empty, Array.empty))
   }
 
-  test("complicated union") {
-    val dfs = Seq(testData, emptyTestData, emptyTestData, testData, testData, emptyTestData,
-      emptyTestData, emptyTestData, testData, emptyTestData)
-    doCheckAnswer(
-      dfs,
-      nodes => UnionNode(nodes),
-      dfs.reduce(_.unionAll(_)).collect()
-    )
+  test("self") {
+    val data = (1 to 100).map { i => (i, i) }.toArray
+    testUnion(Seq(data))
+    testUnion(Seq(data, data))
+    testUnion(Seq(data, data, data))
+  }
+
+  test("basic") {
+    val zero = Array.empty[(Int, Int)]
+    val one = (1 to 100).map { i => (i, i) }.toArray
+    val two = (50 to 150).map { i => (i, i) }.toArray
+    val three = (800 to 900).map { i => (i, i) }.toArray
+    testUnion(Seq(zero, one, two, three))
   }
 
 }
