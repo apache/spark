@@ -283,6 +283,15 @@ class CheckpointSuite extends SparkFunSuite with LocalSparkContext with Logging 
     assert(rdd.collect() === (1 to 100))
   }
 
+  runTest("call RDD.iterator lazily") { reliableCheckpoint: Boolean =>
+    val parCollection = sc.makeRDD(1 to 10, 1)
+    checkpoint(parCollection, reliableCheckpoint)
+    val lazyRDD = new LazyRDD(parCollection)
+    checkpoint(lazyRDD, reliableCheckpoint)
+    lazyRDD.take(5)
+    assert(lazyRDD.collect() === (1 to 10))
+  }
+
   // Utility test methods
 
   /** Checkpoint the RDD either locally or reliably. */
@@ -498,6 +507,20 @@ class FatRDD(parent: RDD[Int]) extends RDD[Int](parent) {
 
   def compute(split: Partition, context: TaskContext): Iterator[Int] = {
     parent.compute(split.asInstanceOf[FatPartition].partition, context)
+  }
+}
+
+class LazyRDD(parent: RDD[Int]) extends RDD[Int](parent) {
+
+  protected def getPartitions: Array[Partition] = parent.partitions
+
+  def compute(split: Partition, context: TaskContext): Iterator[Int] = new Iterator[Int] {
+
+    lazy val iter = parent.iterator(split, context)
+
+    override def hasNext: Boolean = iter.hasNext
+
+    override def next(): Int = iter.next()
   }
 }
 
