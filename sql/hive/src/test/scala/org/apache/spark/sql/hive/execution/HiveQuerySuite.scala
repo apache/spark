@@ -927,7 +927,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-2263: Insert Map<K, V> values") {
     sql("CREATE TABLE m(value MAP<INT, STRING>)")
     sql("INSERT OVERWRITE TABLE m SELECT MAP(key, value) FROM src LIMIT 10")
-    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).map {
+    sql("SELECT * FROM m").collect().zip(sql("SELECT * FROM src LIMIT 10").collect()).foreach {
       case (Row(map: Map[_, _]), Row(key: Int, value: String)) =>
         assert(map.size === 1)
         assert(map.head === (key, value))
@@ -961,10 +961,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("CREATE TEMPORARY FUNCTION") {
     val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
-    sql(s"ADD JAR $funcJar")
+    val jarURL = s"file://$funcJar"
+    sql(s"ADD JAR $jarURL")
     sql(
       """CREATE TEMPORARY FUNCTION udtf_count2 AS
-        | 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'""".stripMargin)
+        |'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
     assert(sql("DESCRIBE FUNCTION udtf_count2").count > 1)
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
