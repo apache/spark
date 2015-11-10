@@ -302,13 +302,11 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  * Converts time string with given pattern.
  * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
  */
-case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
+case class ToUnixTimestamp(timeExp: Expression, format: Expression)
+  extends UnixTime(timeExp, format) {
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
-
-  override def left: Expression = timeExp
-  override def right: Expression = format
 }
 
 /**
@@ -321,10 +319,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
  */
-case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
-  override def left: Expression = timeExp
-  override def right: Expression = format
-
+case class UnixTimestamp(timeExp: Expression, format: Expression)
+  extends UnixTime(timeExp, format) {
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
@@ -334,7 +330,10 @@ case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTi
   }
 }
 
-abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
+abstract class UnixTime(timeExp: Expression, format: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+  override def left: Expression = timeExp
+  override def right: Expression = format
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
