@@ -138,9 +138,12 @@ public class ExternalShuffleClient extends ShuffleClient {
       ExecutorShuffleInfo executorInfo) throws IOException {
     checkInit();
     TransportClient client = clientFactory.createUnmanagedClient(host, port);
-    byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
-    client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
-    client.close();
+    try {
+      byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
+      client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
+    } finally {
+      client.close();
+    }
   }
 
   @Override
