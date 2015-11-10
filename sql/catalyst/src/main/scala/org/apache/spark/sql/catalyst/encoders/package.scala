@@ -25,4 +25,3 @@ package object encoders {
     case _ => sys.error(s"Only expression encoders are supported today")
   }
 }
-
