@@ -35,7 +35,8 @@ class OptimizeInSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
-      Batch("ConstantFolding", Once,
+      Batch("ConstantFolding", FixedPoint(10),
+        NullPropagation,
         ConstantFolding,
         BooleanSimplification,
         OptimizeIn) :: Nil
@@ -82,4 +83,52 @@ class OptimizeInSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("OptimizedIn test: NULL IN (expr1, ..., exprN) gets transformed to Filter(null)") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal.create(null, NullType), Seq(Literal(1), Literal(2))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: Inset optimization disabled as " +
+    "list expression contains attribute)") {
+    val originalQuery =
+      testRelation
+        .where(In(Literal.create(null, StringType), Seq(Literal(1), UnresolvedAttribute("b"))))
+        .analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(Literal.create(null, BooleanType))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("OptimizedIn test: Inset optimization disabled as " +
+    "list expression contains attribute - select)") {
+    val originalQuery =
+      testRelation
+        .select(In(Literal.create(null, StringType),
+        Seq(Literal(1), UnresolvedAttribute("b"))).as("a")).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select(Literal.create(null, BooleanType).as("a"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }

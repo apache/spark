@@ -54,12 +54,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
-      val analyzedPredicate = query.queryExecution.optimizedPlan.collect {
+      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
         case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation, _)) => filters
-      }.flatten
-      assert(analyzedPredicate.nonEmpty)
+      }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined)
 
-      val selectedFilters = DataSourceStrategy.selectFilters(analyzedPredicate)
+      val selectedFilters = maybeAnalyzedPredicate.flatMap(DataSourceStrategy.translateFilter)
       assert(selectedFilters.nonEmpty)
 
       selectedFilters.foreach { pred =>
@@ -313,6 +313,26 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkAnswer(
           sqlContext.read.parquet(path).filter("a > 0 and (part = 0 or a > 1)"),
           (2 to 3).map(i => Row(i, i.toString, 1)))
+      }
+    }
+  }
+
+  test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val pathOne = s"${dir.getCanonicalPath}/table1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
+        val pathTwo = s"${dir.getCanonicalPath}/table2"
+        (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
+
+        // If the "c = 1" filter gets pushed down, this query will throw an exception which
+        // Parquet emits. This is a Parquet issue (PARQUET-389).
+        checkAnswer(
+          sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a"),
+          (1 to 1).map(i => Row(i, i.toString, null)))
       }
     }
   }
