@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import java.io.File
+import java.io.{IOException, File}
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -81,5 +81,24 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+  }
+
+  test("write libsvm data and read it again") {
+    val df = sqlContext.read.format("libsvm").load(path)
+    val writepath = path + "_2"
+    df.write.save(writepath)
+
+    val df2 = sqlContext.read.format("libsvm").load(writepath)
+    val row1 = df.first()
+    val v = row1.getAs[SparseVector](1)
+    assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+  }
+
+  test("write libsvm data failed due to invalid schema") {
+    val df = sqlContext.read.format("text").load(path)
+    val e = intercept[IOException] {
+      df.write.format("libsvm").save(path + "_2")
+    }
+    assert(e.getMessage.contains("Illegal schema for libsvm data"))
   }
 }
