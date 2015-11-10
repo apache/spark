@@ -98,6 +98,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -777,6 +778,19 @@
         <artifactId>junit-interface</artifactId>
         <version>0.11</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.spotify</groupId>
+        <artifactId>docker-client</artifactId>
+        <classifier>shaded</classifier>
+        <version>3.2.1</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <artifactId>guava</artifactId>
+            <groupId>com.google.guava</groupId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.curator</groupId>
