@@ -69,14 +69,14 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         assert(state.exists)
         assert(state.get() === expectedData.get)
         assert(state.getOption() === expectedData)
-        assert(state.getOption.getOrElse(-1) === expectedData.get) // test implicit Option conversion
+        assert(state.getOption.getOrElse(-1) === expectedData.get)
       } else {
         assert(!state.exists)
         intercept[NoSuchElementException] {
           state.get()
         }
         assert(state.getOption() === None)
-        assert(state.getOption.getOrElse(-1) === -1)  // test implicit Option conversion
+        assert(state.getOption.getOrElse(-1) === -1)
       }
 
       assert(state.isTimingOut() === shouldBeTimingOut)
