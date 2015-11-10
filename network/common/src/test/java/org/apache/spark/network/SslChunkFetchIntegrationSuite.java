@@ -16,39 +16,23 @@
  */
 package org.apache.spark.network;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
-import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
-import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.ssl.SslSampleConfigs;
 
-import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Test;
-
 import static org.junit.Assert.*;
 
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 /**
  *

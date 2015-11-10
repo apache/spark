@@ -100,6 +100,8 @@ public class SslSampleConfigs {
           return SslSampleConfigs.trustStorePath;
         } else if (name.equals("spark.ssl.bts.trustStorePassword")) {
           return "password";
+        } else if (name.equals("spark.ssl.bts.enabledAlgorithms")) {
+            return "TLS_RSA_WITH_AES_128_CBC_SHA";
         } else {
           return super.get(name, defaultValue);
         }
@@ -122,7 +124,7 @@ public class SslSampleConfigs {
     try {
       return new SSLFactory.Builder()
         .requestedProtocol("TLSv1")
-        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA"})
+        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA"})
         .keyStore(new File(keyStorePath), "password")
         .keyPassword("password")
         .trustStore(
@@ -165,7 +167,7 @@ public class SslSampleConfigs {
     try {
       return new SSLFactory.Builder()
         .requestedProtocol("TLSv1")
-        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA"})
+        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA"})
         .privateKey(new File(privateKeyPath))
         .keyPassword("password")
         .certChain(new File(certChainPath))
@@ -191,7 +193,7 @@ public class SslSampleConfigs {
     try {
       return new SSLFactory.Builder()
         .requestedProtocol("TLSv1")
-        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA, SSL_RSA_WITH_DES_CBC_SHA"})
+        .requestedCiphers(new String[]{"TLS_RSA_WITH_AES_128_CBC_SHA"})
         .keyStore(new File(untrustedKeyStorePath), "password")
         .keyPassword("password")
         .trustStore(
