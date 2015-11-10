@@ -1448,15 +1448,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutors(executorIds: Seq[String]): Boolean = {
+  override def killExecutors(executorIds: Seq[String], force: Boolean = true): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds, true)
+        b.killExecutors(executorIds, force)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
     }
   }
+
+  def killExecutors(executorIds: Seq[String]) =
+    killExecutors(executorIds, force = true)
 
   /**
    * :: DeveloperApi ::
