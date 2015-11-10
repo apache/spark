@@ -266,8 +266,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     if (isSet(docConcentration)) {
       if (getDocConcentration.length != 1) {
         require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
-          s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
-          s" length 1 (scalar) or an array of length k.")
+          s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be an array of" +
+          s" length either 1 (scalar) or k (num topics).")
       }
       getOptimizer match {
         case "online" =>
