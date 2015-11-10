@@ -547,6 +547,8 @@ private[classification] class LogisticRegressionWriter(instance: LogisticRegress
 object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
 
   override def read: Reader[LogisticRegressionModel] = new LogisticRegressionReader
+
+  override def load(path: String): LogisticRegressionModel = read.load(path)
 }
 
 
