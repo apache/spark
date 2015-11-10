@@ -258,8 +258,8 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Integer> ds = context.createDataset(data, e.INT());
 
     Dataset<Tuple2<Integer, String>> selected = ds.select(
-      expr("value + 1").as(e.INT()),
-      col("value").cast("string").as(e.STRING()));
+      expr("value + 1"),
+      col("value").cast("string")).as(e.tuple(e.INT(), e.STRING()));
 
     Assert.assertEquals(
       Arrays.asList(tuple2(3, "2"), tuple2(7, "6")),
