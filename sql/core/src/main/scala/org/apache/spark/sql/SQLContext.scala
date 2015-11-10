@@ -1285,8 +1285,8 @@ object SQLContext {
     Option(instantiatedContext.get())
   }
 
-  private[sql] def clearSqlListener(listener: SQLListener): Unit = {
-    sqlListener.compareAndSet(listener, null)
+  private[sql] def clearSqlListener(): Unit = {
+    sqlListener.set(null)
   }
 
   /**
