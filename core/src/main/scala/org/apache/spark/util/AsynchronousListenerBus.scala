@@ -121,8 +121,8 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
    * For testing only. Wait until there are no more events in the queue, or until the specified
    * time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
    * emptied.
+   * Exposed for testing.
    */
-  // VisibleForTesting
   @throws(classOf[TimeoutException])
   def waitUntilEmpty(timeoutMillis: Long): Unit = {
     val finishTime = System.currentTimeMillis + timeoutMillis
@@ -139,8 +139,8 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   /**
    * For testing only. Return whether the listener daemon thread is still alive.
+   * Exposed for testing.
    */
-  // VisibleForTesting
   def listenerThreadIsAlive: Boolean = listenerThread.isAlive
 
   /**
