@@ -34,7 +34,39 @@ class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializ
 
   override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
 
+  override def merge(b1: N, b2: N): N = numeric.plus(b1, b2)
+
   override def present(reduction: N): N = reduction
+}
+
+object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with Serializable {
+  override def zero: (Long, Long) = (0, 0)
+
+  override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
+    (countAndSum._1 + 1, countAndSum._2 + input._2)
+  }
+
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) = {
+    (b1._1 + b2._1, b1._2 + b2._2)
+  }
+
+  override def present(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
+}
+
+object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)]
+  with Serializable {
+
+  override def zero: (Long, Long) = (0, 0)
+
+  override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
+    (countAndSum._1 + 1, countAndSum._2 + input._2)
+  }
+
+  override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) = {
+    (b1._1 + b2._1, b1._2 + b2._2)
+  }
+
+  override def present(reduction: (Long, Long)): (Long, Long) = reduction
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
@@ -61,5 +93,25 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         expr("sum(_2)").as[Int],
         count("*")),
       ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
+  }
+
+  test("typed aggregation: complex case") {
+    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(
+        expr("avg(_2)").as[Double],
+        TypedAverage.toColumn),
+      ("a", 2.0, 2.0), ("b", 3.0, 3.0))
+  }
+
+  test("typed aggregation: complex result type") {
+    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(
+        expr("avg(_2)").as[Double],
+        ComplexResultAgg.toColumn),
+      ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
   }
 }

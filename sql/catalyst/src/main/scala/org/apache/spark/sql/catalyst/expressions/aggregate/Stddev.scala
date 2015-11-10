@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
@@ -48,29 +50,26 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
 
   override def dataType: DataType = resultType
 
-  // Expected input data type.
-  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
-  // new version at planning time (after analysis phase). For now, NullType is added at here
-  // to make it resolved when we have cases like `select stddev(null)`.
-  // We can use our analyzer to cast NullType to the default data type of the NumericType once
-  // we remove the old aggregate functions. Then, we will not need NullType at here.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType))
 
-  private val resultType = DoubleType
+  override def checkInputDataTypes(): TypeCheckResult =
+    TypeUtils.checkForNumericExpr(child.dataType, "function stddev")
 
-  private val count = AttributeReference("count", resultType)()
-  private val avg = AttributeReference("avg", resultType)()
-  private val mk = AttributeReference("mk", resultType)()
+  private lazy val resultType = DoubleType
 
-  override val aggBufferAttributes = count :: avg :: mk :: Nil
+  private lazy val count = AttributeReference("count", resultType)()
+  private lazy val avg = AttributeReference("avg", resultType)()
+  private lazy val mk = AttributeReference("mk", resultType)()
 
-  override val initialValues: Seq[Expression] = Seq(
+  override lazy val aggBufferAttributes = count :: avg :: mk :: Nil
+
+  override lazy val initialValues: Seq[Expression] = Seq(
     /* count = */ Cast(Literal(0), resultType),
     /* avg = */ Cast(Literal(0), resultType),
     /* mk = */ Cast(Literal(0), resultType)
   )
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     val value = Cast(child, resultType)
     val newCount = count + Cast(Literal(1), resultType)
 
@@ -89,7 +88,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     )
   }
 
-  override val mergeExpressions: Seq[Expression] = {
+  override lazy val mergeExpressions: Seq[Expression] = {
 
     // count merge
     val newCount = count.left + count.right
@@ -114,7 +113,7 @@ abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
     )
   }
 
-  override val evaluateExpression: Expression = {
+  override lazy val evaluateExpression: Expression = {
     // when count == 0, return null
     // when count == 1, return 0
     // when count >1
