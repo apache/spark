@@ -1040,6 +1040,7 @@ test_that("group by", {
 
   expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
   expect_equal(0, df7_local[df7_local$name == "ID2",][1, 2])
+  unlink(jsonPath2)
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {

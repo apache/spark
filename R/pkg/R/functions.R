@@ -877,6 +877,15 @@ setMethod("rtrim",
             column(jc)
           })
 
+#' @rdname stddev
+#' @name sd
+#' @family agg_funcs
+setMethod("sd",
+          signature(x = "Column"),
+          function(x, na.rm = FALSE) {
+            stddev_samp(x)
+          })
+
 #' second
 #'
 #' Extracts the seconds as an integer from a given date/timestamp/string.
@@ -1246,6 +1255,15 @@ setMethod("upper",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "upper", x@jc)
             column(jc)
+          })
+
+#' @family agg_funcs
+#' @rdname variance
+#' @name var
+setMethod("var",
+          signature(x = "Column"),
+          function(x, y = NULL, na.rm = FALSE, use) {
+            var_samp(x)
           })
 
 #' variance

@@ -939,6 +939,10 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
+#' @rdname stddev
+#' @export
+setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
+
 #' @rdname second
 #' @export
 setGeneric("second", function(x) { standardGeneric("second") })
@@ -983,13 +987,13 @@ setGeneric("soundex", function(x) { standardGeneric("soundex") })
 #' @export
 setGeneric("stddev", function(x) { standardGeneric("stddev") })
 
-#' @rdname stddev_samp
-#' @export
-setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
-
 #' @rdname stddev_pop
 #' @export
 setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
+
+#' @rdname stddev_samp
+#' @export
+setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
 
 #' @rdname substring_index
 #' @export
@@ -1041,15 +1045,19 @@ setGeneric("upper", function(x) { standardGeneric("upper") })
 
 #' @rdname variance
 #' @export
-setGeneric("variance", function(x) { standardGeneric("variance") })
+setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
 
-#' @rdname var_samp
+#' @rdname variance
 #' @export
-setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+setGeneric("variance", function(x) { standardGeneric("variance") })
 
 #' @rdname var_pop
 #' @export
 setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
+
+#' @rdname var_samp
+#' @export
+setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 
 #' @rdname weekofyear
 #' @export
