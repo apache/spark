@@ -531,8 +531,7 @@ class Analyzer(
                   AggregateExpression(max, Complete, isDistinct = false)
                 case min: Min if isDistinct =>
                   AggregateExpression(min, Complete, isDistinct = false)
-                // We get an aggregate function built based on AggregateFunction2 interface.
-                // So, we wrap it in AggregateExpression2.
+                // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg2: AggregateFunction => AggregateExpression(agg2, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other => other

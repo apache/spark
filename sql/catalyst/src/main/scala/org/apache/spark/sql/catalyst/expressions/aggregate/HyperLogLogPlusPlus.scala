@@ -57,19 +57,19 @@ case class HyperLogLogPlusPlus(
   import HyperLogLogPlusPlus._
 
   def this(child: Expression) = {
-    this(child, 0.05, 0, 0)
+    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
   }
 
   def this(child: Expression, relativeSD: Expression) = {
     this(
-      child,
-      relativeSD match {
+      child = child,
+      relativeSD = relativeSD match {
         case Literal(d: Double, DoubleType) => d
         case _ =>
           throw new AnalysisException("The second argument should be a double literal.")
       },
-      0,
-      0)
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0)
   }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =

@@ -174,7 +174,7 @@ class WindowSpec private[sql](
             UnresolvedWindowFunction("max", child :: Nil),
             WindowSpecDefinition(partitionSpec, orderSpec, frame))
           case x =>
-            throw new UnsupportedOperationException(s"$x is not supported in window operation.")
+            throw new UnsupportedOperationException(s"$x is not supported in a window operation.")
         }
 
       case AggregateExpression(aggregateFunction, _, isDistinct) if isDistinct =>
@@ -188,7 +188,7 @@ class WindowSpec private[sql](
           WindowSpecDefinition(partitionSpec, orderSpec, frame))
 
       case x =>
-        throw new UnsupportedOperationException(s"$x is not supported in window operation.")
+        throw new UnsupportedOperationException(s"$x is not supported in a window operation.")
     }
 
     new Column(windowExpr)

@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, Star}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, UnresolvedAlias, UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Rollup, Cube, Aggregate}
@@ -93,29 +93,24 @@ class GroupedData protected[sql](
   }
 
   private[this] def strToExpr(expr: String): (Expression => Expression) = {
-    val exprToFunc: (Expression => AggregateFunction) = {
+    val exprToFunc: (Expression => Expression) = {
       (inputExpr: Expression) => expr.toLowerCase match {
-        case "avg" | "average" | "mean" => Average(inputExpr)
-        case "max" => Max(inputExpr)
-        case "min" => Min(inputExpr)
-        case "stddev" | "std" => StddevSamp(inputExpr)
-        case "stddev_pop" => StddevPop(inputExpr)
-        case "stddev_samp" => StddevSamp(inputExpr)
-        case "variance" => VarianceSamp(inputExpr, 0, 0)
-        case "var_pop" => VariancePop(inputExpr, 0, 0)
-        case "var_samp" => VarianceSamp(inputExpr, 0, 0)
-        case "sum" => Sum(inputExpr)
-        case "skewness" => Skewness(inputExpr, 0, 0)
-        case "kurtosis" => Kurtosis(inputExpr, 0, 0)
+        // We special handle a few cases that have alias that are not in function registry.
+        case "avg" | "average" | "mean" =>
+          UnresolvedFunction("avg", inputExpr :: Nil, isDistinct = false)
+        case "stddev" | "std" =>
+          UnresolvedFunction("stddev", inputExpr :: Nil, isDistinct = false)
+        // Also special handle count because we need to take care count(*).
         case "count" | "size" =>
           // Turn count(*) into count(1)
           inputExpr match {
-            case s: Star => Count(Literal(1))
-            case _ => Count(inputExpr)
+            case s: Star => Count(Literal(1)).toAggregateExpression()
+            case _ => Count(inputExpr).toAggregateExpression()
           }
+        case name => UnresolvedFunction(name, inputExpr :: Nil, isDistinct = false)
       }
     }
-    (inputExpr: Expression) => exprToFunc(inputExpr).toAggregateExpression()
+    (inputExpr: Expression) => exprToFunc(inputExpr)
   }
 
   /**

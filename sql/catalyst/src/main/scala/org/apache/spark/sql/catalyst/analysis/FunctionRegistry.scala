@@ -178,7 +178,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
 
     // aggregate functions
-    expression[HyperLogLogPlusPlus]("approx_distinct"),
+    expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),

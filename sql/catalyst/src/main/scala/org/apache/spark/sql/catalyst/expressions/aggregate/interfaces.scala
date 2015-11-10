@@ -147,8 +147,23 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
+  /**
+   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] because
+   * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
+   * and the flag indicating if this aggregation is distinct aggregation or not.
+   * An [[AggregateFunction]] should not be used without being wrapped in
+   * an [[AggregateExpression]].
+   */
   def toAggregateExpression(): AggregateExpression = toAggregateExpression(isDistinct = false)
 
+  /**
+   * Wraps this [[AggregateFunction]] in an [[AggregateExpression]] and set isDistinct
+   * field of the [[AggregateExpression]] to the given value because
+   * [[AggregateExpression]] is the container of an [[AggregateFunction]], aggregation mode,
+   * and the flag indicating if this aggregation is distinct aggregation or not.
+   * An [[AggregateFunction]] should not be used without being wrapped in
+   * an [[AggregateExpression]].
+   */
   def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
     AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
   }

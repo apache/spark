@@ -113,10 +113,13 @@ trait CheckAnalysis {
                 // TODO: Is it possible that the child of a agg function is another
                 // agg function?
                 aggExpr.aggregateFunction.children.foreach {
+                  // This is just a sanity check, our analysis rule PullOutNondeterministic should
+                  // already pull out those nondeterministic expressions and evaluate them in
+                  // a Project node.
                   case child if !child.deterministic =>
                     failAnalysis(
-                      s"nondeterministic expression ${expr.prettyString} are not allowed " +
-                        s"in grouping expression.")
+                      s"nondeterministic expression ${expr.prettyString} should not " +
+                        s"appear in the arguments of an aggregate function.")
                   case child => // OK
                 }
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
@@ -144,6 +147,9 @@ trait CheckAnalysis {
                 case _ => // OK
               }
               if (!expr.deterministic) {
+                // This is just a sanity check, our analysis rule PullOutNondeterministic should
+                // already pull out those nondeterministic expressions and evaluate them in
+                // a Project node.
                 failAnalysis(s"nondeterministic expression ${expr.prettyString} should not " +
                   s"appear in grouping expression.")
               }

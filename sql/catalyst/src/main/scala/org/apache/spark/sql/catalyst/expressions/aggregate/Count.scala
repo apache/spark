@@ -55,6 +55,11 @@ case class Count(child: Expression) extends DeclarativeAggregate {
 
 object Count {
   def apply(children: Seq[Expression]): Count = {
+    // This is used to deal with COUNT DISTINCT. When we have multiple
+    // children (COUNT(DISTINCT col1, col2, ...)), we wrap them in a STRUCT (i.e. a Row).
+    // Also, the semantic of COUNT(DISTINCT col1, col2, ...) is that if there is any
+    // null in the arguments, we will not count that row. So, we use DropAnyNull at here
+    // to return a null when any field of the created STRUCT is null.
     val child = if (children.size > 1) {
       DropAnyNull(CreateStruct(children))
     } else {

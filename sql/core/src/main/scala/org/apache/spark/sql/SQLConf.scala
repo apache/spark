@@ -457,7 +457,14 @@ private[spark] object SQLConf {
   val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
     booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
       defaultValue = Some(true),
-      isPublic = false)
+      isPublic = false,
+      doc = "When true, if a query only has a single distinct column and it has " +
+        "grouping expressions, we will use our planner rule to handle this distinct " +
+        "column (other cases are handled by DistinctAggregationRewriter). " +
+        "When false, we will always use DistinctAggregationRewriter to plan " +
+        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
+        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
+        "plan aggregation queries with a single distinct column.")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
