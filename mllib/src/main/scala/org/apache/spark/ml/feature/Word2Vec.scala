@@ -198,12 +198,12 @@ class Word2VecModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val bWordVectors = dataset.sqlContext.sparkContext.broadcast(wordVectors)
+    val model = bWordVectors.value.getVectors
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.size == 0) {
         Vectors.sparse($(vectorSize), Array.empty[Int], Array.empty[Double])
       } else {
         val cum = Vectors.zeros($(vectorSize))
-        val model = bWordVectors.value.getVectors
         for (word <- sentence) {
           if (model.contains(word)) {
             axpy(1.0, bWordVectors.value.transform(word), cum)
