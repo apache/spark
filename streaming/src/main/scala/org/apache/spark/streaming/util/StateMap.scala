@@ -63,7 +63,7 @@ private[streaming] object StateMap {
   }
 }
 
-/** Specific implementation of SessionStore interface representing an empty map */
+/** Implementation of StateMap interface representing an empty map */
 private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMap[K, S] {
   override def put(key: K, session: S, updateTime: Long): Unit = {
     throw new NotImplementedError("put() should not be called on an EmptyStateMap")
@@ -76,7 +76,7 @@ private[streaming] class EmptyStateMap[K: ClassTag, S: ClassTag] extends StateMa
   override def toDebugString(): String = ""
 }
 
-/** Implementation of StateMap based on Spark's OpenHashMap */
+/** Implementation of StateMap based on Spark's [[org.apache.spark.util.collection.OpenHashMap]] */
 private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
     @transient @volatile var parentStateMap: StateMap[K, S],
     initialCapacity: Int = 64,

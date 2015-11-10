@@ -356,43 +356,36 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * with a continuously updated per-key state. The user-provided state tracking function is
    * applied on each keyed data item along with its corresponding state. The function can choose to
    * update/remove the state and return a transformed data, which forms the
-   * [[org.apache.spark.streaming.dstream.EmittedRecordsDStream]].
+   * [[org.apache.spark.streaming.dstream.TrackStateDStream]].
    *
    * The specifications of this transformation is made through the
    * [[org.apache.spark.streaming.StateSpec StateSpec]] class. Besides the tracking function, there
    * are a number of optional parameters - initial state data, number of partitions, timeouts, etc.
    * See the [[org.apache.spark.streaming.StateSpec StateSpec spec docs]] for more details.
    *
-   * Scala example of using `trackStateByKey`:
+   * Example of using `trackStateByKey`:
    * {{{
-   *    def trackingFunction(key: String, data: Option[Int], wrappedState: State[Int]): Option[Int] = {
-   *      // Check state exists, accordingly update/remove state and return data to emit
+   *    def trackingFunction(data: Option[Int], wrappedState: State[Int]): String = {
+   *      // Check if state exists, accordingly update/remove state and return transformed data
    *    }
    *
-   *    val spec = StateSpec(trackingFunction).numPartitions(10)
+   *    val spec = StateSpec.function(trackingFunction).numPartitions(10)
    *
-   *    val emittedRecordDStream = keyValueDStream.trackStateByKey[StateType, EmittedDataType](spec)
-   *
+   *    val trackStateDStream = keyValueDStream.trackStateByKey[Int, String](spec)
    * }}}
    *
-   * Java example of using `trackStateByKey`:
-   * {{{
-   *      TODO(@zsxwing)
-   * }}}
-   *
-   * @tparam StateType
+   * @param spec          Specification of this transformation
+   * @tparam StateType    Class type of the state
+   * @tparam EmittedType  Class type of the tranformed data return by the tracking function
    */
   @Experimental
   def trackStateByKey[StateType: ClassTag, EmittedType: ClassTag](
-    spec: StateSpec[K, V, StateType, EmittedType]): EmittedRecordsDStream[K, StateType, EmittedType] = {
-    new EmittedRecordsDStreamImpl[K, V, StateType, EmittedType](
-      new TrackStateDStream[K, V, StateType, EmittedType](
-        self,
-        spec.asInstanceOf[StateSpecImpl[K, V, StateType, EmittedType]]
-      )
+    spec: StateSpec[K, V, StateType, EmittedType]): TrackStateDStream[K, StateType, EmittedType] = {
+    new TrackStateDStreamImpl[K, V, StateType, EmittedType](
+      self,
+      spec.asInstanceOf[StateSpecImpl[K, V, StateType, EmittedType]]
     )
   }
-
 
   /**
    * Return a new "state" DStream where the state for each key is updated by applying

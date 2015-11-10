@@ -29,31 +29,23 @@ import org.apache.spark.annotation.Experimental
  *
  * Scala example of using `State`:
  * {{{
- *    def trackStateFunc(key: String, data: Option[Int], wrappedState: State[Int]): Option[Int] = {
- *
+ *    // A tracking function that maintains an integer state and return a String
+ *    def trackStateFunc(data: Option[Int], state: State[Int]): Option[String] = {
  *      // Check if state exists
  *      if (state.exists) {
- *
- *        val existingState = wrappedState.get  // Get the existing state
- *
- *        val shouldRemove = ...      // Decide whether to remove the state
- *
+ *        val existingState = state.get  // Get the existing state
+ *        val shouldRemove = ...         // Decide whether to remove the state
  *        if (shouldRemove) {
- *
- *          wrappedState.remove()     // Remove the state
- *
+ *          state.remove()     // Remove the state
  *        } else {
- *
  *          val newState = ...
- *          wrappedState(newState)    // Set the new state
- *
+ *          state.update(newState)    // Set the new state
  *        }
  *      } else {
- *
  *        val initialState = ...
  *        state.update(initialState)  // Set the initial state
- *
  *      }
+ *      ... // return something
  *    }
  *
  * }}}
@@ -98,7 +90,7 @@ sealed abstract class State[S] {
 
   /**
    * Whether the state is timing out and going to be removed by the system after the current batch.
-   * This timeou can occur if timeout duration has been specified in the
+   * This timeout can occur if timeout duration has been specified in the
    * [[org.apache.spark.streaming.StateSpec StatSpec]] and the key has not received any new data
    * for that timeout duration.
    */
@@ -114,16 +106,11 @@ sealed abstract class State[S] {
   }
 }
 
-private[streaming]
-object State {
-  implicit def toOption[S](state: State[S]): Option[S] = state.getOption()
-}
-
 /** Internal implementation of the [[State]] interface */
 private[streaming] class StateImpl[S] extends State[S] {
 
   private var state: S = null.asInstanceOf[S]
-  private var defined: Boolean = true
+  private var defined: Boolean = false
   private var timingOut: Boolean = false
   private var updated: Boolean = false
   private var removed: Boolean = false
@@ -134,13 +121,18 @@ private[streaming] class StateImpl[S] extends State[S] {
   }
 
   override def get(): S = {
-    state
+    if (defined) {
+      state
+    } else {
+      throw new NoSuchElementException("State is not set")
+    }
   }
 
   override def update(newState: S): Unit = {
     require(!removed, "Cannot update the state after it has been removed")
     require(!timingOut, "Cannot update the state that is timing out")
     state = newState
+    defined = true
     updated = true
   }
 
@@ -151,6 +143,8 @@ private[streaming] class StateImpl[S] extends State[S] {
   override def remove(): Unit = {
     require(!timingOut, "Cannot remove the state that is timing out")
     require(!removed, "Cannot remove the state that has already been removed")
+    defined = false
+    updated = false
     removed = true
   }
 
@@ -167,7 +161,7 @@ private[streaming] class StateImpl[S] extends State[S] {
   }
 
   /**
-   * Internal method to update the state data and reset internal flags in `this`.
+   * Update the internal data and flags in `this` to the given state option.
    * This method allows `this` object to be reused across many state records.
    */
   def wrap(optionalState: Option[S]): Unit = {
@@ -186,7 +180,7 @@ private[streaming] class StateImpl[S] extends State[S] {
   }
 
   /**
-   * Internal method to update the state data and reset internal flags in `this`.
+   * Update the internal data and flags in `this` to the given state that is going to be timed out.
    * This method allows `this` object to be reused across many state records.
    */
   def wrapTiminoutState(newState: S): Unit = {

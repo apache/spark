@@ -23,36 +23,22 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
-import org.apache.spark.streaming.{StateImpl, State}
+import org.apache.spark.streaming.{Time, StateImpl, State}
 import org.apache.spark.streaming.util.{EmptyStateMap, StateMap}
 import org.apache.spark.util.Utils
 import org.apache.spark._
 
+/**
+ * Record storing the keyed-state [[TrackStateRDD]]. Each record contains a [[StateMap]] and a
+ * sequence of records returned by the tracking function of `trackStateByKey`.
+ */
 private[streaming] case class TrackStateRDDRecord[K, S, T](
-    var stateMap: StateMap[K, S], var emittedRecords: Seq[T]) {
-  /*
-  private def writeObject(outputStream: ObjectOutputStream): Unit = {
-    outputStream.writeObject(stateMap)
-    outputStream.writeInt(emittedRecords.size)
-    val iterator = emittedRecords.iterator
-    while(iterator.hasNext) {
-      outputStream.writeObject(iterator.next)
-    }
-  }
+    var stateMap: StateMap[K, S], var emittedRecords: Seq[T])
 
-  private def readObject(inputStream: ObjectInputStream): Unit = {
-    stateMap = inputStream.readObject().asInstanceOf[StateMap[K, S]]
-    val numEmittedRecords = inputStream.readInt()
-    val array = new Array[T](numEmittedRecords)
-    var i = 0
-    while(i < numEmittedRecords) {
-      array(i) = inputStream.readObject().asInstanceOf[T]
-    }
-    emittedRecords = array.toSeq
-  }*/
-}
-
-
+/**
+ * Partition of the [[TrackStateRDD]], which depends on corresponding partitions of prev state
+ * RDD, and a partitioned keyed-data RDD
+ */
 private[streaming] class TrackStateRDDPartition(
     idx: Int,
     @transient private var prevStateRDD: RDD[_],
@@ -75,14 +61,21 @@ private[streaming] class TrackStateRDDPartition(
 
 
 /**
- * RDD storing the keyed-state of trackStateByKey and corresponding emitted records.
- * Each partition of this RDD has a single record that contains a StateMap storing
+ * RDD storing the keyed-state of `trackStateByKey` and corresponding emitted records.
+ * Each partition of this RDD has a single record of type [[TrackStateRDDRecord]]. This contains a
+ * [[StateMap]] (containing the keyed-states) and the sequence of records returned by the tracking
+ * function of  `trackStateByKey`.
+ * @param prevStateRDD The previous TrackStateRDD on whose StateMap data `this` RDD will be created
+ * @param partitionedDataRDD The partitioned data RDD which is used update the previous StateMaps
+ *                           in the `prevStateRDD` to create `this` RDD
+ * @param trackingFunction The function that will be used to update state and return new data
+ * @param batchTime        The time of the batch to which this RDD belongs to. Use to update
  */
 private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, T]],
     private var partitionedDataRDD: RDD[(K, V)],
-    trackingFunction: (K, Option[V], State[S]) => Option[T],
-    currentTime: Long, timeoutThresholdTime: Option[Long]
+    trackingFunction: (Time, K, Option[V], State[S]) => Option[T],
+    batchTime: Time, timeoutThresholdTime: Option[Long]
   ) extends RDD[TrackStateRDDRecord[K, S, T]](
     partitionedDataRDD.sparkContext,
     List(
@@ -111,6 +104,7 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     val dataIterator = partitionedDataRDD.iterator(
       stateRDDPartition.partitionedDataRDDPartition, context)
 
+    // Create a new state map by cloning the previous one (if it exists) or by creating an empty one
     val newStateMap = if (prevStateRDDIterator.hasNext) {
       prevStateRDDIterator.next().stateMap.copy()
     } else {
@@ -118,24 +112,28 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     }
 
     val emittedRecords = new ArrayBuffer[T]
-
     val wrappedState = new StateImpl[S]()
 
+    // Call the tracking function on each record in the data RDD partition, and accordingly
+    // update the states touched, and the data returned by the tracking function.
     dataIterator.foreach { case (key, value) =>
       wrappedState.wrap(newStateMap.get(key))
-      val emittedRecord = trackingFunction(key, Some(value), wrappedState)
+      val emittedRecord = trackingFunction(batchTime, key, Some(value), wrappedState)
       if (wrappedState.isRemoved) {
         newStateMap.remove(key)
       } else if (wrappedState.isUpdated) {
-        newStateMap.put(key, wrappedState.get(), currentTime)
+        newStateMap.put(key, wrappedState.get(), batchTime.milliseconds)
       }
       emittedRecords ++= emittedRecord
     }
 
+    // If the RDD is expected to be doing a full scan of all the data in the StateMap,
+    // then use this opportunity to filter out those keys that have timed out.
+    // For each of them call the tracking function.
     if (doFullScan && timeoutThresholdTime.isDefined) {
       newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
         wrappedState.wrapTiminoutState(state)
-        val emittedRecord = trackingFunction(key, None, wrappedState)
+        val emittedRecord = trackingFunction(batchTime, key, None, wrappedState)
         emittedRecords ++= emittedRecord
         newStateMap.remove(key)
       }
@@ -165,17 +163,17 @@ private[streaming] object TrackStateRDD {
   def createFromPairRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
       pairRDD: RDD[(K, S)],
       partitioner: Partitioner,
-      updateTime: Long): TrackStateRDD[K, V, S, T] = {
+      updateTime: Time): TrackStateRDD[K, V, S, T] = {
 
     val rddOfTrackStateRecords = pairRDD.partitionBy(partitioner).mapPartitions ({ iterator =>
       val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
-      iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime) }
+      iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime.milliseconds) }
       Iterator(TrackStateRDDRecord(stateMap, Seq.empty[T]))
     }, preservesPartitioning = true)
 
     val emptyDataRDD = pairRDD.sparkContext.emptyRDD[(K, V)].partitionBy(partitioner)
 
-    val noOpFunc = (key: K, value: Option[V], state: State[S]) => None
+    val noOpFunc = (time: Time, key: K, value: Option[V], state: State[S]) => None
 
     new TrackStateRDD[K, V, S, T](rddOfTrackStateRecords, emptyDataRDD, noOpFunc, updateTime, None)
   }

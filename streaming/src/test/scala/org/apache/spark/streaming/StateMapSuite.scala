@@ -35,7 +35,7 @@ class StateMapSuite extends SparkFunSuite {
     assert(map.getByTime(10000).isEmpty)
     assert(map.getAll().isEmpty)
     map.remove(1)   // no exception
-    assert(map.copy().eq(this))
+    assert(map.copy().eq(map))
   }
 
   test("OpenHashMapBasedStateMap - put, get, getByTime, getAll, remove") {

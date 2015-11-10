@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.State
+import org.apache.spark.streaming.{Time, State}
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext, SparkFunSuite}
 
 class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -39,7 +39,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val data = Seq((1, "1"), (2, "2"), (3, "3"))
     val partitioner = new HashPartitioner(10)
     val rdd = TrackStateRDD.createFromPairRDD[Int, Int, String, Int](
-      sc.parallelize(data), partitioner, 123)
+      sc.parallelize(data), partitioner, Time(123))
     assertRDD[Int, Int, String, Int](rdd, data.map { x => (x._1, x._2, 123)}.toSet, Set.empty)
     assert(rdd.partitions.size === partitioner.numPartitions)
 
@@ -52,7 +52,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val initStateWthTime = initStates.map { x => (x._1, x._2, initTime) }.toSet
     val partitioner = new HashPartitioner(2)
     val initStateRDD = TrackStateRDD.createFromPairRDD[String, Int, Int, Int](
-      sc.parallelize(initStates), partitioner, initTime).persist()
+      sc.parallelize(initStates), partitioner, Time(initTime)).persist()
     assertRDD(initStateRDD, initStateWthTime, Set.empty)
 
     val updateTime = 345
@@ -73,7 +73,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       // To track which keys are being touched
       TrackStateRDDSuite.touchedStateKeys.clear()
 
-      val trackingFunc = (key: String, data: Option[Int], state: State[Int]) => {
+      val trackingFunc = (time: Time, key: String, data: Option[Int], state: State[Int]) => {
 
         // Track the key that has been touched
         TrackStateRDDSuite.touchedStateKeys += key
@@ -151,7 +151,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   private def assertOperation[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
       testStateRDD: TrackStateRDD[K, V, S, T],
       newDataRDD: RDD[(K, V)],
-      trackStateFunc: (K, Option[V], State[S]) => Option[T],
+      trackStateFunc: (Time, K, Option[V], State[S]) => Option[T],
       currentTime: Long,
       expectedStates: Set[(K, S, Int)],
       expectedEmittedRecords: Set[T],
@@ -165,7 +165,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     val newStateRDD = new TrackStateRDD[K, V, S, T](
-      testStateRDD, newDataRDD, trackStateFunc, currentTime, None)
+      testStateRDD, newDataRDD, trackStateFunc, Time(currentTime), None)
     if (doFullScan) newStateRDD.setFullScan()
 
     // Persist to make sure that it gets computed only once and we can track precisely how many
