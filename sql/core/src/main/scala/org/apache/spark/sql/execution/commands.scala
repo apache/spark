@@ -102,10 +102,11 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
-    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
+    case Some((key, Some(value)))
+      if key == SQLConf.Deprecated.EXTERNAL_SORT || key == SQLConf.Deprecated.USE_SQL_AGGREGATE2 =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
-          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
+          s"Property ${key} is deprecated and will be ignored. " +
             s"External sort will continue to be used.")
         Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
       }

@@ -57,7 +57,7 @@ abstract class CentralMomentAgg(child: Expression) extends ImperativeAggregate w
 
   override def dataType: DataType = DoubleType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, s"function $prettyName")

@@ -474,6 +474,7 @@ private[spark] object SQLConf {
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
   }
 }
 

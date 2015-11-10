@@ -110,9 +110,13 @@ trait CheckAnalysis {
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
               case aggExpr: AggregateExpression =>
-                // TODO: Is it possible that the child of a agg function is another
-                // agg function?
                 aggExpr.aggregateFunction.children.foreach {
+                  case agg: AggregateExpression =>
+                    failAnalysis(
+                      s"It is not allowed to use an aggregate function as the argument of " +
+                        s"another aggregate function. Please use the inner aggregate function " +
+                        s"in a sub-query.")
+
                   // This is just a sanity check, our analysis rule PullOutNondeterministic should
                   // already pull out those nondeterministic expressions and evaluate them in
                   // a Project node.
@@ -120,6 +124,7 @@ trait CheckAnalysis {
                     failAnalysis(
                       s"nondeterministic expression ${expr.prettyString} should not " +
                         s"appear in the arguments of an aggregate function.")
+
                   case child => // OK
                 }
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
@@ -133,19 +138,30 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
+            def checkSupportedGroupingDataType(
+                expressionString: String,
+                dataType: DataType): Unit = dataType match {
+              case BinaryType =>
+                failAnalysis(s"binary type expression $expressionString cannot be used " +
+                  "in grouping expression")
+              case a: ArrayType =>
+                failAnalysis(s"array type expression $expressionString cannot be used " +
+                  "in grouping expression")
+              case m: MapType =>
+                failAnalysis(s"map type expression $expressionString cannot be used " +
+                  "in grouping expression")
+              case s: StructType =>
+                s.fields.foreach { f =>
+                  checkSupportedGroupingDataType(expressionString, f.dataType)
+                }
+              case udt: UserDefinedType[_] =>
+                checkSupportedGroupingDataType(expressionString, udt.sqlType)
+              case _ => // OK
+            }
+
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              expr.dataType match {
-                case BinaryType =>
-                  failAnalysis(s"binary type expression ${expr.prettyString} cannot be used " +
-                    "in grouping expression")
-                case a: ArrayType =>
-                  failAnalysis(s"array type expression ${expr.prettyString} cannot be used " +
-                    "in grouping expression")
-                case m: MapType =>
-                  failAnalysis(s"map type expression ${expr.prettyString} cannot be used " +
-                    "in grouping expression")
-                case _ => // OK
-              }
+              checkSupportedGroupingDataType(expr.prettyString, expr.dataType)
+
               if (!expr.deterministic) {
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should
                 // already pull out those nondeterministic expressions and evaluate them in
