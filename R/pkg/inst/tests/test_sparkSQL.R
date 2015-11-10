@@ -1506,19 +1506,19 @@ test_that("with() on a DataFrame", {
 
 test_that("Method coltypes() to get R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
-  
+
   data <- data.frame(c1=c(1,2,3),
                      c2=c(T,F,T),
                      c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
-  
+
   schema <- structType(structField("c1", "byte"),
                        structField("c3", "boolean"),
                        structField("c4", "timestamp"))
-  
+
   # Test primitive types
   DF <- createDataFrame(sqlContext, data, schema)
   expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
-  
+
   # Test complex types
   x <- createDataFrame(sqlContext, list(list(as.environment(
     list("a"="b", "c"="d", "e"="f")))))

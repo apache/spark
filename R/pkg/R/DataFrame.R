@@ -2165,13 +2165,13 @@ setMethod("coltypes",
           function(x) {
             # Get the data types of the DataFrame by invoking dtypes() function
             types <- sapply(dtypes(x), function(x) {x[[2]]})
-            
+
             # Map Spark data types into R's data types using DATA_TYPES environment
             rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
-              
+
               # Check for primitive types
               type <- PRIMITIVE_TYPES[[x]]
-              
+
               if (is.null(type)) {
                 # Check for complex types
                 for (t in names(COMPLEX_TYPES)) {
@@ -2180,19 +2180,19 @@ setMethod("coltypes",
                     break
                   }
                 }
-                
+
                 if (is.null(type)) {
                   stop(paste("Unsupported data type: ", x))
                 }
               }
               type
             })
-            
+
             # Find which types don't have mapping to R
             naIndices <- which(is.na(rTypes))
-            
+
             # Assign the original scala data types to the unmatched ones
             rTypes[naIndices] <- types[naIndices]
-            
+
             rTypes
           })
