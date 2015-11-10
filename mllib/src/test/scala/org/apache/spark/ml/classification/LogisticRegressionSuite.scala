@@ -873,8 +873,11 @@ class LogisticRegressionSuite
   }
 
   test("read/write") {
-    val lr = new LogisticRegressionModel(Identifiable.randomUID("logreg"),
-      Vectors.dense(0.1, -0.2, 5.6), -1.1)
+    // Set some Params to make sure set Params are serialized.
+    val lr = new LogisticRegression()
+      .setElasticNetParam(0.1)
+      .setMaxIter(2)
+      .fit(dataset)
     val lr2 = testDefaultReadWrite(lr)
     assert(lr.intercept === lr2.intercept)
     assert(lr.coefficients.toArray === lr2.coefficients.toArray)

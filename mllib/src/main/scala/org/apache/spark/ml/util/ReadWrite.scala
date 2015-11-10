@@ -216,30 +216,29 @@ private[ml] object DefaultParamsWriter {
 private[ml] class DefaultParamsReader[T] extends Reader[T] {
 
   override def load(path: String): T = {
-    implicit val format = DefaultFormats
-    val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = sc.textFile(metadataPath, 1).first()
-    val metadata = parse(metadataStr)
-    val cls = Utils.classForName((metadata \ "class").extract[String])
-    val uid = (metadata \ "uid").extract[String]
-    val instance = cls.getConstructor(classOf[String]).newInstance(uid).asInstanceOf[Params]
-    (metadata \ "paramMap") match {
-      case JObject(pairs) =>
-        pairs.foreach { case (paramName, jsonValue) =>
-          val param = instance.getParam(paramName)
-          val value = param.jsonDecode(compact(render(jsonValue)))
-          instance.set(param, value)
-        }
-      case _ =>
-        throw new IllegalArgumentException(s"Cannot recognize JSON metadata: $metadataStr.")
-    }
+    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+    val cls = Utils.classForName(metadata.className)
+    val instance =
+      cls.getConstructor(classOf[String]).newInstance(metadata.uid).asInstanceOf[Params]
+    DefaultParamsReader.getAndSetParams(instance, metadata)
     instance.asInstanceOf[T]
   }
 }
 
 private[ml] object DefaultParamsReader {
 
-  case class Metadata(className: String, uid: String, timestamp: Long, sparkVersion: String)
+  /**
+   * All info from metadata file.
+   * @param params  paramMap, as a [[JValue]]
+   * @param metadataStr  Full metadata file String (for debugging)
+   */
+  case class Metadata(
+      className: String,
+      uid: String,
+      timestamp: Long,
+      sparkVersion: String,
+      params: JValue,
+      metadataStr: String)
 
   /**
    * Load metadata from file.
@@ -247,27 +246,31 @@ private[ml] object DefaultParamsReader {
    * @throws IllegalArgumentException if expectedClassName is specified and does not match metadata
    */
   def loadMetadata(path: String, sc: SparkContext, expectedClassName: String = ""): Metadata = {
-    implicit val format = DefaultFormats
     val metadataPath = new Path(path, "metadata").toString
     val metadataStr = sc.textFile(metadataPath, 1).first()
     val metadata = parse(metadataStr)
+
+    implicit val format = DefaultFormats
     val className = (metadata \ "class").extract[String]
     val uid = (metadata \ "uid").extract[String]
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
+    val params = metadata \ "paramMap"
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
-    Metadata(className, uid, timestamp, sparkVersion)
+
+    Metadata(className, uid, timestamp, sparkVersion, params, metadataStr)
   }
 
-  def loadParams(instance: Params, path: String, sc: SparkContext): Unit = {
+  /**
+   * Extract Params from metadata, and set them in the instance.
+   * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   */
+  def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats
-    val metadataPath = new Path(path, "metadata").toString
-    val metadataStr = sc.textFile(metadataPath, 1).first()
-    val metadata = parse(metadataStr)
-    (metadata \ "paramMap") match {
+    metadata.params match {
       case JObject(pairs) =>
         pairs.foreach { case (paramName, jsonValue) =>
           val param = instance.getParam(paramName)
@@ -275,7 +278,8 @@ private[ml] object DefaultParamsReader {
           instance.set(param, value)
         }
       case _ =>
-        throw new IllegalArgumentException(s"Cannot recognize JSON metadata: $metadataStr.")
+        throw new IllegalArgumentException(
+          s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
     }
   }
 }

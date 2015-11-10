@@ -557,6 +557,7 @@ private[classification] class LogisticRegressionReader extends Reader[LogisticRe
 
   override def load(path: String): LogisticRegressionModel = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
     val dataPath = new Path(path, "data").toString
     val data = sqlContext.read.format("parquet").load(dataPath)
       .select("numClasses", "numFeatures", "intercept", "coefficients").head()
@@ -565,7 +566,10 @@ private[classification] class LogisticRegressionReader extends Reader[LogisticRe
     // val numFeatures = data.getInt(1)
     val intercept = data.getDouble(2)
     val coefficients = data.getAs[Vector](3)
-    new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+    val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+
+    DefaultParamsReader.getAndSetParams(model, metadata)
+    model
   }
 }
 
