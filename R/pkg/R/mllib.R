@@ -106,7 +106,7 @@ setMethod("summary", signature(object = "PipelineModel"),
               coefficients <- matrix(coefficients, ncol = 4)
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
-              return(list(DevianceResiduals = devianceResiduals, Coefficients = coefficients))
+              return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
             } else {
               coefficients <- as.matrix(unlist(coefficients))
               colnames(coefficients) <- c("Estimate")
