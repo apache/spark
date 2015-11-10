@@ -376,8 +376,8 @@ abstract class DStream[T: ClassTag] (
    * @param body RDD creation code to execute with certain local properties.
    * @param time Current batch time that should be embedded in the scope names
    * @param displayInnerRDDOps Whether the detailed callsites and scopes of the inner RDDs generated
-   *                         by `body` will be displayed in the UI; only the scope and callsite will
-   *                         be of `this` DStream will be displayed.
+   *                           by `body` will be displayed in the UI; only the scope and callsite
+   *                           of the DStream operation that generated `this` will be displayed.
    */
   protected[streaming] def createRDDWithLocalProperties[U](
       time: Time, displayInnerRDDOps: Boolean)(body: => U): U = {
@@ -652,7 +652,7 @@ abstract class DStream[T: ClassTag] (
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)
-    this.foreachRDD((r: RDD[T], t: Time) => cleanedF(r), displayInnerRDDOps = true)
+    foreachRDD((r: RDD[T], t: Time) => cleanedF(r), displayInnerRDDOps = true)
   }
 
   /**
@@ -669,14 +669,17 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
-   * Setting `displayInnerRDDOps` will allow the callsites and scopes of the RDDs generated
-   * in the `foreachFunc` to be displayed in the UI.
+   * @param foreachFunc foreachRDD function
+   * @param displayInnerRDDOps Whether the detailed callsites and scopes of the RDDs generated
+   *                           in the `foreachFunc` to be displayed in the UI. If `false`, then
+   *                           only the scopes and callsites of `foreachRDD` will override those
+   *                           of the RDDs on the display.
    */
   private def foreachRDD(
-      cleanedForeachFunc: (RDD[T], Time) => Unit,
+      foreachFunc: (RDD[T], Time) => Unit,
       displayInnerRDDOps: Boolean): Unit = {
     new ForEachDStream(this,
-      context.sparkContext.clean(cleanedForeachFunc, false), displayInnerRDDOps).register()
+      context.sparkContext.clean(foreachFunc, false), displayInnerRDDOps).register()
   }
 
   /**
