@@ -5,6 +5,7 @@ chartkick
 cryptography
 coverage
 coveralls
+croniter
 dill
 flake8
 flask
@@ -25,6 +26,7 @@ pygments
 pyhive
 pydruid
 PySmbClient
+psycopg2
 python-dateutil
 # pyhs2 -> not compatible with Python 3 because of sasl
 redis

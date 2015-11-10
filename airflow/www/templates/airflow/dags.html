@@ -18,6 +18,7 @@
                 <th></th>
                 <th width="12"><span id="pause_header"class="glyphicon glyphicon-info-sign" title="Use this toggle to pause a DAG. The scheduler won't schedule new tasks instances for a paused DAG. Tasks already running at pause time won't be affected."></span></th>
                 <th>DAG</th>
+                <th>Schedule</th>
                 <th>Owner</th>
                 <th style="padding-left: 5px;">Statuses
                   <img id="loading" width="15" src="{{ url_for("static", filename="loading.gif") }}">
@@ -54,7 +55,10 @@
                         <span class="glyphicon glyphicon-info-sign" class="info" aria-hidden="true" title="This DAG seems to be existing only locally. The master scheduler doesn't seem to be aware of its existence."></span>
                     {% endif %}
                 </td>
-                    <td>{{ dag.owner if dag else orm_dags[dag_id].owners }}</td>
+                <td>
+                  <a class="label label-default" href="/admin/dagrun/?flt2_dag_id_equals={{ dag.dag_id }}">
+                      {{ dag.schedule_interval }}</a></td>
+                <td>{{ dag.owner if dag else orm_dags[dag_id].owners }}</td>
                 <td style="padding:0px; width:180px; height:10px;">
                     <svg height="10" width="10" id='{{ dag.safe_dag_id }}' style="display: block;"></svg>
                 </td>

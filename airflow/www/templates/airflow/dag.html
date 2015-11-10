@@ -7,54 +7,64 @@
 {% endblock %}
 
 {% block body %}
-  <h3>
-  {% if dag.parent_dag %}
-    <span style='color:#AAA;'>SUBDAG:</span> <span>{{ dag.dag_id }}</span>
-  {% else %}
-    <span style='color:#AAA;'>DAG:</span> <span>{{ dag.dag_id }}</span>
-  {% endif %}
-  {% if root %}
-    <span style='color:#AAA;'>ROOT:</span> <span>{{ root }}</span>
-  {% endif %}
-  </h3>
-  <ul class="nav nav-pills">
-    {% if dag.parent_dag %}
-        <li class="never_active"><a href="{{ url_for("airflow.graph", dag_id=dag.parent_dag.dag_id) }}">
-            <span class="glyphicon glyphicon-arrow-left" aria-hidden="true"></span>
-            Back to {{ dag.parent_dag.dag_id }}</a>
-        </li>
-    {% endif %}
-    <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id, root=root) }}">
-        <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
-      Graph View</a></li>
-    <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25, root=root) }}">
-        <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
-      Tree View
-    </a></li>
-    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30, root=root) }}">
-        <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
-        Task Duration
-    </a></li>
-    <li>
-      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id, days=30, root=root) }}">
-        <span class="glyphicon glyphicon-plane" aria-hidden="true"></span>
-        Landing Times
+  <div>
+    <h3 class="pull-left">
+      {% if dag.parent_dag %}
+        <span class="pull-left" style='color:#AAA;'>SUBDAG: </span> <span> {{ dag.dag_id }}</span>
+      {% else %}
+        <span class="pull-left" style='color:#AAA;'>DAG: </span> <span> {{ dag.dag_id }}</span>
+      {% endif %}
+      {% if root %}
+        <span class="pull-left" style='color:#AAA;'>ROOT: </span> <span> {{ root }}</span>
+      {% endif %}
+    </h3>
+    <h4 class="pull-right">
+      <a class="label label-default" href="/admin/dagrun/?flt2_dag_id_equals={{ dag.dag_id }}">
+        schedule: {{ dag.schedule_interval }}
       </a>
-    </li>
-    <li>
-      <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id, root=root) }}">
-        <span class="glyphicon glyphicon-align-left" aria-hidden="true"></span>
-        <i class="icon-align-left"></i>
-        Gantt
-      </a>
-    </li>
-    <li>
-      <a href="{{ url_for("airflow.code", dag_id=dag.dag_id, root=root) }}">
-        <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
-        Code
-      </a>
-    </li>
-  </ul>
+    </h4>
+  </div>
+  <div class="clearfix"></div>
+  <div>
+    <ul class="nav nav-pills">
+      {% if dag.parent_dag %}
+          <li class="never_active"><a href="{{ url_for("airflow.graph", dag_id=dag.parent_dag.dag_id) }}">
+              <span class="glyphicon glyphicon-arrow-left" aria-hidden="true"></span>
+              Back to {{ dag.parent_dag.dag_id }}</a>
+          </li>
+      {% endif %}
+      <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id, root=root) }}">
+          <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
+        Graph View</a></li>
+      <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25, root=root) }}">
+          <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
+        Tree View
+      </a></li>
+      <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30, root=root) }}">
+          <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
+          Task Duration
+      </a></li>
+      <li>
+        <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id, days=30, root=root) }}">
+          <span class="glyphicon glyphicon-plane" aria-hidden="true"></span>
+          Landing Times
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id, root=root) }}">
+          <span class="glyphicon glyphicon-align-left" aria-hidden="true"></span>
+          <i class="icon-align-left"></i>
+          Gantt
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for("airflow.code", dag_id=dag.dag_id, root=root) }}">
+          <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
+          Code
+        </a>
+      </li>
+    </ul>
+  </div>
   <hr>
   <!-- Modal -->
   <div class="modal fade" id="myModal"

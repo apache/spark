@@ -13,6 +13,8 @@ from airflow.settings import Session
 NUM_EXAMPLE_DAGS = 7
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
+DEFAULT_DATE_ISO = DEFAULT_DATE.isoformat()
+DEFAULT_DATE_DS = DEFAULT_DATE_ISO[:10]
 TEST_DAG_ID = 'unit_tests'
 configuration.test_mode()
 
@@ -39,7 +41,7 @@ class CoreTest(unittest.TestCase):
         configuration.test_mode()
         self.dagbag = models.DagBag(
             dag_folder=DEV_NULL, include_examples=True)
-        self.args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        self.args = {'owner': 'airflow', 'start_date': DEFAULT_DATE}
         dag = DAG(TEST_DAG_ID, default_args=self.args)
         self.dag = dag
         self.dag_bash = self.dagbag.dags['example_bash_operator']
@@ -53,14 +55,12 @@ class CoreTest(unittest.TestCase):
             dag_folder=DEV_NULL, include_examples=True)
         dags = [
             dag for dag in self.dagbag.dags.values()
-            #if dag.dag_id not in ('example_http_operator',)]
             if dag.dag_id in ('example_bash_operator',)]
         for dag in dags:
             dag.clear(
                 start_date=DEFAULT_DATE,
                 end_date=DEFAULT_DATE)
         for dag in dags:
-            print(dag.tasks)
             job = jobs.BackfillJob(
                 dag=dag,
                 start_date=DEFAULT_DATE,
@@ -379,48 +379,49 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/rendered?'
             'task_id=runme_1&dag_id=example_bash_operator&'
-            'execution_date=2015-01-07T00:00:00')
-        assert "example_bash_operator__runme_1__20150107" in response.data.decode('utf-8')
+            'execution_date={}'.format(DEFAULT_DATE_ISO))
+        assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/log?task_id=run_this_last&'
-            'dag_id=example_bash_operator&execution_date=2015-01-01T00:00:00')
+            'dag_id=example_bash_operator&execution_date={}'
+            ''.format(DEFAULT_DATE_ISO))
         assert "run_this_last" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/task?'
             'task_id=runme_0&dag_id=example_bash_operator&'
-            'execution_date=2015-01-01')
+            'execution_date={}'.format(DEFAULT_DATE_DS))
         assert "Attributes" in response.data.decode('utf-8')
         response = self.app.get(
             '/admin/airflow/dag_stats')
         assert "example_bash_operator" in response.data.decode('utf-8')
+        url = (
+            "/admin/airflow/success?task_id=run_this_last&"
+            "dag_id=example_bash_operator&upstream=false&downstream=false&"
+            "future=false&past=false&execution_date={}&"
+            "origin=/admin".format(DEFAULT_DATE_DS))
+        response = self.app.get(url)
+        assert "Wait a minute" in response.data.decode('utf-8')
+        response = self.app.get(url + "&confirmed=true")
         response = self.app.get(
             '/admin/airflow/clear?task_id=run_this_last&'
             'dag_id=example_bash_operator&future=true&past=false&'
             'upstream=true&downstream=false&'
-            'execution_date=2015-01-01T00:00:00&'
-            'origin=/admin')
+            'execution_date={}&'
+            'origin=/admin'.format(DEFAULT_DATE_DS))
         assert "Wait a minute" in response.data.decode('utf-8')
-        url = (
-            "/admin/airflow/success?task_id=run_this_last&"
-            "dag_id=example_bash_operator&upstream=false&downstream=false&"
-            "future=false&past=false&execution_date=2017-01-12T00:00:00&"
-            "origin=/admin")
-        response = self.app.get(url)
-        assert "Wait a minute" in response.data.decode('utf-8')
-        response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/clear?task_id=runme_1&"
             "dag_id=example_bash_operator&future=false&past=false&"
             "upstream=false&downstream=true&"
-            "execution_date=2017-01-12T00:00:00&"
-            "origin=/admin")
+            "execution_date={}&"
+            "origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         assert "Wait a minute" in response.data.decode('utf-8')
         response = self.app.get(url + "&confirmed=true")
         url = (
             "/admin/airflow/run?task_id=runme_0&"
             "dag_id=example_bash_operator&force=true&deps=true&"
-            "execution_date=2015-08-12T00:00:00&origin=/admin")
+            "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
@@ -512,7 +513,7 @@ if 'MySqlOperator' in dir(operators):
             args = {
                 'owner': 'airflow',
                 'mysql_conn_id': 'airflow_db',
-                'start_date': datetime(2015, 1, 1)
+                'start_date': DEFAULT_DATE
             }
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
@@ -557,6 +558,14 @@ if 'MySqlOperator' in dir(operators):
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+        def test_sql_sensor(self):
+            t = operators.SqlSensor(
+                task_id='sql_sensor_check',
+                conn_id='mysql_default',
+                sql="SELECT count(1) FROM INFORMATION_SCHEMA.TABLES",
+                dag=self.dag)
+            t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
 
 if 'PostgresOperator' in dir(operators):
     # Only testing if the operator is installed
@@ -564,7 +573,7 @@ if 'PostgresOperator' in dir(operators):
 
         def setUp(self):
             configuration.test_mode()
-            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            args = {'owner': 'airflow', 'start_date': DEFAULT_DATE}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
 
@@ -593,7 +602,7 @@ class HttpOpSensorTest(unittest.TestCase):
 
     def setUp(self):
         configuration.test_mode()
-        args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+        args = {'owner': 'airflow', 'start_date': DEFAULT_DATE_ISO}
         dag = DAG(TEST_DAG_ID, default_args=args)
         self.dag = dag
 
@@ -696,7 +705,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
         def setUp(self):
             configuration.test_mode()
-            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            args = {'owner': 'airflow', 'start_date': DEFAULT_DATE_ISO}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
 
@@ -721,7 +730,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
                 mysql_conn_id='airflow_db',
                 sql=sql,
                 hive_table='airflow.test_mysql_to_hive_part',
-                partition={'ds': '2015-01-02'},
+                partition={'ds': DEFAULT_DATE_DS},
                 recreate=False,
                 create=True,
                 dag=self.dag)
@@ -732,7 +741,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
         def setUp(self):
             configuration.test_mode()
-            args = {'owner': 'airflow', 'start_date': datetime(2015, 1, 1)}
+            args = {'owner': 'airflow', 'start_date': DEFAULT_DATE}
             dag = DAG(TEST_DAG_ID, default_args=args)
             self.dag = dag
             self.hql = """
@@ -801,7 +810,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             t = operators.HiveStatsCollectionOperator(
                 task_id='hive_stats_check',
                 table="airflow.static_babynames_partitioned",
-                partition={'ds': '2015-01-01'},
+                partition={'ds': DEFAULT_DATE_DS},
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -816,7 +825,7 @@ if 'AIRFLOW_RUNALL_TESTS' in os.environ:
             t = operators.MetastorePartitionSensor(
                 task_id='hive_partition_check',
                 table='airflow.static_babynames_partitioned',
-                partition_name='ds=2015-01-01',
+                partition_name='ds={}'.format(DEFAULT_DATE_DS),
                 dag=self.dag)
             t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 

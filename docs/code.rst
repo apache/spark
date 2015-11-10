@@ -1,5 +1,5 @@
-Code / API
-==========
+API Reference
+=============
 
 Operators
 ---------
@@ -124,6 +124,8 @@ Variable                            Description
                                     ``airflow.configuration.conf`` which
                                     represents the content of your
                                     ``airflow.cfg``
+``run_id``                          the ``run_id`` of the current DAG run
+``dag_run``                         a reference to the DAG run object
 =================================   ====================================
 
 Note that you can access the object's attributes and methods with simple

@@ -38,34 +38,49 @@ def create_app(config=None):
         admin = Admin(
             app, name='Airflow',
             static_url_path='/admin',
-            index_view=views.HomeView(endpoint='', url='/admin'),
+            index_view=views.HomeView(endpoint='', url='/admin', name="DAGs"),
             template_mode='bootstrap3',
         )
+        av = admin.add_view
+        vs = views
+        av(vs.Airflow(name='DAGs', category='DAGs'))
 
-        admin.add_view(views.Airflow(name='DAGs'))
+        av(vs.QueryView(name='Ad Hoc Query', category="Data Profiling"))
+        av(vs.ChartModelView(
+            models.Chart, Session, name="Charts", category="Data Profiling"))
+        av(vs.KnowEventView(
+            models.KnownEvent,
+            Session, name="Known Events", category="Data Profiling"))
+        av(vs.SlaMissModelView(
+            models.SlaMiss,
+            Session, name="SLA Misses", category="Browse"))
+        av(vs.TaskInstanceModelView(models.TaskInstance,
+            Session, name="Task Instances", category="Browse"))
+        av(vs.LogModelView(
+            models.Log, Session, name="Logs", category="Browse"))
+        av(vs.JobModelView(
+            jobs.BaseJob, Session, name="Jobs", category="Browse"))
+        av(vs.PoolModelView(
+            models.Pool, Session, name="Pools", category="Admin"))
+        av(vs.ConfigurationView(
+            name='Configuration', category="Admin"))
+        av(vs.UserModelView(
+            models.User, Session, name="Users", category="Admin"))
+        av(vs.ConnectionModelView(
+            models.Connection, Session, name="Connections", category="Admin"))
+        av(vs.VariableView(
+            models.Variable, Session, name="Variables", category="Admin"))
 
-        admin.add_view(views.SlaMissModelView(models.SlaMiss, Session, name="SLA Misses", category="Browse"))
-        admin.add_view(
-            views.TaskInstanceModelView(models.TaskInstance, Session, name="Task Instances", category="Browse")
-        )
+        admin.add_link(base.MenuLink(
+            category='Docs', name='Documentation',
+            url='http://pythonhosted.org/airflow/'))
+        admin.add_link(
+            base.MenuLink(category='Docs',
+                name='Github',url='https://github.com/airbnb/airflow'))
 
-        admin.add_view(views.LogModelView(models.Log, Session, name="Logs", category="Browse"))
-        admin.add_view(views.JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse"))
-
-        admin.add_view(views.QueryView(name='Ad Hoc Query', category="Data Profiling"))
-        admin.add_view(views.ChartModelView(models.Chart, Session, name="Charts", category="Data Profiling"))
-        admin.add_view(views.KnowEventView(models.KnownEvent, Session, name="Known Events", category="Data Profiling"))
-
-        admin.add_view(views.PoolModelView(models.Pool, Session, name="Pools", category="Admin"))
-        admin.add_view(views.ConfigurationView(name='Configuration', category="Admin"))
-        admin.add_view(views.UserModelView(models.User, Session, name="Users", category="Admin"))
-        admin.add_view(views.ConnectionModelView(models.Connection, Session, name="Connections", category="Admin"))
-        admin.add_view(views.VariableView(models.Variable, Session, name="Variables", category="Admin"))
-
-        admin.add_link(base.MenuLink(category='Docs', name='Documentation', url='http://pythonhosted.org/airflow/'))
-        admin.add_link(base.MenuLink(category='Docs',name='Github',url='https://github.com/airbnb/airflow'))
-
-        admin.add_view(views.DagModelView(models.DagModel, Session, name=None))
+        av(vs.DagRunModelView(
+            models.DagRun, Session, name="DAG Runs", category="Browse"))
+        av(vs.DagModelView(models.DagModel, Session, name=None))
         # Hack to not add this view to the menu
         admin._menu = admin._menu[:-1]
 
@@ -76,7 +91,6 @@ def create_app(config=None):
             for v in admin_views:
                 admin.add_view(v)
             for bp in flask_blueprints:
-                print(bp)
                 app.register_blueprint(bp)
             for ml in menu_links:
                 admin.add_link(ml)

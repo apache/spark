@@ -25,6 +25,8 @@ target_metadata = models.Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+COMPARE_TYPE = False
+
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
@@ -40,7 +42,8 @@ def run_migrations_offline():
     """
     url = configuration.get('core', 'SQL_ALCHEMY_CONN')
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True)
+        url=url, target_metadata=target_metadata, literal_binds=True,
+        compare_type=COMPARE_TYPE)
 
     with context.begin_transaction():
         context.run_migrations()
@@ -58,7 +61,8 @@ def run_migrations_online():
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata
+            target_metadata=target_metadata,
+            compare_type=COMPARE_TYPE,
         )
 
         with context.begin_transaction():

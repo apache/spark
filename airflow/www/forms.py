@@ -16,17 +16,6 @@ class DateTimeForm(Form):
         "Execution date", widget=DateTimePickerWidget())
 
 
-class GraphForm(Form):
-    execution_date = DateTimeField(
-        "Execution date", widget=DateTimePickerWidget())
-    arrange = SelectField("Layout", choices=(
-        ('LR', "Left->Right"),
-        ('RL', "Right->Left"),
-        ('TB', "Top->Bottom"),
-        ('BT', "Bottom->Top"),
-    ))
-
-
 class TreeForm(Form):
     base_date = DateTimeField(
         "Anchor date", widget=DateTimePickerWidget(), default=datetime.now())
