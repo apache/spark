@@ -398,15 +398,12 @@ abstract class DStream[T: ClassTag] (
       if (displayInnerRDDOps) {
         // Unset the short form call site, so that generated RDDs get their own
         ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, null)
+        ssc.sparkContext.setLocalProperty(CallSite.LONG_FORM, null)
       } else {
         // Set the callsite, so that the generated RDDs get the DStream's call site and
-        // the RDD call sites stay hidden
-        ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, creationSite.shortForm)
+        // the internal RDD call sites do not get displayed
+        ssc.sparkContext.setCallSite(creationSite)
       }
-
-      // Set the long form call site so that the stack trace shows location of DStream operation
-      // rather than the internals of Spark Streaming where RDD was generated
-      ssc.sparkContext.setLocalProperty(CallSite.LONG_FORM, creationSite.longForm)
 
       // Use the DStream's base scope for this RDD so we can (1) preserve the higher level
       // DStream operation name, and (2) share this scope with other DStreams created in the
