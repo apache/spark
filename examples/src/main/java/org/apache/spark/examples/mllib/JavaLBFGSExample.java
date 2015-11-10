@@ -33,11 +33,14 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example off$
 
 public class JavaLBFGSExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("L-BFGS Example");
     SparkContext sc = new SparkContext(conf);
+
+    // $example on$
     String path = "data/mllib/sample_libsvm_data.txt";
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
     int numFeatures = data.take(1).get(0).features().size();
@@ -99,6 +102,7 @@ public class JavaLBFGSExample {
     for (double l : loss)
       System.out.println(l);
     System.out.println("Area under ROC = " + auROC);
+    // $example off$
   }
 }
-// $example off$
+
