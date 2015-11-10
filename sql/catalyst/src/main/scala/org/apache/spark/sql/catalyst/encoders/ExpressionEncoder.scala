@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.util.Utils
