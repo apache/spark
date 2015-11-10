@@ -80,7 +80,6 @@ private[spark] object MapStatus {
   }
 }
 
-
 /**
  * A [[MapStatus]] implementation that tracks the size of each block. Size for each block is
  * represented using a single byte.
@@ -161,7 +160,6 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
-    markedBlocks = new OpenHashSet[Int]
     markedBlocks = in.readObject().asInstanceOf[OpenHashSet[Int]]
     avgSize = in.readLong()
   }
@@ -169,11 +167,11 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
 
 private[spark] object MapStatusTrackingEmptyBlocks {
   def apply(
-    loc: BlockManagerId,
-    numNonEmptyBlocks: Int ,
-    markedBlocks: OpenHashSet[Int],
-    avgSize: Long,
-    isSparse: Boolean): MapStatusTrackingEmptyBlocks = {
+      loc: BlockManagerId,
+      numNonEmptyBlocks: Int ,
+      markedBlocks: OpenHashSet[Int],
+      avgSize: Long,
+      isSparse: Boolean): MapStatusTrackingEmptyBlocks = {
     new MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, markedBlocks, avgSize, isSparse)
   }
 }
@@ -256,15 +254,11 @@ private[spark] object HighlyCompressedMapStatus {
     } else {
       0
     }
-    var isSparse = true
     if(numNonEmptyBlocks * 32 < totalNumBlocks){
-      MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize, isSparse)
-    }
-    else if ((totalNumBlocks - numNonEmptyBlocks) * 32 < totalNumBlocks){
-      isSparse = false
-      MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, emptyBlocksHashSet, avgSize, isSparse)
-    }
-    else {
+      MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize, isSparse = true)
+    } else if ((totalNumBlocks - numNonEmptyBlocks) * 32 < totalNumBlocks){
+      MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, emptyBlocksHashSet, avgSize, isSparse = false)
+    } else {
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
     }
   }
