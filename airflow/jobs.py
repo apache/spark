@@ -378,7 +378,9 @@ class SchedulerJob(BaseJob):
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
                 next_run_date = datetime.now()
 
-            if next_run_date and next_run_date <= datetime.now():
+            if (
+                    next_run_date and
+                    dag.following_schedule(next_run_date) <= datetime.now()):
                 next_run = DagRun(
                     dag_id=dag.dag_id,
                     run_id='scheduled__' + next_run_date.isoformat(),
