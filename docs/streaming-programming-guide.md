@@ -1948,8 +1948,8 @@ unifiedStream.print();
 {% highlight python %}
 numStreams = 5
 kafkaStreams = [KafkaUtils.createStream(...) for _ in range (numStreams)]
-unifiedStream = streamingContext.union(kafkaStreams)
-unifiedStream.print()
+unifiedStream = streamingContext.union(*kafkaStreams)
+unifiedStream.pprint()
 {% endhighlight %}
 </div>
 </div>
