@@ -124,17 +124,20 @@ _functions_1_4 = {
 
 _functions_1_6 = {
     # unary math functions
-    "stddev": "Aggregate function: returns the unbiased sample standard deviation of" +
-              " the expression in a group.",
-    "stddev_samp": "Aggregate function: returns the unbiased sample standard deviation of" +
-              " the expression in a group.",
-    "stddev_pop": "Aggregate function: returns population standard deviation of" +
-              " the expression in a group.",
-    "variance": "Aggregate function: returns the population variance of the values in a group.",
-    "var_samp": "Aggregate function: returns the unbiased variance of the values in a group.",
-    "var_pop":  "Aggregate function: returns the population variance of the values in a group.",
-    "skewness": "Aggregate function: returns the skewness of the values in a group.",
-    "kurtosis": "Aggregate function: returns the kurtosis of the values in a group."
+    'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
+              ' the expression in a group.',
+    'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
+                   ' the expression in a group.',
+    'stddev_pop': 'Aggregate function: returns population standard deviation of' +
+                  ' the expression in a group.',
+    'variance': 'Aggregate function: returns the population variance of the values in a group.',
+    'var_samp': 'Aggregate function: returns the unbiased variance of the values in a group.',
+    'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
+    'skewness': 'Aggregate function: returns the skewness of the values in a group.',
+    'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
+    'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
+    'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
+                   ' eliminated.'
 }
 
 # math functions that take two arguments as input
