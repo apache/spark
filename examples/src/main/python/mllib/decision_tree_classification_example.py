@@ -20,13 +20,15 @@ Decision Tree Classification Example.
 """
 from __future__ import print_function
 
+from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
 from pyspark.mllib.util import MLUtils
 # $example off$
 
-if __main__ == "__main__":
+if __name__ == "__main__":
+
+    sc = SparkContext(appName="PythonDecisionTreeClassificationExample")
 
     # $example on$
     # Load and parse the data file into an RDD of LabeledPoint.
