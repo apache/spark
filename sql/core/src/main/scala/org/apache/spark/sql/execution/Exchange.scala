@@ -43,15 +43,13 @@ case class Exchange(
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
-      case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated =>
-        "Shuffle"
-      case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated =>
-        "May shuffle"
-      case None => "Shuffle without coordinator"
+      case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated => "(Shuffle)"
+      case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated => "(May shuffle)"
+      case None => ""
     }
 
     val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
-    s"$simpleNodeName($extraInfo)"
+    s"$simpleNodeName$extraInfo"
   }
 
   /**
