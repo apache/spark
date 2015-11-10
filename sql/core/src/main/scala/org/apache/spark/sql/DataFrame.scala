@@ -750,10 +750,14 @@ class DataFrame private[sql](
       // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
+
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
-      // correct defaults after the nested expression's type has been resolved.
+
+      // Leave an unaliased generator with an empty list of names since the analyzer will generate
+      // the correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
+      case Column(jt: JsonTuple) => MultiAlias(jt, Nil)
+
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
     Project(namedExpressions.toSeq, logicalPlan)
