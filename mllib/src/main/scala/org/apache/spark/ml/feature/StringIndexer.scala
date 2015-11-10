@@ -39,6 +39,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputColName = $(inputCol)
     val inputDataType = schema(inputColName).dataType
     require(inputDataType == StringType || inputDataType.isInstanceOf[NumericType],
@@ -89,7 +90,6 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -176,7 +176,6 @@ class StringIndexerModel (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     if (schema.fieldNames.contains($(inputCol))) {
       validateAndTransformSchema(schema)
     } else {

@@ -46,6 +46,7 @@ private[ml] trait PredictorParams extends Params
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
+    validateParams()
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
@@ -113,7 +114,6 @@ abstract class Predictor[
   private[ml] def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
   }
 
@@ -161,7 +161,6 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   protected def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema, fitting = false, featuresDataType)
   }
 

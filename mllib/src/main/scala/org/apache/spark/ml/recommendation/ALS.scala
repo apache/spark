@@ -162,6 +162,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
@@ -381,7 +382,6 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema)
   }
 

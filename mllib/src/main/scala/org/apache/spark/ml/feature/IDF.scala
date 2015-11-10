@@ -52,6 +52,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
    * Validate and transform the input schema.
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
@@ -84,7 +85,6 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema)
   }
 
@@ -123,7 +123,6 @@ class IDFModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema)
   }
 

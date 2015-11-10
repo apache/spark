@@ -80,7 +80,6 @@ final class OneVsRestModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
@@ -184,7 +183,6 @@ final class OneVsRest @Since("1.4.0") (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
