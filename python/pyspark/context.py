@@ -21,6 +21,9 @@ import os
 import shutil
 import signal
 import sys
+import tarfile
+import tempfile
+import uuid
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
@@ -71,8 +74,8 @@ class SparkContext(object):
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-                 environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
+                 environment=None, batchSize=0, serializer=PickleSerializer(),
+                 conf=None, gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -110,15 +113,15 @@ class SparkContext(object):
         self._callsite = first_spark_call() or CallSite(None, None, None)
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
-            self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc, profiler_cls)
+            self._do_init(master, appName, sparkHome, pyFiles, environment,
+                          batchSize, serializer, conf, jsc, profiler_cls)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
-    def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc, profiler_cls):
+    def _do_init(self, master, appName, sparkHome, pyFiles,  environment,
+                 batchSize, serializer, conf, jsc, profiler_cls):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -805,6 +808,40 @@ class SparkContext(object):
         if sys.version > '3':
             import importlib
             importlib.invalidate_caches()
+
+    def addPyPackage(self, pkg):
+        """
+        Add a package to the spark context, the package must have already been
+        imported by the driver via __import__ semantics. Supports namespace
+        packages by simulating the loading __path__ as a set of modules from
+        the __path__ list in a single package.
+        """
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            tar_path = os.path.join(tmp_dir, pkg.__name__+'.tar.gz')
+            tar = tarfile.open(tar_path, "w:gz")
+            for mod in pkg.__path__[::-1]:
+                # adds in reverse to simulate namespace loading path
+                tar.add(mod, arcname=os.path.basename(mod))
+            tar.close()
+            self.addPyFile(tar_path)
+        finally:
+            shutil.rmtree(tmp_dir)
+
+    def addRequirementsFile(self, path):
+        """
+        Add a pip requirements file to distribute dependencies for all tasks
+        on thie SparkContext in the future. An ImportError will be thrown if
+        a module in the file can't be downloaded.
+        See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
+        Raises ImportError if the requirement can't be found
+        """
+        import pip
+        for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
+            if not req.check_if_exists():
+                pip.main(['install', req.req.__str__()])
+            pkg = __import__(req.name)
+            self.addPyPackage(pkg)
 
     def setCheckpointDir(self, dirName):
         """

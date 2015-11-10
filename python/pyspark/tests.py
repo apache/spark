@@ -57,7 +57,6 @@ if sys.version >= "3":
 else:
     from StringIO import StringIO
 
-
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
@@ -1918,6 +1917,17 @@ class ContextTests(unittest.TestCase):
             self.assertNotEqual(SparkContext._active_spark_context, None)
             sc.stop()
         self.assertEqual(SparkContext._active_spark_context, None)
+
+    def test_requirements_file(self):
+        import pip
+        with tempfile.NamedTemporaryFile() as temp:
+            temp.write('simplejson\nquadkey>=0.0.5\nsix==1.8.0')
+            with SparkContext() as sc:
+                sc.addRequirementsFile(temp.name)
+                import quadkey
+                qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
+                        .map(lambda pair: quadkey.from_geo(pair, 1).key)
+                self.assertSequenceEqual(['3', '1', '1'], qks.collect())
 
     def test_progress_api(self):
         with SparkContext() as sc:
