@@ -398,7 +398,7 @@ private[sql] class ParquetRelation(
         val leaves = currentLeafStatuses.filter { f =>
           isSummaryFile(f.getPath) ||
             !(f.getPath.getName.startsWith("_") || f.getPath.getName.startsWith("."))
-        }.toArray.sortWith(_.getPath.toString < _.getPath.toString)
+        }.toArray.sortBy(_.getPath.toString)
 
         dataStatuses = leaves.filterNot(f => isSummaryFile(f.getPath))
         metadataStatuses =
