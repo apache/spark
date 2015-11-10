@@ -115,7 +115,7 @@ structField.jobj <- function(x) {
 }
 
 checkType <- function(type) {
-  if (type %in% names(PRIMITIVE_TYPES)) {
+  if (!is.null(PRIMITIVE_TYPES[[type]])) {
     return()
   } else {
     # Check complex types
