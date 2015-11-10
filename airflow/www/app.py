@@ -38,12 +38,12 @@ def create_app(config=None):
         admin = Admin(
             app, name='Airflow',
             static_url_path='/admin',
-            index_view=views.HomeView(endpoint='', url='/admin'),
+            index_view=views.HomeView(endpoint='', url='/admin', name="DAGs"),
             template_mode='bootstrap3',
         )
         av = admin.add_view
         vs = views
-        av(vs.Airflow(name='DAGs'))
+        av(vs.Airflow(name='DAGs', category='DAGs'))
 
         av(vs.QueryView(name='Ad Hoc Query', category="Data Profiling"))
         av(vs.ChartModelView(

@@ -1931,6 +1931,8 @@ class DAG(object):
             user_defined_macros=None,
             default_args=None,
             concurrency=configuration.getint('core', 'dag_concurrency'),
+            max_active_runs=configuration.getint(
+                'core', 'max_active_runs_per_dag'),
             params=None):
 
         self.user_defined_macros = user_defined_macros
@@ -1956,6 +1958,7 @@ class DAG(object):
         self.last_loaded = datetime.now()
         self.safe_dag_id = dag_id.replace('.', '__dot__')
         self.concurrency = concurrency
+        self.max_active_runs = max_active_runs
 
         self._comps = {
             'dag_id',

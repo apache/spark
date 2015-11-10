@@ -55,6 +55,7 @@ defaults = {
         'donot_pickle': False,
         's3_log_folder': '',
         'dag_concurrency': 16,
+        'max_active_runs_per_dag': 16,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -123,6 +124,9 @@ parallelism = 32
 
 # The number of task instances allowed to run concurrently by the scheduler
 dag_concurrency = 16
+
+# The maximum number of active DAG runs per DAG
+max_active_runs_per_dag = 16
 
 # Whether to load the examples that ship with Airflow. It's good to
 # get started, but you probably want to set this to False in a production
@@ -422,7 +426,6 @@ def getboolean(section, key):
 
 def getfloat(section, key):
     return conf.getfloat(section, key)
-
 
 def getint(section, key):
     return conf.getint(section, key)

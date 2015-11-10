@@ -345,10 +345,18 @@ class SchedulerJob(BaseJob):
         if dag.schedule_interval:
             DagRun = models.DagRun
             session = settings.Session()
-            qry = session.query(func.max(DagRun.execution_date)).filter(and_(
+            qry = session.query(func.count()).filter(
+                DagRun.dag_id == dag.dag_id,
+                DagRun.external_trigger == False,
+                DagRun.state == State.RUNNING,
+            )
+            active_runs = qry.scalar()
+            if active_runs >= dag.max_active_runs:
+                return
+            qry = session.query(func.max(DagRun.execution_date)).filter(
                 DagRun.dag_id == dag.dag_id,
                 DagRun.external_trigger == False
-            ))
+            )
             last_scheduled_run = qry.scalar()
             next_run_date = None
             if not last_scheduled_run:
