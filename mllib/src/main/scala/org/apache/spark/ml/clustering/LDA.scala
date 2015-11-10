@@ -56,10 +56,10 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * This is the parameter to a Dirichlet distribution, where larger values mean more smoothing
    * (more regularization).
    *
-   * If set to a singleton vector [-1], then docConcentration is set automatically. If set to
-   * singleton vector [alpha] where alpha != -1, then alpha is replicated to a vector of
-   * length k in fitting. Otherwise, the [[docConcentration]] vector must be length k.
-   * (default = [-1] = automatic)
+   * If not set by the user, then docConcentration is set automatically. If set to
+   * singleton vector [alpha], then alpha is replicated to a vector of length k in fitting.
+   * Otherwise, the [[docConcentration]] vector must be length k.
+   * (default = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
@@ -77,22 +77,20 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val docConcentration = new DoubleArrayParam(this, "docConcentration",
     "Concentration parameter (commonly named \"alpha\") for the prior placed on documents'" +
-      " distributions over topics (\"theta\").", validDocConcentration)
-
-  /** Check that the docConcentration is valid, independently of other Params */
-  private def validDocConcentration(alpha: Array[Double]): Boolean = {
-    if (alpha.length == 1) {
-      alpha(0) == -1 || alpha(0) >= 1.0
-    } else if (alpha.length > 1) {
-      alpha.forall(_ >= 1.0)
-    } else {
-      false
-    }
-  }
+      " distributions over topics (\"theta\").", (alpha: Array[Double]) => alpha.forall(_ >= 0.0))
 
   /** @group getParam */
   @Since("1.6.0")
   def getDocConcentration: Array[Double] = $(docConcentration)
+
+  /** Get docConcentration used by spark.mllib LDA */
+  protected def getOldDocConcentration: Vector = {
+    if (isSet(docConcentration)) {
+      Vectors.dense(getDocConcentration)
+    } else {
+      Vectors.dense(-1.0)
+    }
+  }
 
   /**
    * Concentration parameter (commonly named "beta" or "eta") for the prior placed on topics'
@@ -103,8 +101,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * Note: The topics' distributions over terms are called "beta" in the original LDA paper
    * by Blei et al., but are called "phi" in many later papers such as Asuncion et al., 2009.
    *
-   * If set to -1, then topicConcentration is set automatically.
-   *  (default = -1 = automatic)
+   * If not set by the user, then topicConcentration is set automatically.
+   *  (default = automatic)
    *
    * Optimizer-specific parameter settings:
    *  - EM
@@ -120,11 +118,20 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val topicConcentration = new DoubleParam(this, "topicConcentration",
     "Concentration parameter (commonly named \"beta\" or \"eta\") for the prior placed on topic'" +
-      " distributions over terms.", (beta: Double) => beta == -1 || beta >= 0.0)
+      " distributions over terms.", ParamValidators.gtEq(0))
 
   /** @group getParam */
   @Since("1.6.0")
   def getTopicConcentration: Double = $(topicConcentration)
+
+  /** Get topicConcentration used by spark.mllib LDA */
+  protected def getOldTopicConcentration: Double = {
+    if (isSet(topicConcentration)) {
+      getTopicConcentration
+    } else {
+      -1.0
+    }
+  }
 
   /** Supported values for Param [[optimizer]]. */
   final val supportedOptimizers: Array[String] = Array("online", "em")
@@ -256,10 +263,32 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   }
 
   override def validateParams(): Unit = {
-    if (getDocConcentration.length != 1) {
-      require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
-        s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
-        s" length 1 (scalar) or an array of length k.")
+    if (isSet(docConcentration)) {
+      if (getDocConcentration.length != 1) {
+        require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
+          s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be either" +
+          s" length 1 (scalar) or an array of length k.")
+      }
+      getOptimizer match {
+        case "online" =>
+          require(getDocConcentration.forall(_ >= 0),
+            "For Online LDA optimizer, docConcentration values must be >= 0.  Found values: " +
+              getDocConcentration.mkString(","))
+        case "em" =>
+          require(getDocConcentration.forall(_ >= 0),
+            "For EM optimizer, docConcentration values must be >= 1.  Found values: " +
+              getDocConcentration.mkString(","))
+      }
+    }
+    if (isSet(topicConcentration)) {
+      getOptimizer match {
+        case "online" =>
+          require(getTopicConcentration >= 0, s"For Online LDA optimizer, topicConcentration" +
+            s" must be >= 0.  Found value: $getTopicConcentration")
+        case "em" =>
+          require(getTopicConcentration >= 0, s"For EM optimizer, topicConcentration" +
+            s" must be >= 1.  Found value: $getTopicConcentration")
+      }
     }
   }
 
@@ -331,8 +360,8 @@ class LDAModel private[ml] (
       val t = udf(oldLocalModel.get.getTopicDistributionMethod(sqlContext.sparkContext))
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol))))
     } else {
-      logWarning("LDAModel.transform was called as a noop. Set an output column such as" +
-        " topicDistributionCol to produce results.")
+      logWarning("LDAModel.transform was called without any output columns. Set an output column" +
+        " such as topicDistributionCol to produce results.")
       dataset
     }
   }
@@ -557,9 +586,8 @@ class LDA @Since("1.6.0") (
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
 
-  setDefault(maxIter -> 20, k -> 10, docConcentration -> Array(-1.0), topicConcentration -> -1.0,
-    optimizer -> "online", checkpointInterval -> 10, tau0 -> 1024, kappa -> 0.51,
-    subsamplingRate -> 0.05, optimizeDocConcentration -> true)
+  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
+    tau0 -> 1024, kappa -> 0.51, subsamplingRate -> 0.05, optimizeDocConcentration -> true)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
@@ -629,8 +657,8 @@ class LDA @Since("1.6.0") (
     transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
-      .setDocConcentration(Vectors.dense($(docConcentration)))
-      .setTopicConcentration($(topicConcentration))
+      .setDocConcentration(getOldDocConcentration)
+      .setTopicConcentration(getOldTopicConcentration)
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setCheckpointInterval($(checkpointInterval))

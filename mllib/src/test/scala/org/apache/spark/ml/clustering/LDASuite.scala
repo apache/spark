@@ -61,8 +61,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lda.isDefined(lda.seed))
     assert(lda.getCheckpointInterval === 10)
     assert(lda.getK === 10)
-    assert(lda.getDocConcentration === Array(-1.0))
-    assert(lda.getTopicConcentration === -1.0)
+    assert(!lda.isSet(lda.docConcentration))
+    assert(!lda.isSet(lda.topicConcentration))
     assert(lda.getOptimizer === "online")
     assert(lda.getKappa === 0.51)
     assert(lda.getTau0 === 1024)
@@ -123,8 +123,6 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     // validateParams()
-    lda.setDocConcentration(-1)
-    assert(lda.getDocConcentration === Array(-1.0))
     lda.validateParams()
     lda.setDocConcentration(1.1)
     lda.validateParams()
