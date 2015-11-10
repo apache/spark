@@ -642,9 +642,11 @@ object WriteAheadLogSuite {
       isWriteCalled = false
       handle
     }
-    override def read(segment: WriteAheadLogRecordHandle): ByteBuffer = ???
-    override def readAll(): JIterator[ByteBuffer] = ???
-    override def clean(threshTime: Long, waitForCompletion: Boolean): Unit = ???
+    override def read(segment: WriteAheadLogRecordHandle): ByteBuffer = wal.read(segment)
+    override def readAll(): JIterator[ByteBuffer] = wal.readAll()
+    override def clean(threshTime: Long, waitForCompletion: Boolean): Unit = {
+      wal.clean(threshTime, waitForCompletion)
+    }
     override def close(): Unit = wal.close()
 
     def allowWrite(): Unit = {
