@@ -89,15 +89,15 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         {createExecutorTable()}
       </tbody>
     </table>
-      <script>
-        {Unparsed {
+    <script>
+      {Unparsed {
         """
           |      window.onload = function() {
           |        sorttable.innerSortFunction.apply(document.getElementById('executorid'), [])
           |      };
         """.stripMargin
       }}
-      </script>
+    </script>
   }
 
   private def createExecutorTable() : Seq[Node] = {
