@@ -24,6 +24,7 @@ import org.apache.spark.unsafe.Platform
 
 abstract class UnsafeRowJoiner {
   def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
+  def withRight(row2: UnsafeRow): UnsafeRow
 }
 
 
@@ -136,7 +137,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
      """.stripMargin
 
     // ------------- update fixed length data for variable length data type  --------------- //
-    val updateOffset = (schema1 ++ schema2).zipWithIndex.map { case (field, i) =>
+    val updateOffsets = (schema1 ++ schema2).zipWithIndex.map { case (field, i) =>
       // Skip fixed length data types, and only generate code for variable length data
       if (UnsafeRow.isFixedLength(field.dataType)) {
         ""
@@ -155,7 +156,11 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
            |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
          """.stripMargin
       }
-    }.mkString("\n")
+    }
+
+    val updateOffset1 = updateOffsets.slice(0, schema1.length).mkString("\n")
+    val updateOffset2 = updateOffsets.slice(schema1.length, schema1.length + schema2.length)
+      .mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
@@ -166,6 +171,35 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow();
+       |  private UnsafeRow _row1 = null;
+       |
+       |  public UnsafeRow withRight(UnsafeRow row2) {
+       |    UnsafeRow row1 = _row1;
+       |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes();
+       |    if (sizeInBytes > buf.length) {
+       |      byte[] buf2 = new byte[sizeInBytes];
+       |      Platform.copyMemory(
+       |        buf, $offset,
+       |        buf2, $offset,
+       |        buf.length);
+       |      buf = buf2;
+       |    }
+       |
+       |    final Object obj1 = row1.getBaseObject();
+       |    final long offset1 = row1.getBaseOffset();
+       |    final Object obj2 = row2.getBaseObject();
+       |    final long offset2 = row2.getBaseOffset();
+       |
+       |    $copyBitset
+       |    $copyFixedLengthRow2
+       |    long numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
+       |    $copyVariableLengthRow2
+       |    $updateOffset2
+       |
+       |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
+       |
+       |    return out;
+       |  }
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -186,9 +220,12 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyFixedLengthRow2
        |    $copyVariableLengthRow1
        |    $copyVariableLengthRow2
-       |    $updateOffset
+       |    $updateOffset1
+       |    $updateOffset2
        |
        |    out.pointTo(buf, ${schema1.size + schema2.size}, sizeInBytes - $sizeReduction);
+       |
+       |    _row1 = row1;
        |
        |    return out;
        |  }
