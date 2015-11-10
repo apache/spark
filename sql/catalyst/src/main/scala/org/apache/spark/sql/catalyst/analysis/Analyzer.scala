@@ -384,14 +384,35 @@ class Analyzer(
             j
           case Some((oldRelation, newRelation)) =>
             val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
-            val newRight = right transformUp {
-              case r if r == oldRelation => newRelation
-            } transformUp {
-              case other => other transformExpressions {
-                case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+            def applyRewrites(plan: LogicalPlan): LogicalPlan =
+              plan transformUp {
+                case r if r == oldRelation => newRelation
+              } transformUp {
+                case other => other transformExpressions {
+                  case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+                }
               }
-            }
-            j.copy(right = newRight)
+            val newRight = applyRewrites(right)
+            // Also apply the rewrites to foreign keys on the left side, because these are meant to
+            // reference the right side.
+            val newLeft =
+              if (left.keys.nonEmpty) {
+                left.transform {
+                  case KeyHint(keys, child) =>
+                    val newKeys = keys.collect {
+                      case ForeignKey(attr, referencedRelation, referencedAttr) =>
+                        ForeignKey(
+                          attr,
+                          applyRewrites(referencedRelation),
+                          attributeRewrites.get(referencedAttr).getOrElse(referencedAttr))
+                    }
+                    // Keep the old keys as well to accommodate future self-joins
+                    KeyHint((keys ++ newKeys).distinct, child)
+                }
+              } else {
+                left
+              }
+            j.copy(left = newLeft, right = newRight)
         }
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
@@ -399,6 +420,32 @@ class Analyzer(
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering = resolveSortOrders(ordering, child, throws = false)
         Sort(newOrdering, global, child)
+
+      // Resolve referenced attributes of foreign keys using the referenced relation
+      case h @ KeyHint(keys, child) if child.resolved && !h.foreignKeyReferencesResolved =>
+        KeyHint(keys.map {
+          case ForeignKey(k, r, u @ UnresolvedAttribute(nameParts)) => withPosition(u) {
+            // The referenced relation r is itself guaranteed to be resolved already, so we can
+            // resolve u against it
+            val referencedAttr = r.resolve(nameParts, resolver).getOrElse(u).toAttribute
+
+            // Enforce the constraint that foreign keys can only reference unique keys
+            if (referencedAttr.resolved) {
+              val referencedAttrIsUnique = r.keys.exists {
+                case UniqueKey(attr) if attr semanticEquals referencedAttr => true
+                case _ => false
+              }
+              if (!referencedAttrIsUnique) {
+                failAnalysis("Foreign keys can only reference unique keys, but " +
+                  s"$k references $referencedAttr which is not unique.")
+              }
+            }
+
+            ForeignKey(k, r, referencedAttr)
+          }
+
+          case otherKey => otherKey
+        }, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.RightOuter
@@ -33,14 +34,7 @@ import org.apache.spark.sql.types._
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 
 object DefaultOptimizer extends Optimizer {
-  val batches =
-    // SubQueries are only needed for analysis and can be removed before execution.
-    Batch("Remove SubQueries", FixedPoint(100),
-      EliminateSubQueries) ::
-    Batch("Aggregate", FixedPoint(100),
-      ReplaceDistinctWithAggregate,
-      RemoveLiteralFromGroupExpressions) ::
-    Batch("Operator Optimizations", FixedPoint(100),
+  val operatorOptimizations = Seq(
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
@@ -51,6 +45,8 @@ object DefaultOptimizer extends Optimizer {
       ColumnPruning,
       // Operator combine
       ProjectCollapsing,
+      KeyHintCollapsing,
+      JoinElimination,
       CombineFilters,
       CombineLimits,
       // Constant folding
@@ -62,7 +58,21 @@ object DefaultOptimizer extends Optimizer {
       RemoveDispensable,
       SimplifyFilters,
       SimplifyCasts,
-      SimplifyCaseConversionExpressions) ::
+      SimplifyCaseConversionExpressions)
+
+  val batches =
+    // SubQueries are only needed for analysis and can be removed before execution.
+    Batch("Remove SubQueries", FixedPoint(100),
+      EliminateSubQueries) ::
+    Batch("Aggregate", FixedPoint(100),
+      ReplaceDistinctWithAggregate,
+      RemoveLiteralFromGroupExpressions) ::
+    // Hints are necessary for some operator optimizations but interfere with others, so we run the
+    // rules with them, then remove them and run the rules again.
+    Batch("Operator Optimizations", FixedPoint(100),
+      operatorOptimizations: _*) ::
+    Batch("Remove Hints", FixedPoint(100),
+      (RemoveKeyHints +: operatorOptimizations): _*) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
@@ -324,6 +334,46 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         Project(cleanedProjection, child)
       }
   }
+}
+
+/**
+ * Combines two adjacent [[KeyHint]]s into one by merging their key lists.
+ */
+object KeyHintCollapsing extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case KeyHint(keys1, KeyHint(keys2, child)) =>
+      KeyHint((keys1 ++ keys2).distinct, child)
+  }
+}
+
+/**
+ * Eliminates keyed equi-joins when followed by a [[Project]] that only keeps columns from one side.
+ */
+object JoinElimination extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case CanEliminateUniqueKeyOuterJoin(outer, projectList) =>
+      Project(projectList, outer)
+    case CanEliminateReferentialIntegrityJoin(parent, child, primaryForeignMap, projectList) =>
+      Project(substituteParentForChild(projectList, parent, primaryForeignMap), child)
+  }
+
+  /**
+   * In the given expressions, substitute all references to parent columns with references to the
+   * corresponding child columns. The `primaryForeignMap` contains these equivalences, extracted
+   * from the equality join expressions.
+   */
+  private def substituteParentForChild(
+      expressions: Seq[NamedExpression],
+      parent: LogicalPlan,
+      primaryForeignMap: AttributeMap[Attribute])
+    : Seq[NamedExpression] = {
+    expressions.map(_.transform {
+      case a: Attribute =>
+        if (parent.outputSet.contains(a)) Alias(primaryForeignMap(a), a.name)(a.exprId)
+        else a
+    }.asInstanceOf[NamedExpression])
+  }
+
 }
 
 /**
@@ -845,6 +895,15 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
       case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
+  }
+}
+
+/**
+ * Removes [[KeyHint]]s from the plan to avoid interfering with other rules.
+ */
+object RemoveKeyHints extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case KeyHint(_, child) => child
   }
 }
 

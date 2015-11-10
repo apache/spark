@@ -77,6 +77,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
+   * The unique and foreign key constraints that will hold for the output of this plan. Specific
+   * plan nodes can override this to introduce or propagate keys.
+   */
+  def keys: Seq[Key] = Seq.empty
+
+  /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
    * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.

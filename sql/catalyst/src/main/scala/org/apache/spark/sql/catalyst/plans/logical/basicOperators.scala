@@ -27,6 +27,19 @@ import org.apache.spark.util.collection.OpenHashSet
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override def keys: Seq[Key] = {
+    val aliasMap = AttributeMap(projectList.collect {
+      case a @ Alias(old: AttributeReference, _) => (old, a.toAttribute)
+      case r: AttributeReference => (r, r)
+    })
+    child.keys.collect {
+      case UniqueKey(attr) if aliasMap.contains(attr) =>
+        UniqueKey(aliasMap(attr))
+      case ForeignKey(attr, referencedRelation, referencedAttr) if aliasMap.contains(attr) =>
+        ForeignKey(aliasMap(attr), referencedRelation, referencedAttr)
+    }
+  }
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
@@ -134,6 +147,16 @@ case class Join(
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case _ =>
         left.output ++ right.output
+    }
+  }
+
+  override def keys: Seq[Key] = {
+    // TODO: try to propagate unique keys as well as foreign keys
+    def fk(keys: Seq[Key]): Seq[ForeignKey] = keys.collect { case k: ForeignKey => k }
+    joinType match {
+      case LeftSemi | LeftOuter => fk(left.keys)
+      case RightOuter => fk(right.keys)
+      case _ => fk(left.keys ++ right.keys)
     }
   }
 
@@ -397,6 +420,7 @@ case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def keys: Seq[Key] = child.keys
 }
 
 /**
@@ -454,6 +478,36 @@ case object OneRowRelation extends LeafNode {
 }
 
 /**
+ * A hint to the optimizer that the given key constraints hold for the output of the child plan.
+ */
+case class KeyHint(newKeys: Seq[Key], child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override def keys: Seq[Key] = newKeys ++ child.keys
+
+  override lazy val resolved: Boolean = newKeys.forall(_.resolved) && childrenResolved
+
+  def foreignKeyReferencesResolved: Boolean = newKeys.forall {
+    case ForeignKey(_, _, referencedAttr) => referencedAttr.resolved
+    case _ => true
+  }
+
+  /** Overridden here to apply `rule` to the keys. */
+  override def transformExpressionsDown(
+      rule: PartialFunction[Expression, Expression]): this.type = {
+    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
+      .asInstanceOf[this.type]
+  }
+
+  /** Overridden here to apply `rule` to the keys. */
+  override def transformExpressionsUp(
+      rule: PartialFunction[Expression, Expression]): this.type = {
+    KeyHint(newKeys.map(_.transformAttribute(rule.andThen(_.asInstanceOf[Attribute]))), child)
+    .asInstanceOf[this.type]
+  }
+}
+
+/*
  * A relation produced by applying `func` to each partition of the `child`. tEncoder/uEncoder are
  * used respectively to decode/encode from the JVM object representation expected by `func.`
  */
