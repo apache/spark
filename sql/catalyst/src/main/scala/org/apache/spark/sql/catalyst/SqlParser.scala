@@ -334,14 +334,13 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val numericLiteral: Parser[Literal] =
     ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
-    | sign.? ~ unsignedFloat ^^ {
-      case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f))
-    }
+    | sign.? ~ unsignedFloat ^^
+      { case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f)) }
     )
 
   protected lazy val unsignedFloat: Parser[String] =
     ( "." ~> numericLit ^^ { u => "0." + u }
-    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
+    | elem("decimal", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
     )
 
   protected lazy val sign: Parser[String] = ("+" | "-")
@@ -466,9 +465,9 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | ident <~ "." ~ "*" ^^ { case tableName => UnresolvedStar(Option(tableName)) }
+    | rep1(ident <~ ".") <~ "*" ^^ { case target => UnresolvedStar(Option(target))}
     | primary
-    )
+   )
 
   protected lazy val signedPrimary: Parser[Expression] =
     sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e }

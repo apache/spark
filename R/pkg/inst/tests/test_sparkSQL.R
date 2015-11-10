@@ -647,11 +647,11 @@ test_that("sample on a DataFrame", {
   sampled <- sample(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
   expect_is(sampled, "DataFrame")
-  sampled2 <- sample(df, FALSE, 0.1)
+  sampled2 <- sample(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled2) < 3)
 
   # Also test sample_frac
-  sampled3 <- sample_frac(df, FALSE, 0.1)
+  sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 })
 
@@ -875,9 +875,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.45, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -0.0111, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -1458,8 +1458,8 @@ test_that("sampleBy() on a DataFrame", {
   fractions <- list("0" = 0.1, "1" = 0.2)
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
-  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -1492,6 +1492,15 @@ test_that("attach() on a DataFrame", {
   stat3 <- summary(df[, "age"])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
+})
+
+test_that("with() on a DataFrame", {
+  df <- createDataFrame(sqlContext, iris)
+  expect_error(Sepal_Length)
+  sum1 <- with(df, list(summary(Sepal_Length), summary(Sepal_Width)))
+  expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
+  sum2 <- with(df, distinct(Sepal_Length))
+  expect_equal(nrow(sum2), 35)
 })
 
 unlink(parquetPath)

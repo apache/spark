@@ -22,13 +22,12 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types._
 
 class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFunction {
 
@@ -517,6 +516,48 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(3, 4, 4, 3, null) :: Nil)
   }
 
+  test("single distinct multiple columns set") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1, value2)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3) ::
+        Row(1, 3) ::
+        Row(2, 1) ::
+        Row(3, 0) :: Nil)
+  }
+
+  test("multiple distinct multiple columns sets") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT
+          |  key,
+          |  count(distinct value1),
+          |  sum(distinct value1),
+          |  count(distinct value2),
+          |  sum(distinct value2),
+          |  count(distinct value1, value2),
+          |  count(value1),
+          |  sum(value1),
+          |  count(value2),
+          |  sum(value2),
+          |  count(*),
+          |  count(1)
+          |FROM agg2
+          |GROUP BY key
+        """.stripMargin),
+      Row(null, 3, 30, 3, 60, 3, 3, 30, 3, 60, 4, 4) ::
+        Row(1, 2, 40, 3, -10, 3, 3, 70, 3, -10, 3, 3) ::
+        Row(2, 2, 0, 1, 1, 1, 3, 1, 3, 3, 4, 4) ::
+        Row(3, 0, null, 1, 3, 0, 0, null, 1, 3, 2, 2) :: Nil)
+  }
+
   test("test count") {
     checkAnswer(
       sqlContext.sql(
@@ -700,6 +741,13 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       }.getMessage
       assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
     }
+  }
+
+  test("no aggregation function (SPARK-11486)") {
+    val df = sqlContext.range(20).selectExpr("id", "repeat(id, 1) as s")
+      .groupBy("s").count()
+      .groupBy().count()
+    checkAnswer(df, Row(20) :: Nil)
   }
 
   test("udaf with all data types") {

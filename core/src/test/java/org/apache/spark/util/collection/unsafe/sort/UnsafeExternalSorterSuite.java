@@ -390,7 +390,6 @@ public class UnsafeExternalSorterSuite {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
         insertNumber(sorter, i);
         newPeakMemory = sorter.getPeakMemoryUsedBytes();
-        // The first page is pre-allocated on instantiation
         if (i % numRecordsPerPage == 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);

@@ -16,6 +16,7 @@
  */
 
 import java.io._
+import java.nio.file.Files
 
 import scala.util.Properties
 import scala.collection.JavaConverters._
@@ -135,8 +136,6 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home").map { p => new File(p).getParentFile().getAbsolutePath() })
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
-    retrieveManaged := true,
-    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.9-spark0",
 
@@ -207,7 +206,8 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExcludedDependencies.settings ++ Revolver.settings))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -292,6 +292,14 @@ object Flume {
 }
 
 /**
+ * Overrides to work around sbt's dependency resolution being different from Maven's.
+ */
+object DependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+}
+
+/**
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
   */
@@ -316,9 +324,7 @@ object OldDeps {
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
-    scalaVersion := "2.10.4",
-    retrieveManaged := true,
-    retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
+    scalaVersion := "2.10.5",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
       "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
       "spark-streaming", "spark-mllib", "spark-bagel", "spark-graphx",
@@ -395,6 +401,8 @@ object Assembly {
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
 
+  val deployDatanucleusJars = taskKey[Unit]("Deploy datanucleus jars to the spark/lib_managed/jars directory")
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     hadoopVersion := {
@@ -420,7 +428,20 @@ object Assembly {
       case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
-    }
+    },
+    deployDatanucleusJars := {
+      val jars: Seq[File] = (fullClasspath in assembly).value.map(_.data)
+        .filter(_.getPath.contains("org.datanucleus"))
+      var libManagedJars = new File(BuildCommons.sparkHome, "lib_managed/jars")
+      libManagedJars.mkdirs()
+      jars.foreach { jar =>
+        val dest = new File(libManagedJars, jar.getName)
+        if (!dest.exists()) {
+          Files.copy(jar.toPath, dest.toPath)
+        }
+      }
+    },
+    assembly <<= assembly.dependsOn(deployDatanucleusJars)
   )
 }
 
