@@ -352,7 +352,19 @@ class SchedulerJob(BaseJob):
             last_scheduled_run = qry.scalar()
             next_run_date = None
             if not last_scheduled_run:
-                next_run_date = min([t.start_date for t in dag.tasks])
+                # First run
+                TI = models.TaskInstance
+                latest_run = (
+                    session.query(func.max(TI.execution_date))
+                    .filter_by(dag_id=dag.dag_id)
+                    .scalar()
+                )
+                if latest_run:
+                    # Migrating from previous version
+                    # make the past 5 runs active
+                    next_run_date = dag.date_range(latest_run, -5)[0]
+                else:
+                    next_run_date = min([t.start_date for t in dag.tasks])
             elif dag.schedule_interval != '@once':
                 next_run_date = dag.following_schedule(last_scheduled_run)
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
@@ -409,7 +421,8 @@ class SchedulerJob(BaseJob):
                 continue
             ti = TI(task, dttm)
             ti.refresh_from_db()
-            if ti.state in (State.RUNNING, State.QUEUED, State.SUCCESS):
+            if ti.state in (
+                    State.RUNNING, State.QUEUED, State.SUCCESS, State.FAILED):
                 continue
             elif ti.is_runnable(flag_upstream_failed=True):
                 logging.debug('Firing task: {}'.format(ti))
@@ -704,7 +717,7 @@ class BackfillJob(BaseJob):
                     succeeded.append(key)
                     tasks_to_run.pop(key)
                 elif (
-                        ti.state not in (State.SUCCESS, State.QUEUED) and 
+                        ti.state not in (State.SUCCESS, State.QUEUED) and
                         state == State.SUCCESS):
                     logging.error(
                         "The airflow run command failed "
