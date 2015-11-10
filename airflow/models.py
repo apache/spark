@@ -1920,6 +1920,10 @@ class DAG(object):
     :param concurrency: the number of task instances allowed to run
         concurrently
     :type concurrency: int
+    :param max_active_runs: maximum number of active DAG runs, beyond this
+        number of DAG runs in a running state, the scheduler won't create
+        new active DAG runs
+    ":type max_active_runs: int"
     """
 
     def __init__(
