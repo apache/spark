@@ -1467,8 +1467,9 @@ test_that("SQL error message is returned from JVM", {
   expect_equal(grepl("Table not found: blah", retError), TRUE)
 })
 
+irisDF <- createDataFrame(sqlContext, iris)
+
 test_that("Method as.data.frame as a synonym for collect()", {
-  irisDF <- createDataFrame(sqlContext, iris)
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
@@ -1501,6 +1502,27 @@ test_that("with() on a DataFrame", {
   expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
   sum2 <- with(df, distinct(Sepal_Length))
   expect_equal(nrow(sum2), 35)
+})
+
+test_that("Method coltypes() to get R's data types of a DataFrame", {
+  expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
+
+  data <- data.frame(c1=c(1,2,3),
+                     c2=c(T,F,T),
+                     c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
+
+  schema <- structType(structField("c1", "byte"),
+                       structField("c3", "boolean"),
+                       structField("c4", "timestamp"))
+
+  # Test primitive types
+  DF <- createDataFrame(sqlContext, data, schema)
+  expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
+
+  # Test complex types
+  x <- createDataFrame(sqlContext, list(list(as.environment(
+    list("a"="b", "c"="d", "e"="f")))))
+  expect_equal(coltypes(x), "map<string,string>")
 })
 
 unlink(parquetPath)
