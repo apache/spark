@@ -80,7 +80,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
            *     more than once.
            */
           logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
-              " or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
+              s" or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
 
           /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e

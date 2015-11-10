@@ -31,6 +31,8 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
+import com.amazonaws.services.kinesis.producer.{KinesisProducer, KinesisProducerConfiguration, UserRecordResult}
+import com.google.common.util.concurrent.{FutureCallback, Futures}
 
 import org.apache.spark.Logging
 
@@ -64,6 +66,16 @@ private[kinesis] class KinesisTestUtils extends Logging {
     new DynamoDB(dynamoDBClient)
   }
 
+  private lazy val kinesisProducer: KinesisProducer = {
+    val conf = new KinesisProducerConfiguration()
+      .setRecordMaxBufferedTime(1000)
+      .setMaxConnections(1)
+      .setRegion(regionName)
+      .setMetricsLevel("none")
+
+    new KinesisProducer(conf)
+  }
+
   def streamName: String = {
     require(streamCreated, "Stream not yet created, call createStream() to create one")
     _streamName
@@ -90,22 +102,41 @@ private[kinesis] class KinesisTestUtils extends Logging {
    * Push data to Kinesis stream and return a map of
    * shardId -> seq of (data, seq number) pushed to corresponding shard
    */
-  def pushData(testData: Seq[Int]): Map[String, Seq[(Int, String)]] = {
+  def pushData(testData: Seq[Int], aggregate: Boolean): Map[String, Seq[(Int, String)]] = {
     require(streamCreated, "Stream not yet created, call createStream() to create one")
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
 
     testData.foreach { num =>
       val str = num.toString
-      val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
-        .withData(ByteBuffer.wrap(str.getBytes()))
-        .withPartitionKey(str)
+      val data = ByteBuffer.wrap(str.getBytes())
+      if (aggregate) {
+        val future = kinesisProducer.addUserRecord(streamName, str, data)
+        val kinesisCallBack = new FutureCallback[UserRecordResult]() {
+          override def onFailure(t: Throwable): Unit = {} // do nothing
 
-      val putRecordResult = kinesisClient.putRecord(putRecordRequest)
-      val shardId = putRecordResult.getShardId
-      val seqNumber = putRecordResult.getSequenceNumber()
-      val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
-        new ArrayBuffer[(Int, String)]())
-      sentSeqNumbers += ((num, seqNumber))
+          override def onSuccess(result: UserRecordResult): Unit = {
+            val shardId = result.getShardId
+            val seqNumber = result.getSequenceNumber()
+            val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
+              new ArrayBuffer[(Int, String)]())
+            sentSeqNumbers += ((num, seqNumber))
+          }
+        }
+
+        Futures.addCallback(future, kinesisCallBack)
+        kinesisProducer.flushSync() // make sure we send all data before returning the map
+      } else {
+        val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
+          .withData(data)
+          .withPartitionKey(str)
+
+        val putRecordResult = kinesisClient.putRecord(putRecordRequest)
+        val shardId = putRecordResult.getShardId
+        val seqNumber = putRecordResult.getSequenceNumber()
+        val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
+          new ArrayBuffer[(Int, String)]())
+        sentSeqNumbers += ((num, seqNumber))
+      }
     }
 
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
@@ -116,7 +147,7 @@ private[kinesis] class KinesisTestUtils extends Logging {
    * Expose a Python friendly API.
    */
   def pushData(testData: java.util.List[Int]): Unit = {
-    pushData(testData.asScala)
+    pushData(testData.asScala, aggregate = false)
   }
 
   def deleteStream(): Unit = {

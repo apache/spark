@@ -216,7 +216,6 @@ private[kinesis] class KinesisReceiver[T](
       val metadata = SequenceNumberRange(streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
-
     }
   }
 
