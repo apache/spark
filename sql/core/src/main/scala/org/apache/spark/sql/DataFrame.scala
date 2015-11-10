@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -116,7 +116,8 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: QueryExecution) extends Serializable {
+    @DeveloperApi @transient val queryExecution: QueryExecution)
+  extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -232,15 +233,6 @@ class DataFrame private[sql](
     }
 
     sb.toString()
-  }
-
-  override def toString: String = {
-    try {
-      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
-    }
   }
 
   /**

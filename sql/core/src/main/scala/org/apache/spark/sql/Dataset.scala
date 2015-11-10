@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -62,7 +62,7 @@ import org.apache.spark.sql.types.StructType
 class Dataset[T] private[sql](
     @transient val sqlContext: SQLContext,
     @transient val queryExecution: QueryExecution,
-    unresolvedEncoder: Encoder[T]) extends Serializable {
+    unresolvedEncoder: Encoder[T]) extends Queryable with Serializable {
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {

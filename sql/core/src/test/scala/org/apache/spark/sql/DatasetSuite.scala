@@ -313,4 +313,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
     checkAnswer(joined, ("2", 2))
   }
+
+  test("toString") {
+    val ds = Seq((1, 2)).toDS()
+    assert(ds.toString == "[_1: int, _2: int]")
+  }
 }
