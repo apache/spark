@@ -16,6 +16,7 @@ from airflow import configuration
 
 csrf = CsrfProtect()
 
+
 def create_app(config=None):
     app = Flask(__name__)
     app.secret_key = configuration.get('webserver', 'SECRET_KEY')

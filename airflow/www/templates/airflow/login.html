@@ -11,7 +11,6 @@
             <div class="account-wall">
                 <img src="{{ url_for("static", filename="pin_100.png") }}" />
                 <form class="form-signin" method="post" action="{{ url_for('airflow.login') }}">
-                    {{ form.csrf_token }}
                     <input type="text" class="form-control" placeholder="Username" name="username" required autofocus>
                     <input type="password" class="form-control" placeholder="Password" name="password" required>
                     <button class="btn btn-lg btn-primary btn-block" type="submit">
@@ -20,6 +19,7 @@
                         <input type="checkbox" value="remember-me">
                         Remember me
                     </label>
+                    <input name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
                 </form>
             </div>
         </div>
