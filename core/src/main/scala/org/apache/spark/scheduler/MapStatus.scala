@@ -20,10 +20,8 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable
+import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
@@ -123,18 +121,18 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a hashset for tracking which blocks are empty(dense) / non-empty(sparse).
- * using a HashSet[Int] can save more memory usage than BitSet
+ * plus a OpenHashSet for tracking which blocks are empty(dense) / non-empty(sparse).
+ * using a OpenHashSet[Int] can save more memory usage than BitSet
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
- * @param markedBlocks a HashSet tracking which blocks are empty(dense) / non-empty(sparse)
+ * @param markedBlocks a OpenHashSet tracking which blocks are empty(dense) / non-empty(sparse)
  * @param avgSize average size of the non-empty blocks
  */
 private[spark] class MapStatusTrackingEmptyBlocks private (
     private[this] var loc: BlockManagerId,
     private[this] var numNonEmptyBlocks: Int,
-    private[this] var markedBlocks: mutable.HashSet[Int],
+    private[this] var markedBlocks: OpenHashSet[Int],
     private[this] var avgSize: Long,
     private[this] var isSparse: Boolean)
   extends MapStatus with Externalizable {
@@ -163,8 +161,8 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
-    markedBlocks = new mutable.HashSet[Int]
-    markedBlocks = in.readObject().asInstanceOf[mutable.HashSet[Int]]
+    markedBlocks = new OpenHashSet[Int]
+    markedBlocks = in.readObject().asInstanceOf[OpenHashSet[Int]]
     avgSize = in.readLong()
   }
 }
@@ -173,10 +171,10 @@ private[spark] object MapStatusTrackingEmptyBlocks {
   def apply(
     loc: BlockManagerId,
     numNonEmptyBlocks: Int ,
-    markedBlocks: mutable.HashSet[Int],
+    markedBlocks: OpenHashSet[Int],
     avgSize: Long,
-    flag: Boolean): MapStatusTrackingEmptyBlocks = {
-    new MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, markedBlocks, avgSize, flag)
+    isSparse: Boolean): MapStatusTrackingEmptyBlocks = {
+    new MapStatusTrackingEmptyBlocks(loc, numNonEmptyBlocks, markedBlocks, avgSize, isSparse)
   }
 }
 
@@ -202,7 +200,7 @@ private[spark] class HighlyCompressedMapStatus private (
     "Average size can only be zero for map stages that produced no output")
 
   protected def this() = this(null, -1, null, -1)  // For deserialization only
-  
+
   override def location: BlockManagerId = loc
 
   override def getSizeForBlock(reduceId: Int): Long = {
@@ -239,8 +237,8 @@ private[spark] object HighlyCompressedMapStatus {
     // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
     val totalNumBlocks = uncompressedSizes.length
     val emptyBlocks = new BitSet(totalNumBlocks)
-    val emptyBlocksHashSet = new mutable.HashSet[Int]
-    val nonEmptyBlocks = new mutable.HashSet[Int]
+    val emptyBlocksHashSet = new OpenHashSet[Int]
+    val nonEmptyBlocks = new OpenHashSet[Int]
     while (i < totalNumBlocks) {
       var size = uncompressedSizes(i)
       if (size > 0) {
