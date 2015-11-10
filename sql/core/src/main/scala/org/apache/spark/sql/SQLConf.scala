@@ -268,6 +268,11 @@ private[spark] object SQLConf {
     doc = "When true, use the new optimized Tungsten physical execution backend.",
     isPublic = false)
 
+  val SUBEXPRESSION_ELIMINATION_ENABLED = booleanConf("spark.sql.subexpressionElimination.enabled",
+    defaultValue = Some(true),  // use CODEGEN_ENABLED as default
+    doc = "When true, common subexpressions will be eliminated.",
+    isPublic = false)
+
   val DIALECT = stringConf(
     "spark.sql.dialect",
     defaultValue = Some("sql"),
@@ -540,6 +545,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
+
+  private[spark] def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED, codegenEnabled)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

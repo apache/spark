@@ -66,6 +66,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   } else {
     false
   }
+  val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.conf.subexpressionEliminationEnabled
+  } else {
+    false
+  }
 
   /**
    * Whether the "prepare" method is called.

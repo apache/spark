@@ -70,7 +70,8 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
     child.execute().mapPartitions { iter =>
-      val project = UnsafeProjection.create(projectList, child.output)
+      val project = UnsafeProjection.create(projectList, child.output,
+        subexpressionEliminationEnabled)
       iter.map { row =>
         numRows += 1
         project(row)
