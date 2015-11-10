@@ -36,13 +36,11 @@ setMethod("initialize", "Column", function(.Object, jc) {
   .Object
 })
 
-column <- function(jc) {
-  new("Column", jc)
-}
-
-col <- function(x) {
-  column(callJStatic("org.apache.spark.sql.functions", "col", x))
-}
+setMethod("column",
+          signature(x = "jobj"),
+          function(x) {
+            new("Column", x)
+          })
 
 #' @rdname show
 #' @name show
@@ -211,8 +209,7 @@ setMethod("cast",
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            table <- listToSeq(as.list(table))
-            jc <- callJMethod(x@jc, "in", table)
+            jc <- callJMethod(x@jc, "in", as.list(table))
             return(column(jc))
           })
 

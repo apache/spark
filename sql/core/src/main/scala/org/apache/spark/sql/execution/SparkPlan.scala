@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +31,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
@@ -40,9 +39,8 @@ object SparkPlan {
 }
 
 /**
- * :: DeveloperApi ::
+ * The base class for physical operators.
  */
-@DeveloperApi
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
   /**
@@ -170,11 +168,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = {
-    execute().mapPartitions { iter =>
-      val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      iter.map(converter(_).asInstanceOf[Row])
-    }.collect()
+  def executeCollect(): Array[InternalRow] = {
+    execute().map(_.copy()).collect()
+  }
+
+  /**
+   * Runs this query returning the result as an array, using external Row format.
+   */
+  def executeCollectPublic(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    executeCollect().map(converter(_).asInstanceOf[Row])
   }
 
   /**
@@ -182,9 +185,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after RDD.take but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[Row] = {
+  def executeTake(n: Int): Array[InternalRow] = {
     if (n == 0) {
-      return new Array[Row](0)
+      return new Array[InternalRow](0)
     }
 
     val childRDD = execute().map(_.copy())
@@ -218,8 +221,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    buf.toArray.map(converter(_).asInstanceOf[Row])
+    buf.toArray
   }
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")

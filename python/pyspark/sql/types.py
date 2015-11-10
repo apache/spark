@@ -168,10 +168,12 @@ class DateType(AtomicType):
         return True
 
     def toInternal(self, d):
-        return d and d.toordinal() - self.EPOCH_ORDINAL
+        if d is not None:
+            return d.toordinal() - self.EPOCH_ORDINAL
 
     def fromInternal(self, v):
-        return v and datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+        if v is not None:
+            return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
 class TimestampType(AtomicType):
@@ -1125,15 +1127,15 @@ def _verify_type(obj, dataType):
         return
 
     _type = type(dataType)
-    assert _type in _acceptable_types, "unknown datatype: %s" % dataType
+    assert _type in _acceptable_types, "unknown datatype: %s for object %r" % (dataType, obj)
 
     if _type is StructType:
         if not isinstance(obj, (tuple, list)):
-            raise TypeError("StructType can not accept object in type %s" % type(obj))
+            raise TypeError("StructType can not accept object %r in type %s" % (obj, type(obj)))
     else:
         # subclass of them can not be fromInternald in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError("%s can not accept object in type %s" % (dataType, type(obj)))
+            raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
     if isinstance(dataType, ArrayType):
         for i in obj:
@@ -1174,6 +1176,8 @@ class Row(tuple):
     >>> row = Row(name="Alice", age=11)
     >>> row
     Row(age=11, name='Alice')
+    >>> row['name'], row['age']
+    ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
 
@@ -1241,6 +1245,19 @@ class Row(tuple):
         """create new Row object"""
         return _create_row(self, args)
 
+    def __getitem__(self, item):
+        if isinstance(item, (int, slice)):
+            return super(Row, self).__getitem__(item)
+        try:
+            # it will be slow when it has many fields,
+            # but this will not be used in normal cases
+            idx = self.__fields__.index(item)
+            return super(Row, self).__getitem__(idx)
+        except IndexError:
+            raise KeyError(item)
+        except ValueError:
+            raise ValueError(item)
+
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
@@ -1290,8 +1307,11 @@ class DatetimeConverter(object):
 
     def convert(self, obj, gateway_client):
         Timestamp = JavaClass("java.sql.Timestamp", gateway_client)
-        return Timestamp(int(time.mktime(obj.timetuple())) * 1000 + obj.microsecond // 1000)
-
+        seconds = (calendar.timegm(obj.utctimetuple()) if obj.tzinfo
+                   else time.mktime(obj.timetuple()))
+        t = Timestamp(int(seconds) * 1000)
+        t.setNanos(obj.microsecond * 1000)
+        return t
 
 # datetime is a subclass of date, we should register DatetimeConverter first
 register_input_converter(DatetimeConverter())

@@ -65,7 +65,7 @@ class StopWordsRemoverSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("StopWordsRemover with additional words") {
-    val stopWords = StopWords.EnglishStopWords ++ Array("python", "scala")
+    val stopWords = StopWords.English ++ Array("python", "scala")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")

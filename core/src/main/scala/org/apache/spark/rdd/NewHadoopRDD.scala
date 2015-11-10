@@ -40,11 +40,10 @@ import org.apache.spark.storage.StorageLevel
 private[spark] class NewHadoopPartition(
     rddId: Int,
     val index: Int,
-    @transient rawSplit: InputSplit with Writable)
+    rawSplit: InputSplit with Writable)
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
-
   override def hashCode(): Int = 41 * (41 + rddId) + index
 }
 
@@ -68,14 +67,14 @@ class NewHadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient conf: Configuration)
+    @transient private val _conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val confBroadcast = sc.broadcast(new SerializableConfiguration(conf))
-  // private val serializableConf = new SerializableWritable(conf)
+  private val confBroadcast = sc.broadcast(new SerializableConfiguration(_conf))
+  // private val serializableConf = new SerializableWritable(_conf)
 
   private val jobTrackerId: String = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
@@ -84,14 +83,35 @@ class NewHadoopRDD[K, V](
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
+  private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
+
+  def getConf: Configuration = {
+    val conf: Configuration = confBroadcast.value.value
+    if (shouldCloneJobConf) {
+      // Hadoop Configuration objects are not thread-safe, which may lead to various problems if
+      // one job modifies a configuration while another reads it (SPARK-2546, SPARK-10611).  This
+      // problem occurs somewhat rarely because most jobs treat the configuration as though it's
+      // immutable.  One solution, implemented here, is to clone the Configuration object.
+      // Unfortunately, this clone can be very expensive.  To avoid unexpected performance
+      // regressions for workloads and Hadoop versions that do not suffer from these thread-safety
+      // issues, this cloning is disabled by default.
+      NewHadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+        logDebug("Cloning Hadoop Configuration")
+        new Configuration(conf)
+      }
+    } else {
+      conf
+    }
+  }
+
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
     inputFormat match {
       case configurable: Configurable =>
-        configurable.setConf(conf)
+        configurable.setConf(_conf)
       case _ =>
     }
-    val jobContext = newJobContext(conf, jobId)
+    val jobContext = newJobContext(_conf, jobId)
     val rawSplits = inputFormat.getSplits(jobContext).toArray
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
@@ -104,7 +124,7 @@ class NewHadoopRDD[K, V](
     val iter = new Iterator[(K, V)] {
       val split = theSplit.asInstanceOf[NewHadoopPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
-      val conf = confBroadcast.value.value
+      val conf = getConf
 
       val inputMetrics = context.taskMetrics
         .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
@@ -164,30 +184,32 @@ class NewHadoopRDD[K, V](
       }
 
       private def close() {
-        try {
-          if (reader != null) {
-            // Close reader and release it
+        if (reader != null) {
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
             reader.close()
-            reader = null
-
-            if (bytesReadCallback.isDefined) {
-              inputMetrics.updateBytesRead()
-            } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-                       split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
-              // If we can't get the bytes read from the FS stats, fall back to the split size,
-              // which may be inaccurate.
-              try {
-                inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
-              } catch {
-                case e: java.io.IOException =>
-                  logWarning("Unable to get input size to set InputMetrics for task", e)
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
               }
-            }
+          } finally {
+            reader = null
           }
-        } catch {
-          case e: Exception => {
-            if (!ShutdownHookManager.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
+          if (bytesReadCallback.isDefined) {
+            inputMetrics.updateBytesRead()
+          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+                     split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+            // If we can't get the bytes read from the FS stats, fall back to the split size,
+            // which may be inaccurate.
+            try {
+              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+            } catch {
+              case e: java.io.IOException =>
+                logWarning("Unable to get input size to set InputMetrics for task", e)
             }
           }
         }
@@ -230,11 +252,15 @@ class NewHadoopRDD[K, V](
     super.persist(storageLevel)
   }
 
-
-  def getConf: Configuration = confBroadcast.value.value
 }
 
 private[spark] object NewHadoopRDD {
+  /**
+   * Configuration's constructor is not threadsafe (see SPARK-1097 and HADOOP-10456).
+   * Therefore, we synchronize on this lock before calling new Configuration().
+   */
+  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
+
   /**
    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
    * the given function rather than the index of the partition.
@@ -262,12 +288,13 @@ private[spark] class WholeTextFileRDD(
     inputFormatClass: Class[_ <: WholeTextFileInputFormat],
     keyClass: Class[String],
     valueClass: Class[String],
-    @transient conf: Configuration,
+    conf: Configuration,
     minPartitions: Int)
   extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.newInstance
+    val conf = getConf
     inputFormat match {
       case configurable: Configurable =>
         configurable.setConf(conf)

@@ -50,32 +50,9 @@ example illustrates how to mine frequent itemsets and association rules
 Rules](mllib-frequent-pattern-mining.html#association-rules) for
 details) from `transactions`.
 
+Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.FPGrowth
-
-val data = sc.textFile("data/mllib/sample_fpgrowth.txt")
-
-val transactions: RDD[Array[String]] = data.map(s => s.trim.split(' '))
-
-val fpg = new FPGrowth()
-  .setMinSupport(0.2)
-  .setNumPartitions(10)
-val model = fpg.run(transactions)
-
-model.freqItemsets.collect().foreach { itemset =>
-  println(itemset.items.mkString("[", ",", "]") + ", " + itemset.freq)
-}
-
-val minConfidence = 0.8
-model.generateAssociationRules(minConfidence).collect().foreach { rule =>
-  println(
-    rule.antecedent.mkString("[", ",", "]")
-      + " => " + rule.consequent .mkString("[", ",", "]")
-      + ", " + rule.confidence)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/SimpleFPGrowth.scala %}
 
 </div>
 
@@ -92,46 +69,9 @@ example illustrates how to mine frequent itemsets and association rules
 Rules](mllib-frequent-pattern-mining.html#association-rules) for
 details) from `transactions`.
 
-{% highlight java %}
-import java.util.Arrays;
-import java.util.List;
+Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.AssociationRules;
-import org.apache.spark.mllib.fpm.FPGrowth;
-import org.apache.spark.mllib.fpm.FPGrowthModel;
-
-SparkConf conf = new SparkConf().setAppName("FP-growth Example");
-JavaSparkContext sc = new JavaSparkContext(conf);
-
-JavaRDD<String> data = sc.textFile("data/mllib/sample_fpgrowth.txt");
-
-JavaRDD<List<String>> transactions = data.map(
-  new Function<String, List<String>>() {
-    public List<String> call(String line) {
-      String[] parts = line.split(" ");
-      return Arrays.asList(parts);
-    }
-  }
-);
-
-FPGrowth fpg = new FPGrowth()
-  .setMinSupport(0.2)
-  .setNumPartitions(10);
-FPGrowthModel<String> model = fpg.run(transactions);
-
-for (FPGrowth.FreqItemset<String> itemset: model.freqItemsets().toJavaRDD().collect()) {
-  System.out.println("[" + itemset.javaItems() + "], " + itemset.freq());
-}
-
-double minConfidence = 0.8;
-for (AssociationRules.Rule<String> rule
-    : model.generateAssociationRules(minConfidence).toJavaRDD().collect()) {
-  System.out.println(
-    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaSimpleFPGrowth.java %}
 
 </div>
 
@@ -144,19 +84,9 @@ Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.
 
-{% highlight python %}
-from pyspark.mllib.fpm import FPGrowth
+Refer to the [`FPGrowth` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) for more details on the API.
 
-data = sc.textFile("data/mllib/sample_fpgrowth.txt")
-
-transactions = data.map(lambda line: line.strip().split(' '))
-
-model = FPGrowth.train(transactions, minSupport=0.2, numPartitions=10)
-
-result = model.freqItemsets().collect()
-for fi in result:
-    print(fi)
-{% endhighlight %}
+{% include_example python/mllib/fpgrowth_example.py %}
 
 </div>
 
@@ -170,27 +100,9 @@ for fi in result:
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
-{% highlight scala %}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.fpm.AssociationRules
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
+Refer to the [`AssociationRules` Scala docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
-val freqItemsets = sc.parallelize(Seq(
-  new FreqItemset(Array("a"), 15L),
-  new FreqItemset(Array("b"), 35L),
-  new FreqItemset(Array("a", "b"), 12L)
-));
-
-val ar = new AssociationRules()
-  .setMinConfidence(0.8)
-val results = ar.run(freqItemsets)
-
-results.collect().foreach { rule =>
-  println("[" + rule.antecedent.mkString(",")
-    + "=>"
-    + rule.consequent.mkString(",") + "]," + rule.confidence)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/AssociationRulesExample.scala %}
 
 </div>
 
@@ -199,29 +111,9 @@ results.collect().foreach { rule =>
 implements a parallel rule generation algorithm for constructing rules
 that have a single item as the consequent.
 
-{% highlight java %}
-import java.util.Arrays;
+Refer to the [`AssociationRules` Java docs](api/java/org/apache/spark/mllib/fpm/AssociationRules.html) for details on the API.
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.AssociationRules;
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
-
-JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
-  new FreqItemset<String>(new String[] {"a"}, 15L),
-  new FreqItemset<String>(new String[] {"b"}, 35L),
-  new FreqItemset<String>(new String[] {"a", "b"}, 12L)
-));
-
-AssociationRules arules = new AssociationRules()
-  .setMinConfidence(0.8);
-JavaRDD<AssociationRules.Rule<String>> results = arules.run(freqItemsets);
-
-for (AssociationRules.Rule<String> rule: results.collect()) {
-  System.out.println(
-    rule.javaAntecedent() + " => " + rule.javaConsequent() + ", " + rule.confidence());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaAssociationRulesExample.java %}
 
 </div>
 </div>
@@ -267,24 +159,9 @@ Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel)
 that stores the frequent sequences with their frequencies.
 
-{% highlight scala %}
-import org.apache.spark.mllib.fpm.PrefixSpan
+Refer to the [`PrefixSpan` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpan) and [`PrefixSpanModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.fpm.PrefixSpanModel) for details on the API.
 
-val sequences = sc.parallelize(Seq(
-    Array(Array(1, 2), Array(3)),
-    Array(Array(1), Array(3, 2), Array(1, 2)),
-    Array(Array(1, 2), Array(5)),
-    Array(Array(6))
-  ), 2).cache()
-val prefixSpan = new PrefixSpan()
-  .setMinSupport(0.5)
-  .setMaxPatternLength(5)
-val model = prefixSpan.run(sequences)
-model.freqSequences.collect().foreach { freqSequence =>
-println(
-  freqSequence.sequence.map(_.mkString("[", ", ", "]")).mkString("[", ", ", "]") + ", " + freqSequence.freq)
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/PrefixSpanExample.scala %}
 
 </div>
 
@@ -296,27 +173,9 @@ Calling `PrefixSpan.run` returns a
 [`PrefixSpanModel`](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html)
 that stores the frequent sequences with their frequencies.
 
-{% highlight java %}
-import java.util.Arrays;
-import java.util.List;
+Refer to the [`PrefixSpan` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpan.html) and [`PrefixSpanModel` Java docs](api/java/org/apache/spark/mllib/fpm/PrefixSpanModel.html) for details on the API.
 
-import org.apache.spark.mllib.fpm.PrefixSpan;
-import org.apache.spark.mllib.fpm.PrefixSpanModel;
-
-JavaRDD<List<List<Integer>>> sequences = sc.parallelize(Arrays.asList(
-  Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3)),
-  Arrays.asList(Arrays.asList(1), Arrays.asList(3, 2), Arrays.asList(1, 2)),
-  Arrays.asList(Arrays.asList(1, 2), Arrays.asList(5)),
-  Arrays.asList(Arrays.asList(6))
-), 2);
-PrefixSpan prefixSpan = new PrefixSpan()
-  .setMinSupport(0.5)
-  .setMaxPatternLength(5);
-PrefixSpanModel<Integer> model = prefixSpan.run(sequences);
-for (PrefixSpan.FreqSequence<Integer> freqSeq: model.freqSequences().toJavaRDD().collect()) {
-  System.out.println(freqSeq.javaSequence() + ", " + freqSeq.freq());
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaPrefixSpanExample.java %}
 
 </div>
 </div>

@@ -24,12 +24,12 @@ import sys
 if sys.version < "3":
     from itertools import imap as map
 
-from pyspark import SparkContext
+from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql import since
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.dataframe import DataFrame
 
 
 def _create_function(name, doc=""):
@@ -122,6 +122,24 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_functions_1_6 = {
+    # unary math functions
+    'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
+              ' the expression in a group.',
+    'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
+                   ' the expression in a group.',
+    'stddev_pop': 'Aggregate function: returns population standard deviation of' +
+                  ' the expression in a group.',
+    'variance': 'Aggregate function: returns the population variance of the values in a group.',
+    'var_samp': 'Aggregate function: returns the unbiased variance of the values in a group.',
+    'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
+    'skewness': 'Aggregate function: returns the skewness of the values in a group.',
+    'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
+    'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
+    'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
+                   ' eliminated.'
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -172,6 +190,8 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+for _name, _doc in _functions_1_6.items():
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -188,6 +208,14 @@ def approxCountDistinct(col, rsd=None):
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
     return Column(jc)
+
+
+@since(1.6)
+def broadcast(df):
+    """Marks a DataFrame as small enough for use in broadcast joins."""
+
+    sc = SparkContext._active_spark_context
+    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
 @since(1.4)

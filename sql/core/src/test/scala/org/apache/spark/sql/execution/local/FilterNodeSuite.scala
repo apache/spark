@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class FilterNodeSuite extends LocalNodeTest with SharedSQLContext {
 
-  test("basic") {
-    val condition = (testData.col("key") % 2) === 0
-    checkAnswer(
-      testData,
-      node => FilterNode(condition.expr, node),
-      testData.filter(condition).collect()
-    )
+class FilterNodeSuite extends LocalNodeTest {
+
+  private def testFilter(inputData: Array[(Int, Int)] = Array.empty): Unit = {
+    val cond = 'k % 2 === 0
+    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val filterNode = new FilterNode(conf, cond, inputNode)
+    val resolvedNode = resolveExpressions(filterNode)
+    val expectedOutput = inputData.filter { case (k, _) => k % 2 == 0 }
+    val actualOutput = resolvedNode.collect().map { case row =>
+      (row.getInt(0), row.getInt(1))
+    }
+    assert(actualOutput === expectedOutput)
   }
 
   test("empty") {
-    val condition = (emptyTestData.col("key") % 2) === 0
-    checkAnswer(
-      emptyTestData,
-      node => FilterNode(condition.expr, node),
-      emptyTestData.filter(condition).collect()
-    )
+    testFilter()
   }
+
+  test("basic") {
+    testFilter((1 to 100).map { i => (i, i) }.toArray)
+  }
+
 }

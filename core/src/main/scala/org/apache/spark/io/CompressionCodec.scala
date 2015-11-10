@@ -47,6 +47,11 @@ trait CompressionCodec {
 private[spark] object CompressionCodec {
 
   private val configKey = "spark.io.compression.codec"
+
+  private[spark] def supportsConcatenationOfSerializedStreams(codec: CompressionCodec): Boolean = {
+    codec.isInstanceOf[SnappyCompressionCodec] || codec.isInstanceOf[LZFCompressionCodec]
+  }
+
   private val shortCompressionCodecNames = Map(
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
@@ -148,7 +153,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   try {
     Snappy.getNativeLibraryVersion
   } catch {
-    case e: Error => throw new IllegalArgumentException
+    case e: Error => throw new IllegalArgumentException(e)
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
