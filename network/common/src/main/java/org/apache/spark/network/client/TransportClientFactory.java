@@ -158,6 +158,16 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
+  /**
+   * Create a completely new {@link TransportClient} to the given remote host / port
+   * But this connection is not pooled.
+   */
+  public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
+      throws IOException {
+    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    return createClient(address);
+  }
+
   /** Create a completely new {@link TransportClient} to the remote address. */
   private TransportClient createClient(InetSocketAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
