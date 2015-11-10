@@ -48,9 +48,11 @@ private[spark] object AkkaUtils extends Logging {
       host: String,
       port: Int,
       conf: SparkConf,
-      securityManager: SecurityManager): (ActorSystem, Int) = {
+      securityManager: SecurityManager,
+      advertisedHost: Option[String] = None,
+      advertisedPort: Option[Int] = None): (ActorSystem, Int) = {
     val startService: Int => (ActorSystem, Int) = { actualPort =>
-      doCreateActorSystem(name, host, actualPort, conf, securityManager)
+      doCreateActorSystem(name, host, actualPort, conf, securityManager, advertisedHost, advertisedPort)
     }
     Utils.startServiceOnPort(port, startService, conf, name)
   }
@@ -60,7 +62,9 @@ private[spark] object AkkaUtils extends Logging {
       host: String,
       port: Int,
       conf: SparkConf,
-      securityManager: SecurityManager): (ActorSystem, Int) = {
+      securityManager: SecurityManager,
+      advertisedHost: Option[String] = None,
+      advertisedPort: Option[Int] = None): (ActorSystem, Int) = {
 
     val akkaThreads = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
@@ -92,9 +96,7 @@ private[spark] object AkkaUtils extends Logging {
     val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
         .getOrElse(ConfigFactory.empty())
 
-    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap.asJava)
-      .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
-      s"""
+    val baseConfigString = s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
       |akka.stdout-loglevel = "ERROR"
@@ -105,8 +107,6 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPausesS s
       |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
-      |akka.remote.netty.tcp.hostname = "$host"
-      |akka.remote.netty.tcp.port = $port
       |akka.remote.netty.tcp.tcp-nodelay = on
       |akka.remote.netty.tcp.connection-timeout = $akkaTimeoutS s
       |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}B
@@ -116,7 +116,35 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       |akka.log-dead-letters = $lifecycleEvents
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
-      """.stripMargin))
+      """.stripMargin
+
+    val hostConfigString = advertisedHost match {
+      case Some(advertisedHostValue) =>
+         s"""
+            |akka.remote.netty.tcp.hostname = "${advertisedHostValue}"
+            |akka.remote.netty.tcp.bind-hostname = "$host"
+          """.stripMargin
+      case None =>
+         s"""
+            |akka.remote.netty.tcp.hostname = "$host"
+          """.stripMargin
+    }
+
+    val portConfigString = advertisedPort match {
+      case Some(advertisedPortValue) =>
+         s"""
+            |akka.remote.netty.tcp.port = ${advertisedPortValue}
+            |akka.remote.netty.tcp.bind-port = $port
+          """.stripMargin
+      case None =>
+         s"""
+            |akka.remote.netty.tcp.port = $port
+          """.stripMargin
+    }
+
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String].asJava)
+      .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
+      List(baseConfigString, hostConfigString, portConfigString).mkString ) )
 
     val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider

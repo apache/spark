@@ -810,7 +810,7 @@ private[spark] object Utils extends Logging {
    * Get the local machine's URI.
    */
   def localHostNameForURI(): String = {
-    customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
+    sys.env.get("SPARK_PUBLIC_DNS").getOrElse( customHostname.getOrElse(InetAddresses.toUriString(localIpAddress)) )
   }
 
   def checkHost(host: String, message: String = "") {

@@ -115,7 +115,7 @@ import org.apache.spark.annotation.DeveloperApi
     private val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
     private val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
-    private val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
+    private val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server", Some("spark.replClassServer.advertisedPort"))
     private var currentSettings: Settings             = initialSettings
     private var printResults                                  = true      // whether to print result lines
     private var totalSilence                                  = false     // whether to print anything
@@ -129,7 +129,8 @@ import org.apache.spark.annotation.DeveloperApi
     // (which will be passed to executors so that they can connect to it)
     classServer.start()
     if (SPARK_DEBUG_REPL) {
-      echo("Class server started, URI = " + classServer.uri)
+      echo("Class server started, bound URI = " + classServer.boundUri)
+      echo("Class server started, advertised URI = " + classServer.uri)
     }
 
     /**

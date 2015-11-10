@@ -42,10 +42,11 @@ private[spark] class HttpFileServer(
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(conf, baseDir, securityManager, requestedPort, "HTTP file server")
+    httpServer = new HttpServer(conf, baseDir, securityManager, requestedPort, "HTTP file server", Some("spark.fileserver.advertisedPort"))
     httpServer.start()
     serverUri = httpServer.uri
-    logDebug("HTTP file server started at: " + serverUri)
+    logInfo("HTTP file server bound to: " + httpServer.boundUri)
+    logInfo("HTTP file server advertising as: " + serverUri)
   }
 
   def stop() {

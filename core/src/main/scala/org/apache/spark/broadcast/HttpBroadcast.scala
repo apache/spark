@@ -154,10 +154,11 @@ private[broadcast] object HttpBroadcast extends Logging {
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf), "broadcast")
     val broadcastPort = conf.getInt("spark.broadcast.port", 0)
     server =
-      new HttpServer(conf, broadcastDir, securityManager, broadcastPort, "HTTP broadcast server")
+      new HttpServer(conf, broadcastDir, securityManager, broadcastPort, "HTTP broadcast server", Some("spark.broadcast.advertisedPort"))
     server.start()
     serverUri = server.uri
-    logInfo("Broadcast server started at " + serverUri)
+    logInfo("Broadcast server bound to: " + server.boundUri)
+    logInfo("Broadcast server advertising as: " + serverUri)
   }
 
   def getFile(id: Long): File = new File(broadcastDir, BroadcastBlockId(id).name)
