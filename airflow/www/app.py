@@ -3,8 +3,7 @@ import socket
 from flask import Flask
 from flask.ext.admin import Admin, base
 from flask.ext.cache import Cache
-
-import flask_login
+from flask_wtf.csrf import CsrfProtect
 
 import airflow
 from airflow import models
@@ -15,11 +14,15 @@ from airflow import jobs
 from airflow import settings
 from airflow import configuration
 
+csrf = CsrfProtect()
+
 
 def create_app(config=None):
     app = Flask(__name__)
     app.secret_key = configuration.get('webserver', 'SECRET_KEY')
     app.config['LOGIN_DISABLED'] = not configuration.getboolean('webserver', 'AUTHENTICATE')
+
+    csrf.init_app(app)
 
     #app.config = config
     airflow.load_login()

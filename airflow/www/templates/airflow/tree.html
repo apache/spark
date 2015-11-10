@@ -18,6 +18,7 @@
         <input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
         <input type="submit" value="Go" class="btn btn-default"
         action="" method="get">
+        <input name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
     </form>
 </div>
 <div style="clear: both;"></div>

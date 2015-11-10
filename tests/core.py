@@ -9,6 +9,7 @@ from airflow import jobs, models, DAG, utils, operators, hooks, macros
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
+from lxml import html
 
 NUM_EXAMPLE_DAGS = 7
 DEV_NULL = '/dev/null'
@@ -471,10 +472,20 @@ class WebLdapAuthTest(unittest.TestCase):
         app.config['TESTING'] = True
         self.app = app.test_client()
 
+    def get_csrf(self, response):
+        tree = html.fromstring(response.data)
+        form = tree.find('.//form')
+
+        return form.find('.//input[@name="_csrf_token"]').value
+
     def login(self, username, password):
+        response = self.app.get('/admin/airflow/login')
+        csrf_token = self.get_csrf(response)
+
         return self.app.post('/admin/airflow/login', data=dict(
             username=username,
-            password=password
+            password=password,
+            csrf_token=csrf_token
         ), follow_redirects=True)
 
     def logout(self):

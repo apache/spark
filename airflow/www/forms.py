@@ -3,11 +3,10 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask.ext.admin.form import DateTimePickerWidget
-from wtforms import (
-    Form, DateTimeField, SelectField
-)
+from wtforms import DateTimeField, SelectField
+from flask_wtf import Form
 
 
 class DateTimeForm(Form):
