@@ -13,7 +13,7 @@ setup(name='pyspark',
     author_email='dev@spark.apache.org',
     url='https://github.com/apache/spark/tree/master/python',
     packages=['pyspark', 'pyspark.mllib', 'pyspark.ml', 'pyspark.sql', 'pyspark.streaming'],
-    install_requires=['py4j==0.8.2.1'],
+    install_requires=['py4j==0.9'],
     extras_require = {
         'ml': ['numpy>=1.7'],
         'sql': ['pandas'] 
