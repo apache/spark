@@ -347,6 +347,7 @@ private[sql] class JDBCRDD(
 
   /**
    * Runs the SQL query against the JDBC driver.
+   *
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
     new Iterator[InternalRow] {
@@ -368,7 +369,7 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    val fetchSize = properties.getProperty("fetchsize", "0").toInt
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 

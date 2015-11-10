@@ -34,7 +34,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
 /**
  * An helper class to update the fields of UnsafeRow, used by ColumnAccessor
  *
- * WARNNING: These setter MUST be called in increasing order of ordinals.
+ * WARNING: These setter MUST be called in increasing order of ordinals.
  */
 class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
 
