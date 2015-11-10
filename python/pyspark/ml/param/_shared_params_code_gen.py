@@ -117,7 +117,8 @@ if __name__ == "__main__":
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
          "should be treated as confidences, not precise probabilities.", "'probability'", str),
-        ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", "'rawPrediction'", str),
+        ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", "'rawPrediction'",
+         str),
         ("inputCol", "input column name.", None, str),
         ("inputCols", "input column names.", None, None),
         ("outputCol", "output column name.", "self.uid + '__output'", None),
