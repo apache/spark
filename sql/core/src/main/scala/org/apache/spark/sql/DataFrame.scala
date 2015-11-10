@@ -1479,8 +1479,8 @@ class DataFrame private[sql](
   /**
    * Returns the first `n` rows in the [[DataFrame]].
    *
-   * Running take requires moving data into the application's driver process, and doing so on a
-   * very large dataset can crash the driver process with OutOfMemoryError.
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
    *
    * @group action
    * @since 1.3.0
@@ -1501,8 +1501,8 @@ class DataFrame private[sql](
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
    *
-   * Running take requires moving data into the application's driver process, and doing so with
-   * a very large `n` can crash the driver process with OutOfMemoryError.
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
    *
    * For Java API, use [[collectAsList]].
    *
