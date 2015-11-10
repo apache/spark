@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark._
 
 class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
 
@@ -198,29 +198,30 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     }
   }
 
-  test("SimpleFutureAction callback must not consume a thread while waiting") {
+  private def testAsyncAction[R](action : RDD[Int] => FutureAction[R]) : Unit = {
     val executorInvoked = Promise[Unit]
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
         executorInvoked.success(())
       }
-      override def reportFailure(t: Throwable): Unit = ???
+      override def reportFailure(t: Throwable): Unit = ()
     }
-    val f = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr}).countAsync()
+    /*
+      We sleep here so that we get to the assertion before the job completes.
+      I wish there were a cleaner way to do this, but trying to use any sort of synchronization
+      with this fails due to task serialization.
+    */
+    val rdd = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr})
+    val f = action(rdd)
     f.onComplete(_ => ())(fakeExecutionContext)
     assert(!executorInvoked.isCompleted)
   }
 
+  test("SimpleFutureAction callback must not consume a thread while waiting") {
+    testAsyncAction(_.countAsync())
+  }
+
   test("ComplexFutureAction callback must not consume a thread while waiting") {
-    val executorInvoked = Promise[Unit]
-    val fakeExecutionContext = new ExecutionContext {
-      override def execute(runnable: Runnable): Unit = {
-        executorInvoked.success(())
-      }
-      override def reportFailure(t: Throwable): Unit = ???
-    }
-    val f = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr}).takeAsync(100)
-    f.onComplete(_ => ())(fakeExecutionContext)
-    assert(!executorInvoked.isCompleted)
+    testAsyncAction((_.takeAsync(100)))
   }
 }
