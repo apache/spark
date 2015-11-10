@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 object DecisionTreeRegressionExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("DecisionTreeClassificationExample")
+    val conf = new SparkConf().setAppName("DecisionTreeRegressionExample")
     val sc = new SparkContext(conf)
 
     // $example on$

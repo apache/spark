@@ -40,7 +40,7 @@ class JavaDecisionTreeClassificationExample {
   public static void main(String[] args) {
 
     // $example on$
-    SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTreeExample");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTreeClassificationExample");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
     // Load and parse the data file.

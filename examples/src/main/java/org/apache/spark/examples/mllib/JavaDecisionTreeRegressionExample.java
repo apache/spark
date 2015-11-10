@@ -41,7 +41,7 @@ class JavaDecisionTreeRegressionExample {
   public static void main(String[] args) {
 
     // $example on$
-    SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTreeExample");
+    SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTreeRegressionExample");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
 
     // Load and parse the data file.
