@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
@@ -25,6 +26,7 @@ import kafka.message.MessageAndMetadata
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
+import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListener}
 
 class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -142,6 +144,40 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd3.isDefined)
     assert(rdd3.get.count === sentOnlyOne.values.sum, "didn't get exactly one message")
 
+  }
+
+  test("KafkaRDD with empty partition") {
+    val topic = s"topic-${Random.nextInt}"
+    kafkaTestUtils.createTopic(topic)
+
+    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "group.id" -> s"test-consumer-${Random.nextInt}")
+
+    val offsetRanges = Array(OffsetRange(topic, 0, 0L, 0L))
+
+    val tasks = ArrayBuffer[Int]()
+    sc.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        tasks += taskStart.stageAttemptId
+      }
+    })
+
+    val rdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
+      sc, kafkaParams, offsetRanges)
+
+    // Assuming all the zero partitions are filtered out
+    assert(rdd.partitions === Array.empty)
+
+    val received = rdd.map(_._2).collect
+
+    // No task is submitted and started
+    assert(tasks.toArray === Array.empty)
+
+    // No received data
+    assert(received === Array.empty)
+    assert(rdd.count === 0L)
+    assert(rdd.isEmpty)
+    assert(rdd.take(1).size === 0)
   }
 
   // get an rdd from the committed consumer offsets until the latest leader offsets,
