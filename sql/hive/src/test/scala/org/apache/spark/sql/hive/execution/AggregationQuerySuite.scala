@@ -69,11 +69,7 @@ class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFun
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
-  var originalUseAggregate2: Boolean = _
-
   override def beforeAll(): Unit = {
-    originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -120,7 +116,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.dropTempTable("emptyTable")
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
@@ -447,73 +442,80 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("single distinct column set") {
-    // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  min(distinct value1),
-          |  sum(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  max(distinct value1)
-          |FROM agg2
-        """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+    Seq(true, false).foreach { specializeSingleDistinctAgg =>
+      val conf =
+        (SQLConf.SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING.key,
+          specializeSingleDistinctAgg.toString)
+      withSQLConf(conf) {
+        // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  min(distinct value1),
+              |  sum(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  max(distinct value1)
+              |FROM agg2
+            """.stripMargin),
+          Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  mydoubleavg(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  key,
-          |  mydoubleavg(value1 - 1),
-          |  mydoubleavg(distinct value1) * 0.1,
-          |  avg(value1 + value2)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
-        Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
-        Row(null, null, 3.0, 3, null, null, null) ::
-        Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  mydoubleavg(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  key,
+              |  mydoubleavg(value1 - 1),
+              |  mydoubleavg(distinct value1) * 0.1,
+              |  avg(value1 + value2)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
+            Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
+            Row(null, null, 3.0, 3, null, null, null) ::
+            Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoubleavg(distinct value1),
-          |  mydoublesum(value2),
-          |  mydoublesum(distinct value1),
-          |  mydoubleavg(distinct value1),
-          |  mydoubleavg(value1)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
-        Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
-        Row(3, null, 3.0, null, null, null) ::
-        Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  key,
+              |  mydoubleavg(distinct value1),
+              |  mydoublesum(value2),
+              |  mydoublesum(distinct value1),
+              |  mydoubleavg(distinct value1),
+              |  mydoubleavg(value1)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
+            Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
+            Row(3, null, 3.0, null, null, null) ::
+            Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  count(value1),
-          |  count(*),
-          |  count(1),
-          |  count(DISTINCT value1),
-          |  key
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(3, 3, 3, 2, 1) ::
-        Row(3, 4, 4, 2, 2) ::
-        Row(0, 2, 2, 0, 3) ::
-        Row(3, 4, 4, 3, null) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  count(value1),
+              |  count(*),
+              |  count(1),
+              |  count(DISTINCT value1),
+              |  key
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(3, 3, 3, 2, 1) ::
+            Row(3, 4, 4, 2, 2) ::
+            Row(0, 2, 2, 0, 3) ::
+            Row(3, 4, 4, 3, null) :: Nil)
+      }
+    }
   }
 
   test("single distinct multiple columns set") {
@@ -699,48 +701,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
-
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      val errorMessage = intercept[SparkException] {
-        val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
-        val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
-      }.getMessage
-      assert(errorMessage.contains("java.lang.UnsupportedOperationException: " +
-        "Corr only supports the new AggregateExpression2"))
-    }
-  }
-
-  test("test Last implemented based on AggregateExpression1") {
-    // TODO: Remove this test once we remove AggregateExpression1.
-    import org.apache.spark.sql.functions._
-    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
-    withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-
-      checkAnswer(
-        df.groupBy("i").agg(last("j")),
-        df
-      )
-    }
-  }
-
-  test("error handling") {
-    withSQLConf("spark.sql.useAggregate2" -> "false") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  sum(value + 1.5 * key),
-            |  mydoublesum(value),
-            |  mydoubleavg(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-    }
   }
 
   test("no aggregation function (SPARK-11486)") {

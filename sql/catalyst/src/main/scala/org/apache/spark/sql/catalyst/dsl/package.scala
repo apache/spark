@@ -23,6 +23,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.types._
@@ -144,17 +145,18 @@ package object dsl {
       }
     }
 
-    def sum(e: Expression): Expression = Sum(e)
-    def sumDistinct(e: Expression): Expression = SumDistinct(e)
-    def count(e: Expression): Expression = Count(e)
-    def countDistinct(e: Expression*): Expression = CountDistinct(e)
+    def sum(e: Expression): Expression = Sum(e).toAggregateExpression()
+    def sumDistinct(e: Expression): Expression = Sum(e).toAggregateExpression(isDistinct = true)
+    def count(e: Expression): Expression = Count(e).toAggregateExpression()
+    def countDistinct(e: Expression*): Expression =
+      Count(e).toAggregateExpression(isDistinct = true)
     def approxCountDistinct(e: Expression, rsd: Double = 0.05): Expression =
-      ApproxCountDistinct(e, rsd)
-    def avg(e: Expression): Expression = Average(e)
-    def first(e: Expression): Expression = First(e)
-    def last(e: Expression): Expression = Last(e)
-    def min(e: Expression): Expression = Min(e)
-    def max(e: Expression): Expression = Max(e)
+      HyperLogLogPlusPlus(e, rsd).toAggregateExpression()
+    def avg(e: Expression): Expression = Average(e).toAggregateExpression()
+    def first(e: Expression): Expression = new First(e).toAggregateExpression()
+    def last(e: Expression): Expression = new Last(e).toAggregateExpression()
+    def min(e: Expression): Expression = Min(e).toAggregateExpression()
+    def max(e: Expression): Expression = Max(e).toAggregateExpression()
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
