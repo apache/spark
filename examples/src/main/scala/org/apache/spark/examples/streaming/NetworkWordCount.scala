@@ -54,12 +54,6 @@ object NetworkWordCount {
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()
-    wordCounts.foreachRDD { rdd =>
-      val temp = rdd.map { _ -> 1 }.reduceByKey( _ + _)
-      val temp2 = temp.map { _ -> 1}.reduceByKey(_ + _)
-      val count = temp2.count
-      println(count)
-    }
     ssc.start()
     ssc.awaitTermination()
   }
