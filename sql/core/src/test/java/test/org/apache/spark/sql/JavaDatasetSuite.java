@@ -29,7 +29,6 @@ import org.junit.*;
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.catalyst.encoders.Encoder;
 import org.apache.spark.sql.catalyst.encoders.Encoder$;
@@ -68,8 +67,16 @@ public class JavaDatasetSuite implements Serializable {
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = context.createDataset(data, e.STRING());
-    String[] collected = (String[]) ds.collect();
-    Assert.assertEquals(Arrays.asList("hello", "world"), Arrays.asList(collected));
+    List<String> collected = ds.collectAsList();
+    Assert.assertEquals(Arrays.asList("hello", "world"), collected);
+  }
+
+  @Test
+  public void testTake() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = context.createDataset(data, e.STRING());
+    List<String> collected = ds.takeAsList(1);
+    Assert.assertEquals(Arrays.asList("hello"), collected);
   }
 
   @Test
@@ -78,16 +85,16 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = context.createDataset(data, e.STRING());
     Assert.assertEquals("hello", ds.first());
 
-    Dataset<String> filtered = ds.filter(new Function<String, Boolean>() {
+    Dataset<String> filtered = ds.filter(new FilterFunction<String>() {
       @Override
-      public Boolean call(String v) throws Exception {
+      public boolean call(String v) throws Exception {
         return v.startsWith("h");
       }
     });
     Assert.assertEquals(Arrays.asList("hello"), filtered.collectAsList());
 
 
-    Dataset<Integer> mapped = ds.map(new Function<String, Integer>() {
+    Dataset<Integer> mapped = ds.map(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -95,7 +102,7 @@ public class JavaDatasetSuite implements Serializable {
     }, e.INT());
     Assert.assertEquals(Arrays.asList(5, 5), mapped.collectAsList());
 
-    Dataset<String> parMapped = ds.mapPartitions(new FlatMapFunction<Iterator<String>, String>() {
+    Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
       @Override
       public Iterable<String> call(Iterator<String> it) throws Exception {
         List<String> ls = new LinkedList<String>();
@@ -128,7 +135,7 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "b", "c");
     Dataset<String> ds = context.createDataset(data, e.STRING());
 
-    ds.foreach(new VoidFunction<String>() {
+    ds.foreach(new ForeachFunction<String>() {
       @Override
       public void call(String s) throws Exception {
         accum.add(1);
@@ -142,52 +149,57 @@ public class JavaDatasetSuite implements Serializable {
     List<Integer> data = Arrays.asList(1, 2, 3);
     Dataset<Integer> ds = context.createDataset(data, e.INT());
 
-    int reduced = ds.reduce(new Function2<Integer, Integer, Integer>() {
+    int reduced = ds.reduce(new ReduceFunction<Integer>() {
       @Override
       public Integer call(Integer v1, Integer v2) throws Exception {
         return v1 + v2;
       }
     });
     Assert.assertEquals(6, reduced);
-
-    int folded = ds.fold(1, new Function2<Integer, Integer, Integer>() {
-      @Override
-      public Integer call(Integer v1, Integer v2) throws Exception {
-        return v1 * v2;
-      }
-    });
-    Assert.assertEquals(6, folded);
   }
 
   @Test
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, e.STRING());
-    GroupedDataset<Integer, String> grouped = ds.groupBy(new Function<String, Integer>() {
+    GroupedDataset<Integer, String> grouped = ds.groupBy(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
       }
     }, e.INT());
 
-    Dataset<String> mapped = grouped.mapGroups(
-      new Function2<Integer, Iterator<String>, Iterator<String>>() {
+    Dataset<String> mapped = grouped.map(new MapGroupFunction<Integer, String, String>() {
+      @Override
+      public String call(Integer key, Iterator<String> values) throws Exception {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      }
+    }, e.STRING());
+
+    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+
+    Dataset<String> flatMapped = grouped.flatMap(
+      new FlatMapGroupFunction<Integer, String, String>() {
         @Override
-        public Iterator<String> call(Integer key, Iterator<String> data) throws Exception {
+        public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
-          while (data.hasNext()) {
-            sb.append(data.next());
+          while (values.hasNext()) {
+            sb.append(values.next());
           }
-          return Collections.singletonList(sb.toString()).iterator();
+          return Collections.singletonList(sb.toString());
         }
       },
       e.STRING());
 
-    Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
+    Assert.assertEquals(Arrays.asList("1a", "3foobar"), flatMapped.collectAsList());
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, e.INT());
-    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new Function<Integer, Integer>() {
+    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
@@ -196,9 +208,9 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> cogrouped = grouped.cogroup(
       grouped2,
-      new Function3<Integer, Iterator<String>, Iterator<Integer>, Iterator<String>>() {
+      new CoGroupFunction<Integer, String, Integer, String>() {
         @Override
-        public Iterator<String> call(
+        public Iterable<String> call(
             Integer key,
             Iterator<String> left,
             Iterator<Integer> right) throws Exception {
@@ -210,7 +222,7 @@ public class JavaDatasetSuite implements Serializable {
           while (right.hasNext()) {
             sb.append(right.next());
           }
-          return Collections.singletonList(sb.toString()).iterator();
+          return Collections.singletonList(sb.toString());
         }
       },
       e.STRING());
@@ -224,15 +236,15 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = context.createDataset(data, e.STRING());
     GroupedDataset<Integer, String> grouped = ds.groupBy(length(col("value"))).asKey(e.INT());
 
-    Dataset<String> mapped = grouped.mapGroups(
-      new Function2<Integer, Iterator<String>, Iterator<String>>() {
+    Dataset<String> mapped = grouped.map(
+      new MapGroupFunction<Integer, String, String>() {
         @Override
-        public Iterator<String> call(Integer key, Iterator<String> data) throws Exception {
+        public String call(Integer key, Iterator<String> data) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
           while (data.hasNext()) {
             sb.append(data.next());
           }
-          return Collections.singletonList(sb.toString()).iterator();
+          return sb.toString();
         }
       },
       e.STRING());
@@ -246,8 +258,8 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Integer> ds = context.createDataset(data, e.INT());
 
     Dataset<Tuple2<Integer, String>> selected = ds.select(
-      expr("value + 1").as(e.INT()),
-      col("value").cast("string").as(e.STRING()));
+      expr("value + 1"),
+      col("value").cast("string")).as(e.tuple(e.INT(), e.STRING()));
 
     Assert.assertEquals(
       Arrays.asList(tuple2(3, "2"), tuple2(7, "6")),

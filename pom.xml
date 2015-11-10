@@ -154,6 +154,8 @@
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.9.40</aws.java.sdk.version>
     <aws.kinesis.client.version>1.4.0</aws.kinesis.client.version>
+    <!-- the producer is used in tests -->
+    <aws.kinesis.producer.version>0.10.1</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <!--  commons-httpclient/commons-httpclient-->
