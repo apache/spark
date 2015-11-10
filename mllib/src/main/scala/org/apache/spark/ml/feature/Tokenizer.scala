@@ -100,10 +100,25 @@ class RegexTokenizer(override val uid: String)
   /** @group getParam */
   def getPattern: String = $(pattern)
 
-  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+")
+  /**
+   * Indicates whether to convert all characters to lowercase before tokenizing.
+   * Default: true
+   * @group param
+   */
+  final val toLowercase: BooleanParam = new BooleanParam(this, "toLowercase",
+    "whether to convert all characters to lowercase before tokenizing.")
 
-  override protected def createTransformFunc: String => Seq[String] = { str =>
+  /** @group setParam */
+  def setToLowercase(value: Boolean): this.type = set(toLowercase, value)
+
+  /** @group getParam */
+  def getToLowercase: Boolean = $(toLowercase)
+
+  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
+
+  override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
+    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
