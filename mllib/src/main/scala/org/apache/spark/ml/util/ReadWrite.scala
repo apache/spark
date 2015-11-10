@@ -172,7 +172,7 @@ trait Readable[T] {
  * data (e.g., models with coefficients).
  * @param instance object to save
  */
-private[ml] class DefaultParamsWriter(instance: Params) extends Writer with Logging {
+private[ml] class DefaultParamsWriter(instance: Params) extends Writer {
 
   override protected def saveImpl(path: String): Unit = {
     val uid = instance.uid
