@@ -480,8 +480,6 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def login(self, username, password):
         response = self.app.get('/admin/airflow/login')
-        print(response.data.decode('utf-8'))
-
         csrf_token = self.get_csrf(response)
 
         return self.app.post('/admin/airflow/login', data=dict(
@@ -497,19 +495,15 @@ class WebLdapAuthTest(unittest.TestCase):
         assert configuration.getboolean('webserver', 'authenticate') is True
 
         response = self.login('user1', 'userx')
-        print(response.data.decode('utf-8'))
         assert 'Incorrect login details' in response.data.decode('utf-8')
 
         response = self.login('userz', 'user1')
-        print(response.data.decode('utf-8'))
         assert 'Incorrect login details' in response.data.decode('utf-8')
 
         response = self.login('user1', 'user1')
-        print(response.data.decode('utf-8'))
         assert 'Data Profiling' in response.data.decode('utf-8')
 
         response = self.logout()
-        print(response.data.decode('utf-8'))
         assert 'form-signin' in response.data.decode('utf-8')
 
     def test_unauthorized(self):
