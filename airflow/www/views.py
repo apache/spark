@@ -1739,7 +1739,7 @@ class ChartModelView(wwwutils.DataProfilingMixin, AirflowModelView):
             model.iteration_no = 0
         else:
             model.iteration_no += 1
-        if not model.user_id and current_user:
+        if not model.user_id and current_user and hasattr(current_user, 'id'):
             model.user_id = current_user.id
         model.last_modified = datetime.now()
 
