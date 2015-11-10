@@ -1739,7 +1739,7 @@ class ChartModelView(wwwutils.DataProfilingMixin, AirflowModelView):
             model.iteration_no = 0
         else:
             model.iteration_no += 1
-        if not current_app['LOGIN_DISABLED'] and not model.user_id and current_user:
+        if not model.user_id and current_user:
             model.user_id = current_user.id
         model.last_modified = datetime.now()
 
