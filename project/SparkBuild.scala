@@ -242,6 +242,8 @@ object SparkBuild extends PomBuild {
 
   enable(Flume.settings)(streamingFlumeSink)
 
+  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -291,6 +293,13 @@ object Unsafe {
 
 object Flume {
   lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
+object DockerIntegrationTests {
+  // This serves to override the override specified in DependencyOverrides:
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+  )
 }
 
 /**
