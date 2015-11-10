@@ -788,7 +788,10 @@ class LDA(object):
 
 @inherit_doc
 class BisectingKMeansModel(JavaModelWrapper):
-    """A clustering model derived from the bisecting k-means method.
+    """
+    .. note:: Experimental
+
+    A clustering model derived from the bisecting k-means method.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> from numpy.testing import assert_almost_equal, assert_equal
@@ -855,6 +858,8 @@ class BisectingKMeansModel(JavaModelWrapper):
 
 class BisectingKMeans(object):
     """
+    .. note:: Experimental
+
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
     techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
