@@ -33,7 +33,8 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
       streamId = 2,
       name = "test",
       active = true,
-      location = "localhost"
+      location = "localhost",
+      executorId = "1"
     ))
     listenerWrapper.onReceiverStarted(receiverStarted)
     assertReceiverInfo(listener.receiverStarted.receiverInfo, receiverStarted.receiverInfo)
@@ -42,7 +43,8 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
       streamId = 2,
       name = "test",
       active = false,
-      location = "localhost"
+      location = "localhost",
+      executorId = "1"
     ))
     listenerWrapper.onReceiverStopped(receiverStopped)
     assertReceiverInfo(listener.receiverStopped.receiverInfo, receiverStopped.receiverInfo)
@@ -52,6 +54,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
       name = "test",
       active = false,
       location = "localhost",
+      executorId = "1",
       lastErrorMessage = "failed",
       lastError = "failed",
       lastErrorTime = System.currentTimeMillis()
@@ -197,6 +200,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assert(javaReceiverInfo.name === receiverInfo.name)
     assert(javaReceiverInfo.active === receiverInfo.active)
     assert(javaReceiverInfo.location === receiverInfo.location)
+    assert(javaReceiverInfo.executorId === receiverInfo.executorId)
     assert(javaReceiverInfo.lastErrorMessage === receiverInfo.lastErrorMessage)
     assert(javaReceiverInfo.lastError === receiverInfo.lastError)
     assert(javaReceiverInfo.lastErrorTime === receiverInfo.lastErrorTime)
