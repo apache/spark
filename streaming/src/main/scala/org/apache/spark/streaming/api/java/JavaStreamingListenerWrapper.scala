@@ -33,6 +33,7 @@ private[streaming] class JavaStreamingListenerWrapper(javaStreamingListener: Jav
       receiverInfo.name,
       receiverInfo.active,
       receiverInfo.location,
+      receiverInfo.executorId,
       receiverInfo.lastErrorMessage,
       receiverInfo.lastError,
       receiverInfo.lastErrorTime
