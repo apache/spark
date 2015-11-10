@@ -134,6 +134,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   }
 
   /** Supported values for Param [[optimizer]]. */
+  @Since("1.6.0")
   final val supportedOptimizers: Array[String] = Array("online", "em")
 
   /**
@@ -186,32 +187,34 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
-   * Default: 1024, following the Online LDA paper (Hoffman et al., 2010).
+   * This is called "tau0" in the Online LDA paper (Hoffman et al., 2010)
+   * Default: 1024, following Hoffman et al.
    * @group expertParam
    */
   @Since("1.6.0")
-  final val tau0 = new DoubleParam(this, "tau0", "A (positive) learning parameter that" +
-    " downweights early iterations. Larger values make early iterations count less.",
+  final val learningOffset = new DoubleParam(this, "learningOffset", "A (positive) learning" +
+    " parameter that downweights early iterations. Larger values make early iterations count less.",
     ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.6.0")
-  def getTau0: Double = $(tau0)
+  def getLearningOffset: Double = $(learningOffset)
 
   /**
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
-   * Default: 0.51, based on the Online LDA paper (Hoffman et al., 2010).
+   * This is called "kappa" in the Online LDA paper (Hoffman et al., 2010).
+   * Default: 0.51, based on Hoffman et al.
    * @group expertParam
    */
   @Since("1.6.0")
-  final val kappa = new DoubleParam(this, "kappa", "Learning rate, set as an exponential decay" +
-    " rate. This should be between (0.5, 1.0] to guarantee asymptotic convergence.",
-    ParamValidators.gt(0))
+  final val learningDecay = new DoubleParam(this, "learningDecay", "Learning rate, set as an" +
+    " exponential decay rate. This should be between (0.5, 1.0] to guarantee asymptotic" +
+    " convergence.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.6.0")
-  def getKappa: Double = $(kappa)
+  def getLearningDecay: Double = $(learningDecay)
 
   /**
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
@@ -262,6 +265,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
+  @Since("1.6.0")
   override def validateParams(): Unit = {
     if (isSet(docConcentration)) {
       if (getDocConcentration.length != 1) {
@@ -295,8 +299,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {
     case "online" =>
       new OldOnlineLDAOptimizer()
-        .setTau0($(tau0))
-        .setKappa($(kappa))
+        .setTau0($(learningOffset))
+        .setKappa($(learningDecay))
         .setMiniBatchFraction($(subsamplingRate))
         .setOptimizeDocConcentration($(optimizeDocConcentration))
     case "em" =>
@@ -587,7 +591,8 @@ class LDA @Since("1.6.0") (
   def this() = this(Identifiable.randomUID("lda"))
 
   setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
-    tau0 -> 1024, kappa -> 0.51, subsamplingRate -> 0.05, optimizeDocConcentration -> true)
+    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
+    optimizeDocConcentration -> true)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
@@ -635,11 +640,11 @@ class LDA @Since("1.6.0") (
 
   /** @group expertSetParam */
   @Since("1.6.0")
-  def setTau0(value: Double): this.type = set(tau0, value)
+  def setLearningOffset(value: Double): this.type = set(learningOffset, value)
 
   /** @group expertSetParam */
   @Since("1.6.0")
-  def setKappa(value: Double): this.type = set(kappa, value)
+  def setLearningDecay(value: Double): this.type = set(learningDecay, value)
 
   /** @group setParam */
   @Since("1.6.0")

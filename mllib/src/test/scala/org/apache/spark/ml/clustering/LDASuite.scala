@@ -64,8 +64,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(!lda.isSet(lda.docConcentration))
     assert(!lda.isSet(lda.topicConcentration))
     assert(lda.getOptimizer === "online")
-    assert(lda.getKappa === 0.51)
-    assert(lda.getTau0 === 1024)
+    assert(lda.getLearningDecay === 0.51)
+    assert(lda.getLearningOffset === 1024)
     assert(lda.getSubsamplingRate === 0.05)
     assert(lda.getOptimizeDocConcentration)
     assert(lda.getTopicDistributionCol === "topicDistribution")
@@ -95,10 +95,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lda.getOptimizer === "em")
     lda.setOptimizer("online")
     assert(lda.getOptimizer === "online")
-    lda.setKappa(0.53)
-    assert(lda.getKappa === 0.53)
-    lda.setTau0(1027)
-    assert(lda.getTau0 === 1027)
+    lda.setLearningDecay(0.53)
+    assert(lda.getLearningDecay === 0.53)
+    lda.setLearningOffset(1027)
+    assert(lda.getLearningOffset === 1027)
     lda.setSubsamplingRate(0.06)
     assert(lda.getSubsamplingRate === 0.06)
     lda.setOptimizeDocConcentration(false)
@@ -137,10 +137,10 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Online LDA
     intercept[IllegalArgumentException] {
-      new LDA().setTau0(0)
+      new LDA().setLearningOffset(0)
     }
     intercept[IllegalArgumentException] {
-      new LDA().setKappa(0)
+      new LDA().setLearningDecay(0)
     }
     intercept[IllegalArgumentException] {
       new LDA().setSubsamplingRate(0)
