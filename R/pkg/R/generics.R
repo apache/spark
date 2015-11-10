@@ -561,7 +561,7 @@ setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
-setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
 # @rdname tojson
 # @export

@@ -1944,9 +1944,9 @@ setMethod("describe",
 #' @rdname summary
 #' @name summary
 setMethod("summary",
-          signature(x = "DataFrame"),
-          function(x) {
-            describe(x)
+          signature(object = "DataFrame"),
+          function(object, ...) {
+            describe(object)
           })
 
 

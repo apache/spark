@@ -113,3 +113,9 @@ test_that("summary coefficients match with native glm of family 'binomial'", {
     rownames(stats$Coefficients) ==
     c("(Intercept)", "Sepal_Length", "Sepal_Width")))
 })
+
+test_that("summary works on base GLM models", {
+  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
+  baseSummary <- summary(baseModel)
+  expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
+})
