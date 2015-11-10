@@ -2308,6 +2308,18 @@ object functions extends LegacyFunctions {
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
 
   /**
+   * Creates a new row for a json column according to the given field names.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def json_tuple(json: Column, fields: String*): Column = withExpr {
+    require(fields.length > 0, "at least 1 field name should be given.")
+    JsonTuple(json.expr +: fields.map(Literal.apply))
+  }
+
+  /**
    * Returns length of array or map.
    *
    * @group collection_funcs
