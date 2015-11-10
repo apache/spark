@@ -48,7 +48,8 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   private val transportConf = SparkTransportConf.fromSparkConf(
     sparkConf, numUsableCores = 0, Some(securityManager.btsSSLOptions))
   private val blockHandler = newShuffleBlockHandler(transportConf)
-  private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
+  private val transportContext: TransportContext =
+    new TransportContext(transportConf, blockHandler, true)
 
   private var server: TransportServer = _
 

@@ -34,6 +34,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       data: _*)
   }
 
+  test("toDS with RDD") {
+    val ds = sparkContext.makeRDD(Seq("a", "b", "c"), 3).toDS()
+    checkAnswer(
+      ds.mapPartitions(_ => Iterator(1)),
+      1, 1, 1)
+  }
+
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
     checkAnswer(
@@ -52,6 +59,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("as case class - reordered fields by name") {
     val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
     assert(ds.collect() === Array(ClassData("a", 1), ClassData("b", 2), ClassData("c", 3)))
+  }
+
+  test("as case class - take") {
+    val ds = Seq((1, "a"), (2, "b"), (3, "c")).toDF("b", "a").as[ClassData]
+    assert(ds.take(2) === Array(ClassData("a", 1), ClassData("b", 2)))
   }
 
   test("map") {
@@ -130,11 +142,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
   }
 
-  test("fold") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
-    assert(ds.fold(("", 0))((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
-  }
-
   test("joinWith, flat schema") {
     val ds1 = Seq(1, 2, 3).toDS().as("a")
     val ds2 = Seq(1, 2).toDS().as("b")
@@ -191,16 +198,100 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 1))
   }
 
-  test("groupBy function, mapGroups") {
+  test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.mapGroups { case (g, iter) =>
-      Iterator((g._1, iter.map(_._2).sum))
-    }
+    val agged = grouped.map { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy function, fatMap") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy(v => (v._1, "word"))
+    val agged = grouped.flatMap { case (g, iter) => Iterator(g._1, iter.map(_._2).sum.toString) }
+
+    checkAnswer(
+      agged,
+      "a", "30", "b", "3", "c", "1")
+  }
+
+  test("groupBy columns, map") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1")
+    val agged = grouped.map { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
+
+    checkAnswer(
+      agged,
+      ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy columns asKey, map") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1").asKey[String]
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+
+    checkAnswer(
+      agged,
+      ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy columns asKey tuple, map") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1", lit(1)).asKey[(String, Int)]
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+
+    checkAnswer(
+      agged,
+      (("a", 1), 30), (("b", 1), 3), (("c", 1), 1))
+  }
+
+  test("groupBy columns asKey class, map") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).asKey[ClassData]
+    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+
+    checkAnswer(
+      agged,
+      (ClassData("a", 1), 30), (ClassData("b", 1), 3), (ClassData("c", 1), 1))
+  }
+
+  test("typed aggregation: expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(sum("_2").as[Int]),
+      ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("typed aggregation: expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(sum("_2").as[Int], sum($"_2" + 1).as[Long]),
+      ("a", 30, 32L), ("b", 3, 5L), ("c", 1, 2L))
+  }
+
+  test("typed aggregation: expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(sum("_2").as[Int], sum($"_2" + 1).as[Long], count("*").as[Long]),
+      ("a", 30, 32L, 2L), ("b", 3, 5L, 2L), ("c", 1, 2L, 1L))
+  }
+
+  test("typed aggregation: expr, expr, expr, expr") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+
+    checkAnswer(
+      ds.groupBy(_._1).agg(
+        sum("_2").as[Int],
+        sum($"_2" + 1).as[Long],
+        count("*").as[Long],
+        avg("_2").as[Double]),
+      ("a", 30, 32L, 2L, 15.0), ("b", 3, 5L, 2L, 1.5), ("c", 1, 2L, 1L, 1.0))
   }
 
   test("cogroup") {
@@ -213,5 +304,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       cogrouped,
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
+  }
+
+  test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
+    val ds1 = Seq("1", "2").toDS().as("a")
+    val ds2 = Seq(2, 3).toDS().as("b")
+
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
+    checkAnswer(joined, ("2", 2))
+  }
+
+  test("toString") {
+    val ds = Seq((1, 2)).toDS()
+    assert(ds.toString == "[_1: int, _2: int]")
   }
 }

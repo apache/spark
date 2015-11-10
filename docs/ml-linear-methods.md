@@ -71,8 +71,8 @@ val lr = new LogisticRegression()
 // Fit the model
 val lrModel = lr.fit(training)
 
-// Print the weights and intercept for logistic regression
-println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
+// Print the coefficients and intercept for logistic regression
+println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 {% endhighlight %}
 </div>
 
@@ -105,8 +105,8 @@ public class LogisticRegressionWithElasticNetExample {
     // Fit the model
     LogisticRegressionModel lrModel = lr.fit(training);
 
-    // Print the weights and intercept for logistic regression
-    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
+    // Print the coefficients and intercept for logistic regression
+    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
   }
 }
 {% endhighlight %}
@@ -124,8 +124,8 @@ lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 # Fit the model
 lrModel = lr.fit(training)
 
-# Print the weights and intercept for logistic regression
-print("Weights: " + str(lrModel.weights))
+# Print the coefficients and intercept for logistic regression
+print("Coefficients: " + str(lrModel.coefficients))
 print("Intercept: " + str(lrModel.intercept))
 {% endhighlight %}
 </div>
@@ -258,8 +258,8 @@ val lr = new LinearRegression()
 // Fit the model
 val lrModel = lr.fit(training)
 
-// Print the weights and intercept for linear regression
-println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
+// Print the coefficients and intercept for linear regression
+println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
 
 // Summarize the model over the training set and print out some metrics
 val trainingSummary = lrModel.summary
@@ -302,8 +302,8 @@ public class LinearRegressionWithElasticNetExample {
     // Fit the model
     LinearRegressionModel lrModel = lr.fit(training);
 
-    // Print the weights and intercept for linear regression
-    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
+    // Print the coefficients and intercept for linear regression
+    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
 
     // Summarize the model over the training set and print out some metrics
     LinearRegressionTrainingSummary trainingSummary = lrModel.summary();
@@ -330,8 +330,8 @@ lr = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 # Fit the model
 lrModel = lr.fit(training)
 
-# Print the weights and intercept for linear regression
-print("Weights: " + str(lrModel.weights))
+# Print the coefficients and intercept for linear regression
+print("Coefficients: " + str(lrModel.coefficients))
 print("Intercept: " + str(lrModel.intercept))
 
 # Linear regression model summary is not yet supported in Python.
