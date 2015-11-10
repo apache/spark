@@ -66,17 +66,13 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
         self.synchronized {
           processingEvent = true
         }
-        if (stopped.get()) return
+        if (stopped.get()) {
+          // Get out of the while loop and shutdown the daemon thread
+          return
+        }
         try {
           val event = eventQueue.poll
-          if (event == null) {
-            // Get out of the while loop and shutdown the daemon thread
-            if (!stopped.get) {
-              throw new IllegalStateException("Polling `null` from eventQueue means" +
-                " the listener bus has been stopped. So `stopped` must be true")
-            }
-            return
-          }
+          assert(event != null, "event queue was empty but the listener bus was not stopped")
           postToAll(event)
         } finally {
           self.synchronized {
