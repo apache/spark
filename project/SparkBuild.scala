@@ -56,7 +56,8 @@ object BuildCommons {
 
   val testTempDir = s"$sparkHome/target/tmp"
 
-  val compilerJVMVersion = settingKey[String]("source and target JVM version for java and scalac")
+  val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
+  val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
 }
 
 object SparkBuild extends PomBuild {
@@ -156,16 +157,17 @@ object SparkBuild extends PomBuild {
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
-    compilerJVMVersion := "1.7",
+    javacJVMVersion := "1.7",
+    scalacJVMVersion := "1.7",
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", compilerJVMVersion.value,
-      "-target", compilerJVMVersion.value
+      "-source", javacJVMVersion.value,
+      "-target", javacJVMVersion.value
     ),
 
     scalacOptions in Compile ++= Seq(
-      s"-target:jvm-${compilerJVMVersion.value}",
+      s"-target:jvm-${scalacJVMVersion.value}",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
 
@@ -574,7 +576,9 @@ object Java8TestSettings {
   import BuildCommons._
 
   lazy val settings = Seq(
-    compilerJVMVersion := "1.8"
+    javacJVMVersion := "1.8",
+    // Targeting Java 8 bytecode is only supported in Scala 2.11.4 and higher:
+    scalacJVMVersion := (if (System.getProperty("scala-2.11") == "true") "1.8" else "1.7")
   )
 }
 
