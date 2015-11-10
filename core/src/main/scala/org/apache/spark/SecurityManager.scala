@@ -23,7 +23,7 @@ import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
+import com.google.common.hash.HashCode
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 
@@ -381,7 +381,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
         val secret = new Array[Byte](length)
         rnd.nextBytes(secret)
 
-        val cookie = HashCodes.fromBytes(secret).toString()
+        val cookie = HashCode.fromBytes(secret).toString()
         SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
         cookie
       } else {
