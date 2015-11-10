@@ -380,7 +380,8 @@ abstract class DStream[T: ClassTag] (
    *                           of the DStream operation that generated `this` will be displayed.
    */
   protected[streaming] def createRDDWithLocalProperties[U](
-      time: Time, displayInnerRDDOps: Boolean)(body: => U): U = {
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
     // Pass this DStream's operation scope and creation site information to RDDs through

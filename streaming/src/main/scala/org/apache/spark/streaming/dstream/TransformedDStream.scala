@@ -60,7 +60,8 @@ class TransformedDStream[U: ClassTag] (
    * displayed in the UI.
    */
   override protected[streaming] def createRDDWithLocalProperties[U](
-      time: Time, displayInnerRDDOps: Boolean)(body: => U): U = {
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
     super.createRDDWithLocalProperties(time, displayInnerRDDOps = true)(body)
   }
 }
