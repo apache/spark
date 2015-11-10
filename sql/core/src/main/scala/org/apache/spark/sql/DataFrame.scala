@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -749,10 +750,14 @@ class DataFrame private[sql](
       // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
+
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
-      // correct defaults after the nested expression's type has been resolved.
+
+      // Leave an unaliased generator with an empty list of names since the analyzer will generate
+      // the correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
+      case Column(jt: JsonTuple) => MultiAlias(jt, Nil)
+
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
     Project(namedExpressions.toSeq, logicalPlan)
@@ -1338,7 +1343,7 @@ class DataFrame private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(First(attr), attr.name)()
+        Alias(new First(attr).toAggregateExpression(), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
@@ -1381,11 +1386,11 @@ class DataFrame private[sql](
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
-      "count" -> Count,
-      "mean" -> Average,
-      "stddev" -> StddevSamp,
-      "min" -> Min,
-      "max" -> Max)
+      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
+      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
+      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
+      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
@@ -1479,8 +1484,8 @@ class DataFrame private[sql](
   /**
    * Returns the first `n` rows in the [[DataFrame]].
    *
-   * Running take requires moving data into the application's driver process, and doing so on a
-   * very large dataset can crash the driver process with OutOfMemoryError.
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
    *
    * @group action
    * @since 1.3.0
@@ -1501,8 +1506,8 @@ class DataFrame private[sql](
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
    *
-   * Running take requires moving data into the application's driver process, and doing so with
-   * a very large `n` can crash the driver process with OutOfMemoryError.
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
    *
    * For Java API, use [[collectAsList]].
    *

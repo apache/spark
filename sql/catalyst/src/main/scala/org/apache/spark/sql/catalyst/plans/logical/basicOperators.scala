@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -218,8 +218,6 @@ case class Aggregate(
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
-
-  lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
@@ -527,7 +525,7 @@ case class MapGroups[K, T, U](
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
   def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
-      func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+      func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
       left: LogicalPlan,
@@ -551,7 +549,7 @@ object CoGroup {
  * right children.
  */
 case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
     kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],

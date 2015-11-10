@@ -45,6 +45,9 @@ case class Expand(
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
   private[this] val projection = {
     if (outputsUnsafeRows) {
       (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)

@@ -159,17 +159,14 @@ public class TransportClientFactory implements Closeable {
   }
 
   /**
-   * Creates a new client that will not be managed by this factory.
-   *
-   * The client will not be shared with callers of {@link #createClient(String, int)} and will
-   * not be closed when the factory is disposed of.
+   * Create a completely new {@link TransportClient} to the given remote host / port.
+   * This connection is not pooled.
    *
    * As with {@link #createClient(String, int)}, this method is blocking.
    */
   public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
-    throws IOException {
-
-    InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+      throws IOException {
+    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     return createClient(address);
   }
 

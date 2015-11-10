@@ -15,215 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.expressions.aggregate
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.IntegerType
 
 /**
- * Utility functions used by the query planner to convert our plan to new aggregation code path.
- */
-object Utils {
-
-  // Check if the DataType given cannot be part of a group by clause.
-  private def isUnGroupable(dt: DataType): Boolean = dt match {
-    case _: ArrayType | _: MapType => true
-    case s: StructType => s.fields.exists(f => isUnGroupable(f.dataType))
-    case _ => false
-  }
-
-  // Right now, we do not support complex types in the grouping key schema.
-  private def supportsGroupingKeySchema(aggregate: Aggregate): Boolean =
-    !aggregate.groupingExpressions.exists(e => isUnGroupable(e.dataType))
-
-  private def doConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
-    case p: Aggregate if supportsGroupingKeySchema(p) =>
-
-      val converted = MultipleDistinctRewriter.rewrite(p.transformExpressionsDown {
-        case expressions.Average(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Average(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Count(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.CountDistinct(children) =>
-          val child = if (children.size > 1) {
-            DropAnyNull(CreateStruct(children))
-          } else {
-            children.head
-          }
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Count(child),
-            mode = aggregate.Complete,
-            isDistinct = true)
-
-        case expressions.First(child, ignoreNulls) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.First(child, ignoreNulls),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Kurtosis(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Kurtosis(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Last(child, ignoreNulls) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Last(child, ignoreNulls),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Max(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Max(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Min(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Min(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Skewness(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Skewness(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.StddevPop(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.StddevPop(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.StddevSamp(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.StddevSamp(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.Sum(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.SumDistinct(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Sum(child),
-            mode = aggregate.Complete,
-            isDistinct = true)
-
-        case expressions.Corr(left, right) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.Corr(left, right),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.ApproxCountDistinct(child, rsd) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.HyperLogLogPlusPlus(child, rsd),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.VariancePop(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.VariancePop(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-
-        case expressions.VarianceSamp(child) =>
-          aggregate.AggregateExpression2(
-            aggregateFunction = aggregate.VarianceSamp(child),
-            mode = aggregate.Complete,
-            isDistinct = false)
-      })
-
-      // Check if there is any expressions.AggregateExpression1 left.
-      // If so, we cannot convert this plan.
-      val hasAggregateExpression1 = converted.aggregateExpressions.exists { expr =>
-        // For every expressions, check if it contains AggregateExpression1.
-        expr.find {
-          case agg: expressions.AggregateExpression1 => true
-          case other => false
-        }.isDefined
-      }
-
-      // Check if there are multiple distinct columns.
-      // TODO remove this.
-      val aggregateExpressions = converted.aggregateExpressions.flatMap { expr =>
-        expr.collect {
-          case agg: AggregateExpression2 => agg
-        }
-      }.toSet.toSeq
-      val functionsWithDistinct = aggregateExpressions.filter(_.isDistinct)
-      val hasMultipleDistinctColumnSets =
-        if (functionsWithDistinct.map(_.aggregateFunction.children).distinct.length > 1) {
-          true
-        } else {
-          false
-        }
-
-      if (!hasAggregateExpression1 && !hasMultipleDistinctColumnSets) Some(converted) else None
-
-    case other => None
-  }
-
-  def checkInvalidAggregateFunction2(aggregate: Aggregate): Unit = {
-    // If the plan cannot be converted, we will do a final round check to see if the original
-    // logical.Aggregate contains both AggregateExpression1 and AggregateExpression2. If so,
-    // we need to throw an exception.
-    val aggregateFunction2s = aggregate.aggregateExpressions.flatMap { expr =>
-      expr.collect {
-        case agg: AggregateExpression2 => agg.aggregateFunction
-      }
-    }.distinct
-    if (aggregateFunction2s.nonEmpty) {
-      // For functions implemented based on the new interface, prepare a list of function names.
-      val invalidFunctions = {
-        if (aggregateFunction2s.length > 1) {
-          s"${aggregateFunction2s.tail.map(_.nodeName).mkString(",")} " +
-            s"and ${aggregateFunction2s.head.nodeName} are"
-        } else {
-          s"${aggregateFunction2s.head.nodeName} is"
-        }
-      }
-      val errorMessage =
-        s"${invalidFunctions} implemented based on the new Aggregate Function " +
-          s"interface and it cannot be used with functions implemented based on " +
-          s"the old Aggregate Function interface."
-      throw new AnalysisException(errorMessage)
-    }
-  }
-
-  def tryConvert(plan: LogicalPlan): Option[Aggregate] = plan match {
-    case p: Aggregate =>
-      val converted = doConvert(p)
-      if (converted.isDefined) {
-        converted
-      } else {
-        checkInvalidAggregateFunction2(p)
-        None
-      }
-    case other => None
-  }
-}
-
-/**
- * This rule rewrites an aggregate query with multiple distinct clauses into an expanded double
+ * This rule rewrites an aggregate query with distinct aggregations into an expanded double
  * aggregation in which the regular aggregation expressions and every distinct clause is aggregated
  * in a separate group. The results are then combined in a second aggregate.
  *
@@ -298,9 +100,11 @@ object Utils {
  * we could improve this in the current rule by applying more advanced expression cannocalization
  * techniques.
  */
-object MultipleDistinctRewriter extends Rule[LogicalPlan] {
+case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case p if !p.resolved => p
+    // We need to wait until this Aggregate operator is resolved.
     case a: Aggregate => rewrite(a)
     case p => p
   }
@@ -310,7 +114,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
     // Collect all aggregate expressions.
     val aggExpressions = a.aggregateExpressions.flatMap { e =>
       e.collect {
-        case ae: AggregateExpression2 => ae
+        case ae: AggregateExpression => ae
       }
     }
 
@@ -319,8 +123,15 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    // Only continue to rewrite if there is more than one distinct group.
-    if (distinctAggGroups.size > 1) {
+    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
+      // When the flag is set to specialize single distinct agg planning,
+      // we will rely on our Aggregation strategy to handle queries with a single
+      // distinct column and this aggregate operator does have grouping expressions.
+      distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && a.groupingExpressions.isEmpty)
+    } else {
+      distinctAggGroups.size >= 1
+    }
+    if (shouldRewrite) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
@@ -332,11 +143,11 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
       // Functions used to modify aggregate functions and their inputs.
       def evalWithinGroup(id: Literal, e: Expression) = If(EqualTo(gid, id), e, nullify(e))
       def patchAggregateFunctionChildren(
-          af: AggregateFunction2)(
-          attrs: Expression => Expression): AggregateFunction2 = {
+          af: AggregateFunction)(
+          attrs: Expression => Expression): AggregateFunction = {
         af.withNewChildren(af.children.map {
           case afc => attrs(afc)
-        }).asInstanceOf[AggregateFunction2]
+        }).asInstanceOf[AggregateFunction]
       }
 
       // Setup unique distinct aggregate children.
@@ -381,7 +192,7 @@ object MultipleDistinctRewriter extends Rule[LogicalPlan] {
         val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
 
         // Select the result of the first aggregate in the last aggregate.
-        val result = AggregateExpression2(
+        val result = AggregateExpression(
           aggregate.First(evalWithinGroup(regularGroupId, operator.toAttribute), Literal(true)),
           mode = Complete,
           isDistinct = false)
