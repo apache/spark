@@ -237,214 +237,241 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2, 2, 2) :: Nil)
   }
 
-  test("left outer join") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
-      Row(1, "A", 1, "a") ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+  def test_outer_join(useSMJ: Boolean): Unit = {
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+    val algo = if (useSMJ) "SortMergeOuterJoin" else "ShuffledHashOuterJoin"
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+    test("left outer join: " + algo) {
+      withSQLConf(SQLConf.SORTMERGE_JOIN.key -> useSMJ.toString) {
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
-      Row(1, "A", 1, "a") ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+        checkAnswer(
+          upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
+          Row(1, "A", 1, "a") ::
+            Row(2, "B", 2, "b") ::
+            Row(3, "C", 3, "c") ::
+            Row(4, "D", 4, "d") ::
+            Row(5, "E", null, null) ::
+            Row(6, "F", null, null) :: Nil)
 
-    // Make sure we are choosing left.outputPartitioning as the
-    // outputPartitioning for the outer join operator.
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.N, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY l.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) :: Nil)
+        checkAnswer(
+          upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
+          Row(1, "A", null, null) ::
+            Row(2, "B", 2, "b") ::
+            Row(3, "C", 3, "c") ::
+            Row(4, "D", 4, "d") ::
+            Row(5, "E", null, null) ::
+            Row(6, "F", null, null) :: Nil)
 
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.a, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY r.a
-        """.stripMargin),
-      Row(null, 6) :: Nil)
+        checkAnswer(
+          upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
+          Row(1, "A", null, null) ::
+            Row(2, "B", 2, "b") ::
+            Row(3, "C", 3, "c") ::
+            Row(4, "D", 4, "d") ::
+            Row(5, "E", null, null) ::
+            Row(6, "F", null, null) :: Nil)
+
+        checkAnswer(
+          upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
+          Row(1, "A", 1, "a") ::
+            Row(2, "B", 2, "b") ::
+            Row(3, "C", 3, "c") ::
+            Row(4, "D", 4, "d") ::
+            Row(5, "E", null, null) ::
+            Row(6, "F", null, null) :: Nil)
+
+        // Make sure we are choosing left.outputPartitioning as the
+        // outputPartitioning for the outer join operator.
+        checkAnswer(
+          sql(
+            """
+            |SELECT l.N, count(*)
+            |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+            |GROUP BY l.N
+          """.
+              stripMargin),
+        Row(1, 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) :: Nil)
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT r.a, count(*)
+              |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+              |GROUP BY r.a
+            """.stripMargin),
+          Row(null, 6) :: Nil)
+      }
+    }
+
+    test("right outer join: " + algo) {
+      withSQLConf(SQLConf.SORTMERGE_JOIN.key -> useSMJ.toString) {
+        checkAnswer(
+          lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
+          Row(1, "a", 1, "A") ::
+            Row(2, "b", 2, "B") ::
+            Row(3, "c", 3, "C") ::
+            Row(4, "d", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+        checkAnswer(
+          lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
+          Row(null, null, 1, "A") ::
+            Row(2, "b", 2, "B") ::
+            Row(3, "c", 3, "C") ::
+            Row(4, "d", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+        checkAnswer(
+          lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
+          Row(null, null, 1, "A") ::
+            Row(2, "b", 2, "B") ::
+            Row(3, "c", 3, "C") ::
+            Row(4, "d", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+        checkAnswer(
+          lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
+          Row(1, "a", 1, "A") ::
+            Row(2, "b", 2, "B") ::
+            Row(3, "c", 3, "C") ::
+            Row(4, "d", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+
+        // Make sure we are choosing right.outputPartitioning as the
+        // outputPartitioning for the outer join operator.
+        checkAnswer(
+          sql(
+            """
+              |SELECT l.a, count(*)
+              |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
+              |GROUP BY l.a
+            """.stripMargin),
+          Row(null,
+            6))
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT r.N, count(*)
+              |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
+              |GROUP BY r.N
+            """.stripMargin),
+          Row(1
+            , 1) ::
+            Row(2, 1) ::
+            Row(3, 1) ::
+            Row(4, 1) ::
+            Row(5, 1) ::
+            Row(6, 1) :: Nil)
+        }
+      }
+
+    test("full outer join: " + algo) {
+      withSQLConf(SQLConf.SORTMERGE_JOIN.key -> useSMJ.toString) {
+
+        upperCaseData.where('N <= 4).registerTempTable("left")
+        upperCaseData.where('N >= 3).registerTempTable("right")
+
+        val left = UnresolvedRelation(TableIdentifier("left"), None)
+        val right = UnresolvedRelation(TableIdentifier("right"), None)
+
+        checkAnswer(
+          left.join(right, $"left.N" === $"right.N", "full"),
+          Row(1, "A", null, null) ::
+            Row(2, "B", null, null) ::
+            Row(3, "C", 3, "C") ::
+            Row(4, "D", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+
+        checkAnswer(
+          left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
+          Row(1, "A", null, null) ::
+            Row(2, "B", null, null) ::
+            Row(3, "C", null, null) ::
+            Row(null, null, 3, "C") ::
+            Row(4, "D", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+
+        checkAnswer(
+          left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
+          Row(1, "A", null, null) ::
+            Row(2, "B", null, null) ::
+            Row(3, "C", null, null) ::
+            Row(null, null, 3, "C") ::
+            Row(4, "D", 4, "D") ::
+            Row(null, null, 5, "E") ::
+            Row(null, null, 6, "F") :: Nil)
+
+        // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+        // operator.
+        checkAnswer(
+          sql(
+            """
+            |SELECT l.a, count(*)
+            |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+            |GROUP BY l.a
+          """.
+              stripMargin),
+        Row(
+          null, 10))
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT r.N, count(*)
+              |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+              |GROUP BY r.N
+            """.stripMargin),
+          Row
+            (1, 1) ::
+            Row(2, 1) ::
+            Row(3, 1) ::
+            Row(4, 1) ::
+            Row(5, 1) ::
+            Row(6, 1) ::
+            Row(null, 4) :: Nil)
+
+        checkAnswer(
+          sql(
+            """
+              |SELECT l.N, count(*)
+              |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+              |GROUP BY l.N
+            """.stripMargin),
+          Row(1
+            , 1) ::
+            Row(2, 1) ::
+            Row(3, 1) ::
+            Row(4, 1) ::
+            Row(5, 1) ::
+            Row(6, 1) ::
+            Row(null, 4) :: Nil)
+
+        checkAnswer(
+          sql(
+            """
+            |SELECT r.a, count(*)
+            |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+            |GROUP BY r.a
+          """.
+              stripMargin),
+          Row(null, 10))
+      }
+    }
   }
 
-  test("right outer join") {
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
-      Row(1, "a", 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
-      Row(null, null, 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
-      Row(null, null, 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
-      Row(1, "a", 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-
-    // Make sure we are choosing right.outputPartitioning as the
-    // outputPartitioning for the outer join operator.
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.a, count(*)
-          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.stripMargin),
-      Row(null, 6))
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.N, count(*)
-          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY r.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) :: Nil)
-  }
-
-  test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("left")
-    upperCaseData.where('N >= 3).registerTempTable("right")
-
-    val left = UnresolvedRelation(TableIdentifier("left"), None)
-    val right = UnresolvedRelation(TableIdentifier("right"), None)
-
-    checkAnswer(
-      left.join(right, $"left.N" === $"right.N", "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-
-    checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", null, null) ::
-        Row(3, "C", null, null) ::
-        Row(null, null, 3, "C") ::
-        Row(4, "D", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-
-    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.a, count(*)
-          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.stripMargin),
-      Row(null, 10))
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.N, count(*)
-          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY r.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT l.N, count(*)
-          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY l.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) ::
-        Row(null, 4) :: Nil)
-
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.a, count(*)
-          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY r.a
-        """.stripMargin),
-      Row(null, 10))
-  }
+  // test SortMergeOuterJoin
+  test_outer_join(true)
+  // test ShuffledHashOuterJoin
+  test_outer_join(false)
 
   test("broadcasted left semi join operator selection") {
     sqlContext.cacheManager.clearCache()
