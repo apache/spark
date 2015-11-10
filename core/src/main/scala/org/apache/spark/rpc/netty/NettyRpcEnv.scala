@@ -389,18 +389,23 @@ private[netty] class NettyRpcEnv(
     def setInUse(inUse: Boolean): Unit = this.inUse = inUse
 
     override def userEventTriggered(ctx: ChannelHandlerContext, evt: Object): Unit = {
-      client.synchronized {
+      val timedOut = client.synchronized {
         if (!inUse && evt.isInstanceOf[IdleStateEvent] && client.isActive()) {
           logDebug(s"Closing transport client $client after idle timeout.")
           val socketAddr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
           val address = RpcAddress(socketAddr.getHostName(), socketAddr.getPort())
           ctx.close()
-          NettyRpcEnv.this.synchronized {
-            fileClients.remove(address)
-          }
+          true
+        } else {
+          false
         }
       }
       ctx.fireUserEventTriggered(evt)
+      if (timedOut) {
+        NettyRpcEnv.this.synchronized {
+          fileClients.remove(address)
+        }
+      }
     }
 
   }
