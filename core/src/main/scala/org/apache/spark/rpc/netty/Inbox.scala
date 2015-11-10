@@ -21,8 +21,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, ThreadSafeRpcEndpoint}
 
@@ -194,7 +192,7 @@ private[netty] class Inbox(
   def isEmpty: Boolean = inbox.synchronized { messages.isEmpty }
 
   /** Called when we are dropping a message. Test cases override this to test message dropping. */
-  @VisibleForTesting
+  // VisibleForTesting
   protected def onDrop(message: InboxMessage): Unit = {
     logWarning(s"Drop $message because $endpointRef is stopped")
   }

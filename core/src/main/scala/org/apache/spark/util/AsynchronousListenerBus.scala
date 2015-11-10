@@ -20,7 +20,6 @@ package org.apache.spark.util
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.google.common.annotations.VisibleForTesting
 import org.apache.spark.SparkContext
 
 /**
@@ -123,7 +122,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
    * time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
    * emptied.
    */
-  @VisibleForTesting
+  // VisibleForTesting
   @throws(classOf[TimeoutException])
   def waitUntilEmpty(timeoutMillis: Long): Unit = {
     val finishTime = System.currentTimeMillis + timeoutMillis
