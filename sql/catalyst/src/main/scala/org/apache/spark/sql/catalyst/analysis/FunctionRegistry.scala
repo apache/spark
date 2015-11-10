@@ -24,6 +24,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -177,6 +178,7 @@ object FunctionRegistry {
     expression[ToRadians]("radians"),
 
     // aggregate functions
+    expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),

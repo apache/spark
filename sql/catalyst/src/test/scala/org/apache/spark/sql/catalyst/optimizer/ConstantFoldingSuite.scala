@@ -162,7 +162,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -170,7 +170,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1.0) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

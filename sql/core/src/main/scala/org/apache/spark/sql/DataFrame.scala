@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -1338,7 +1339,7 @@ class DataFrame private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(First(attr), attr.name)()
+        Alias(new First(attr).toAggregateExpression(), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
@@ -1381,11 +1382,11 @@ class DataFrame private[sql](
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
-      "count" -> Count,
-      "mean" -> Average,
-      "stddev" -> StddevSamp,
-      "min" -> Min,
-      "max" -> Max)
+      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
+      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
+      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
+      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 

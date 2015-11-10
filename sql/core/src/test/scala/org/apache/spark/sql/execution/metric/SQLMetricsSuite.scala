@@ -152,36 +152,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("Aggregate metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "false",
-      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
-      // Assume the execution plan is
-      // ... -> Aggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) -> Aggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("Aggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("Aggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
-
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        2L -> ("Aggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("Aggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
-  }
-
   test("SortBasedAggregate metrics") {
     // Because SortBasedAggregate may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.

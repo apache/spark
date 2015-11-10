@@ -237,34 +237,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8828 sum should return null if all input values are null") {
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
+    checkAnswer(
+      sql("select sum(a), avg(a) from allNulls"),
+      Seq(Row(null, null))
+    )
   }
 
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
@@ -507,29 +483,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("literal in agg grouping expressions") {
-    def literalInAggTest(): Unit = {
-      checkAnswer(
-        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-      checkAnswer(
-        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-        sql("SELECT 1, 2, sum(b) FROM testData2"))
-    }
-
-    literalInAggTest()
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      literalInAggTest()
-    }
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT 1, 2, sum(b) FROM testData2"))
   }
 
   test("aggregates with nulls") {

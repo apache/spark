@@ -64,12 +64,12 @@ import org.apache.spark.sql.types.StructType
  * @param groupingExpressions
  *   expressions for grouping keys
  * @param nonCompleteAggregateExpressions
- *   [[AggregateExpression2]] containing [[AggregateFunction2]]s with mode [[Partial]],
- *   [[PartialMerge]], or [[Final]].
+ * [[AggregateExpression]] containing [[AggregateFunction]]s with mode [[Partial]],
+ * [[PartialMerge]], or [[Final]].
  * @param nonCompleteAggregateAttributes the attributes of the nonCompleteAggregateExpressions'
  *   outputs when they are stored in the final aggregation buffer.
  * @param completeAggregateExpressions
- *   [[AggregateExpression2]] containing [[AggregateFunction2]]s with mode [[Complete]].
+ * [[AggregateExpression]] containing [[AggregateFunction]]s with mode [[Complete]].
  * @param completeAggregateAttributes the attributes of completeAggregateExpressions' outputs
  *   when they are stored in the final aggregation buffer.
  * @param resultExpressions
@@ -83,9 +83,9 @@ import org.apache.spark.sql.types.StructType
  */
 class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
     nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateExpressions: Seq[AggregateExpression],
     completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
@@ -106,7 +106,7 @@ class TungstenAggregationIterator(
   // A Seq containing all AggregateExpressions.
   // It is important that all AggregateExpressions with the mode Partial, PartialMerge or Final
   // are at the beginning of the allAggregateExpressions.
-  private[this] val allAggregateExpressions: Seq[AggregateExpression2] =
+  private[this] val allAggregateExpressions: Seq[AggregateExpression] =
     nonCompleteAggregateExpressions ++ completeAggregateExpressions
 
   // Check to make sure we do not have more than three modes in our AggregateExpressions.
@@ -150,10 +150,10 @@ class TungstenAggregationIterator(
   // Initialize all AggregateFunctions by binding references, if necessary,
   // and setting inputBufferOffset and mutableBufferOffset.
   private def initializeAllAggregateFunctions(
-      startingInputBufferOffset: Int): Array[AggregateFunction2] = {
+      startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
-    val functions = new Array[AggregateFunction2](allAggregateExpressions.length)
+    val functions = new Array[AggregateFunction](allAggregateExpressions.length)
     var i = 0
     while (i < allAggregateExpressions.length) {
       val func = allAggregateExpressions(i).aggregateFunction
@@ -195,7 +195,7 @@ class TungstenAggregationIterator(
     functions
   }
 
-  private[this] var allAggregateFunctions: Array[AggregateFunction2] =
+  private[this] var allAggregateFunctions: Array[AggregateFunction] =
     initializeAllAggregateFunctions(initialInputBufferOffset)
 
   // Positions of those imperative aggregate functions in allAggregateFunctions.
@@ -263,7 +263,7 @@ class TungstenAggregationIterator(
       case (Some(Partial), None) =>
         val updateExpressions = allAggregateFunctions.flatMap {
           case ae: DeclarativeAggregate => ae.updateExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         val imperativeAggregateFunctions: Array[ImperativeAggregate] =
           allAggregateFunctions.collect { case func: ImperativeAggregate => func}
@@ -286,7 +286,7 @@ class TungstenAggregationIterator(
       case (Some(PartialMerge), None) | (Some(Final), None) =>
         val mergeExpressions = allAggregateFunctions.flatMap {
           case ae: DeclarativeAggregate => ae.mergeExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         val imperativeAggregateFunctions: Array[ImperativeAggregate] =
           allAggregateFunctions.collect { case func: ImperativeAggregate => func}
@@ -307,11 +307,11 @@ class TungstenAggregationIterator(
 
       // Final-Complete
       case (Some(Final), Some(Complete)) =>
-        val completeAggregateFunctions: Array[AggregateFunction2] =
+        val completeAggregateFunctions: Array[AggregateFunction] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
         val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
           completeAggregateFunctions.collect { case func: ImperativeAggregate => func }
-        val nonCompleteAggregateFunctions: Array[AggregateFunction2] =
+        val nonCompleteAggregateFunctions: Array[AggregateFunction] =
           allAggregateFunctions.take(nonCompleteAggregateExpressions.length)
         val nonCompleteImperativeAggregateFunctions: Array[ImperativeAggregate] =
           nonCompleteAggregateFunctions.collect { case func: ImperativeAggregate => func }
@@ -321,7 +321,7 @@ class TungstenAggregationIterator(
         val mergeExpressions =
           nonCompleteAggregateFunctions.flatMap {
             case ae: DeclarativeAggregate => ae.mergeExpressions
-            case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+            case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
           } ++ completeOffsetExpressions
         val finalMergeProjection =
           newMutableProjection(mergeExpressions, aggregationBufferAttributes ++ inputAttributes)()
@@ -331,7 +331,7 @@ class TungstenAggregationIterator(
           Seq.fill(nonCompleteAggregateFunctions.map(_.aggBufferAttributes.length).sum)(NoOp)
         val updateExpressions = finalOffsetExpressions ++ completeAggregateFunctions.flatMap {
           case ae: DeclarativeAggregate => ae.updateExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         val completeUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
@@ -358,7 +358,7 @@ class TungstenAggregationIterator(
 
       // Complete-only
       case (None, Some(Complete)) =>
-        val completeAggregateFunctions: Array[AggregateFunction2] =
+        val completeAggregateFunctions: Array[AggregateFunction] =
           allAggregateFunctions.takeRight(completeAggregateExpressions.length)
         // All imperative aggregate functions with mode Complete.
         val completeImperativeAggregateFunctions: Array[ImperativeAggregate] =
@@ -366,7 +366,7 @@ class TungstenAggregationIterator(
 
         val updateExpressions = completeAggregateFunctions.flatMap {
           case ae: DeclarativeAggregate => ae.updateExpressions
-          case agg: AggregateFunction2 => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
+          case agg: AggregateFunction => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
         }
         val completeExpressionAggUpdateProjection =
           newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
@@ -414,7 +414,7 @@ class TungstenAggregationIterator(
         val joinedRow = new JoinedRow()
         val evalExpressions = allAggregateFunctions.map {
           case ae: DeclarativeAggregate => ae.evaluateExpression
-          case agg: AggregateFunction2 => NoOp
+          case agg: AggregateFunction => NoOp
         }
         val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
         // These are the attributes of the row produced by `expressionAggEvalProjection`

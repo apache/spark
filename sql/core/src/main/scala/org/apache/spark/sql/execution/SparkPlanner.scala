@@ -38,7 +38,6 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
       DataSourceStrategy ::
       DDLStrategy ::
       TakeOrderedAndProject ::
-      HashAggregation ::
       Aggregation ::
       LeftSemiJoin ::
       EquiJoinSelection ::

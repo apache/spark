@@ -448,14 +448,23 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
-  val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
-    defaultValue = Some(true), doc = "<TODO>")
-
   val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
     defaultValue = Some(true),
     isPublic = false,
     doc = "When true, we could use `datasource`.`path` as table in SQL query"
   )
+
+  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
+    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
+      defaultValue = Some(true),
+      isPublic = false,
+      doc = "When true, if a query only has a single distinct column and it has " +
+        "grouping expressions, we will use our planner rule to handle this distinct " +
+        "column (other cases are handled by DistinctAggregationRewriter). " +
+        "When false, we will always use DistinctAggregationRewriter to plan " +
+        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
+        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
+        "plan aggregation queries with a single distinct column.")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -532,8 +541,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
-  private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
-
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   private[spark] def defaultSizeInBytes: Long =
@@ -574,6 +581,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
+    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

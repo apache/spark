@@ -51,18 +51,18 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  private val first = AttributeReference("first", child.dataType)()
+  private lazy val first = AttributeReference("first", child.dataType)()
 
-  private val valueSet = AttributeReference("valueSet", BooleanType)()
+  private lazy val valueSet = AttributeReference("valueSet", BooleanType)()
 
-  override val aggBufferAttributes: Seq[AttributeReference] = first :: valueSet :: Nil
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = first :: valueSet :: Nil
 
-  override val initialValues: Seq[Literal] = Seq(
+  override lazy val initialValues: Seq[Literal] = Seq(
     /* first = */ Literal.create(null, child.dataType),
     /* valueSet = */ Literal.create(false, BooleanType)
   )
 
-  override val updateExpressions: Seq[Expression] = {
+  override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
         /* first = */ If(Or(valueSet, IsNull(child)), first, child),
@@ -76,7 +76,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
     }
   }
 
-  override val mergeExpressions: Seq[Expression] = {
+  override lazy val mergeExpressions: Seq[Expression] = {
     // For first, we can just check if valueSet.left is set to true. If it is set
     // to true, we use first.right. If not, we use first.right (even if valueSet.right is
     // false, we are safe to do so because first.right will be null in this case).
@@ -86,7 +86,7 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
     )
   }
 
-  override val evaluateExpression: AttributeReference = first
+  override lazy val evaluateExpression: AttributeReference = first
 
   override def toString: String = s"first($child)${if (ignoreNulls) " ignore nulls"}"
 }

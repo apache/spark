@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression2, AggregateFunction2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 /**
- * An iterator used to evaluate [[AggregateFunction2]]. It assumes the input rows have been
+ * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
  * sorted by values of [[groupingKeyAttributes]].
  */
 class SortBasedAggregationIterator(
@@ -31,9 +31,9 @@ class SortBasedAggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression2],
+    nonCompleteAggregateExpressions: Seq[AggregateExpression],
     nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression2],
+    completeAggregateExpressions: Seq[AggregateExpression],
     completeAggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
