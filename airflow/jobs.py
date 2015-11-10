@@ -378,7 +378,9 @@ class SchedulerJob(BaseJob):
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
                 next_run_date = datetime.now()
 
-            if next_run_date and next_run_date <= datetime.now():
+            if (
+                    next_run_date and
+                    dag.following_schedule(next_run_date) <= datetime.now()):
                 next_run = DagRun(
                     dag_id=dag.dag_id,
                     run_id='scheduled__' + next_run_date.isoformat(),
@@ -424,8 +426,22 @@ class SchedulerJob(BaseJob):
             session.commit()
 
         active_runs = dag.get_active_runs()
+
+        # Making a set of task instances that are easy to skip based on state
+        skip_tis = set()
+        if active_runs:
+            qry = (
+                session.query(TI.task_id, TI.execution_date)
+                .filter(
+                    TI.dag_id == dag.dag_id,
+                    TI.execution_date.in_(active_runs),
+                    TI.state.in_((State.RUNNING, State.SUCCESS, State.FAILED)),
+                )
+            )
+            skip_tis = {(ti[0], ti[1]) for ti in qry.all()}
+
         for task, dttm in product(dag.tasks, active_runs):
-            if task.adhoc:
+            if task.adhoc or (task.task_id, dttm) in skip_tis:
                 continue
             ti = TI(task, dttm)
             ti.refresh_from_db()
