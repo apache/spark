@@ -662,6 +662,9 @@ class Airflow(BaseView):
             d['data_profiling'] = current_user.data_profiling()
             d['is_anonymous'] = current_user.is_anonymous()
             d['is_authenticated'] = current_user.is_authenticated()
+        if hasattr(current_user, 'username'):
+            d['username'] = current_user.username
+
         return Response(
             response=json.dumps(d, indent=4),
             status=200, mimetype="application/json")
