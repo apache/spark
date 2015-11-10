@@ -58,6 +58,11 @@ abstract class Aggregator[-A, B, C] {
   def reduce(b: B, a: A): B
 
   /**
+   * Merge two intermediate values
+   */
+  def merge(b1: B, b2: B): B
+
+  /**
    * Transform the output of the reduction.
    */
   def present(reduction: B): C
