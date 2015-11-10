@@ -2157,9 +2157,14 @@ setMethod("with",
 #' 
 #' @name coltypes
 #' @title Get column types of a DataFrame
+#' @family dataframe_funcs
 #' @param x (DataFrame)
 #' @return value (character) A character vector with the column types of the given DataFrame
 #' @rdname coltypes
+#' @examples \dontrun{
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' coltypes(irisDF)
+#' }
 setMethod("coltypes",
           signature(x = "DataFrame"),
           function(x) {
