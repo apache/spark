@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Iterator => JIterator}
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -26,7 +27,9 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttrib
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, Encoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.QueryExecution
+
 
 /**
  * :: Experimental ::
@@ -143,7 +146,7 @@ class GroupedDataset[K, T] private[sql](
    * that cast appropriately for the user facing interface.
    * TODO: does not handle aggrecations that return nonflat results,
    */
-  protected def aggUntyped(columns: TypedColumn[_]*): Dataset[_] = {
+  protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val aliases = (groupingAttributes ++ columns.map(_.expr)).map {
       case u: UnresolvedAttribute => UnresolvedAlias(u)
       case expr: NamedExpression => expr
@@ -151,7 +154,15 @@ class GroupedDataset[K, T] private[sql](
     }
 
     val unresolvedPlan = Aggregate(groupingAttributes, aliases, logicalPlan)
-    val execution = new QueryExecution(sqlContext, unresolvedPlan)
+
+    // Fill in the input encoders for any aggregators in the plan.
+    val withEncoders = unresolvedPlan transformAllExpressions {
+      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(
+          aEncoder = Some(tEnc.asInstanceOf[ExpressionEncoder[Any]]),
+          children = dataAttributes)
+    }
+    val execution = new QueryExecution(sqlContext, withEncoders)
 
     val columnEncoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]])
 
@@ -162,43 +173,47 @@ class GroupedDataset[K, T] private[sql](
       case (e, a) =>
         e.unbind(a :: Nil).resolve(execution.analyzed.output)
     }
-    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
+
+    new Dataset(
+      sqlContext,
+      execution,
+      ExpressionEncoder.tuple(encoders))
   }
 
   /**
    * Computes the given aggregation, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing this aggregation over all elements in the group.
    */
-  def agg[A1](col1: TypedColumn[A1]): Dataset[(K, A1)] =
-    aggUntyped(col1).asInstanceOf[Dataset[(K, A1)]]
+  def agg[U1](col1: TypedColumn[T, U1]): Dataset[(K, U1)] =
+    aggUntyped(col1).asInstanceOf[Dataset[(K, U1)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    */
-  def agg[A1, A2](col1: TypedColumn[A1], col2: TypedColumn[A2]): Dataset[(K, A1, A2)] =
-    aggUntyped(col1, col2).asInstanceOf[Dataset[(K, A1, A2)]]
+  def agg[U1, U2](col1: TypedColumn[T, U1], col2: TypedColumn[T, U2]): Dataset[(K, U1, U2)] =
+    aggUntyped(col1, col2).asInstanceOf[Dataset[(K, U1, U2)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    */
-  def agg[A1, A2, A3](
-      col1: TypedColumn[A1],
-      col2: TypedColumn[A2],
-      col3: TypedColumn[A3]): Dataset[(K, A1, A2, A3)] =
-    aggUntyped(col1, col2, col3).asInstanceOf[Dataset[(K, A1, A2, A3)]]
+  def agg[U1, U2, U3](
+      col1: TypedColumn[T, U1],
+      col2: TypedColumn[T, U2],
+      col3: TypedColumn[T, U3]): Dataset[(K, U1, U2, U3)] =
+    aggUntyped(col1, col2, col3).asInstanceOf[Dataset[(K, U1, U2, U3)]]
 
   /**
    * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    */
-  def agg[A1, A2, A3, A4](
-      col1: TypedColumn[A1],
-      col2: TypedColumn[A2],
-      col3: TypedColumn[A3],
-      col4: TypedColumn[A4]): Dataset[(K, A1, A2, A3, A4)] =
-    aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, A1, A2, A3, A4)]]
+  def agg[U1, U2, U3, U4](
+      col1: TypedColumn[T, U1],
+      col2: TypedColumn[T, U2],
+      col3: TypedColumn[T, U3],
+      col4: TypedColumn[T, U4]): Dataset[(K, U1, U2, U3, U4)] =
+    aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, U1, U2, U3, U4)]]
 
   /**
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
