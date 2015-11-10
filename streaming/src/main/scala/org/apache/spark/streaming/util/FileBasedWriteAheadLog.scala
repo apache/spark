@@ -21,7 +21,7 @@ import java.util.{Iterator => JIterator}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.parallel.{ThreadPoolTaskSupport, ForkJoinTaskSupport}
+import scala.collection.parallel.ThreadPoolTaskSupport
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
