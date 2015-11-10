@@ -22,8 +22,6 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.Success
-
 import scala.collection.Map
 import scala.concurrent.Await
 import scala.collection.mutable.{HashMap, HashSet, Stack}

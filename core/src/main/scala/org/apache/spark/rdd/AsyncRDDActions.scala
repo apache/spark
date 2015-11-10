@@ -19,13 +19,12 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.util.ThreadUtils
-
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SimpleFutureAction, ComplexFutureAction, FutureAction, Logging}
+import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.

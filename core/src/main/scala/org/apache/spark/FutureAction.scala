@@ -20,13 +20,14 @@ package org.apache.spark
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent._
+import scala.concurrent.duration.Duration
+import scala.util.Try
+
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.JobWaiter
 
-import scala.concurrent._
-import scala.concurrent.duration.Duration
-import scala.util.Try
 
 /**
  * A future for the result of an action to support cancellation. This is an extension of the
