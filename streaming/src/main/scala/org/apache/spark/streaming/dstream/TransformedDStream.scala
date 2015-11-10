@@ -55,6 +55,8 @@ class TransformedDStream[U: ClassTag] (
   /**
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
+   * This has been overriden to make sure that `hideInnerRDDOps` is always `true`, that is,
+   * the inner scopes and callsites of RDDs are always exposed.
    */
   override protected[streaming] def createRDDWithLocalProperties[U](
       time: Time, hideInnerRDDOps: Boolean)(body: => U): U = {
