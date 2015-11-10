@@ -371,10 +371,11 @@ case class ScalaUDF(
     """
   }
 
+  lazy val outputEncoder: ExpressionEncoder[Row] =
+      RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
+
   override def eval(input: InternalRow): Any = {
     val projected = InternalRow.fromSeq(children.map(_.eval(input)))
-    val outputEncoder: ExpressionEncoder[Row] =
-      RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
-    outputEncoder.toRow(Row(f(projected))).asInstanceOf[InternalRow].get(0, dataType)
+    outputEncoder.toRow(Row(f(projected))).copy().asInstanceOf[InternalRow].get(0, dataType)
   }
 }
