@@ -13,10 +13,10 @@ if [ -a $nose_args ]; then
 --cover-package=airflow \
 --cover-html-dir=airflow/www/static/coverage \
 -v \
---logging-level=DEBUG 
-#--with-doctest \
-"
+--logging-level=DEBUG "
 fi
+
+#--with-doctest 
 
 # Generate the `airflow` executable if needed
 which airflow > /dev/null || python setup.py develop
