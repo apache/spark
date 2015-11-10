@@ -1458,7 +1458,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  def killExecutors(executorIds: Seq[String]) =
+  def killExecutors(executorIds: Seq[String]): Boolean =
     killExecutors(executorIds, force = true)
 
   /**
