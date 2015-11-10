@@ -251,5 +251,7 @@ object RowEncoder {
       Invoke(row, "getArray", dataType, Literal(ordinal) :: Nil)
     case _: MapType =>
       Invoke(row, "getMap", dataType, Literal(ordinal) :: Nil)
+    case udt: UserDefinedType[_] =>
+      getField(row, ordinal, udt.sqlType)
   }
 }
