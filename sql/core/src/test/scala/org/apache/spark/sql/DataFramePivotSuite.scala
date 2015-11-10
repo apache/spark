@@ -23,20 +23,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   import testImplicits._
 
-  test("pivot courses") {
-    checkAnswer(
-      courseSales.pivot(Seq($"year"), $"course", Seq("dotNET", "Java"), sum($"earnings")),
-      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
-    )
-  }
-
-  test("pivot year") {
-    checkAnswer(
-      courseSales.pivot(Seq($"course"), $"year", Seq("2012", "2013"), sum($"earnings")),
-      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
-    )
-  }
-
   test("pivot courses groupBy") {
     checkAnswer(
       courseSales.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings")),
