@@ -53,4 +53,12 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
 
     Utils.deleteRecursively(path)
   }
+
+  test("partitioned columns should appear at the end of schema") {
+    withTempPath { f =>
+      val path = f.getAbsolutePath
+      Seq(1 -> "a").toDF("i", "j").write.partitionBy("i").parquet(path)
+      assert(sqlContext.read.parquet(path).schema.map(_.name) == Seq("j", "i"))
+    }
+  }
 }

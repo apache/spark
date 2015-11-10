@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
@@ -219,8 +219,6 @@ case class Aggregate(
     !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  lazy val newAggregation: Option[Aggregate] = Utils.tryConvert(this)
-
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
 }
 
@@ -305,6 +303,9 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
+
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
 
   override def statistics: Statistics = {
     // TODO shouldn't we factor in the size of the projection versus the size of the backing child
@@ -505,7 +506,7 @@ case class AppendColumn[T, U](
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
   def apply[K : Encoder, T : Encoder, U : Encoder](
-      func: (K, Iterator[T]) => Iterator[U],
+      func: (K, Iterator[T]) => TraversableOnce[U],
       groupingAttributes: Seq[Attribute],
       child: LogicalPlan): MapGroups[K, T, U] = {
     new MapGroups(
@@ -525,7 +526,7 @@ object MapGroups {
  * object representation of all the rows with that key.
  */
 case class MapGroups[K, T, U](
-    func: (K, Iterator[T]) => Iterator[U],
+    func: (K, Iterator[T]) => TraversableOnce[U],
     kEncoder: ExpressionEncoder[K],
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],
@@ -538,7 +539,7 @@ case class MapGroups[K, T, U](
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
   def apply[K : Encoder, Left : Encoder, Right : Encoder, R : Encoder](
-      func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+      func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
       left: LogicalPlan,
@@ -562,7 +563,7 @@ object CoGroup {
  * right children.
  */
 case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
     kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
