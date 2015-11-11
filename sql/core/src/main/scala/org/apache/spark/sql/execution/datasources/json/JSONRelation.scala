@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.CharArrayWriter
+import java.io.{IOException, CharArrayWriter}
 
 import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
@@ -93,10 +93,13 @@ private[sql] class JSONRelation(
     val job = new Job(sqlContext.sparkContext.hadoopConfiguration)
     val conf = SparkHadoopUtil.get.getConfigurationFromJobContext(job)
 
-    val paths = inputPaths.map(_.getPath)
+    val rddInputPaths = inputPaths.map(_.getPath)
 
-    if (paths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, paths: _*)
+    if (rddInputPaths.nonEmpty) {
+      FileInputFormat.setInputPaths(job, rddInputPaths: _*)
+    } else {
+      throw new IOException("Input paths do not exist or are empty directories, "
+            + "Input Paths=" + paths.mkString(","))
     }
 
     sqlContext.sparkContext.hadoopRDD(
@@ -139,6 +142,10 @@ private[sql] class JSONRelation(
       iterator.map(unsafeProjection)
     }
   }
+
+  override def inputExists: Boolean = inputRDD.isDefined || super.inputExists
+
+  override def readFromHDFS: Boolean = !inputRDD.isDefined
 
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>

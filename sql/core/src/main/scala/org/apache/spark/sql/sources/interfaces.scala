@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.IOException
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -428,6 +430,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
+
+    var inputExists: Boolean = !paths.isEmpty
+
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
@@ -440,7 +445,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
+          inputExists = inputExists && fs.exists(qualified)
           logInfo(s"Listing $qualified on driver")
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
         }.filterNot { status =>
@@ -613,8 +618,31 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    if (!inputExists) {
+      throw new IOException("Input paths do not exist, input paths="
+        + inputPaths.mkString("[", ",", "]"))
+    } else {
+      if (inputStatuses.isEmpty && readFromHDFS) {
+        logWarning("Input paths are empty, input paths=" + inputPaths.mkString("[", ",", "]"))
+        sqlContext.sparkContext.emptyRDD[InternalRow]
+      } else {
+        buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+      }
+    }
   }
+
+  /**
+   * Most of time, HadoopFsRelation should check the inputPaths, but for some cases it is not,
+   * e.g. JsonRelation may read from RDD[String]
+   */
+  def inputExists: Boolean = fileStatusCache.inputExists
+
+  /**
+   * Most of time, HadoopFsRelation should read from hdfs, but some cases it is not,
+   * e.g. JsonRelation may read from RDD[String]
+   * @return
+   */
+  def readFromHDFS: Boolean = true
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
