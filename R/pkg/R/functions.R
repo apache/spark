@@ -877,12 +877,25 @@ setMethod("rtrim",
             column(jc)
           })
 
-#' @rdname stddev
+#' sd
+#'
+#' Aggregate function: alias for \link{stddev_samp}
+#'
+#' @rdname sd
 #' @name sd
 #' @family agg_funcs
+#' @seealso \link{stddev_pop}, \link{stddev_samp}
+#' @export
+#' @examples
+#'\dontrun{
+#'stddev(df$c)
+#'select(df, stddev(df$age))
+#'agg(df, sd(df$age))
+#'}
 setMethod("sd",
           signature(x = "Column"),
           function(x, na.rm = FALSE) {
+            # In R, sample standard deviation is calculated with the sd() function.
             stddev_samp(x)
           })
 
@@ -1015,35 +1028,12 @@ setMethod("soundex",
             column(jc)
           })
 
-#' stddev
-#'
-#' Aggregate function: alias for \link{stddev_samp}
-#'
-#' @rdname stddev
+#' @rdname sd
 #' @name stddev
-#' @family agg_funcs
-#' @export
-#' @examples \dontrun{stddev(df$c)}
 setMethod("stddev",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev", x@jc)
-            column(jc)
-          })
-
-#' stddev_samp
-#'
-#' Aggregate function: returns the unbiased sample standard deviation of the expression in a group.
-#'
-#' @rdname stddev_samp
-#' @name stddev_samp
-#' @family agg_funcs
-#' @export
-#' @examples \dontrun{stddev_samp(df$c)}
-setMethod("stddev_samp",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "stddev_samp", x@jc)
             column(jc)
           })
 
@@ -1054,12 +1044,30 @@ setMethod("stddev_samp",
 #' @rdname stddev_pop
 #' @name stddev_pop
 #' @family agg_funcs
+#' @seealso \link{sd}, \link{stddev_samp}
 #' @export
 #' @examples \dontrun{stddev_pop(df$c)}
 setMethod("stddev_pop",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev_pop", x@jc)
+            column(jc)
+          })
+
+#' stddev_samp
+#'
+#' Aggregate function: returns the unbiased sample standard deviation of the expression in a group.
+#'
+#' @rdname stddev_samp
+#' @name stddev_samp
+#' @family agg_funcs
+#' @seealso \link{stddev_pop}, \link{sd}
+#' @export
+#' @examples \dontrun{stddev_samp(df$c)}
+setMethod("stddev_samp",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "stddev_samp", x@jc)
             column(jc)
           })
 
@@ -1257,44 +1265,34 @@ setMethod("upper",
             column(jc)
           })
 
-#' @family agg_funcs
-#' @rdname variance
-#' @name var
-setMethod("var",
-          signature(x = "Column"),
-          function(x, y = NULL, na.rm = FALSE, use) {
-            var_samp(x)
-          })
-
-#' variance
+#' var
 #'
 #' Aggregate function: alias for \link{var_samp}.
 #'
-#' @rdname variance
-#' @name variance
+#' @rdname var
+#' @name var
 #' @family agg_funcs
+#' @seealso \link{var_pop}, \link{var_samp}
 #' @export
-#' @examples \dontrun{variance(df$c)}
+#' @examples
+#'\dontrun{
+#'variance(df$c)
+#'select(df, var_pop(df$age))
+#'agg(df, var(df$age))
+#'}
+setMethod("var",
+          signature(x = "Column"),
+          function(x, y = NULL, na.rm = FALSE, use) {
+            # In R, sample variance is calculated with the var() function.
+            var_samp(x)
+          })
+
+#' @rdname var
+#' @name variance
 setMethod("variance",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "variance", x@jc)
-            column(jc)
-          })
-
-#' var_samp
-#'
-#' Aggregate function: returns the unbiased variance of the values in a group.
-#'
-#' @rdname var_samp
-#' @name var_samp
-#' @family agg_funcs
-#' @export
-#' @examples \dontrun{var_samp(df$c)}
-setMethod("var_samp",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "var_samp", x@jc)
             column(jc)
           })
 
@@ -1305,12 +1303,30 @@ setMethod("var_samp",
 #' @rdname var_pop
 #' @name var_pop
 #' @family agg_funcs
+#' @seealso \link{var}, \link{var_samp}
 #' @export
 #' @examples \dontrun{var_pop(df$c)}
 setMethod("var_pop",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "var_pop", x@jc)
+            column(jc)
+          })
+
+#' var_samp
+#'
+#' Aggregate function: returns the unbiased variance of the values in a group.
+#'
+#' @rdname var_samp
+#' @name var_samp
+#' @family agg_funcs
+#' @seealso \link{var_pop}, \link{var}
+#' @export
+#' @examples \dontrun{var_samp(df$c)}
+setMethod("var_samp",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "var_samp", x@jc)
             column(jc)
           })
 

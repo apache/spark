@@ -983,7 +983,7 @@ test_that("when(), otherwise() and ifelse() on a DataFrame", {
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, 0, 1)))[, 1], c(1, 0))
 })
 
-test_that("group by", {
+test_that("group by, agg functions", {
   df <- jsonFile(sqlContext, jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
   expect_equal(1, count(df1))
@@ -1020,8 +1020,8 @@ test_that("group by", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-  expect_equal(30, collect(max(gd))[1,2])
-  expect_equal(1, collect(count(gd))[1,2])
+  expect_equal(30, collect(max(gd))[1, 2])
+  expect_equal(1, collect(count(gd))[1, 2])
 
   mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
                   "{\"name\":\"ID1\", \"value\": \"10\"}",
@@ -1037,10 +1037,31 @@ test_that("group by", {
 
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
-
   expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
   expect_equal(0, df7_local[df7_local$name == "ID2",][1, 2])
+
+  mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
+                  "{\"name\":\"Andy\", \"age\":30}",
+                  "{\"name\":\"Justin\", \"age\":19}",
+                  "{\"name\":\"Justin\", \"age\":1}")
+  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines3, jsonPath3)
+  df8 <- jsonFile(sqlContext, jsonPath3)
+  gd3 <- groupBy(df8, "name")
+  gd3_local <- collect(sum(gd3))
+  expect_equal(60, gd3_local[gd3_local$name == "Andy",][1, 2])
+  expect_equal(20, gd3_local[gd3_local$name == "Justin",][1, 2])
+
+  expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
+  gd3_local <- collect(agg(gd3, var(df8$age)))
+  expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
+
+  # make sure base:: or stats::sd, var are working
+  expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
+  expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
+
   unlink(jsonPath2)
+  unlink(jsonPath3)
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {
@@ -1268,7 +1289,7 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(transformedDF)[4], "newAge2")
   expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
 
-  # test if transform on local data frames works
+  # test if base::transform on local data frames works
   # ensure the proper signature is used - otherwise this will fail to run
   attach(airquality)
   result <- transform(Ozone, logOzone = log(Ozone))
