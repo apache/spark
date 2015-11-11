@@ -230,6 +230,7 @@ class FileBasedWriteAheadLogSuite
       }
       val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
       assert(iterator.toSeq === testSeq)
+      assert(counter.getMax() > 1) // make sure we are doing a parallel computation!
       assert(counter.getMax() <= numThreads)
     } finally {
       tpool.shutdownNow()
