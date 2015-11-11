@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.JavaConversions
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -315,7 +313,7 @@ case class ScalaUDF(
     val rowClassName = Row.getClass.getName + ".MODULE$"
     val rowClass = classOf[Row].getName
     val internalRowClassName = classOf[InternalRow].getName
-    val javaConversionClassName = JavaConversions.getClass.getName + ".MODULE$"
+    val javaConversionClassName = scala.collection.JavaConversions.getClass.getName + ".MODULE$"
 
     // Generate code for input encoder
     val inputExpressionEncoderTerm = ctx.freshName("inputExpressionEncoder")
