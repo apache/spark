@@ -28,7 +28,6 @@ from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
-from pyspark.streaming.listener import StreamingListenerAdapter
 
 __all__ = ["StreamingContext"]
 
@@ -370,5 +369,5 @@ class StreamingContext(object):
         Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
         receiving system events related to streaming.
         """
-        streamingListenerAdapter = StreamingListenerAdapter(streamingListener)
-        self._jssc.addStreamingListener(streamingListenerAdapter)
+        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
+            self._jvm.PythonStreamingListenerWrapper(streamingListener)))

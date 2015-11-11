@@ -48,7 +48,7 @@ from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPar
 from pyspark.streaming.flume import FlumeUtils
 from pyspark.streaming.mqtt import MQTTUtils
 from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
-from pyspark.streaming.listener import StreamingListener, BatchInfo
+from pyspark.streaming.listener import StreamingListener
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -417,13 +417,13 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosSubmitted = []
 
         def onBatchSubmitted(self, batchSubmitted):
-            self.batchInfosSubmitted.append(batchSubmitted.batchInfo)
+            self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
 
         def onBatchStarted(self, batchStarted):
-            self.batchInfosStarted.append(batchStarted.batchInfo)
+            self.batchInfosStarted.append(batchStarted.batchInfo())
 
         def onBatchCompleted(self, batchCompleted):
-            self.batchInfosCompleted.append(batchCompleted.batchInfo)
+            self.batchInfosCompleted.append(batchCompleted.batchInfo())
 
     def test_batch_info_reports(self):
         batch_collector = self.BatchInfoCollector()
@@ -444,23 +444,20 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         self.assertEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
 
-            self.assertIsNone(info.schedulingDelay())
-            self.assertIsNone(info.processingDelay())
-            self.assertIsNone(info.totalDelay())
+            self.assertEqual(info.schedulingDelay(), -1L)
+            self.assertEqual(info.processingDelay(), -1L)
+            self.assertEqual(info.totalDelay(), -1L)
 
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
-            self.assertIsNotNone(info.schedulingDelay())
             self.assertGreaterEqual(info.schedulingDelay(), 0)
-            self.assertIsNone(info.processingDelay())
-            self.assertIsNone(info.totalDelay())
+            self.assertEqual(info.processingDelay(), -1L)
+            self.assertEqual(info.totalDelay(), -1L)
 
         self.assertEqual(len(batchInfosCompleted), 4)
 
         for info in batchInfosCompleted:
-            self.assertIsNotNone(info.schedulingDelay())
-            self.assertIsNotNone(info.processingDelay())
-            self.assertIsNotNone(info.totalDelay())
+
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertGreaterEqual(info.processingDelay(), 0)
             self.assertGreaterEqual(info.totalDelay(), 0)
