@@ -38,7 +38,7 @@ class PlannerSuite extends SharedSQLContext {
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = sqlContext.planner
     import planner._
-    val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
+    val plannedOption = Aggregation(query).headOption
     val planned =
       plannedOption.getOrElse(
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))

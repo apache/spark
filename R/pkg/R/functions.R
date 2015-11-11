@@ -1339,7 +1339,7 @@ setMethod("pmod", signature(y = "Column"),
 #' @export
 setMethod("approxCountDistinct",
           signature(x = "Column"),
-          function(x, rsd = 0.95) {
+          function(x, rsd = 0.05) {
             jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })

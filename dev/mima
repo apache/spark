@@ -38,7 +38,7 @@ generate_mima_ignore() {
 # it did not process the new classes (which are in assembly jar).
 generate_mima_ignore
 
-export SPARK_CLASSPATH="`find lib_managed \( -name '*spark*jar' -a -type f \) | tr "\\n" ":"`"
+export SPARK_CLASSPATH="$(build/sbt "export oldDeps/fullClasspath" | tail -n1)"
 echo "SPARK_CLASSPATH=$SPARK_CLASSPATH"
 
 generate_mima_ignore
