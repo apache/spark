@@ -795,14 +795,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       val df = sqlContext.createDataFrame(rdd, schema)
 
       val allColumns = df.schema.fields.map(f => col(f.name))
-      val expectedAnaswer =
+      val expectedAnswer =
         data
           .find(r => r.getInt(0) == 50)
           .getOrElse(fail("A row with id 50 should be the expected answer."))
       checkAnswer(
         df.groupBy().agg(udaf(allColumns: _*)),
         // udaf returns a Row as the output value.
-        Row(expectedAnaswer)
+        Row(expectedAnswer)
       )
     }
   }
