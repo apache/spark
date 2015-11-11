@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.util.{Iterator => JIterator}
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.function.{Function2 => JFunction2, Function3 => JFunction3, _}
+import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, Encoder}
+import org.apache.spark.sql.catalyst.encoders.{FlatEncoder, ExpressionEncoder, encoderFor, Encoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -43,27 +41,14 @@ import org.apache.spark.sql.execution.QueryExecution
  * after Spark 1.6.
  */
 @Experimental
-class GroupedDataset[K, T] private[sql](
-    private val kEncoder: Encoder[K],
-    private val tEncoder: Encoder[T],
+class GroupedDataset[K : Encoder, T : Encoder] private[sql](
     queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
-  private implicit val kEnc = kEncoder match {
-    case e: ExpressionEncoder[K] => e.unbind(groupingAttributes).resolve(groupingAttributes)
-    case other =>
-      throw new UnsupportedOperationException("Only expression encoders are currently supported")
-  }
+  private implicit val kEnc = encoderFor[K]
 
-  private implicit val tEnc = tEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(dataAttributes)
-    case other =>
-      throw new UnsupportedOperationException("Only expression encoders are currently supported")
-  }
-
-  /** Encoders for built in aggregations. */
-  private implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
+  private implicit val tEnc = encoderFor[T]
 
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
@@ -78,8 +63,6 @@ class GroupedDataset[K, T] private[sql](
    */
   def asKey[L : Encoder]: GroupedDataset[L, T] =
     new GroupedDataset(
-      encoderFor[L],
-      tEncoder,
       queryExecution,
       dataAttributes,
       groupingAttributes)
@@ -144,7 +127,6 @@ class GroupedDataset[K, T] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggrecations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val aliases = (groupingAttributes ++ columns.map(_.expr)).map {
@@ -166,18 +148,10 @@ class GroupedDataset[K, T] private[sql](
 
     val columnEncoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]])
 
-    // Rebind the encoders to the nested schema that will be produced by the aggregation.
-    val encoders = (kEnc +: columnEncoders).zip(execution.analyzed.output).map {
-      case (e: ExpressionEncoder[_], a) if !e.flat =>
-        e.nested(a).resolve(execution.analyzed.output)
-      case (e, a) =>
-        e.unbind(a :: Nil).resolve(execution.analyzed.output)
-    }
-
     new Dataset(
       sqlContext,
       execution,
-      ExpressionEncoder.tuple(encoders))
+      ExpressionEncoder.tuple(columnEncoders))
   }
 
   /**
@@ -219,7 +193,7 @@ class GroupedDataset[K, T] private[sql](
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
    * for that key.
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as[Long])
+  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(FlatEncoder[Long]))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
@@ -230,7 +204,7 @@ class GroupedDataset[K, T] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[T], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit def uEnc: Encoder[U] = other.tEncoder
+    implicit def uEnc: Encoder[U] = other.tEnc
     new Dataset[R](
       sqlContext,
       CoGroup(

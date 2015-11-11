@@ -97,7 +97,7 @@ case class TypedAggregateExpression(
     })
 
   val bAttributes = bEncoder.schema.toAttributes
-  lazy val boundB = bEncoder.resolve(bAttributes).bind(bAttributes)
+  lazy val boundB = bEncoder.bind(bAttributes)
 
   private def updateBuffer(buffer: MutableRow, value: InternalRow): Unit = {
     // todo: need a more neat way to assign the value.

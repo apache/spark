@@ -62,15 +62,11 @@ import org.apache.spark.sql.types.StructType
 class Dataset[T] private[sql](
     @transient val sqlContext: SQLContext,
     @transient val queryExecution: QueryExecution,
-    unresolvedEncoder: Encoder[T]) extends Queryable with Serializable {
+    encoder: Encoder[T]) extends Queryable with Serializable {
 
-  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
-  private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(queryExecution.analyzed.output)
-    case _ => throw new IllegalArgumentException("Only expression encoders are currently supported")
-  }
+  implicit val enc: ExpressionEncoder[T] = encoderFor(encoder)
 
-  private implicit def classTag = encoder.clsTag
+  private implicit def classTag = enc.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -80,7 +76,7 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def schema: StructType = encoder.schema
+  def schema: StructType = enc.schema
 
   /* ************* *
    *  Conversions  *
@@ -133,10 +129,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
-    val tEnc = encoderFor[T]
-    val input = queryExecution.analyzed.output
+    val bound = enc.bind(queryExecution.analyzed.output)
     queryExecution.toRdd.mapPartitions { iter =>
-      val bound = tEnc.bind(input)
       iter.map(bound.fromRow)
     }
   }
@@ -294,12 +288,10 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = queryExecution.analyzed
-    val withGroupingKey = AppendColumn(func, inputPlan)
+    val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
-      encoderFor[K].resolve(withGroupingKey.newColumns),
-      encoderFor[T].bind(inputPlan.output),
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
@@ -319,11 +311,9 @@ class Dataset[T] private[sql](
     val keyAttributes = executed.analyzed.output.takeRight(cols.size)
 
     new GroupedDataset(
-      RowEncoder(keyAttributes.toStructType),
-      encoderFor[T],
       executed,
       dataAttributes,
-      keyAttributes)
+      keyAttributes)(RowEncoder(keyAttributes.toStructType), enc)
   }
 
   /**
@@ -371,13 +361,7 @@ class Dataset[T] private[sql](
     val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
     val unresolvedPlan = Project(aliases, logicalPlan)
     val execution = new QueryExecution(sqlContext, unresolvedPlan)
-    // Rebind the encoders to the nested schema that will be produced by the select.
-    val encoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
-      case (e: ExpressionEncoder[_], a) if !e.flat =>
-        e.nested(a.toAttribute).resolve(execution.analyzed.output)
-      case (e, a) =>
-        e.unbind(a.toAttribute :: Nil).resolve(execution.analyzed.output)
-    }
+    val encoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]])
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
   }
 
@@ -485,28 +469,20 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
-    val leftData = this.encoder match {
+    val leftData = this.enc match {
       case e if e.flat => Alias(left.output.head, "_1")()
       case _ => Alias(CreateStruct(left.output), "_1")()
     }
-    val rightData = other.encoder match {
+    val rightData = other.enc match {
       case e if e.flat => Alias(right.output.head, "_2")()
       case _ => Alias(CreateStruct(right.output), "_2")()
     }
-    val leftEncoder =
-      if (encoder.flat) encoder else encoder.nested(leftData.toAttribute)
-    val rightEncoder =
-      if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(
-        leftEncoder,
-        rightEncoder.rebind(right.output, left.output ++ right.output))
 
     withPlan[(T, U)](other) { (left, right) =>
       Project(
         leftData :: rightData :: Nil,
         Join(left, right, Inner, Some(condition.expr)))
-    }
+    }(ExpressionEncoder.tuple(enc, other.enc))
   }
 
   /* ************************** *
@@ -568,7 +544,7 @@ class Dataset[T] private[sql](
   private[sql] def logicalPlan = queryExecution.analyzed
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
-    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), encoder)
+    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), enc)
 
   private[sql] def withPlan[R : Encoder](
       other: Dataset[_])(

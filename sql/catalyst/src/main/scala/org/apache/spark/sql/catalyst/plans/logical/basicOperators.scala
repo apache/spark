@@ -467,10 +467,10 @@ case class MapPartitions[T, U](
 }
 
 /** Factory for constructing new `AppendColumn` nodes. */
-object AppendColumn {
-  def apply[T : Encoder, U : Encoder](func: T => U, child: LogicalPlan): AppendColumn[T, U] = {
+object AppendColumns {
+  def apply[T : Encoder, U : Encoder](func: T => U, child: LogicalPlan): AppendColumns[T, U] = {
     val attrs = encoderFor[U].schema.toAttributes
-    new AppendColumn[T, U](func, encoderFor[T], encoderFor[U], attrs, child)
+    new AppendColumns[T, U](func, encoderFor[T], encoderFor[U], attrs, child)
   }
 }
 
@@ -479,7 +479,7 @@ object AppendColumn {
  * resulting columns at the end of the input row. tEncoder/uEncoder are used respectively to
  * decode/encode from the JVM object representation expected by `func.`
  */
-case class AppendColumn[T, U](
+case class AppendColumns[T, U](
     func: T => U,
     tEncoder: ExpressionEncoder[T],
     uEncoder: ExpressionEncoder[U],
