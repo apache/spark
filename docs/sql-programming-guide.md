@@ -982,7 +982,8 @@ when a table is dropped.
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.
+of the original data. When writing Parquet files, all columns are automatically converted to be nullable for 
+compatibility reasons.
 
 ### Loading Data Programmatically
 
@@ -2287,7 +2288,7 @@ Several caching related features are not supported yet:
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
+(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

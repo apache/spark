@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -62,7 +62,7 @@ import org.apache.spark.sql.types.StructType
 class Dataset[T] private[sql](
     @transient val sqlContext: SQLContext,
     @transient val queryExecution: QueryExecution,
-    unresolvedEncoder: Encoder[T]) extends Serializable {
+    unresolvedEncoder: Encoder[T]) extends Queryable with Serializable {
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
@@ -358,7 +358,7 @@ class Dataset[T] private[sql](
    * }}}
    * @since 1.6.0
    */
-  def select[U1: Encoder](c1: TypedColumn[U1]): Dataset[U1] = {
+  def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
     new Dataset[U1](sqlContext, Project(Alias(c1.expr, "_1")() :: Nil, logicalPlan))
   }
 
@@ -367,7 +367,7 @@ class Dataset[T] private[sql](
    * code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
-  protected def selectUntyped(columns: TypedColumn[_]*): Dataset[_] = {
+  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
     val unresolvedPlan = Project(aliases, logicalPlan)
     val execution = new QueryExecution(sqlContext, unresolvedPlan)
@@ -385,7 +385,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by computing the given [[Column]] expressions for each element.
    * @since 1.6.0
    */
-  def select[U1, U2](c1: TypedColumn[U1], c2: TypedColumn[U2]): Dataset[(U1, U2)] =
+  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
     selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
 
   /**
@@ -393,9 +393,9 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3]): Dataset[(U1, U2, U3)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
     selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
 
   /**
@@ -403,10 +403,10 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3],
-      c4: TypedColumn[U4]): Dataset[(U1, U2, U3, U4)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
     selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
 
   /**
@@ -414,11 +414,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4, U5](
-      c1: TypedColumn[U1],
-      c2: TypedColumn[U2],
-      c3: TypedColumn[U3],
-      c4: TypedColumn[U4],
-      c5: TypedColumn[U5]): Dataset[(U1, U2, U3, U4, U5)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /* **************** *
