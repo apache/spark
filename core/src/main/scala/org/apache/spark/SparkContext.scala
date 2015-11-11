@@ -1448,18 +1448,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutors(executorIds: Seq[String], force: Boolean = true): Boolean = {
+  def killExecutors(executorIds: Seq[String]): Boolean =
+  {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds, force)
+        b.killExecutors(executorIds)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
     }
   }
-
-  def killExecutors(executorIds: Seq[String]): Boolean =
-    killExecutors(executorIds, force = true)
 
   /**
    * :: DeveloperApi ::
@@ -1474,7 +1472,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutor(executorId: String): Boolean =
-    super.killExecutor(executorId, true)
+    super.killExecutor(executorId)
 
   /**
    * Request that the cluster manager kill the specified executor without adjusting the
@@ -1493,7 +1491,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true, true)
+        b.killExecutors(Seq(executorId), replace = true, force = false)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false

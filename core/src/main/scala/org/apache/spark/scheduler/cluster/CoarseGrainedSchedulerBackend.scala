@@ -411,9 +411,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutors(
-      executorIds: Seq[String],
-      force: Boolean): Boolean = synchronized {
-    killExecutors(executorIds, replace = false, force)
+      executorIds: Seq[String]): Boolean = synchronized {
+    killExecutors(executorIds, replace = false, force = false)
   }
 
   /**
@@ -421,6 +420,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    *
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
+   * @param force whether to force kill busy executors
    * @return whether the kill request is acknowledged.
    */
   final def killExecutors(
@@ -458,8 +458,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
-    // executorsToKill may be empty
-    doKillExecutors(executorsToKill)
+    !executorsToKill.isEmpty && doKillExecutors(executorsToKill)
   }
 
   /**

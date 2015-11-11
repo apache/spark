@@ -511,13 +511,6 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
-
-    // Executor is added to remove by misjudgment due to async listener making it as idle).
-    // see SPARK-9552
-    if (executorsPendingToRemove.contains(executorId)) {
-      // Rescue the executor from pending to remove list
-      executorsPendingToRemove.remove(executorId)
-    }
   }
 
   /**

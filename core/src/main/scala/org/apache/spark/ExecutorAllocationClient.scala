@@ -52,19 +52,12 @@ private[spark] trait ExecutorAllocationClient {
    * Request that the cluster manager kill the specified executors.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def killExecutors(executorIds: Seq[String], force: Boolean): Boolean
+  def killExecutors(executorIds: Seq[String]): Boolean
 
   /**
    * Request that the cluster manager kill the specified executor.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  private[spark] def killExecutor(executorId: String): Boolean =
-    killExecutors(Seq(executorId), force = false)
-
-  /**
-   * Request that the cluster manager kill the specified executor.
-   * @return whether the request is acknowledged by the cluster manager.
-   */
-  def killExecutor(executorId: String, force: Boolean): Boolean =
-    killExecutors(Seq(executorId), force)
+  def killExecutor(executorId: String): Boolean =
+    killExecutors(Seq(executorId))
 }
