@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.streaming.dstream.{TrackStateDStream, TrackStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
@@ -166,7 +167,8 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       sum
     }
 
-    testOperation(inputData, StateSpec.function(trackStateFunc), outputData, stateData)
+    testOperation[String, Int, Int](
+      inputData, StateSpec.function(trackStateFunc), outputData, stateData)
   }
 
   test("trackStateByKey - basic operations with advanced API") {
@@ -211,6 +213,55 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     }
 
     testOperation(inputData, StateSpec.function(trackStateFunc), outputData, stateData)
+  }
+
+  test("trackStateByKey - type inferencing and class tags") {
+
+    // Simple track state function with value as Int, state as Double and emitted type as Double
+    val simpleFunc = (value: Option[Int], state: State[Double]) => {
+      0L
+    }
+
+    // Advanced track state function with key as String, value as Int, state as Double and
+    // emitted type as Double
+    val advancedFunc = (time: Time, key: String, value: Option[Int], state: State[Double]) => {
+      Some(0L)
+    }
+
+    def testTypes(dstream: TrackStateDStream[_, _, _, _]): Unit = {
+      val dstreamImpl = dstream.asInstanceOf[TrackStateDStreamImpl[_, _, _, _]]
+      assert(dstreamImpl.keyClass === classOf[String])
+      assert(dstreamImpl.valueClass === classOf[Int])
+      assert(dstreamImpl.stateClass === classOf[Double])
+      assert(dstreamImpl.emittedClass === classOf[Long])
+    }
+
+    val inputStream = new TestInputStream[(String, Int)](ssc, Seq.empty, numPartitions = 2)
+
+    // Defining StateSpec inline with trackStateByKey and simple function implicitly gets the types
+    val simpleFunctionStateStream1 = inputStream.trackStateByKey(
+      StateSpec.function(simpleFunc).numPartitions(1))
+    testTypes(simpleFunctionStateStream1)
+
+    // Separately defining StateSpec with simple function requires explicitly specifying types
+    val simpleFuncSpec = StateSpec.function[String, Int, Double, Long](simpleFunc)
+    val simpleFunctionStateStream2 = inputStream.trackStateByKey(simpleFuncSpec)
+    testTypes(simpleFunctionStateStream2)
+
+    // Separately defining StateSpec with advanced function implicitly gets the types
+    val advFuncSpec1 = StateSpec.function(advancedFunc)
+    val advFunctionStateStream1 = inputStream.trackStateByKey(advFuncSpec1)
+    testTypes(advFunctionStateStream1)
+
+    // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
+    val advFunctionStateStream2 = inputStream.trackStateByKey(
+      StateSpec.function(simpleFunc).numPartitions(1))
+    testTypes(advFunctionStateStream2)
+
+    // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
+    val advFuncSpec2 = StateSpec.function[String, Int, Double, Long](advancedFunc)
+    val advFunctionStateStream3 = inputStream.trackStateByKey[Double, Long](advFuncSpec2)
+    testTypes(advFunctionStateStream3)
   }
 
   test("trackStateByKey - states as emitted records") {

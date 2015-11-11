@@ -150,15 +150,15 @@ object StateSpec {
    * @tparam StateType    Class of the states data
    * @tparam EmittedType  Class of the emitted data
    */
-  def function[ValueType, StateType, EmittedType](
+  def function[KeyType, ValueType, StateType, EmittedType](
       trackingFunction: (Option[ValueType], State[StateType]) => EmittedType
-    ): StateSpec[Any, ValueType, StateType, EmittedType] = {
+    ): StateSpec[KeyType, ValueType, StateType, EmittedType] = {
     ClosureCleaner.clean(trackingFunction, checkSerializable = true)
     val wrappedFunction =
       (time: Time, key: Any, value: Option[ValueType], state: State[StateType]) => {
         Some(trackingFunction(value, state))
       }
-    new StateSpecImpl[Any, ValueType, StateType, EmittedType](wrappedFunction)
+    new StateSpecImpl(wrappedFunction)
   }
 }
 

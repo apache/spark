@@ -39,7 +39,7 @@ import org.apache.spark.streaming.rdd.{TrackStateRDD, TrackStateRDDRecord}
  * @tparam EmittedType Class of the emitted records
  */
 @Experimental
-sealed abstract class TrackStateDStream[KeyType, StateType, EmittedType: ClassTag](
+sealed abstract class TrackStateDStream[KeyType, ValueType, StateType, EmittedType: ClassTag](
     ssc: StreamingContext) extends DStream[EmittedType](ssc) {
 
   /** Return a pair DStream where each RDD is the snapshot of the state of all the keys. */
@@ -51,7 +51,7 @@ private[streaming] class TrackStateDStreamImpl[
     KeyType: ClassTag, ValueType: ClassTag, StateType: ClassTag, EmittedType: ClassTag](
     dataStream: DStream[(KeyType, ValueType)],
     spec: StateSpecImpl[KeyType, ValueType, StateType, EmittedType])
-  extends TrackStateDStream[KeyType, StateType, EmittedType](dataStream.context) {
+  extends TrackStateDStream[KeyType, ValueType, StateType, EmittedType](dataStream.context) {
 
   private val internalStream =
     new InternalTrackStateDStream[KeyType, ValueType, StateType, EmittedType](dataStream, spec)
@@ -78,6 +78,14 @@ private[streaming] class TrackStateDStreamImpl[
     internalStream.flatMap {
       _.stateMap.getAll().map { case (k, s, _) => (k, s) }.toTraversable }
   }
+
+  def keyClass: Class[_] = implicitly[ClassTag[KeyType]].runtimeClass
+
+  def valueClass: Class[_] = implicitly[ClassTag[ValueType]].runtimeClass
+
+  def stateClass: Class[_] = implicitly[ClassTag[StateType]].runtimeClass
+
+  def emittedClass: Class[_] = implicitly[ClassTag[EmittedType]].runtimeClass
 }
 
 /**
