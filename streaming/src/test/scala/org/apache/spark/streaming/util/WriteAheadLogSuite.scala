@@ -36,7 +36,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfter}
+import org.scalatest.{PrivateMethodTester, BeforeAndAfterEach, BeforeAndAfter}
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.streaming.scheduler._
@@ -314,7 +314,11 @@ class FileBasedWriteAheadLogWithFileCloseAfterWriteSuite
 class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     allowBatching = true,
     closeFileAfterWrite = false,
-    "BatchedWriteAheadLog") with MockitoSugar with BeforeAndAfterEach with Eventually {
+    "BatchedWriteAheadLog")
+  with MockitoSugar
+  with BeforeAndAfterEach
+  with Eventually
+  with PrivateMethodTester {
 
   import BatchedWriteAheadLog._
   import WriteAheadLogSuite._
@@ -324,6 +328,8 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   private var walBatchingThreadPool: ThreadPoolExecutor = _
   private var walBatchingExecutionContext: ExecutionContextExecutorService = _
   private val sparkConf = new SparkConf()
+
+  private val queueLength = PrivateMethod[Int]('getQueueLength)
 
   override def beforeEach(): Unit = {
     wal = mock[WriteAheadLog]
@@ -390,13 +396,14 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     eventually(timeout(1 second)) {
       assert(blockingWal.isBlocked)
     }
-    // rest of the records will be batched while it takes 3 to get written
+    // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
     writeAsync(batchedWal, event3, 8L)
     writeAsync(batchedWal, event4, 12L)
     writeAsync(batchedWal, event5, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
+      assert(batchedWal.invokePrivate(queueLength()) === 4)
     }
     blockingWal.allowWrite()
 
@@ -404,6 +411,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val buffer2 = wrapArrayArrayByte(Array(event2, event3, event4, event5))
 
     eventually(timeout(1 second)) {
+      assert(batchedWal.invokePrivate(queueLength()) === 0)
       verify(wal, times(1)).write(meq(buffer1), meq(3L))
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
