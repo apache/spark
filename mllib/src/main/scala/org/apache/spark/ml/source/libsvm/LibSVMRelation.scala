@@ -48,7 +48,7 @@ import org.apache.spark.util.SerializableConfiguration
  */
 private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val vectorType: String)
     (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation with Logging with Serializable {
+  extends HadoopFsRelation with Serializable {
 
   override def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus])
     : RDD[Row] = {
