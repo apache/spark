@@ -60,8 +60,8 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
     if (in instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
       try {
-        bodyLength = resp.buffer.size();
-        body = resp.buffer.convertToNetty();
+        bodyLength = resp.body.size();
+        body = resp.body.convertToNetty();
       } catch (Exception e) {
         // Re-encode this message as BlockFetchFailure.
         logger.error(String.format("Error opening block %s for client %s",
