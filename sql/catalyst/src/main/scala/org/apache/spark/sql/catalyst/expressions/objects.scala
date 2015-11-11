@@ -48,7 +48,7 @@ case class StaticInvoke(
     arguments: Seq[Expression] = Nil,
     propagateNull: Boolean = true) extends Expression {
 
-  private val objectName = staticObject match {
+  val objectName = staticObject match {
     case c: Class[_] => c.getName
     case other => other.getClass.getName.stripSuffix("$")
   }
@@ -174,22 +174,6 @@ case class Invoke(
       $objNullCheck
     """
   }
-}
-
-case class SerializeUsingKryo(child: Expression) extends UnaryExpression {
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
-
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    ""
-  }
-
-  override def dataType: DataType = ObjectType(SerializeUsingKryo.objectClass)
-}
-
-object SerializeUsingKryo {
-  val objectClass: Class[Object] = new Object().getClass.asInstanceOf[Class[Object]]
 }
 
 /**
