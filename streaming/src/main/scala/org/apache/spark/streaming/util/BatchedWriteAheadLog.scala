@@ -182,6 +182,9 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       buffer.clear()
     }
   }
+
+  /** Method for querying the queue length. Should only be used in tests. */
+  private def getQueueLength(): Int = walWriteQueue.size()
 }
 
 /** Static methods for aggregating and de-aggregating records. */
