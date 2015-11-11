@@ -313,7 +313,9 @@ case class ScalaUDF(
     val rowClassName = Row.getClass.getName + ".MODULE$"
     val rowClass = classOf[Row].getName
     val internalRowClassName = classOf[InternalRow].getName
+    // scalastyle:off
     val javaConversionClassName = scala.collection.JavaConversions.getClass.getName + ".MODULE$"
+    // scalastyle:on
 
     // Generate code for input encoder
     val inputExpressionEncoderTerm = ctx.freshName("inputExpressionEncoder")
