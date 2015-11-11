@@ -198,30 +198,49 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     }
   }
 
-  private def testAsyncAction[R](action : RDD[Int] => FutureAction[R]) : Unit = {
-    val executorInvoked = Promise[Unit]
+  private def testAsyncAction[R](action : RDD[Int] => FutureAction[R])
+    (starter : => Semaphore) : Unit = {
+    val executionContextInvoked = Promise[Unit]
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
-        executorInvoked.success(())
+        executionContextInvoked.success(())
       }
       override def reportFailure(t: Throwable): Unit = ()
     }
-    /*
-      We sleep here so that we get to the assertion before the job completes.
-      I wish there were a cleaner way to do this, but trying to use any sort of synchronization
-      with this fails due to task serialization.
-    */
-    val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => Thread.sleep(1000L); itr}
+    starter.drainPermits()
+    val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => starter.acquire(1); itr}
     val f = action(rdd)
     f.onComplete(_ => ())(fakeExecutionContext)
-    assert(!executorInvoked.isCompleted)
+    // Here we verify that registering the callback didn't cause a thread to be consumed.
+    assert(!executionContextInvoked.isCompleted)
+    // Now allow the executors to proceed with task processing.
+    starter.release(rdd.partitions.length)
+    // Waiting for the result verifies that the tasks were successfully processed.
+    // This mainly exists to verify that we didn't break task deserialization.
+    Await.result(executionContextInvoked.future, atMost = 15.seconds)
   }
 
   test("SimpleFutureAction callback must not consume a thread while waiting") {
-    testAsyncAction(_.countAsync())
+    testAsyncAction(_.countAsync())(AsyncRDDActionsSuite.simpleAsyncActionStart)
   }
 
   test("ComplexFutureAction callback must not consume a thread while waiting") {
-    testAsyncAction((_.takeAsync(100)))
+    testAsyncAction((_.takeAsync(100)))(AsyncRDDActionsSuite.complexAsyncActionStart)
   }
+}
+
+
+object AsyncRDDActionsSuite {
+  /*
+    These are used by the tests that verify that callbacks don't consume threads while waiting
+    to force the executors to wait for a "go" signal before processing, so that the job
+    doesn't complete before we've had a chance to verify that the ExecutionContext was not
+    invoked.
+
+    They must be placed here, in the companion object, rather than in the tests themselves,
+    so that they don't get serialized along with the tasks.
+    Each test gets its own semaphore so that the tests can be safely run in parallel if desired.
+   */
+  private val simpleAsyncActionStart = new Semaphore(0)
+  private val complexAsyncActionStart = new Semaphore(0)
 }
