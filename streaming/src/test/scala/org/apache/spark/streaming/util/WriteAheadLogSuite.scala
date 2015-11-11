@@ -198,7 +198,7 @@ class FileBasedWriteAheadLogSuite
 
   import WriteAheadLogSuite._
 
-  test("FileBasedWriteAheadLog - parallel readAll opens at most 'numThreads' files") {
+  test("FileBasedWriteAheadLog - seqToParIterator") {
     /*
      If the setting `closeFileAfterWrite` is enabled, we start generating a very large number of
      files. This causes recovery to take a very long time. In order to make it quicker, we
@@ -211,43 +211,24 @@ class FileBasedWriteAheadLogSuite
     class GetMaxCounter {
       private val value = new AtomicInteger()
       @volatile private var max: Int = 0
-      def increment(): Unit = {
+      def increment(): Unit = synchronized {
         val atInstant = value.incrementAndGet()
         if (atInstant > max) max = atInstant
       }
-      def decrement(): Unit = { value.decrementAndGet() }
-      def get(): Int = value.get()
-      def getMax(): Int = max
-    }
-    /**
-     * We need an object that can be iterated through, which will increment our counter once
-     * initialized, and decrement once closed. This way we can simulate how many "streams" will
-     * be opened during a real use case.
-     */
-    class ReaderObject(cnt: GetMaxCounter, value: Int) extends Iterator[Int] with Closeable {
-      cnt.increment()
-      private var returnedValue: Boolean = false
-      override def hasNext(): Boolean = !returnedValue
-      override def next(): Int = {
-        if (!returnedValue) {
-          returnedValue = true
-          value
-        } else {
-          -1
-        }
-      }
-      override def close(): Unit = {
-        cnt.decrement()
-      }
+      def decrement(): Unit = synchronized { value.decrementAndGet() }
+      def get(): Int = synchronized { value.get() }
+      def getMax(): Int = synchronized { max }
     }
     try {
       val testSeq = 1 to 64
       val counter = new GetMaxCounter()
       def handle(value: Int): Iterator[Int] = {
-        val reader = new ReaderObject(counter, value)
-        CompletionIterator[Int, Iterator[Int]](reader, reader.close)
+        new CompletionIterator[Int, Iterator[Int]](Iterator(value)) {
+          counter.increment()
+          override def completion() { counter.decrement() }
+        }
       }
-      val iterator = FileBasedWriteAheadLog.parallelIteratorCreator(tpool, testSeq, handle)
+      val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
       assert(iterator.toSeq === testSeq)
       assert(counter.getMax() <= numThreads)
     } finally {
@@ -641,6 +622,9 @@ object WriteAheadLogSuite {
       allowBatching: Boolean): Seq[String] = {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
     val data = wal.readAll().asScala.map(byteBufferToString).toSeq
+    // compute data, otherwise the lazy computation will fail because of wal.close() as the
+    // thread pool for parallel recovery gets killed
+    data.length
     wal.close()
     data
   }

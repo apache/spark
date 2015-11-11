@@ -137,7 +137,7 @@ private[streaming] class FileBasedWriteAheadLog(
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      parallelIteratorCreator(threadpool, logFilesToRead, readFile).asJava
+      seqToParIterator(threadpool, logFilesToRead, readFile).asJava
     }
   }
 
@@ -268,13 +268,14 @@ private[streaming] object FileBasedWriteAheadLog {
    * where we create `FileBasedWriteAheadLogReader`s during parallel recovery. We don't want to
    * open up `k` streams altogether where `k` is the size of the Seq that we want to parallelize.
    */
-  def parallelIteratorCreator[I, O](
-      threadpool: ThreadPoolExecutor,
+  def seqToParIterator[I, O](
+      tpool: ThreadPoolExecutor,
       source: Seq[I],
       handler: I => Iterator[O]): Iterator[O] = {
-    val taskSupport = new ThreadPoolTaskSupport(threadpool)
-    source.grouped(threadpool.getCorePoolSize).flatMap { element =>
-      val parallelCollection = element.par
+    val taskSupport = new ThreadPoolTaskSupport(tpool)
+    val groupSize = math.max(math.max(tpool.getCorePoolSize, tpool.getPoolSize), 8)
+    source.grouped(groupSize).flatMap { group =>
+      val parallelCollection = group.par
       parallelCollection.tasksupport = taskSupport
       parallelCollection.map(handler)
     }.flatten
