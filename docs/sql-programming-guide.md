@@ -982,7 +982,8 @@ when a table is dropped.
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.
+of the original data. When writing Parquet files, all columns are automatically converted to be nullable for 
+compatibility reasons.
 
 ### Loading Data Programmatically
 
@@ -1085,15 +1086,6 @@ teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
 for (teenName in collect(teenNames)) {
   cat(teenName, "\n")
 }
-{% endhighlight %}
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.sql("REFRESH TABLE my_table")
 {% endhighlight %}
 
 </div>
@@ -1636,8 +1628,10 @@ YARN cluster. The convenient way to do this is adding them through the `--jars` 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a `HiveContext`.  When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
-directory.
+hive-site.xml, the context automatically creates `metastore_db` in the current directory and
+creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
+Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
+the spark application.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -2294,7 +2288,7 @@ Several caching related features are not supported yet:
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
+(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

@@ -237,34 +237,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8828 sum should return null if all input values are null") {
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "true") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-        checkAnswer(
-          sql("select sum(a), avg(a) from allNulls"),
-          Seq(Row(null, null))
-        )
-      }
-    }
+    checkAnswer(
+      sql("select sum(a), avg(a) from allNulls"),
+      Seq(Row(null, null))
+    )
   }
 
   private def testCodeGen(sqlText: String, expectedResults: Seq[Row]): Unit = {
@@ -507,29 +483,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("literal in agg grouping expressions") {
-    def literalInAggTest(): Unit = {
-      checkAnswer(
-        sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-      checkAnswer(
-        sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-        Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-        sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-      checkAnswer(
-        sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-        sql("SELECT 1, 2, sum(b) FROM testData2"))
-    }
-
-    literalInAggTest()
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      literalInAggTest()
-    }
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+    checkAnswer(
+      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT 1, 2, sum(b) FROM testData2"))
   }
 
   test("aggregates with nulls") {
@@ -724,83 +693,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("select count(a) from t"),
         Row(0))
     }
-  }
-
-  test("stddev") {
-    checkAnswer(
-      sql("SELECT STDDEV(a) FROM testData2"),
-      Row(math.sqrt(4.0 / 5.0))
-    )
-  }
-
-  test("stddev_pop") {
-    checkAnswer(
-      sql("SELECT STDDEV_POP(a) FROM testData2"),
-      Row(math.sqrt(4.0 / 6.0))
-    )
-  }
-
-  test("stddev_samp") {
-    checkAnswer(
-      sql("SELECT STDDEV_SAMP(a) FROM testData2"),
-      Row(math.sqrt(4/5.0))
-    )
-  }
-
-  test("var_samp") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VAR_SAMP(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 5.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("variance") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VARIANCE(a) FROM testData2")
-    val expectedAnswer = Row(0.8)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("var_pop") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT VAR_POP(a) FROM testData2")
-    val expectedAnswer = Row(4.0 / 6.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("skewness") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT skewness(a) FROM testData2")
-    val expectedAnswer = Row(0.0)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("kurtosis") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT kurtosis(a) FROM testData2")
-    val expectedAnswer = Row(-1.5)
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
-  }
-
-  test("stddev agg") {
-    checkAnswer(
-      sql("SELECT a, stddev(b), stddev_pop(b), stddev_samp(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, math.sqrt(1.0 / 2.0), math.sqrt(1.0 / 4.0), math.sqrt(1.0 / 2.0))))
-  }
-
-  test("variance agg") {
-    val absTol = 1e-8
-    checkAggregatesWithTol(
-      sql("SELECT a, variance(b), var_samp(b), var_pop(b) FROM testData2 GROUP BY a"),
-      (1 to 3).map(i => Row(i, 1.0 / 2.0, 1.0 / 2.0, 1.0 / 4.0)),
-      absTol)
-  }
-
-  test("skewness and kurtosis agg") {
-    val absTol = 1e-8
-    val sparkAnswer = sql("SELECT a, skewness(b), kurtosis(b) FROM testData2 GROUP BY a")
-    val expectedAnswer = (1 to 3).map(i => Row(i, 0.0, -2.0))
-    checkAggregatesWithTol(sparkAnswer, expectedAnswer, absTol)
   }
 
   test("inner join where, one match per row") {
@@ -2077,5 +1969,53 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
     }
+  }
+
+  test("Common subexpression elimination") {
+    // select from a table to prevent constant folding.
+    val df = sql("SELECT a, b from testData2 limit 1")
+    checkAnswer(df, Row(1, 1))
+
+    checkAnswer(df.selectExpr("a + 1", "a + 1"), Row(2, 2))
+    checkAnswer(df.selectExpr("a + 1", "a + 1 + 1"), Row(2, 3))
+
+    // This does not work because the expressions get grouped like (a + a) + 1
+    checkAnswer(df.selectExpr("a + 1", "a + a + 1"), Row(2, 3))
+    checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
+
+    // Identity udf that tracks the number of times it is called.
+    val countAcc = sparkContext.accumulator(0, "CallCount")
+    sqlContext.udf.register("testUdf", (x: Int) => {
+      countAcc.++=(1)
+      x
+    })
+
+    // Evaluates df, verifying it is equal to the expectedResult and the accumulator's value
+    // is correct.
+    def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
+      countAcc.setValue(0)
+      checkAnswer(df, expectedResult)
+      assert(countAcc.value == expectedCount)
+    }
+
+    verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
+    verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
+
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+    // Would be nice if semantic equals for `+` understood commutative
+    verifyCallCount(
+      df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 2)
+
+    // Try disabling it via configuration.
+    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "false")
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
+    sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
+    verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
   }
 }

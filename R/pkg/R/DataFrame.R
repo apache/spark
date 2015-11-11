@@ -1944,9 +1944,9 @@ setMethod("describe",
 #' @rdname summary
 #' @name summary
 setMethod("summary",
-          signature(x = "DataFrame"),
-          function(x) {
-            describe(x)
+          signature(object = "DataFrame"),
+          function(object, ...) {
+            describe(object)
           })
 
 
@@ -2126,11 +2126,78 @@ setMethod("as.data.frame",
 setMethod("attach",
           signature(what = "DataFrame"),
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            cols <- columns(what)
-            stopifnot(length(cols) > 0)
-            newEnv <- new.env()
-            for (i in 1:length(cols)) {
-              assign(x = cols[i], value = what[, cols[i]], envir = newEnv)
-            }
+            newEnv <- assignNewEnv(what)
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          })
+
+#' Evaluate a R expression in an environment constructed from a DataFrame
+#' with() allows access to columns of a DataFrame by simply referring to
+#' their name. It appends every column of a DataFrame into a new
+#' environment. Then, the given expression is evaluated in this new
+#' environment.
+#'
+#' @rdname with
+#' @title Evaluate a R expression in an environment constructed from a DataFrame
+#' @param data (DataFrame) DataFrame to use for constructing an environment.
+#' @param expr (expression) Expression to evaluate.
+#' @param ... arguments to be passed to future methods.
+#' @examples
+#' \dontrun{
+#' with(irisDf, nrow(Sepal_Width))
+#' }
+#' @seealso \link{attach}
+setMethod("with",
+          signature(data = "DataFrame"),
+          function(data, expr, ...) {
+            newEnv <- assignNewEnv(data)
+            eval(substitute(expr), envir = newEnv, enclos = newEnv)
+          })
+
+#' Returns the column types of a DataFrame.
+#' 
+#' @name coltypes
+#' @title Get column types of a DataFrame
+#' @family dataframe_funcs
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+#' @examples \dontrun{
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' coltypes(irisDF)
+#' }
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # Get the data types of the DataFrame by invoking dtypes() function
+            types <- sapply(dtypes(x), function(x) {x[[2]]})
+
+            # Map Spark data types into R's data types using DATA_TYPES environment
+            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+
+              # Check for primitive types
+              type <- PRIMITIVE_TYPES[[x]]
+
+              if (is.null(type)) {
+                # Check for complex types
+                for (t in names(COMPLEX_TYPES)) {
+                  if (substring(x, 1, nchar(t)) == t) {
+                    type <- COMPLEX_TYPES[[t]]
+                    break
+                  }
+                }
+
+                if (is.null(type)) {
+                  stop(paste("Unsupported data type: ", x))
+                }
+              }
+              type
+            })
+
+            # Find which types don't have mapping to R
+            naIndices <- which(is.na(rTypes))
+
+            # Assign the original scala data types to the unmatched ones
+            rTypes[naIndices] <- types[naIndices]
+
+            rTypes
           })

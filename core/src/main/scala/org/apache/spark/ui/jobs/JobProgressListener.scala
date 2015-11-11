@@ -21,8 +21,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
