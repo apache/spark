@@ -96,7 +96,11 @@ private[spark] class DTStatsAggregator(
    * Update the stats for a given (feature, bin) for ordered features, using the given label.
    */
   def update(featureIndex: Int, binIndex: Int, label: Double, instanceWeight: Double): Unit = {
+    println("Updating for "+featureIndex+"binIndex"+binIndex)
     val i = featureOffsets(featureIndex) + binIndex * statsSize
+    println("featureOffsets are "+featureOffsets.toList)
+    println("featureOffsets is "+featureOffsets(featureIndex))
+    println("i "+i)
     impurityAggregator.update(allStats, i, label, instanceWeight)
   }
 

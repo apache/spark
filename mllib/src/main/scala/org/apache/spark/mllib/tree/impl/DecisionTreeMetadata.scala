@@ -168,17 +168,17 @@ private[spark] object DecisionTreeMetadata extends Logging {
             numBins(featureIndex) = numCategories
           }
         } else {
-          numBins(featureIndex) = -1
+          numBins(featureIndex) = 0
         }
       }
     } else {
       // Binary classification or regression
       strategy.categoricalFeaturesInfo.foreach { case (featureIndex, numCategories) =>
-        // Set number of bins to -1 if we are skipping a feature
+        // Set number of bins to 0 if we are skipping a feature
         if (numCategories > 1) {
           numBins(featureIndex) = numCategories
         } else {
-          numBins(featureIndex) = -1
+          numBins(featureIndex) = 0
         }
       }
     }
