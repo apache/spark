@@ -25,11 +25,13 @@ import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.StructType
 
-class PipelineSuite extends SparkFunSuite {
+class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   abstract class MyModel extends Model[MyModel]
 
@@ -111,4 +113,63 @@ class PipelineSuite extends SparkFunSuite {
     assert(pipelineModel1.uid === "pipeline1")
     assert(pipelineModel1.stages === stages)
   }
+
+  test("read/write") {
+    val writableStage = new WritableStage("writableStage").setIntParam(56)
+    val pipeline = new Pipeline().setStages(Array(writableStage))
+
+    val pipeline2 = testDefaultReadWrite(pipeline, testParams = false)
+    assert(pipeline2.getStages.length === 1)
+    assert(pipeline2.getStages(0).isInstanceOf[WritableStage])
+    val writableStage2 = pipeline2.getStages(0).asInstanceOf[WritableStage]
+    assert(writableStage.getIntParam === writableStage2.getIntParam)
+  }
+
+  test("read/write with non-Writable stage") {
+    val unWritableStage = new UnWritableStage("unwritableStage")
+    val unWritablePipeline = new Pipeline().setStages(Array(unWritableStage))
+    withClue("Pipeline.write should fail when Pipeline contains non-Writable stage") {
+      intercept[UnsupportedOperationException] {
+        unWritablePipeline.write
+      }
+    }
+  }
+}
+
+
+/** Used to test [[Pipeline]] with [[Writable]] stages */
+class WritableStage(override val uid: String) extends PipelineStage with Writable {
+
+  final val intParam: IntParam = new IntParam(this, "intParam", "doc")
+
+  def getIntParam: Int = $(intParam)
+
+  def setIntParam(value: Int): this.type = set(intParam, value)
+
+  setDefault(intParam -> 0)
+
+  override def copy(extra: ParamMap): WritableStage = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+
+  def transformSchema(schema: StructType): StructType = schema
+}
+
+object WritableStage extends Readable[WritableStage] {
+
+  override def read: Reader[WritableStage] = new DefaultParamsReader[WritableStage]
+
+  override def load(path: String): WritableStage = read.load(path)
+}
+
+/** Used to test [[Pipeline]] with non-[[Writable]] stages */
+class UnWritableStage(override val uid: String) extends PipelineStage {
+
+  final val intParam: IntParam = new IntParam(this, "intParam", "doc")
+
+  setDefault(intParam -> 0)
+
+  override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
+
+  def transformSchema(schema: StructType): StructType = schema
 }
