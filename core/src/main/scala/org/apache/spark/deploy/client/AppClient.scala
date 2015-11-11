@@ -272,7 +272,7 @@ private[spark] class AppClient(
     }
 
     override def onStop(): Unit = {
-      if (registrationRetryTimer != null) {
+      if (registrationRetryTimer.get != null) {
         registrationRetryTimer.get.cancel(true)
       }
       registrationRetryThread.shutdownNow()
@@ -289,7 +289,7 @@ private[spark] class AppClient(
   }
 
   def stop() {
-    if (endpoint != null) {
+    if (endpoint.get != null) {
       try {
         val timeout = RpcUtils.askRpcTimeout(conf)
         timeout.awaitResult(endpoint.get.ask[Boolean](StopAppClient))
@@ -308,7 +308,7 @@ private[spark] class AppClient(
    * @return whether the request is acknowledged.
    */
   def requestTotalExecutors(requestedTotal: Int): Boolean = {
-    if (endpoint != null && appId != null) {
+    if (endpoint.get != null && appId.get != null) {
       endpoint.get.askWithRetry[Boolean](RequestExecutors(appId.get, requestedTotal))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
@@ -321,7 +321,7 @@ private[spark] class AppClient(
    * @return whether the kill request is acknowledged.
    */
   def killExecutors(executorIds: Seq[String]): Boolean = {
-    if (endpoint != null && appId != null) {
+    if (endpoint.get != null && appId.get != null) {
       endpoint.get.askWithRetry[Boolean](KillExecutors(appId.get, executorIds))
     } else {
       logWarning("Attempted to kill executors before driver fully initialized.")
