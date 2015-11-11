@@ -180,7 +180,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R)(implicit executor: ExecutionContext) : FutureAction[R] = synchronized {
+      resultFunc: => R) : FutureAction[R] = synchronized {
     // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
     // command need to be in an atomic block.
     if (!isCancelled) {
@@ -217,6 +217,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   def jobIds: Seq[Int] = subActions flatMap {_.jobIds}
 
 }
+
 
 private[spark]
 class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S => T)
