@@ -162,7 +162,7 @@ secret_key = temporary_key
 threads = 4
 
 # The worker class gunicorn should use. Choices include
-# sync (default), eventlet, gevent, tornado
+# sync (default), eventlet, gevent
 worker_class = sync
 
 # Expose the configuration file in the web server
