@@ -20,12 +20,11 @@ package org.apache.spark
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.Try
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaFutureAction
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.JobWaiter
