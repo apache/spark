@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
-import org.apache.spark.sql.functions._
 
 import scala.language.postfixOps
 
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
@@ -36,7 +34,7 @@ class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializ
 
   override def merge(b1: N, b2: N): N = numeric.plus(b1, b2)
 
-  override def present(reduction: N): N = reduction
+  override def finish(reduction: N): N = reduction
 }
 
 object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with Serializable {
@@ -50,7 +48,7 @@ object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
+  override def finish(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
 }
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)]
@@ -66,7 +64,7 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(reduction: (Long, Long)): (Long, Long) = reduction
+  override def finish(reduction: (Long, Long)): (Long, Long) = reduction
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
@@ -113,5 +111,16 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
+  }
+
+  test("typed aggregation: in project list") {
+    val ds = Seq(1, 3, 2, 5).toDS()
+
+    checkAnswer(
+      ds.select(sum((i: Int) => i)),
+      11)
+    checkAnswer(
+      ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
+      11 -> 22)
   }
 }

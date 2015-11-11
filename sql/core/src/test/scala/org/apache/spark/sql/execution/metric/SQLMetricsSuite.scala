@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.xbean.asm5._
+import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
@@ -41,22 +41,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       l += 1L
       l.add(1L)
     }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
   }
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
     val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
   }
 
   /**
@@ -486,7 +484,7 @@ private class BoxingFinder(
     method: MethodIdentifier[_] = null,
     val boxingInvokes: mutable.Set[String] = mutable.Set.empty,
     visitedMethods: mutable.Set[MethodIdentifier[_]] = mutable.Set.empty)
-  extends ClassVisitor(ASM4) {
+  extends ClassVisitor(ASM5) {
 
   private val primitiveBoxingClassName =
     Set("java/lang/Long",
@@ -503,11 +501,12 @@ private class BoxingFinder(
     MethodVisitor = {
     if (method != null && (method.name != name || method.desc != desc)) {
       // If method is specified, skip other methods.
-      return new MethodVisitor(ASM4) {}
+      return new MethodVisitor(ASM5) {}
     }
 
-    new MethodVisitor(ASM4) {
-      override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+    new MethodVisitor(ASM5) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         if (op == INVOKESPECIAL && name == "<init>" || op == INVOKESTATIC && name == "valueOf") {
           if (primitiveBoxingClassName.contains(owner)) {
             // Find boxing methods, e.g, new java.lang.Long(l) or java.lang.Long.valueOf(l)
@@ -522,10 +521,9 @@ private class BoxingFinder(
           if (!visitedMethods.contains(m)) {
             // Keep track of visited methods to avoid potential infinite cycles
             visitedMethods += m
-            BoxingFinder.getClassReader(classOfMethodOwner).foreach { cl =>
-              visitedMethods += m
-              cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
-            }
+            val cl = BoxingFinder.getClassReader(classOfMethodOwner)
+            visitedMethods += m
+            cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
           }
         }
       }
@@ -535,22 +533,14 @@ private class BoxingFinder(
 
 private object BoxingFinder {
 
-  def getClassReader(cls: Class[_]): Option[ClassReader] = {
+  def getClassReader(cls: Class[_]): ClassReader = {
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
     val baos = new ByteArrayOutputStream(128)
     // Copy data over, before delegating to ClassReader -
     // else we can run out of open file handles.
     Utils.copyStream(resourceStream, baos, true)
-    // ASM4 doesn't support Java 8 classes, which requires ASM5.
-    // So if the class is ASM5 (E.g., java.lang.Long when using JDK8 runtime to run these codes),
-    // then ClassReader will throw IllegalArgumentException,
-    // However, since this is only for testing, it's safe to skip these classes.
-    try {
-      Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
 }
