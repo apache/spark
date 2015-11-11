@@ -96,7 +96,6 @@ private[sql] object JDBCRDD extends Logging {
       case java.sql.Types.TINYINT       => IntegerType
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
-      case java.sql.Types.CHAR          => StringType
       case _                            => null
       // scalastyle:on
     }
