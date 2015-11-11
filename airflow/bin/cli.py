@@ -321,7 +321,7 @@ def webserver(args):
     log_to_stdout()
     from airflow.www.app import cached_app
     app = cached_app(configuration)
-    threads = args.threads or configuration.get('webserver', 'threads')
+    workers = args.workers or configuration.get('webserver', 'workers')
     if args.debug:
         print(
             "Starting the web server on port {0} and host {1}.".format(
@@ -329,12 +329,12 @@ def webserver(args):
         app.run(debug=True, port=args.port, host=args.hostname)
     else:
         print(
-            'Running the Gunicorn server with {threads}'
-            'on host {args.hostname} and port '
+            'Running the Gunicorn server with {workers} {args.workerclass}'
+            'workers on host {args.hostname} and port '
             '{args.port}...'.format(**locals()))
         sp = subprocess.Popen([
-            'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
-            args.hostname + ':' + str(args.port),
+            'gunicorn', '-w', str(args.workers), '-k', str(args.workerclass),
+            '-t', '120', '-b', args.hostname + ':' + str(args.port),
             'airflow.www.app:cached_app()'])
         sp.wait()
 
@@ -595,10 +595,15 @@ def get_parser():
         type=int,
         help="Set the port on which to run the web server")
     parser_webserver.add_argument(
-        "-w", "--threads",
-        default=configuration.get('webserver', 'THREADS'),
+        "-w", "--workers",
+        default=configuration.get('webserver', 'WORKERS'),
         type=int,
-        help="Number of threads to run the webserver on")
+        help="Number of workers to run the webserver on")
+    parser_webserver.add_argument(
+        "-k", "--workerclass",
+        default=configuration.get('webserver', 'WORKER_CLASS'),
+        choices=['sync', 'eventlet', 'gevent', 'tornado'],
+        help="The worker class to use for gunicorn")
     parser_webserver.add_argument(
         "-hn", "--hostname",
         default=configuration.get('webserver', 'WEB_SERVER_HOST'),
