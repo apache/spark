@@ -136,7 +136,7 @@ case class TypedAggregateExpression(
 
   override def eval(buffer: InternalRow): Any = {
     val b = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
-    val result = cEncoder.toRow(aggregator.present(b))
+    val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
       case _: StructType => result
       case _ => result.get(0, dataType)

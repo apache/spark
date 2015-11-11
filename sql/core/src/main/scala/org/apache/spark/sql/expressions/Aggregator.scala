@@ -65,7 +65,7 @@ abstract class Aggregator[-A, B, C] {
   /**
    * Transform the output of the reduction.
    */
-  def present(reduction: B): C
+  def finish(reduction: B): C
 
   /**
    * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] or [[DataFrame]]
