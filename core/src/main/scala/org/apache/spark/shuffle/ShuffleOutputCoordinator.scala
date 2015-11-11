@@ -18,8 +18,6 @@ package org.apache.spark.shuffle
 
 import java.io.{File, FileInputStream, FileOutputStream, IOException}
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.SerializerInstance
