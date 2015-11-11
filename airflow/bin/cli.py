@@ -329,12 +329,12 @@ def webserver(args):
         app.run(debug=True, port=args.port, host=args.hostname)
     else:
         print(
-            'Running the Gunicorn server with {threads}'
-            'on host {args.hostname} and port '
+            'Running the Gunicorn server with {threads} {args.workerclass}'
+            'workers on host {args.hostname} and port '
             '{args.port}...'.format(**locals()))
         sp = subprocess.Popen([
-            'gunicorn', '-w', str(args.threads), '-t', '120', '-b',
-            args.hostname + ':' + str(args.port),
+            'gunicorn', '-w', str(args.threads), '-k', str(args.workerclass),
+            '-t', '120', '-b', args.hostname + ':' + str(args.port),
             'airflow.www.app:cached_app()'])
         sp.wait()
 
@@ -599,6 +599,10 @@ def get_parser():
         default=configuration.get('webserver', 'THREADS'),
         type=int,
         help="Number of threads to run the webserver on")
+    parser_webserver.add_argument(
+        "-k", "--workerclass",
+        default=configuration.get('webserver', 'WORKER_CLASS'),
+        help="The worker class to use for gunicorn")
     parser_webserver.add_argument(
         "-hn", "--hostname",
         default=configuration.get('webserver', 'WEB_SERVER_HOST'),
