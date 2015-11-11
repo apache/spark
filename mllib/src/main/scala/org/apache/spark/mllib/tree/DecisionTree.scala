@@ -347,21 +347,8 @@ object DecisionTree extends Serializable with Logging {
       unorderedFeatures: Set[Int],
       instanceWeight: Double,
       featuresForNode: Option[Array[Int]]): Unit = {
-    val numFeaturesPerNode = if (featuresForNode.nonEmpty) {
-      // Use subsampled features
-      featuresForNode.get.size
-    } else {
-      // Use all features
-      agg.metadata.numFeatures
-    }
-    // Iterate over features.
-    var featureIndexIdx = 0
-    while (featureIndexIdx < numFeaturesPerNode) {
-      val featureIndex = if (featuresForNode.nonEmpty) {
-        featuresForNode.get.apply(featureIndexIdx)
-      } else {
-        featureIndexIdx
-      }
+    val features: Array[Int] = featuresForNode.getOrElse(agg.metadata.featureIndexes.toArray)
+    features.zipWithIndex.foreach{case (featureIndex, featureIndexIdx) =>
       if (unorderedFeatures.contains(featureIndex)) {
         // Unordered feature
         val featureValue = treePoint.binnedFeatures(featureIndex)
@@ -385,7 +372,6 @@ object DecisionTree extends Serializable with Logging {
         val binIndex = treePoint.binnedFeatures(featureIndex)
         agg.update(featureIndexIdx, binIndex, treePoint.label, instanceWeight)
       }
-      featureIndexIdx += 1
     }
   }
 

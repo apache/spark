@@ -53,7 +53,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Make sure trees are the same.
     assert(rfTree.toString == dt.toString)
   }
-
+/*
   test("Binary classification with continuous features:" +
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
@@ -196,7 +196,32 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
       featureSubsetStrategy = "sqrt", seed = 12345)
   }
+ */
+  test("filtering of 1 category categorical point") {
+    val arr = new Array[LabeledPoint](4)
+    arr(0) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0, 0.0, 3.0, 1.0))
+    arr(1) = new LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0, 1.0, 2.0))
+    arr(2) = new LabeledPoint(0.0, Vectors.dense(0.0, 0.0, 0.0, 6.0, 3.0))
+    arr(3) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0, 1.0, 3.0, 2.0))
+    val categoricalFeaturesInfo = Map(0 -> 1, 2 -> 2, 4 -> 4)
+    val input = sc.parallelize(arr)
 
+    val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
+      numClasses = 3, categoricalFeaturesInfo = categoricalFeaturesInfo)
+    val model = RandomForest.trainClassifier(input, strategy, numTrees = 2,
+      featureSubsetStrategy = "sqrt", seed = 12345)
+    // TODO(holden): go through and make sure that none of the trees have the 0 feature used in them.
+    def assertTreeDoesNotContain(node: Node, feature: Long): Unit = {
+      node.split.foreach(split => assert(split.feature != feature))
+      node.leftNode.foreach(assertTreeDoesNotContain(_, feature))
+      node.rightNode.foreach(assertTreeDoesNotContain(_, feature))
+    }
+    model.trees.foreach{tree =>
+
+    }
+  }
+
+/*
   test("subsampling rate in RandomForest"){
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(5, 20)
     val rdd = sc.parallelize(arr)
@@ -233,5 +258,5 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
     }
   }
-
+ */
 }
