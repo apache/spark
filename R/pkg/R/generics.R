@@ -561,7 +561,7 @@ setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
-setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
 # @rdname tojson
 # @export
@@ -1047,3 +1047,7 @@ setGeneric("attach")
 #' @rdname with
 #' @export
 setGeneric("with")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })

@@ -185,6 +185,12 @@ case class ExpressionEncoder[T](
     })
   }
 
+  def shift(delta: Int): ExpressionEncoder[T] = {
+    copy(constructExpression = constructExpression transform {
+      case r: BoundReference => r.copy(ordinal = r.ordinal + delta)
+    })
+  }
+
   /**
    * Returns a copy of this encoder where the expressions used to create an object given an
    * input row have been modified to pull the object out from a nested struct, instead of the
