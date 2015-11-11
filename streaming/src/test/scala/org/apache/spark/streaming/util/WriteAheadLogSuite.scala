@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 import java.io._
 import java.nio.ByteBuffer
 import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -39,7 +40,7 @@ import org.scalatest.{BeforeAndAfterEach, BeforeAndAfter}
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{ThreadUtils, ManualClock, Utils}
+import org.apache.spark.util.{CompletionIterator, ThreadUtils, ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
@@ -196,6 +197,63 @@ class FileBasedWriteAheadLogSuite
   extends CommonWriteAheadLogTests(false, false, "FileBasedWriteAheadLog") {
 
   import WriteAheadLogSuite._
+
+  test("FileBasedWriteAheadLog - parallel readAll opens at most 'numThreads' files") {
+    /*
+     If the setting `closeFileAfterWrite` is enabled, we start generating a very large number of
+     files. This causes recovery to take a very long time. In order to make it quicker, we
+     parallelized the reading of these files. This test makes sure that we limit the number of
+     open files to the size of the number of threads in our thread pool rather than the size of
+     the list of files.
+     */
+    val numThreads = 8
+    val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
+    class GetMaxCounter {
+      private val value = new AtomicInteger()
+      @volatile private var max: Int = 0
+      def increment(): Unit = {
+        val atInstant = value.incrementAndGet()
+        if (atInstant > max) max = atInstant
+      }
+      def decrement(): Unit = { value.decrementAndGet() }
+      def get(): Int = value.get()
+      def getMax(): Int = max
+    }
+    /**
+     * We need an object that can be iterated through, which will increment our counter once
+     * initialized, and decrement once closed. This way we can simulate how many "streams" will
+     * be opened during a real use case.
+     */
+    class ReaderObject(cnt: GetMaxCounter, value: Int) extends Iterator[Int] with Closeable {
+      cnt.increment()
+      private var returnedValue: Boolean = false
+      override def hasNext(): Boolean = !returnedValue
+      override def next(): Int = {
+        if (!returnedValue) {
+          returnedValue = true
+          value
+        } else {
+          -1
+        }
+      }
+      override def close(): Unit = {
+        cnt.decrement()
+      }
+    }
+    try {
+      val testSeq = 1 to 64
+      val counter = new GetMaxCounter()
+      def handle(value: Int): Iterator[Int] = {
+        val reader = new ReaderObject(counter, value)
+        CompletionIterator[Int, Iterator[Int]](reader, reader.close)
+      }
+      val iterator = FileBasedWriteAheadLog.parallelIteratorCreator(tpool, testSeq, handle)
+      assert(iterator.toSeq === testSeq)
+      assert(counter.getMax() <= numThreads)
+    } finally {
+      tpool.shutdownNow()
+    }
+  }
 
   test("FileBasedWriteAheadLogWriter - writing data") {
     val dataToWrite = generateRandomData()
