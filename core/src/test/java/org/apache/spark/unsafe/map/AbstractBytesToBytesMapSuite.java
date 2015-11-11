@@ -356,8 +356,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
       final java.util.BitSet valuesSeen = new java.util.BitSet(NUM_ENTRIES);
       final Iterator<BytesToBytesMap.Location> iter = map.iterator();
-      final long key[] = new long[KEY_LENGTH / 8];
-      final long value[] = new long[VALUE_LENGTH / 8];
+      final long[] key = new long[KEY_LENGTH / 8];
+      final long[] value = new long[VALUE_LENGTH / 8];
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
         Assert.assertTrue(loc.isDefined());
