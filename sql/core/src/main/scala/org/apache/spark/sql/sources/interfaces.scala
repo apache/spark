@@ -423,8 +423,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
-  private val codegenEnabled = sqlContext.conf.codegenEnabled
-
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
@@ -660,7 +658,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
     // Yeah, to workaround serialization...
     val dataSchema = this.dataSchema
-    val codegenEnabled = this.codegenEnabled
     val needConversion = this.needConversion
 
     val requiredOutput = requiredColumns.map { col =>
@@ -677,11 +674,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
 
     converted.mapPartitions { rows =>
-      val buildProjection = if (codegenEnabled) {
+      val buildProjection =
         GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
-      } else {
-        () => new InterpretedMutableProjection(requiredOutput, dataSchema.toAttributes)
-      }
 
       val projectedRows = {
         val mutableProjection = buildProjection()

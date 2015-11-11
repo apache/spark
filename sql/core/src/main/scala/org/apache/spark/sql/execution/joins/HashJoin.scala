@@ -45,9 +45,7 @@ trait HashJoin {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled
-      && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(self.schema))
+    UnsafeProjection.canSupport(buildKeys) && UnsafeProjection.canSupport(self.schema)
   }
 
   override def outputsUnsafeRows: Boolean = isUnsafeMode
