@@ -444,15 +444,15 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         self.assertEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
 
-            self.assertEqual(info.schedulingDelay(), -1L)
-            self.assertEqual(info.processingDelay(), -1L)
-            self.assertEqual(info.totalDelay(), -1L)
+            self.assertEqual(info.schedulingDelay(), -1)
+            self.assertEqual(info.processingDelay(), -1)
+            self.assertEqual(info.totalDelay(), -1)
 
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
             self.assertGreaterEqual(info.schedulingDelay(), 0)
-            self.assertEqual(info.processingDelay(), -1L)
-            self.assertEqual(info.totalDelay(), -1L)
+            self.assertEqual(info.processingDelay(), -1)
+            self.assertEqual(info.totalDelay(), -1)
 
         self.assertEqual(len(batchInfosCompleted), 4)
 
