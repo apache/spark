@@ -26,7 +26,8 @@ import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 private[netty] abstract class NettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     override val senderAddress: RpcAddress,
-    needReply: Boolean)
+    needReply: Boolean,
+    override val appId: Option[String])
   extends RpcCallContext with Logging {
 
   protected def send(message: Any): Unit
@@ -65,7 +66,7 @@ private[netty] class LocalNettyRpcCallContext(
     senderAddress: RpcAddress,
     needReply: Boolean,
     p: Promise[Any])
-  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply, None) {
 
   override protected def send(message: Any): Unit = {
     p.success(message)
@@ -80,8 +81,9 @@ private[netty] class RemoteNettyRpcCallContext(
     endpointRef: NettyRpcEndpointRef,
     callback: RpcResponseCallback,
     senderAddress: RpcAddress,
-    needReply: Boolean)
-  extends NettyRpcCallContext(endpointRef, senderAddress, needReply) {
+    needReply: Boolean,
+    appId: Option[String])
+  extends NettyRpcCallContext(endpointRef, senderAddress, needReply, appId) {
 
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)

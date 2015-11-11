@@ -118,7 +118,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
       val rpcCallContext =
         new RemoteNettyRpcCallContext(
-          nettyEnv, sender, callback, message.senderAddress, message.needReply)
+          nettyEnv, sender, callback, message.senderAddress, message.needReply,
+          Option(message.receiver.client).map(_.getClientId))
       ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext)
     }
 
