@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders.Encoder
-import org.apache.spark.sql.functions._
 
 import scala.language.postfixOps
 
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
