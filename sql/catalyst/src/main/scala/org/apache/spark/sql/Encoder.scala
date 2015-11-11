@@ -39,7 +39,7 @@ trait Encoder[T] extends Serializable {
   def clsTag: ClassTag[T]
 }
 
-object Encoder {
+object Encoders {
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
   def SHORT: Encoder[java.lang.Short] = ExpressionEncoder(flat = true)
