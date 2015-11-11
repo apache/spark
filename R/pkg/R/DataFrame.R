@@ -2279,14 +2279,14 @@ setMethod("str", signature="DataFrame", definition=
                   # Add the corresponding number of spaces for alignment
                   spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
 
-                  # Get the short type. For 'character', it would be 'chr'; 
+                  # Get the short type. For 'character', it would be 'chr';
                   # 'for numeric', it's 'num', etc.
                   dataType <- SHORT_TYPES[[types[i]]]
                   if (is.null(dataType)) {
                     dataType <- substring(types[i], 1, 3)
                   }
 
-                  # Concatenate the colnames, coltypes, and first 
+                  # Concatenate the colnames, coltypes, and first
                   # elements of each column
                   line <- " $ " %++% names[i] %++% spaces %++% ": " %++%
                     dataType %++% " " %++% firstElements
