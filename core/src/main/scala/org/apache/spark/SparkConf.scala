@@ -595,7 +595,9 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.lookupTimeout" -> Seq(
       AlternateConfig("spark.akka.lookupTimeout", "1.4")),
     "spark.streaming.fileStream.minRememberDuration" -> Seq(
-      AlternateConfig("spark.streaming.minRememberDuration", "1.5"))
+      AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
+    "spark.yarn.max.executor.failures" -> Seq(
+      AlternateConfig("spark.yarn.max.worker.failures", "1.5"))
     )
 
   /**
@@ -619,7 +621,7 @@ private[spark] object SparkConf extends Logging {
   /**
    * Return whether the given config should be passed to an executor on start-up.
    *
-   * Certain akka and authentication configs are required of the executor when it connects to
+   * Certain akka and authentication configs are required from the executor when it connects to
    * the scheduler, while the rest of the spark configs can be inherited from the driver later.
    */
   def isExecutorStartupConf(name: String): Boolean = {
@@ -627,6 +629,7 @@ private[spark] object SparkConf extends Logging {
     name.startsWith("spark.akka") ||
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
+    name.startsWith("spark.rpc") ||
     isSparkPortConf(name)
   }
 

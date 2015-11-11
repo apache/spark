@@ -45,7 +45,7 @@ class AnalysisSuite extends AnalysisTest {
     val explode = Explode(AttributeReference("a", IntegerType, nullable = true)())
     assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
 
-    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
+    assert(!Project(Seq(Alias(count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {
@@ -78,7 +78,7 @@ class AnalysisSuite extends AnalysisTest {
 
   test("resolve relations") {
     assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table Not Found: tAbLe"))
+      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
 
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
 
@@ -142,5 +142,36 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, plan)
     plan = testRelation.select(CreateStructUnsafe(Seq(a, (a + 1).as("a+1"))).as("col"))
     checkAnalysis(plan, plan)
+  }
+
+  test("SPARK-10534: resolve attribute references in order by clause") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+
+    val plan = testRelation2.select('c).orderBy(Floor('a).asc)
+    val expected = testRelation2.select(c, a).orderBy(Floor(a.cast(DoubleType)).asc).select(c)
+
+    checkAnalysis(plan, expected)
+  }
+
+  test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-8654: different types in inlist but can be converted to a commmon type") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(1.2345))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-8654: check type compatibility error") {
+    val plan = Project(Alias(In(Literal(null), Seq(Literal(true), Literal(1))), "a")() :: Nil,
+      LocalRelation()
+    )
+    assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
   }
 }

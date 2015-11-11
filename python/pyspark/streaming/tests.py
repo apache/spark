@@ -27,6 +27,11 @@ import struct
 import shutil
 from functools import reduce
 
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -61,9 +66,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
     def tearDownClass(cls):
         cls.sc.stop()
         # Clean up in the JVM just in case there has been some issues in Python API
-        jSparkContextOption = SparkContext._jvm.SparkContext.get()
-        if jSparkContextOption.nonEmpty():
-            jSparkContextOption.get().stop()
+        try:
+            jSparkContextOption = SparkContext._jvm.SparkContext.get()
+            if jSparkContextOption.nonEmpty():
+                jSparkContextOption.get().stop()
+        except:
+            pass
 
     def setUp(self):
         self.ssc = StreamingContext(self.sc, self.duration)
@@ -72,9 +80,12 @@ class PySparkStreamingTestCase(unittest.TestCase):
         if self.ssc is not None:
             self.ssc.stop(False)
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
-        if jStreamingContextOption.nonEmpty():
-            jStreamingContextOption.get().stop(False)
+        try:
+            jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+            if jStreamingContextOption.nonEmpty():
+                jStreamingContextOption.get().stop(False)
+        except:
+            pass
 
     def wait_for(self, result, n):
         start_time = time.time()
@@ -585,6 +596,13 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
+    def test_await_termination_or_timeout(self):
+        self._add_input_stream()
+        self.ssc.start()
+        self.assertFalse(self.ssc.awaitTerminationOrTimeout(0.001))
+        self.ssc.stop(False)
+        self.assertTrue(self.ssc.awaitTerminationOrTimeout(0.001))
+
 
 class CheckpointTests(unittest.TestCase):
 
@@ -886,6 +904,16 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.wait_for(offsetRanges, 1)
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    def test_topic_and_partition_equality(self):
+        topic_and_partition_a = TopicAndPartition("foo", 0)
+        topic_and_partition_b = TopicAndPartition("foo", 0)
+        topic_and_partition_c = TopicAndPartition("bar", 0)
+        topic_and_partition_d = TopicAndPartition("foo", 1)
+
+        self.assertEqual(topic_and_partition_a, topic_and_partition_b)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
 
 class FlumeStreamTests(PySparkStreamingTestCase):
@@ -1297,4 +1325,8 @@ if __name__ == "__main__":
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-        unittest.TextTestRunner(verbosity=3).run(tests)
+        if xmlrunner:
+            unittest.main(tests, verbosity=3,
+                          testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        else:
+            unittest.TextTestRunner(verbosity=3).run(tests)

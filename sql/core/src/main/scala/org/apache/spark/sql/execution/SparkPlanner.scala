@@ -38,14 +38,14 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
       DataSourceStrategy ::
       DDLStrategy ::
       TakeOrderedAndProject ::
-      HashAggregation ::
       Aggregation ::
       LeftSemiJoin ::
       EquiJoinSelection ::
       InMemoryScans ::
       BasicOperators ::
+      BroadcastNestedLoop ::
       CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil)
+      DefaultJoin :: Nil)
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using

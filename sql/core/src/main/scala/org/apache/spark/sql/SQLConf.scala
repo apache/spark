@@ -233,6 +233,25 @@ private[spark] object SQLConf {
     defaultValue = Some(200),
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
+  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
+    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+      defaultValue = Some(64 * 1024 * 1024),
+      doc = "The target post-shuffle input size in bytes of a task.")
+
+  val ADAPTIVE_EXECUTION_ENABLED = booleanConf("spark.sql.adaptive.enabled",
+    defaultValue = Some(false),
+    doc = "When true, enable adaptive query execution.")
+
+  val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
+    intConf("spark.sql.adaptive.minNumPostShufflePartitions",
+      defaultValue = Some(-1),
+      doc = "The advisory minimal number of post-shuffle partitions provided to " +
+        "ExchangeCoordinator. This setting is used in our test to make sure we " +
+        "have enough parallelism to expose issues that will not be exposed with a " +
+        "single partition. When the value is a non-positive value, this setting will" +
+        "not be provided to ExchangeCoordinator.",
+      isPublic = false)
+
   val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
     defaultValue = Some(true),
     doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
@@ -247,6 +266,11 @@ private[spark] object SQLConf {
   val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
     defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
     doc = "When true, use the new optimized Tungsten physical execution backend.",
+    isPublic = false)
+
+  val SUBEXPRESSION_ELIMINATION_ENABLED = booleanConf("spark.sql.subexpressionElimination.enabled",
+    defaultValue = Some(true),  // use CODEGEN_ENABLED as default
+    doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
   val DIALECT = stringConf(
@@ -429,12 +453,28 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
-  val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
-    defaultValue = Some(true), doc = "<TODO>")
+  val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
+    defaultValue = Some(true),
+    isPublic = false,
+    doc = "When true, we could use `datasource`.`path` as table in SQL query"
+  )
+
+  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
+    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
+      defaultValue = Some(true),
+      isPublic = false,
+      doc = "When true, if a query only has a single distinct column and it has " +
+        "grouping expressions, we will use our planner rule to handle this distinct " +
+        "column (other cases are handled by DistinctAggregationRewriter). " +
+        "When false, we will always use DistinctAggregationRewriter to plan " +
+        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
+        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
+        "plan aggregation queries with a single distinct column.")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
   }
 }
 
@@ -481,6 +521,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
+  private[spark] def targetPostShuffleInputSize: Long =
+    getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+
+  private[spark] def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  private[spark] def minNumPostShufflePartitions: Int =
+    getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
   private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
@@ -499,7 +547,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
 
-  private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
+  private[spark] def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED, codegenEnabled)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -539,6 +588,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
+    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

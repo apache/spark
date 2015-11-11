@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 
 import scala.language.existentials
 
-import org.apache.spark.sql.catalyst.{ScalaReflection, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
 
@@ -364,6 +366,10 @@ case class MapObjects(
       (".numElements()", (i: String) => s".getShort($i)", true)
     case ArrayType(BooleanType, _) =>
       (".numElements()", (i: String) => s".getBoolean($i)", true)
+    case ArrayType(StringType, _) =>
+      (".numElements()", (i: String) => s".getUTF8String($i)", false)
+    case ArrayType(_: MapType, _) =>
+      (".numElements()", (i: String) => s".getMap($i)", false)
   }
 
   override def nullable: Boolean = true
@@ -398,7 +404,7 @@ case class MapObjects(
     val convertedArray = ctx.freshName("convertedArray")
     val loopIndex = ctx.freshName("loopIndex")
 
-    val convertedType = ctx.javaType(boundFunction.dataType)
+    val convertedType = ctx.boxedType(boundFunction.dataType)
 
     // Because of the way Java defines nested arrays, we have to handle the syntax specially.
     // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
@@ -434,14 +440,74 @@ case class MapObjects(
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
-          ${genFunction.code}
+          if ($loopIsNull) {
+            $convertedArray[$loopIndex] = null;
+          } else {
+            ${genFunction.code}
+            $convertedArray[$loopIndex] = ${genFunction.value};
+          }
 
-          $convertedArray[$loopIndex] = ($convertedType)${genFunction.value};
           $loopIndex += 1;
         }
 
         ${ev.isNull} = false;
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
+      }
+    """
+  }
+}
+
+/**
+ * Constructs a new external row, using the result of evaluating the specified expressions
+ * as content.
+ *
+ * @param children A list of expression to use as content of the external row.
+ */
+case class CreateExternalRow(children: Seq[Expression]) extends Expression {
+  override def dataType: DataType = ObjectType(classOf[Row])
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val rowClass = classOf[GenericRow].getName
+    val values = ctx.freshName("values")
+    s"""
+      boolean ${ev.isNull} = false;
+      final Object[] $values = new Object[${children.size}];
+    """ +
+      children.zipWithIndex.map { case (e, i) =>
+        val eval = e.gen(ctx)
+        eval.code + s"""
+          if (${eval.isNull}) {
+            $values[$i] = null;
+          } else {
+            $values[$i] = ${eval.value};
+          }
+         """
+      }.mkString("\n") +
+      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+  }
+}
+
+case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
+  extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val row = child.gen(ctx)
+    s"""
+      ${row.code}
+      final boolean ${ev.isNull} = ${row.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
       }
     """
   }

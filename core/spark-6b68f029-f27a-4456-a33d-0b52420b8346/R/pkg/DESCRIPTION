@@ -1,0 +1,13 @@
+Package: sparkPackageTest
+Type: Package
+Title: Test for building an R package
+Version: 0.1
+Date: 2015-07-08
+Author: Burak Yavuz
+Imports: methods, SparkR
+Depends: R (>= 3.1), methods, SparkR
+Suggests: testthat
+Description: Test for building an R package within a jar
+License: Apache License (== 2.0)
+Collate: 'mylib.R'
+      

@@ -19,7 +19,6 @@ package org.apache.spark.network.shuffle
 import java.io.{IOException, File}
 import java.util.concurrent.ConcurrentMap
 
-import com.google.common.annotations.VisibleForTesting
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.fusesource.leveldbjni.JniDBFactory
 import org.iq80.leveldb.{DB, Options}
