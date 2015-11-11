@@ -27,15 +27,14 @@ import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
+import org.apache.spark.{DefaultPasswordAuthenticator, Logging, SecurityManager, SparkConf,
+    SparkException, SparkFunSuite}
 
 
 class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging {
@@ -282,7 +281,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     try {
       System.setProperty("SPARK_YARN_MODE", "true")
       val initial = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
+        .getSecretKeyFromUserCredentials(DefaultPasswordAuthenticator.SECRET_LOOKUP_KEY)
       assert(initial === null || initial.length === 0)
 
       val conf = new SparkConf()
@@ -291,7 +290,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       val sm = new SecurityManager(conf)
 
       val generated = SparkHadoopUtil.get
-        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
+        .getSecretKeyFromUserCredentials(DefaultPasswordAuthenticator.SECRET_LOOKUP_KEY)
       assert(generated != null)
       val genString = new Text(generated).toString()
       assert(genString != "unused")
@@ -299,7 +298,8 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     } finally {
       // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret
       // to an empty string.
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(SecurityManager.SECRET_LOOKUP_KEY, "")
+      SparkHadoopUtil.get.addSecretKeyToUserCredentials(
+        DefaultPasswordAuthenticator.SECRET_LOOKUP_KEY, "")
       System.clearProperty("SPARK_YARN_MODE")
     }
   }

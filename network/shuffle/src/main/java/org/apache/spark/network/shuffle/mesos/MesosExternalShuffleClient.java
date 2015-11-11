@@ -55,7 +55,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
   public void registerDriverWithShuffleService(String host, int port) throws IOException {
     checkInit();
     byte[] registerDriver = new RegisterDriver(appId).toByteArray();
-    TransportClient client = clientFactory.createClient(host, port);
+    TransportClient client = clientFactory.createClient(host, port, appId);
     client.sendRpc(registerDriver, new RpcResponseCallback() {
       @Override
       public void onSuccess(byte[] response) {

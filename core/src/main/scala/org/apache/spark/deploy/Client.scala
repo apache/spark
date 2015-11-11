@@ -24,10 +24,12 @@ import scala.util.{Failure, Success}
 
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcAddress, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, Namespace, SecurityManager, SparkConf}
+import org.apache.spark.SecurityManager.{SPARK_AUTH_SECRET_CONF, ENV_AUTH_SECRET}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcAddress, RpcEnv,
+    ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{ThreadUtils, SparkExitCode, Utils}
 
 /**
@@ -80,11 +82,29 @@ private class ClientEndpoint(
         val extraJavaOptsConf = "spark.driver.extraJavaOptions"
         val extraJavaOpts = sys.props.get(extraJavaOptsConf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
-        val sparkJavaOpts = Utils.sparkJavaOpts(conf)
+
+        // we don't want to send any secrets as system properties because they would be translated
+        // to Java options which are passed in command-line and thus visible for other users
+        val propsToExclude = Set(Namespace.Blank, Namespace.Submission, Namespace.Application)
+          .map(_.confName(SPARK_AUTH_SECRET_CONF))
+        val sparkJavaOpts = Utils.sparkJavaOpts(conf, key => !propsToExclude.contains(key))
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
-        val command = new Command(mainClass,
+
+        // we want to transport secrets only from submission and app namespaces; they will be
+        // transported as environment variables though
+        val envSecrets = Set(Namespace.Submission, Namespace.Application).flatMap { ns =>
+          sys.env.get(ns.envName(ENV_AUTH_SECRET))
+            .orElse(conf.getOption(ns.confName(SPARK_AUTH_SECRET_CONF)))
+            .map(v => ns.envName(ENV_AUTH_SECRET) -> v)
+        }
+
+        val command = new Command(
+          mainClass,
           Seq("{{WORKER_URL}}", "{{USER_JAR}}", driverArgs.mainClass) ++ driverArgs.driverOptions,
-          sys.env, classPathEntries, libraryPathEntries, javaOpts)
+          (sys.env ++ envSecrets) - ENV_AUTH_SECRET,
+          classPathEntries,
+          libraryPathEntries,
+          javaOpts)
 
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
@@ -145,7 +165,7 @@ private class ClientEndpoint(
     }
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
       logInfo(message)
@@ -208,6 +228,9 @@ private class ClientEndpoint(
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
 object Client {
+  private[spark] val SYSTEM_NAME = "driverClient"
+  private[spark] val ENDPOINT_NAME = "client"
+
   def main(args: Array[String]) {
     // scalastyle:off println
     if (!sys.props.contains("SPARK_SUBMIT")) {
@@ -226,12 +249,25 @@ object Client {
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    val rpcEnv =
-      RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
+    // if a secret key has been set in an env variable, copy it to SparkConf
+    sys.env.get(ENV_AUTH_SECRET).foreach(conf.set(SPARK_AUTH_SECRET_CONF, _))
 
-    val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
-      map(rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, _, Master.ENDPOINT_NAME))
-    rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
+    // if a secret key for submission has been set in an env variable, copy it to SparkConf at
+    // submission namespace
+    sys.env.get(Namespace.Submission.envName(ENV_AUTH_SECRET))
+      .foreach(conf.set(Namespace.Submission.confName(SPARK_AUTH_SECRET_CONF), _))
+
+    // for the configuration of submission endpoint we use the configuration at spark.submission
+    val submissionConf = conf.fromNamespace(Namespace.Submission)
+
+    val rpcEnv = RpcEnv.create(
+      SYSTEM_NAME, Utils.localHostName(), 0, conf, new SecurityManager(submissionConf))
+
+    val masterEndpoints = driverArgs.masters
+      .map(RpcAddress.fromSparkURL)
+      .map(rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, _, Master.ENDPOINT_NAME))
+    rpcEnv.setupEndpoint(
+      ENDPOINT_NAME, new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
     rpcEnv.awaitTermination()
   }

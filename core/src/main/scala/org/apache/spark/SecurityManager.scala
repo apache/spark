@@ -17,17 +17,14 @@
 
 package org.apache.spark
 
-import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
-import java.security.{KeyStore, SecureRandom}
+import java.security.KeyStore
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
-import com.google.common.hash.HashCodes
 import com.google.common.io.Files
-import org.apache.hadoop.io.Text
+import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.util.Utils
 
@@ -147,7 +144,18 @@ import org.apache.spark.util.Utils
  *  spark.authenticate.secret config.
  *  All the nodes (Master and Workers) and the applications need to have the same shared secret.
  *  This again is not ideal as one user could potentially affect another users application.
- *  This should be enhanced in the future to provide better protection.
+ *
+ *  In standalone mode, an authentication through a default password authenticator or a externally
+ *  defined password authenticator is possible. By default, different users can authenticate to
+ *  Spark Master by providing their credentials in Spark configuration. These credentials are used
+ *  to authenticate through SASL Digest-MD5, which means that the password will not be send over the
+ *  wire. Spark Master default authenticator searches for the password in Spark configuration, at
+ *  spark.authenticate.secrets.username key. A custom password authenticator can be defined in
+ *  spark.authenticate.authenticatorClass - it can be leverages to obtain passwords from a database
+ *  or some other location. In this mode, Spark Workers use the default user `sparkSaslUser` to
+ *  authenticate to the master. Custom authentication works only if Netty based RPC is used. When
+ *  Akka RPC is used, a single shared secret is the only option.
+ *
  *  If the UI needs to be secure, the user needs to install a javax servlet filter to do the
  *  authentication. Spark will then use that user to compare against the view acls to do
  *  authorization. If not filter is in place the user is generally null and no authorization
@@ -216,7 +224,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
-  private val secretKey = generateSecretKey()
+  private val user = sparkConf.get(SASL_USER_CONF, SecretKeyHolder.DEFAULT_SPARK_SASL_USER)
+
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
     "; users with view permissions: " + viewAcls.toString() +
@@ -292,6 +301,25 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     (None, None)
   }
 
+  val authenticator = if (authOn) {
+    val instance = try {
+      for (authClass <- sparkConf.getOption("spark.authenticate.authenticatorClass")) yield {
+        val cls = Utils.classForName(authClass)
+        val ctor = cls.getConstructor(classOf[SparkConf])
+        ctor.newInstance(sparkConf) match {
+          case pa: PasswordAuthenticator => pa
+        }
+      }
+    } catch {
+      case ex: Exception =>
+        logError("Cannot create a custom password provider. Using default.", ex)
+        None
+    }
+    instance.orElse(Some(new DefaultPasswordAuthenticator(sparkConf)))
+  } else {
+    None
+  }
+
   /**
    * Split a comma separated String, filter out any empty items, and return a Set of strings
    */
@@ -358,50 +386,6 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-   * Generates or looks up the secret key.
-   *
-   * The way the key is stored depends on the Spark deployment mode. Yarn
-   * uses the Hadoop UGI.
-   *
-   * For non-Yarn deployments, If the config variable is not set
-   * we throw an exception.
-   */
-  private def generateSecretKey(): String = {
-    if (!isAuthenticationEnabled) {
-      null
-    } else if (SparkHadoopUtil.get.isYarnMode) {
-      // In YARN mode, the secure cookie will be created by the driver and stashed in the
-      // user's credentials, where executors can get it. The check for an array of size 0
-      // is because of the test code in YarnSparkHadoopUtilSuite.
-      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
-      if (secretKey == null || secretKey.length == 0) {
-        logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
-        val rnd = new SecureRandom()
-        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-        val secret = new Array[Byte](length)
-        rnd.nextBytes(secret)
-
-        val cookie = HashCodes.fromBytes(secret).toString()
-        SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
-        cookie
-      } else {
-        new Text(secretKey).toString
-      }
-    } else {
-      // user must have set spark.authenticate.secret config
-      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
-      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
-        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
-        case Some(value) => value
-        case None =>
-          throw new IllegalArgumentException(
-            "Error: a secret key must be specified via the " +
-              SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
-      }
-    }
-  }
-
-  /**
    * Check to see if Acls for the UI are enabled
    * @return true if UI authentication is enabled, otherwise false
    */
@@ -457,34 +441,47 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * For now use a single hardcoded user.
    * @return the HTTP user as a String
    */
-  def getHttpUser(): String = "sparkHttpUser"
+  def getHttpUser(): String = SecretKeyHolder.DEFAULT_SPARK_SASL_HTTP_USER
 
   /**
    * Gets the user used for authenticating SASL connections.
    * For now use a single hardcoded user.
    * @return the SASL user as a String
    */
-  def getSaslUser(): String = "sparkSaslUser"
+  def getSaslUser(): String = user
 
   /**
    * Gets the secret key.
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
-  def getSecretKey(): String = secretKey
+  def getSecretKey(): String = authenticator.map(_.getPassword(getSaslUser())).orNull
 
-  // Default SecurityManager only has a single secret key, so ignore appId.
-  override def getSaslUser(appId: String): String = getSaslUser()
-  override def getSecretKey(appId: String): String = getSecretKey()
+  override def getSaslUser(appId: String): String = {
+    if (StringUtils.isBlank(appId)) {
+      getSaslUser()
+    } else {
+      appId
+    }
+  }
+
+  override def getSecretKey(appId: String): String = {
+    if (StringUtils.isNotBlank(appId) && authenticator.isDefined) {
+      authenticator.map(_.getPassword(appId)).get
+    } else {
+      getSecretKey()
+    }
+  }
 }
 
 private[spark] object SecurityManager {
-
   val SPARK_AUTH_CONF: String = "spark.authenticate"
   val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same
   // value as SPARK_AUTH_SECRET_CONF set in SparkConf
-  val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
+  val ENV_AUTH_SECRET = "SPARK_AUTH_SECRET"
 
-  // key used to store the spark secret in the Hadoop UGI
-  val SECRET_LOOKUP_KEY = "sparkCookie"
+  val AUTHENTICATOR_CLASS_CONF = "spark.authenticate.authenticatorClass"
+
+  // SASL user configuration property (used when running as a client)
+  val SASL_USER_CONF = "spark.authenticate.user"
 }

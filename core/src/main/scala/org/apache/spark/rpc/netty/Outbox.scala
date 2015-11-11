@@ -42,7 +42,7 @@ private[netty] case class OutboxMessage(content: Array[Byte],
 
 }
 
-private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
+private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress, appId: Option[String]) {
 
   outbox => // Give this an alias so we can use it more clearly in closures.
 
@@ -149,7 +149,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
 
       override def call(): Unit = {
         try {
-          val _client = nettyEnv.createClient(address)
+          val _client = nettyEnv.createClient(address, appId)
           outbox.synchronized {
             client = _client
             if (stopped) {

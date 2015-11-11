@@ -169,16 +169,16 @@ class SecurityManagerSuite extends SparkFunSuite {
   test("ssl on setup") {
     val conf = SSLSampleConfigs.sparkSSLConfig()
     val expectedAlgorithms = Set(
-    "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
-    "TLS_RSA_WITH_AES_256_CBC_SHA256",
-    "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256",
-    "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-    "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256",
-    "SSL_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
-    "SSL_RSA_WITH_AES_256_CBC_SHA256",
-    "SSL_DHE_RSA_WITH_AES_256_CBC_SHA256",
-    "SSL_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
-    "SSL_DHE_RSA_WITH_AES_128_CBC_SHA256")
+      "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+      "TLS_RSA_WITH_AES_256_CBC_SHA256",
+      "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256",
+      "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+      "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256",
+      "SSL_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+      "SSL_RSA_WITH_AES_256_CBC_SHA256",
+      "SSL_DHE_RSA_WITH_AES_256_CBC_SHA256",
+      "SSL_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+      "SSL_DHE_RSA_WITH_AES_128_CBC_SHA256")
 
     val securityManager = new SecurityManager(conf)
 
@@ -233,16 +233,23 @@ class SecurityManagerSuite extends SparkFunSuite {
   test("secret authentication key") {
     val key = "very secret key"
     val conf = new SparkConf()
-      .set(SecurityManager.SPARK_AUTH_CONF, "true")
-      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
     assert(key === new SecurityManager(conf).getSecretKey())
-
-    val keyFromEnv = "very secret key from env"
-    val conf2 = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
-      .set(SecurityManager.SPARK_AUTH_CONF, "true")
-      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
-    assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
+  test("custom password authenticator") {
+    val key = "abc"
+    val conf = new SparkConf(false)
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+        .set("spark.authenticate.authenticatorClass",
+          classOf[SamplePasswordAuthenticator].getCanonicalName)
+    val sm = new SecurityManager(conf)
+    assert(sm.getSecretKey(key) === key + key)
+  }
 }
 
+class SamplePasswordAuthenticator(conf: SparkConf) extends PasswordAuthenticator {
+  override def getPassword(authId: String): String = authId + authId
+}

@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.sasl.SaslServerBootstrap
+import org.apache.spark.network.sasl.{SaslServerBootstrap, SecretKeyHolder}
 import org.apache.spark.network.server.{TransportServerBootstrap, TransportServer}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
@@ -37,9 +37,10 @@ import org.apache.spark.util.Utils
  *
  * Optionally requires SASL authentication in order to read. See [[SecurityManager]].
  */
-private[deploy]
-class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityManager)
-  extends Logging {
+private[deploy] class ExternalShuffleService(
+  sparkConf: SparkConf,
+  securityManager: SecurityManager,
+  secretKeyHolder: Option[SecretKeyHolder] = None) extends Logging {
 
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
@@ -70,7 +71,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
     val bootstraps: Seq[TransportServerBootstrap] =
       if (useSasl) {
-        Seq(new SaslServerBootstrap(transportConf, securityManager))
+        Seq(new SaslServerBootstrap(transportConf, secretKeyHolder.getOrElse(securityManager)))
       } else {
         Nil
       }
@@ -93,7 +94,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 /**
  * A main class for running the external shuffle service.
  */
-object ExternalShuffleService extends Logging {
+private[deploy] object ExternalShuffleService extends Logging {
   @volatile
   private var server: ExternalShuffleService = _
 

@@ -56,7 +56,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   def registerRpcEndpoint(name: String, endpoint: RpcEndpoint): NettyRpcEndpointRef = {
     val addr = RpcEndpointAddress(nettyEnv.address, name)
-    val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv)
+    val endpointRef = new NettyRpcEndpointRef(nettyEnv.conf, addr, nettyEnv, None)
     synchronized {
       if (stopped) {
         throw new IllegalStateException("RpcEnv has been stopped")
@@ -118,7 +118,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     def createMessage(sender: NettyRpcEndpointRef): InboxMessage = {
       val rpcCallContext =
         new RemoteNettyRpcCallContext(
-          nettyEnv, sender, callback, message.senderAddress, message.needReply)
+          nettyEnv, sender, callback, message.senderAddress, message.needReply,
+          Option(message.receiver.client).map(_.getClientId))
       ContentMessage(message.senderAddress, message.content, message.needReply, rpcCallContext)
     }
 

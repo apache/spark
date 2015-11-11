@@ -33,7 +33,7 @@ private[deploy] object DeployTestUtils {
   def createAppInfo() : ApplicationInfo = {
     val appDesc = createAppDesc()
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
-      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue)
+      "id", appDesc, JsonConstants.submitDate, null, Int.MaxValue, None)
     appInfo.endTime = JsonConstants.currTimeInMillis
     appInfo
   }
@@ -47,7 +47,7 @@ private[deploy] object DeployTestUtils {
     new DriverDescription("hdfs://some-dir/some.jar", 100, 3, false, createDriverCommand())
 
   def createDriverInfo(): DriverInfo = new DriverInfo(3, "driver-3",
-    createDriverDesc(), new Date())
+    createDriverDesc(), new Date(), None)
 
   def createWorkerInfo(): WorkerInfo = {
     val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")

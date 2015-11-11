@@ -29,13 +29,14 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, Namespace, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.network.sasl.ShuffleSecretManager
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
@@ -127,7 +128,15 @@ private[deploy] class Worker(
     WorkerWebUI.DEFAULT_RETAINED_DRIVERS)
 
   // The shuffle service is not actually started unless configured.
-  private val shuffleService = new ExternalShuffleService(conf, securityMgr)
+  private val shuffleServiceConf = conf.fromNamespace(Namespace.Application)
+  private val shuffleServiceSecurityMgr = new SecurityManager(shuffleServiceConf)
+  private val secretKeyHolder = if (shuffleServiceSecurityMgr.isAuthenticationEnabled()) {
+    Some(new ShuffleSecretManager)
+  } else {
+    None
+  }
+  private val shuffleService = new ExternalShuffleService(
+    shuffleServiceConf, shuffleServiceSecurityMgr, secretKeyHolder)
 
   private val publicAddress = {
     val envVar = conf.getenv("SPARK_PUBLIC_DNS")
@@ -386,7 +395,7 @@ private[deploy] class Worker(
     }
   }
 
-  override def receive: PartialFunction[Any, Unit] = synchronized {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = synchronized {
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
@@ -454,6 +463,9 @@ private[deploy] class Worker(
             }.toSeq
           }
           appDirectories(appId) = appLocalDirs
+          val appSecret = CommandUtils.findSecretKey(appDesc.command)
+          secretKeyHolder.foreach(
+            _.registerApp(appId, appSecret.getOrElse(securityMgr.getSecretKey(appId))))
           val manager = new ExecutorRunner(
             appId,
             execId,
@@ -542,6 +554,7 @@ private[deploy] class Worker(
 
     case ApplicationFinished(id) =>
       finishedApps += id
+      secretKeyHolder.foreach(_.unregisterApp(id))
       maybeCleanupApplication(id)
   }
 

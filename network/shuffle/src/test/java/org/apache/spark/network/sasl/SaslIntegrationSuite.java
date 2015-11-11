@@ -103,9 +103,10 @@ public class SaslIntegrationSuite {
   public void testGoodClient() throws IOException {
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
+        new SaslClientBootstrap(conf, secretKeyHolder)));
 
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client =
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), "app-1");
     String msg = "Hello, World!";
     byte[] resp = client.sendRpcSync(msg.getBytes(), TIMEOUT_MS);
     assertEquals(msg, new String(resp)); // our rpc handler should just return the given msg
@@ -118,11 +119,11 @@ public class SaslIntegrationSuite {
     when(badKeyHolder.getSecretKey(anyString())).thenReturn("wrong-password");
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "unknown-app", badKeyHolder)));
+        new SaslClientBootstrap(conf, badKeyHolder)));
 
     try {
       // Bootstrap should fail on startup.
-      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), "unknown-app");
       fail("Connection should have failed.");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Mismatched response"));
@@ -134,7 +135,8 @@ public class SaslIntegrationSuite {
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList());
 
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client =
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), null);
     try {
       client.sendRpcSync(new byte[13], TIMEOUT_MS);
       fail("Should have failed");
@@ -157,10 +159,10 @@ public class SaslIntegrationSuite {
     TransportContext context = new TransportContext(conf, handler);
     clientFactory = context.createClientFactory(
       Lists.<TransportClientBootstrap>newArrayList(
-        new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
+        new SaslClientBootstrap(conf, secretKeyHolder)));
     TransportServer server = context.createServer();
     try {
-      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), "app-1");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Digest-challenge format violation"));
     } finally {
@@ -188,10 +190,8 @@ public class SaslIntegrationSuite {
     try {
       // Create a client, and make a request to fetch blocks from a different app.
       clientFactory = blockServerContext.createClientFactory(
-        Lists.<TransportClientBootstrap>newArrayList(
-          new SaslClientBootstrap(conf, "app-1", secretKeyHolder)));
-      client1 = clientFactory.createClient(TestUtils.getLocalHost(),
-        blockServer.getPort());
+        Lists.<TransportClientBootstrap>newArrayList(new SaslClientBootstrap(conf, secretKeyHolder)));
+      client1 = clientFactory.createClient(TestUtils.getLocalHost(), blockServer.getPort(), "app-1");
 
       final AtomicReference<Throwable> exception = new AtomicReference<>();
 
@@ -235,9 +235,9 @@ public class SaslIntegrationSuite {
       // the stream created for the previous app.
       clientFactory2 = blockServerContext.createClientFactory(
         Lists.<TransportClientBootstrap>newArrayList(
-          new SaslClientBootstrap(conf, "app-2", secretKeyHolder)));
-      client2 = clientFactory2.createClient(TestUtils.getLocalHost(),
-        blockServer.getPort());
+          new SaslClientBootstrap(conf, secretKeyHolder)));
+      client2 = clientFactory2
+        .createClient(TestUtils.getLocalHost(), blockServer.getPort(), "app-2");
 
       ChunkReceivedCallback callback = new ChunkReceivedCallback() {
         @Override

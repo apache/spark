@@ -94,7 +94,7 @@ public class TransportClientFactorySuite {
         public void run() {
           try {
             TransportClient client =
-              factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+              factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
             assert (client.isActive());
             clients.add(client);
           } catch (IOException e) {
@@ -142,8 +142,8 @@ public class TransportClientFactorySuite {
   @Test
   public void returnDifferentClientsForDifferentServers() throws IOException {
     TransportClientFactory factory = context.createClientFactory();
-    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort(), null);
     assertTrue(c1.isActive());
     assertTrue(c2.isActive());
     assertTrue(c1 != c2);
@@ -153,7 +153,7 @@ public class TransportClientFactorySuite {
   @Test
   public void neverReturnInactiveClients() throws IOException, InterruptedException {
     TransportClientFactory factory = context.createClientFactory();
-    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
     c1.close();
 
     long start = System.currentTimeMillis();
@@ -162,7 +162,7 @@ public class TransportClientFactorySuite {
     }
     assertFalse(c1.isActive());
 
-    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
     assertFalse(c1 == c2);
     assertTrue(c2.isActive());
     factory.close();
@@ -171,8 +171,8 @@ public class TransportClientFactorySuite {
   @Test
   public void closeBlockClientsWithFactory() throws IOException {
     TransportClientFactory factory = context.createClientFactory();
-    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
+    TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort(), null);
     assertTrue(c1.isActive());
     assertTrue(c2.isActive());
     factory.close();
@@ -200,7 +200,7 @@ public class TransportClientFactorySuite {
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
     TransportClientFactory factory = context.createClientFactory();
     try {
-      TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+      TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort(), null);
       assertTrue(c1.isActive());
       long expiredTime = System.currentTimeMillis() + 10000; // 10 seconds
       while (c1.isActive() && System.currentTimeMillis() < expiredTime) {

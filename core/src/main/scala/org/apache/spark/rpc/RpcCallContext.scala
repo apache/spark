@@ -38,4 +38,9 @@ private[spark] trait RpcCallContext {
    * The sender of this message.
    */
   def senderAddress: RpcAddress
+
+  /**
+   * The application identifier which the client is authenticated with
+   */
+  def appId: Option[String]
 }

@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.deploy.master
 
-import io.netty.channel.Channel;
+import akka.actor.ActorNotFound
 
-/**
- * A bootstrap which is executed on a TransportClient before it is returned to the user.
- * This enables an initial exchange of information (e.g., SASL authentication tokens) on a once-per-
- * connection basis.
- *
- * Since connections (and TransportClients) are reused as much as possible, it is generally
- * reasonable to perform an expensive bootstrapping operation, as they often share a lifespan with
- * the JVM itself.
- */
-public interface TransportClientBootstrap {
-  /** Performs the bootstrapping operation, throwing an exception on failure. */
-  void doBootstrap(TransportClient client, Channel channel, String appId) throws RuntimeException;
+class AbstractAkkaMasterNet extends AbstractMasterNet("akka") {
+
+  def shouldFailBecauseOfWrongSecret(code: => Unit): Unit = {
+    try {
+      code
+      fail("Should fail")
+    } catch {
+      case expected: ActorNotFound =>
+    }
+  }
 }

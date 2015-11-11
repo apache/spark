@@ -582,7 +582,7 @@ private[spark] class ApplicationMaster(
       driver.send(RegisterClusterManager(self))
     }
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver.send(x)

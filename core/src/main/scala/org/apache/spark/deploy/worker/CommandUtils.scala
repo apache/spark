@@ -22,8 +22,8 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.apache.spark.Logging
-import org.apache.spark.SecurityManager
+import org.apache.spark.SecurityManager._
+import org.apache.spark.{Logging, Namespace, SecurityManager}
 import org.apache.spark.deploy.Command
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
@@ -40,14 +40,13 @@ object CommandUtils extends Logging {
    */
   def buildProcessBuilder(
       command: Command,
-      securityMgr: SecurityManager,
       memory: Int,
       sparkHome: String,
       substituteArguments: String => String,
       classPaths: Seq[String] = Seq[String](),
       env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(
-      command, securityMgr, substituteArguments, classPaths, env)
+      command, substituteArguments, classPaths, env)
     val commandSeq = buildCommandSeq(localCommand, memory, sparkHome)
     val builder = new ProcessBuilder(commandSeq: _*)
     val environment = builder.environment()
@@ -71,7 +70,6 @@ object CommandUtils extends Logging {
    */
   private def buildLocalCommand(
       command: Command,
-      securityMgr: SecurityManager,
       substituteArguments: String => String,
       classPath: Seq[String] = Seq[String](),
       env: Map[String, String]): Command = {
@@ -87,9 +85,8 @@ object CommandUtils extends Logging {
     }
 
     // set auth secret to env variable if needed
-    if (securityMgr.isAuthenticationEnabled) {
-      newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> securityMgr.getSecretKey)
-    }
+    val secretKey = findSecretKey(command)
+    secretKey.foreach(key => newEnvironment += (SecurityManager.ENV_AUTH_SECRET -> key))
 
     Command(
       command.mainClass,
@@ -117,4 +114,23 @@ object CommandUtils extends Logging {
       }
     }.start()
   }
+
+  val SYSTEM_PROPERTY_PATTERN = """^-D(.+?)=(.*)$""".r
+
+  /**
+   * Searches for a secret defined in the given command at a given namespace. No matter whether
+   * the secret is defined as env variable or as Java system property passed in the command line.
+   *
+   * @param command a command to search over
+   * @param namespace a namespace at which the secret is searched
+   * @return a secret token if it was found
+   */
+  def findSecretKey(command: Command, namespace: Namespace = Namespace.Blank): Option[String] = {
+    command.environment.get(namespace.envName(ENV_AUTH_SECRET))
+      .orElse(command.javaOpts.collectFirst {
+      case CommandUtils.SYSTEM_PROPERTY_PATTERN(key, secret)
+        if key == namespace.confName(SPARK_AUTH_SECRET_CONF) => secret
+    })
+  }
+
 }

@@ -20,7 +20,6 @@ package org.apache.spark.network.client;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -78,7 +77,7 @@ public class TransportClientFactory implements Closeable {
   private final TransportContext context;
   private final TransportConf conf;
   private final List<TransportClientBootstrap> clientBootstraps;
-  private final ConcurrentHashMap<SocketAddress, ClientPool> connectionPool;
+  private final ConcurrentHashMap<ClientAddress, ClientPool> connectionPool;
 
   /** Random number generator for picking connections between peers. */
   private final Random rand;
@@ -94,7 +93,7 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
+    this.connectionPool = new ConcurrentHashMap<ClientAddress, ClientPool>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 
@@ -120,10 +119,13 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
+  public TransportClient createClient(String remoteHost, int remotePort, String appId)
+    throws IOException {
+
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
-    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    final ClientAddress address =
+      ClientAddress.from(new InetSocketAddress(remoteHost, remotePort), appId);
 
     // Create the ClientPool if we don't have it yet.
     ClientPool clientPool = connectionPool.get(address);
@@ -162,14 +164,14 @@ public class TransportClientFactory implements Closeable {
    * Create a completely new {@link TransportClient} to the given remote host / port
    * But this connection is not pooled.
    */
-  public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
+  public TransportClient createUnmanagedClient(String remoteHost, int remotePort, String appId)
       throws IOException {
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
-    return createClient(address);
+    return createClient(ClientAddress.from(address, appId));
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */
-  private TransportClient createClient(InetSocketAddress address) throws IOException {
+  private TransportClient createClient(ClientAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
 
     Bootstrap bootstrap = new Bootstrap();
@@ -195,7 +197,7 @@ public class TransportClientFactory implements Closeable {
 
     // Connect to the remote server
     long preConnect = System.nanoTime();
-    ChannelFuture cf = bootstrap.connect(address);
+    ChannelFuture cf = bootstrap.connect(address.socketAddress);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
@@ -212,7 +214,7 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Connection to {} successful, running bootstraps...", address);
     try {
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
-        clientBootstrap.doBootstrap(client, channel);
+        clientBootstrap.doBootstrap(client, channel, address.appId);
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;

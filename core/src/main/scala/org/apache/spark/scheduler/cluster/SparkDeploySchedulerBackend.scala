@@ -19,22 +19,22 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.rpc.RpcAddress
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
-    sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+  extends CoarseGrainedSchedulerBackend(scheduler, scheduler.sc.env.rpcEnv)
   with AppClientListener
   with Logging {
 
+  private val sc = scheduler.sc
   private var client: AppClient = null
   private var stopping = false
   private val launcherBackend = new LauncherBackend() {
@@ -88,9 +88,17 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
-      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
-    client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
+
+    val appDesc = new ApplicationDescription(
+      sc.appName,
+      maxCores,
+      sc.executorMemory,
+      command,
+      appUIAddress,
+      sc.eventLogDir,
+      sc.eventLogCodec,
+      coresPerExecutor)
+    client = AppClient(sc.conf, masters, appDesc, this)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()

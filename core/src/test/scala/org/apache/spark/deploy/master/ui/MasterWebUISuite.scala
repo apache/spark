@@ -59,7 +59,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfter {
     val appDesc = createAppDesc()
     // use new start date so it isn't filtered by UI
     val activeApp = new ApplicationInfo(
-      new Date().getTime, "id", appDesc, new Date(), null, Int.MaxValue)
+      new Date().getTime, "id", appDesc, new Date(), null, Int.MaxValue, None)
     activeApp.addExecutor(worker, 2)
 
     val workers = Array[WorkerInfo](worker)

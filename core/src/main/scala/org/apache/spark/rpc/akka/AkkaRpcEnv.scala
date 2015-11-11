@@ -151,24 +151,30 @@ private[spark] class AkkaRpcEnv private[akka] (
   private def processMessage(endpoint: RpcEndpoint, m: AkkaMessage, _sender: ActorRef): Unit = {
     val message = m.message
     val needReply = m.needReply
-    val pf: PartialFunction[Any, Unit] =
-      if (needReply) {
-        endpoint.receiveAndReply(new RpcCallContext {
-          override def sendFailure(e: Throwable): Unit = {
-            _sender ! AkkaFailure(e)
-          }
+    val pf: PartialFunction[Any, Unit] = {
+      val callCtx = new RpcCallContext {
+        override def sendFailure(e: Throwable): Unit = {
+          _sender ! AkkaFailure(e)
+        }
 
-          override def reply(response: Any): Unit = {
-            _sender ! AkkaMessage(response, false)
-          }
+        override def reply(response: Any): Unit = {
+          _sender ! AkkaMessage(response, false)
+        }
 
-          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
-          override lazy val senderAddress: RpcAddress =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
-        })
-      } else {
-        endpoint.receive
+        // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+        override lazy val senderAddress: RpcAddress =
+          new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
+
+        // there is no real authentication with Akka
+        override val appId: Option[String] = None
       }
+
+      if (needReply) {
+        endpoint.receiveAndReply(callCtx)
+      } else {
+        endpoint.receive(callCtx)
+      }
+    }
     try {
       pf.applyOrElse[Any, Unit](message, { message =>
         throw new SparkException(s"Unmatched message $message from ${_sender}")

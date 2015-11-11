@@ -24,6 +24,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.rpc._
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
+import org.apache.spark.SecurityManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend.ENDPOINT_NAME
@@ -102,7 +103,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
     }
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
@@ -300,7 +301,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   override def start() {
     val properties = new ArrayBuffer[(String, String)]
     for ((key, value) <- scheduler.sc.conf.getAll) {
-      if (key.startsWith("spark.")) {
+      // it doesn't make any sense to send secret here because the executor must already know it
+      // in order to connect and fetch this configuration. It also breaks the shared secret
+      // principle
+      if (key.startsWith("spark.") && key != SecurityManager.SPARK_AUTH_SECRET_CONF) {
         properties += ((key, value))
       }
     }

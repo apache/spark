@@ -46,7 +46,7 @@ private[spark] class WorkerWatcher(
 
   private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case e => logWarning(s"Received unexpected message: $e")
   }
 

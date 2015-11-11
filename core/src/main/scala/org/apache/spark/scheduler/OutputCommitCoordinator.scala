@@ -183,7 +183,7 @@ private[spark] object OutputCommitCoordinator {
       override val rpcEnv: RpcEnv, outputCommitCoordinator: OutputCommitCoordinator)
     extends RpcEndpoint with Logging {
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case StopCoordinator =>
         logInfo("OutputCommitCoordinator stopped!")
         stop()

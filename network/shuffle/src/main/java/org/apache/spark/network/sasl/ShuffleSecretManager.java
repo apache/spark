@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.util.JavaUtils;
 
 /**
@@ -36,7 +35,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
 
   // Spark user used for authenticating SASL connections
   // Note that this must match the value in org.apache.spark.SecurityManager
-  private static final String SPARK_SASL_USER = "sparkSaslUser";
+  private static final String SPARK_SASL_USER = SecretKeyHolder.DEFAULT_SPARK_SASL_USER;
 
   public ShuffleSecretManager() {
     shuffleSecretMap = new ConcurrentHashMap<String, String>();

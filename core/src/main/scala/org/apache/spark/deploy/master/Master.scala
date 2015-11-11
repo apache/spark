@@ -29,6 +29,7 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
@@ -207,8 +208,39 @@ private[deploy] class Master(
     self.send(RevokedLeadership)
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
+  def getUserId(context: RpcCallContext): String = {
+    context.appId.map(securityMgr.getSaslUser).getOrElse(securityMgr.getSaslUser())
+  }
+
+  def checkAuthorizedToInternalMessages(context: RpcCallContext): Unit = {
+    if (securityMgr.isAuthenticationEnabled()) {
+      if (getUserId(context) != SecretKeyHolder.DEFAULT_SPARK_SASL_USER) {
+        throw new SparkException("Unauthorized")
+      }
+    }
+  }
+
+  def checkAuthorizedToApp(appId: String, context: RpcCallContext): Unit = {
+    if (securityMgr.isAuthenticationEnabled()) {
+      val owner = idToApp.get(appId).flatMap(_.owner)
+      val userId = getUserId(context)
+      for (ownerId <- owner if ownerId != userId)
+        throw new SparkException(s"User $userId is not authorized to manage app $appId")
+    }
+  }
+
+  def checkAuthorizedToDriver(driverId: String, context: RpcCallContext): Unit = {
+    if (securityMgr.isAuthenticationEnabled()) {
+      val owner = (drivers ++ completedDrivers).find(_.id == driverId).flatMap(_.owner)
+      val userId = getUserId(context)
+      for (ownerId <- owner if ownerId != userId)
+        throw new SparkException(s"User $userId is not authorized to driver app $driverId")
+    }
+  }
+
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ElectedLeader => {
+      checkAuthorizedToInternalMessages(context)
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
@@ -226,9 +258,12 @@ private[deploy] class Master(
       }
     }
 
-    case CompleteRecovery => completeRecovery()
+    case CompleteRecovery =>
+      checkAuthorizedToInternalMessages(context)
+      completeRecovery()
 
     case RevokedLeadership => {
+      checkAuthorizedToInternalMessages(context)
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
     }
@@ -239,7 +274,7 @@ private[deploy] class Master(
         // ignore, don't send response
       } else {
         logInfo("Registering app " + description.name)
-        val app = createApplication(description, driver)
+        val app = createApplication(description, driver, context.appId)
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
         persistenceEngine.addApplication(app)
@@ -249,6 +284,7 @@ private[deploy] class Master(
     }
 
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) => {
+      checkAuthorizedToApp(appId, context)
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
         case Some(exec) => {
@@ -288,6 +324,7 @@ private[deploy] class Master(
     }
 
     case DriverStateChanged(driverId, state, exception) => {
+      checkAuthorizedToInternalMessages(context)
       state match {
         case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
           removeDriver(driverId, state, exception)
@@ -297,6 +334,7 @@ private[deploy] class Master(
     }
 
     case Heartbeat(workerId, worker) => {
+      checkAuthorizedToInternalMessages(context)
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
@@ -313,6 +351,7 @@ private[deploy] class Master(
     }
 
     case MasterChangeAcknowledged(appId) => {
+      checkAuthorizedToApp(appId, context)
       idToApp.get(appId) match {
         case Some(app) =>
           logInfo("Application has been re-registered: " + appId)
@@ -325,6 +364,7 @@ private[deploy] class Master(
     }
 
     case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
+      checkAuthorizedToInternalMessages(context)
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
@@ -353,10 +393,12 @@ private[deploy] class Master(
     }
 
     case UnregisterApplication(applicationId) =>
+      checkAuthorizedToApp(applicationId, context)
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
 
     case CheckForWorkerTimeOut => {
+      checkAuthorizedToInternalMessages(context)
       timeOutDeadWorkers()
     }
   }
@@ -364,6 +406,7 @@ private[deploy] class Master(
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterWorker(
         id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+      checkAuthorizedToInternalMessages(context)
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -394,7 +437,7 @@ private[deploy] class Master(
         context.reply(SubmitDriverResponse(self, false, None, msg))
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
-        val driver = createDriver(description)
+        val driver = createDriver(description, context.appId)
         persistenceEngine.addDriver(driver)
         waitingDrivers += driver
         drivers.add(driver)
@@ -409,6 +452,7 @@ private[deploy] class Master(
     }
 
     case RequestKillDriver(driverId) => {
+      checkAuthorizedToDriver(driverId, context)
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           s"Can only kill drivers in ALIVE state."
@@ -442,6 +486,7 @@ private[deploy] class Master(
     }
 
     case RequestDriverStatus(driverId) => {
+      checkAuthorizedToDriver(driverId, context)
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only request driver status in ALIVE state."
@@ -459,6 +504,7 @@ private[deploy] class Master(
     }
 
     case RequestMasterState => {
+      checkAuthorizedToInternalMessages(context)
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
@@ -470,9 +516,11 @@ private[deploy] class Master(
     }
 
     case RequestExecutors(appId, requestedTotal) =>
+      checkAuthorizedToApp(appId, context)
       context.reply(handleRequestExecutors(appId, requestedTotal))
 
     case KillExecutors(appId, executorIds) =>
+      checkAuthorizedToApp(appId, context)
       val formattedExecutorIds = formatExecutorIds(executorIds)
       context.reply(handleKillExecutors(appId, formattedExecutorIds))
   }
@@ -764,12 +812,14 @@ private[deploy] class Master(
     schedule()
   }
 
-  private def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef):
-      ApplicationInfo = {
+  private def createApplication(
+      desc: ApplicationDescription,
+      driver: RpcEndpointRef,
+      owner: Option[String]): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     val appId = newApplicationId(date)
-    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores, owner)
   }
 
   private def registerApplication(app: ApplicationInfo): Unit = {
@@ -1011,10 +1061,10 @@ private[deploy] class Master(
     appId
   }
 
-  private def createDriver(desc: DriverDescription): DriverInfo = {
+  private def createDriver(desc: DriverDescription, owner: Option[String]): DriverInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new DriverInfo(now, newDriverId(date), desc, date)
+    new DriverInfo(now, newDriverId(date), desc, date, owner)
   }
 
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo) {

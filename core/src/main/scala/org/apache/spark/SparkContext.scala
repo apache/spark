@@ -45,6 +45,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 
 import org.apache.mesos.MesosNativeLibrary
 
+import org.apache.spark.SecurityManager._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -379,6 +380,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   try {
     _conf = config.clone()
+
+    // if a secret key has been set in an env variable, use it
+    for (ns <- Seq(Namespace.Blank, Namespace.Application, Namespace.Submission)) {
+      sys.env.get(ns.envName(ENV_AUTH_SECRET))
+        .foreach(conf.set(ns.confName(SPARK_AUTH_SECRET_CONF), _))
+    }
+
+    // copy all the properties from spark.application.xxx to spark.xxx
+    _conf = _conf.fromNamespace(Namespace.Application)
+
     _conf.validateSettings()
 
     if (!_conf.contains("spark.master")) {
@@ -496,6 +507,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
     executorEnvs ++= _conf.getExecutorEnv
     executorEnvs("SPARK_USER") = sparkUser
+    _conf.getOption(Namespace.Application.confName(SecurityManager.SPARK_AUTH_SECRET_CONF))
+      .foreach(executorEnvs(SecurityManager.ENV_AUTH_SECRET) = _)
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
@@ -2612,7 +2625,7 @@ object SparkContext extends Logging {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new SparkDeploySchedulerBackend(scheduler, masterUrls)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2629,7 +2642,7 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new SparkDeploySchedulerBackend(scheduler, masterUrls)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
