@@ -21,14 +21,15 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.api.java.function._
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -359,7 +360,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    new Dataset[U1](sqlContext, Project(Alias(c1.expr, "_1")() :: Nil, logicalPlan))
+    new Dataset[U1](sqlContext, Project(Alias(withEncoder(c1).expr, "_1")() :: Nil, logicalPlan))
   }
 
   /**
@@ -368,17 +369,28 @@ class Dataset[T] private[sql](
    * that cast appropriately for the user facing interface.
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val aliases = columns.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
+    val withEncoders = columns.map(withEncoder)
+    val aliases = withEncoders.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
     val unresolvedPlan = Project(aliases, logicalPlan)
     val execution = new QueryExecution(sqlContext, unresolvedPlan)
     // Rebind the encoders to the nested schema that will be produced by the select.
-    val encoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
+    val encoders = withEncoders.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
       case (e: ExpressionEncoder[_], a) if !e.flat =>
         e.nested(a.toAttribute).resolve(execution.analyzed.output)
       case (e, a) =>
         e.unbind(a.toAttribute :: Nil).resolve(execution.analyzed.output)
     }
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
+  }
+
+  private def withEncoder(c: TypedColumn[_, _]): TypedColumn[_, _] = {
+    val e = c.expr transform {
+      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(
+          aEncoder = Some(encoder.asInstanceOf[ExpressionEncoder[Any]]),
+          children = queryExecution.analyzed.output)
+    }
+    new TypedColumn(e, c.encoder)
   }
 
   /**
