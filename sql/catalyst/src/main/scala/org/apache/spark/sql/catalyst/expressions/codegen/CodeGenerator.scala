@@ -33,10 +33,6 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
 
 
-// These classes are here to avoid issues with serialization and integration with quasiquotes.
-class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
-class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
-
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
@@ -205,8 +201,6 @@ class CodeGenContext {
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
-    case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
-    case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
