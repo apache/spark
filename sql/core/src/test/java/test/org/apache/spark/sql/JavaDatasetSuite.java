@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.encoders.Encoder;
 import org.apache.spark.sql.catalyst.encoders.Encoder$;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.GroupedDataset;
-import org.apache.spark.sql.TypedColumn;
 import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
 
@@ -390,8 +389,8 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<Tuple4<String, Integer, Long, Long>> agged2 = grouped.agg(
       new IntSumOf().toColumn(e.INT(), e.INT()),
-      (TypedColumn<Tuple2<String, Integer>, Long>) (Object) expr("sum(_2)").as(e.LONG()),
-      (TypedColumn<Tuple2<String, Integer>, Long>) (Object) count("*"));
+      expr("sum(_2)"),
+      count("*")).as(e.tuple(e.STRING(), e.INT(), e.LONG(), e.LONG()));
     Assert.assertEquals(
       Arrays.asList(
         new Tuple4<String, Integer, Long, Long>("a", 3, 3L, 2L),

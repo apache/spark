@@ -137,8 +137,19 @@ class GroupedDataset[K, T] private[sql](
   }
 
   // To ensure valid overloading.
-  protected def agg(expr: Column, exprs: Column*): DataFrame =
-    groupedData.agg(expr, exprs: _*)
+  @scala.annotation.varargs
+  def agg(expr: Column, exprs: Column*): DataFrame =
+    groupedData.agg(withEncoder(expr), exprs.map(withEncoder): _*)
+
+  private def withEncoder(c: Column): Column = {
+    val e = c.expr transform {
+      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(
+          aEncoder = Some(tEnc.asInstanceOf[ExpressionEncoder[Any]]),
+          children = dataAttributes)
+    }
+    Column(e)
+  }
 
   /**
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
