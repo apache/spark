@@ -47,6 +47,11 @@
     <property name="severity" value="error"/>
 
     <property name="fileExtensions" value="java, properties, xml"/>
+
+    <module name="SuppressionFilter">
+      <property name="file" value="checkstyle-suppressions.xml"/>
+    </module>
+
     <!-- Checks for whitespace                               -->
     <!-- See http://checkstyle.sf.net/config_whitespace.html -->
     <module name="FileTabCharacter">
