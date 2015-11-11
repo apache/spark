@@ -158,7 +158,7 @@ web_server_port = 8080
 secret_key = temporary_key
 
 # number of threads to run the Gunicorn web server
-thread = 4
+threads = 4
 
 # Expose the configuration file in the web server
 expose_config = true
