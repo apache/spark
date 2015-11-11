@@ -49,6 +49,7 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
+  checkDataType("ChaR(5)", StringType)
   checkDataType("varchAr(20)", StringType)
   checkDataType("BINARY", BinaryType)
 
