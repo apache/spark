@@ -213,9 +213,11 @@ class DagBag(object):
         """
         from airflow.jobs import LocalTaskJob as LJ
         logging.info("Finding 'running' jobs without a recent heartbeat")
-        secs = (configuration.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
+        secs = (
+            configuration.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
         limit_dttm = datetime.now() - timedelta(seconds=secs)
-        print("Failing jobs without heartbeat after {}".format(limit_dttm))
+        logging.info(
+            "Failing jobs without heartbeat after {}".format(limit_dttm))
         jobs = (
             session
             .query(LJ)
