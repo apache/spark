@@ -145,6 +145,8 @@ private[sql] class JSONRelation(
 
   override def inputExists: Boolean = inputRDD.isDefined || super.inputExists
 
+  override def readFromHDFS: Boolean = !inputRDD.isDefined
+
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
       ((inputRDD, that.inputRDD) match {
