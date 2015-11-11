@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.File
-
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.catalyst.expressions.{NamedExpression, Literal, AttributeReference, EqualTo}
@@ -36,11 +34,6 @@ import org.apache.spark.util.Utils
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
-  // Do not use a temp path here to speed up subsequent executions of the unit test during
-  // development.
-  private val ivyPath = Some(
-    new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath())
-
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
@@ -52,8 +45,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   test("success sanity check") {
     val badClient = IsolatedClientLoader.forVersion(HiveContext.hiveExecutionVersion,
-      buildConf(),
-      ivyPath).createClient()
+      buildConf()).createClient()
     val db = new HiveDatabase("default", "")
     badClient.createDatabase(db)
   }
@@ -83,7 +75,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   ignore("failure sanity check") {
     val e = intercept[Throwable] {
       val badClient = quietly {
-        IsolatedClientLoader.forVersion("13", buildConf(), ivyPath).createClient()
+        IsolatedClientLoader.forVersion("13", buildConf()).createClient()
       }
     }
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
@@ -97,7 +89,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: create client") {
       client = null
       System.gc() // Hack to avoid SEGV on some JVM versions.
-      client = IsolatedClientLoader.forVersion(version, buildConf(), ivyPath).createClient()
+      client = IsolatedClientLoader.forVersion(version, buildConf()).createClient()
     }
 
     test(s"$version: createDatabase") {
