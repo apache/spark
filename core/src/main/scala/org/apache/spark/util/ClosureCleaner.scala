@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.{Map, Set}
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
+import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 
@@ -325,11 +325,11 @@ private[spark] object ClosureCleaner extends Logging {
 private[spark] class ReturnStatementInClosureException
   extends SparkException("Return statements aren't allowed in Spark closures")
 
-private class ReturnStatementFinder extends ClassVisitor(ASM4) {
+private class ReturnStatementFinder extends ClassVisitor(ASM5) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     if (name.contains("apply")) {
-      new MethodVisitor(ASM4) {
+      new MethodVisitor(ASM5) {
         override def visitTypeInsn(op: Int, tp: String) {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl")) {
             throw new ReturnStatementInClosureException
@@ -337,7 +337,7 @@ private class ReturnStatementFinder extends ClassVisitor(ASM4) {
         }
       }
     } else {
-      new MethodVisitor(ASM4) {}
+      new MethodVisitor(ASM5) {}
     }
   }
 }
@@ -361,7 +361,7 @@ private[util] class FieldAccessFinder(
     findTransitively: Boolean,
     specificMethod: Option[MethodIdentifier[_]] = None,
     visitedMethods: Set[MethodIdentifier[_]] = Set.empty)
-  extends ClassVisitor(ASM4) {
+  extends ClassVisitor(ASM5) {
 
   override def visitMethod(
       access: Int,
@@ -376,7 +376,7 @@ private[util] class FieldAccessFinder(
       return null
     }
 
-    new MethodVisitor(ASM4) {
+    new MethodVisitor(ASM5) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
         if (op == GETFIELD) {
           for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
@@ -385,7 +385,8 @@ private[util] class FieldAccessFinder(
         }
       }
 
-      override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         for (cl <- fields.keys if cl.getName == owner.replace('/', '.')) {
           // Check for calls a getter method for a variable in an interpreter wrapper object.
           // This means that the corresponding field will be accessed, so we should save it.
@@ -408,7 +409,7 @@ private[util] class FieldAccessFinder(
   }
 }
 
-private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM4) {
+private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM5) {
   var myName: String = null
 
   // TODO: Recursively find inner closures that we indirectly reference, e.g.
@@ -423,9 +424,9 @@ private class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisitor(ASM
 
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    new MethodVisitor(ASM4) {
-      override def visitMethodInsn(op: Int, owner: String, name: String,
-          desc: String) {
+    new MethodVisitor(ASM5) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         val argTypes = Type.getArgumentTypes(desc)
         if (op == INVOKESPECIAL && name == "<init>" && argTypes.length > 0
             && argTypes(0).toString.startsWith("L") // is it an object?
