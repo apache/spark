@@ -343,7 +343,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation)
-      execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
+      execution.TungstenProject(
+        projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
 
