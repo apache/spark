@@ -54,7 +54,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     var clientBootstrap: Option[TransportClientBootstrap] = None
     if (authEnabled) {
       serverBootstrap = Some(new SaslServerBootstrap(transportConf, securityManager))
-      clientBootstrap = Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager,
+      clientBootstrap = Some(new SaslClientBootstrap(transportConf, securityManager,
         securityManager.isSaslEncryptionEnabled()))
     }
     transportContext = new TransportContext(transportConf, rpcHandler)
@@ -85,7 +85,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
-          val client = clientFactory.createClient(host, port)
+          val client = clientFactory.createClient(host, port, appId)
           new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
         }
       }
@@ -117,7 +117,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       blockData: ManagedBuffer,
       level: StorageLevel): Future[Unit] = {
     val result = Promise[Unit]()
-    val client = clientFactory.createClient(hostname, port)
+    val client = clientFactory.createClient(hostname, port, appId)
 
     // StorageLevel is serialized as bytes using our JavaSerializer. Everything else is encoded
     // using our binary protocol.

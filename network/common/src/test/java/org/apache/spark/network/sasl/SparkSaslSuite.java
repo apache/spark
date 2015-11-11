@@ -382,13 +382,13 @@ public class SparkSaslSuite {
 
       try {
         List<TransportClientBootstrap> clientBootstraps = Lists.newArrayList();
-        clientBootstraps.add(new SaslClientBootstrap(conf, "user", keyHolder, encrypt));
+        clientBootstraps.add(new SaslClientBootstrap(conf, keyHolder, encrypt));
         if (disableClientEncryption) {
           clientBootstraps.add(new EncryptionDisablerBootstrap());
         }
 
         this.client = ctx.createClientFactory(clientBootstraps)
-          .createClient(TestUtils.getLocalHost(), server.getPort());
+          .createClient(TestUtils.getLocalHost(), server.getPort(), "user");
       } catch (Exception e) {
         close();
         throw e;
@@ -443,7 +443,7 @@ public class SparkSaslSuite {
   private static class EncryptionDisablerBootstrap implements TransportClientBootstrap {
 
     @Override
-    public void doBootstrap(TransportClient client, Channel channel) {
+    public void doBootstrap(TransportClient client, Channel channel, String appId) {
       channel.pipeline().remove(SaslEncryption.ENCRYPTION_HANDLER_NAME);
     }
 

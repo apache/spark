@@ -105,7 +105,8 @@ public class RequestTimeoutIntegrationSuite {
     TransportContext context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client =
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), null);
 
     // First completes quickly (semaphore starts at 1).
     TestCallback callback0 = new TestCallback();
@@ -155,7 +156,7 @@ public class RequestTimeoutIntegrationSuite {
 
     // First request should eventually fail.
     TransportClient client0 =
-      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), null);
     TestCallback callback0 = new TestCallback();
     synchronized (callback0) {
       client0.sendRpc(new byte[0], callback0);
@@ -167,7 +168,7 @@ public class RequestTimeoutIntegrationSuite {
     // Increment the semaphore and the second request should succeed quickly.
     semaphore.release(2);
     TransportClient client1 =
-      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), null);
     TestCallback callback1 = new TestCallback();
     synchronized (callback1) {
       client1.sendRpc(new byte[0], callback1);
@@ -204,7 +205,8 @@ public class RequestTimeoutIntegrationSuite {
     TransportContext context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client =
+      clientFactory.createClient(TestUtils.getLocalHost(), server.getPort(), null);
 
     // Send one request, which will eventually fail.
     TestCallback callback0 = new TestCallback();

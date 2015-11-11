@@ -22,17 +22,14 @@ import java.net.{InetSocketAddress, URI}
 import java.nio.ByteBuffer
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy
+import javax.annotation.Nullable
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
-import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
+import scala.util.{DynamicVariable, Failure, Success}
 
-import com.google.common.base.Preconditions
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -41,6 +38,7 @@ import org.apache.spark.network.server._
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance}
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 private[netty] class NettyRpcEnv(
     val conf: SparkConf,
@@ -58,14 +56,14 @@ private[netty] class NettyRpcEnv(
     new NettyRpcHandler(dispatcher, this))
 
   private val clientFactory = {
-    val bootstraps: java.util.List[TransportClientBootstrap] =
+    val bootstraps =
       if (securityManager.isAuthenticationEnabled()) {
-        java.util.Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager,
-          securityManager.isSaslEncryptionEnabled()))
+        List[TransportClientBootstrap](new SaslClientBootstrap(
+          transportConf, securityManager, securityManager.isSaslEncryptionEnabled()))
       } else {
-        java.util.Collections.emptyList[TransportClientBootstrap]
+        Nil
       }
-    transportContext.createClientFactory(bootstraps)
+    transportContext.createClientFactory(bootstraps.asJava)
   }
 
   val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
@@ -85,7 +83,7 @@ private[netty] class NettyRpcEnv(
    * A map for [[RpcAddress]] and [[Outbox]]. When we are connecting to a remote [[RpcAddress]],
    * we just put messages to its [[Outbox]] to implement a non-blocking `send` method.
    */
-  private val outboxes = new ConcurrentHashMap[RpcAddress, Outbox]()
+  private val outboxes = new ConcurrentHashMap[(RpcAddress, Option[String]), Outbox]()
 
   /**
    * Remove the address's Outbox and stop it.
@@ -120,9 +118,10 @@ private[netty] class NettyRpcEnv(
 
   def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     val addr = RpcEndpointAddress(uri)
-    val endpointRef = new NettyRpcEndpointRef(conf, addr, this)
+    val appId = Some(securityManager.getSaslUser())
+    val endpointRef = new NettyRpcEndpointRef(conf, addr, this, appId)
     val verifier = new NettyRpcEndpointRef(
-      conf, RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME), this)
+      conf, RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME), this, appId)
     verifier.ask[Boolean](RpcEndpointVerifier.CheckExistence(endpointRef.name)).flatMap { find =>
       if (find) {
         Future.successful(endpointRef)
@@ -144,10 +143,10 @@ private[netty] class NettyRpcEnv(
       require(receiver.address != null,
         "Cannot send message to client endpoint with no listen address.")
       val targetOutbox = {
-        val outbox = outboxes.get(receiver.address)
+        val outbox = outboxes.get((receiver.address, receiver.appId))
         if (outbox == null) {
-          val newOutbox = new Outbox(this, receiver.address)
-          val oldOutbox = outboxes.putIfAbsent(receiver.address, newOutbox)
+          val newOutbox = new Outbox(this, receiver.address, receiver.appId)
+          val oldOutbox = outboxes.putIfAbsent((receiver.address, receiver.appId), newOutbox)
           if (oldOutbox == null) {
             newOutbox
           } else {
@@ -193,8 +192,8 @@ private[netty] class NettyRpcEnv(
     }
   }
 
-  private[netty] def createClient(address: RpcAddress): TransportClient = {
-    clientFactory.createClient(address.host, address.port)
+  private[netty] def createClient(address: RpcAddress, appId: Option[String]): TransportClient = {
+    clientFactory.createClient(address.host, address.port, appId.orNull)
   }
 
   private[netty] def ask(message: RequestMessage): Future[Any] = {
@@ -372,12 +371,13 @@ private[netty] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
  * @param conf Spark configuration.
  * @param endpointAddress The address where the endpoint is listening.
  * @param nettyEnv The RpcEnv associated with this ref.
- * @param local Whether the referenced endpoint lives in the same process.
+ * @param appId The application identifier used to authenticate
  */
 private[netty] class NettyRpcEndpointRef(
     @transient private val conf: SparkConf,
     endpointAddress: RpcEndpointAddress,
-    @transient @volatile private var nettyEnv: NettyRpcEnv)
+    @transient @volatile private var nettyEnv: NettyRpcEnv,
+    @volatile private[netty] var appId: Option[String])
   extends RpcEndpointRef(conf) with Serializable with Logging {
 
   @transient @volatile var client: TransportClient = _
@@ -391,6 +391,9 @@ private[netty] class NettyRpcEndpointRef(
     in.defaultReadObject()
     nettyEnv = NettyRpcEnv.currentEnv.value
     client = NettyRpcEnv.currentClient.value
+    if (client != null) {
+      appId = Option(client.getClientId)
+    }
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = {

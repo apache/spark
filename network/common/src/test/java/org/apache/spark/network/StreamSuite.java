@@ -140,7 +140,8 @@ public class StreamSuite {
 
   @Test
   public void testSingleStream() throws Throwable {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory
+      .createClient(TestUtils.getLocalHost(), server.getPort(), null);
     try {
       StreamTask task = new StreamTask(client, "largeBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
@@ -152,7 +153,8 @@ public class StreamSuite {
 
   @Test
   public void testMultipleStreams() throws Throwable {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory
+      .createClient(TestUtils.getLocalHost(), server.getPort(), null);
     try {
       for (int i = 0; i < 20; i++) {
         StreamTask task = new StreamTask(client, STREAMS[i % STREAMS.length],
@@ -168,7 +170,8 @@ public class StreamSuite {
   @Test
   public void testConcurrentStreams() throws Throwable {
     ExecutorService executor = Executors.newFixedThreadPool(20);
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory
+      .createClient(TestUtils.getLocalHost(), server.getPort(), null);
 
     try {
       List<StreamTask> tasks = new ArrayList<>();

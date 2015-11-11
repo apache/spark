@@ -84,7 +84,10 @@ public class RpcIntegrationSuite {
   }
 
   private RpcResult sendRPC(String ... commands) throws Exception {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory.createClient(
+      TestUtils.getLocalHost(),
+      server.getPort(),
+      null);
     final Semaphore sem = new Semaphore(0);
 
     final RpcResult res = new RpcResult();

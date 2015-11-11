@@ -39,20 +39,19 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
 
   private final boolean encrypt;
   private final TransportConf conf;
-  private final String appId;
   private final SecretKeyHolder secretKeyHolder;
 
-  public SaslClientBootstrap(TransportConf conf, String appId, SecretKeyHolder secretKeyHolder) {
-    this(conf, appId, secretKeyHolder, false);
+  public SaslClientBootstrap(
+    TransportConf conf,
+    SecretKeyHolder secretKeyHolder) {
+    this(conf, secretKeyHolder, false);
   }
 
   public SaslClientBootstrap(
       TransportConf conf,
-      String appId,
       SecretKeyHolder secretKeyHolder,
       boolean encrypt) {
     this.conf = conf;
-    this.appId = appId;
     this.secretKeyHolder = secretKeyHolder;
     this.encrypt = encrypt;
   }
@@ -63,7 +62,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
    * due to mismatch.
    */
   @Override
-  public void doBootstrap(TransportClient client, Channel channel) {
+  public void doBootstrap(TransportClient client, Channel channel, String appId) {
     SparkSaslClient saslClient = new SparkSaslClient(appId, secretKeyHolder, encrypt);
     try {
       byte[] payload = saslClient.firstToken();

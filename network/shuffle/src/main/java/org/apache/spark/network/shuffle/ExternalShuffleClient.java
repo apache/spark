@@ -81,7 +81,7 @@ public class ExternalShuffleClient extends ShuffleClient {
     TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (saslEnabled) {
-      bootstraps.add(new SaslClientBootstrap(conf, appId, secretKeyHolder, saslEncryptionEnabled));
+      bootstraps.add(new SaslClientBootstrap(conf, secretKeyHolder, saslEncryptionEnabled));
     }
     clientFactory = context.createClientFactory(bootstraps);
   }
@@ -101,7 +101,7 @@ public class ExternalShuffleClient extends ShuffleClient {
           @Override
           public void createAndStart(String[] blockIds, BlockFetchingListener listener)
               throws IOException {
-            TransportClient client = clientFactory.createClient(host, port);
+            TransportClient client = clientFactory.createClient(host, port, appId);
             new OneForOneBlockFetcher(client, appId, execId, blockIds, listener).start();
           }
         };
@@ -137,7 +137,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       ExecutorShuffleInfo executorInfo) throws IOException {
     checkInit();
-    TransportClient client = clientFactory.createUnmanagedClient(host, port);
+    TransportClient client = clientFactory.createUnmanagedClient(host, port, appId);
     try {
       byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
       client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);

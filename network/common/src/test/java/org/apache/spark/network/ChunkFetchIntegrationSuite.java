@@ -135,7 +135,8 @@ public class ChunkFetchIntegrationSuite {
   }
 
   private FetchResult fetchChunks(List<Integer> chunkIndices) throws Exception {
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    TransportClient client = clientFactory
+      .createClient(TestUtils.getLocalHost(), server.getPort(), null);
     final Semaphore sem = new Semaphore(0);
 
     final FetchResult res = new FetchResult();
