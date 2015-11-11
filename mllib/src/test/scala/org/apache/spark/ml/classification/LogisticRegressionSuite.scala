@@ -23,7 +23,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{Identifiable, DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -31,7 +31,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LogisticRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
@@ -869,6 +870,18 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
     assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+  }
 
+  test("read/write") {
+    // Set some Params to make sure set Params are serialized.
+    val lr = new LogisticRegression()
+      .setElasticNetParam(0.1)
+      .setMaxIter(2)
+      .fit(dataset)
+    val lr2 = testDefaultReadWrite(lr)
+    assert(lr.intercept === lr2.intercept)
+    assert(lr.coefficients.toArray === lr2.coefficients.toArray)
+    assert(lr.numClasses === lr2.numClasses)
+    assert(lr.numFeatures === lr2.numFeatures)
   }
 }
