@@ -236,8 +236,8 @@ abstract class BaseRelation {
 
   /**
    * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
-   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
-   * data source relation.
+   * may not be able to apply to every row. Spark SQL will apply all returned [[Filter]]s against
+   * rows returned by this data source relation.
    *
    * @since 1.6.0
    */
