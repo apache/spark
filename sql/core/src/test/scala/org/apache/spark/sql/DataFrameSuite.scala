@@ -459,7 +459,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),
       Row("mean", null, null),
-      Row("stddev", null, null),
+      Row("stddev", Double.NaN, Double.NaN),
       Row("min", null, null),
       Row("max", null, null))
 
@@ -1127,5 +1127,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         checkAnswer(sqlContext.read.parquet(p).select("YeaR"), Row(2012))
       }
     }
+  }
+
+  test("SPARK-10656: completely support special chars") {
+    val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
+    checkAnswer(df.select(df("*")), Row(1, "a"))
+    checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
   }
 }

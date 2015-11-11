@@ -21,7 +21,6 @@ import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
@@ -506,6 +505,10 @@ class SQLContext private[sql](
     val plan = LogicalRDD(attributes, encoded)(self)
 
     new Dataset[T](this, plan)
+  }
+
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala)
   }
 
   /**

@@ -44,6 +44,7 @@ provide class probabilities, and linear models provide model summaries.
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)
+* [Survival Regression](ml-survival-regression.html)
 
 
 # Main concepts in Pipelines

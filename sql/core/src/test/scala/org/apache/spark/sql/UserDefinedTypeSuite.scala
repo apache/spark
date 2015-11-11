@@ -21,16 +21,13 @@ import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
+import org.apache.spark.sql.catalyst.expressions.OpenHashSetUDT
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 
@@ -132,16 +129,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     df.take(1)(0).getAs[MyDenseVector](1)
     df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
-  }
-
-  test("HyperLogLogUDT") {
-    val hyperLogLogUDT = HyperLogLogUDT
-    val hyperLogLog = new HyperLogLog(0.4)
-    (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
-
-    val actual = hyperLogLogUDT.deserialize(hyperLogLogUDT.serialize(hyperLogLog))
-    assert(actual.cardinality() === hyperLogLog.cardinality())
-    assert(java.util.Arrays.equals(actual.getBytes, hyperLogLog.getBytes))
   }
 
   test("OpenHashSetUDT") {

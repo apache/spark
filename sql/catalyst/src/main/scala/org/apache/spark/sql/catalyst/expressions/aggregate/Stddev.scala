@@ -19,31 +19,12 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 
-case class StddevPop(child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override def prettyName: String = "stddev_pop"
-
-  override protected val momentOrder = 2
-
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
-    require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
-
-    if (n == 0.0) null else math.sqrt(moments(2) / n)
-  }
-}
-
 case class StddevSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends CentralMomentAgg(child) {
+    inputAggBufferOffset: Int = 0)
+  extends CentralMomentAgg(child) {
+
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -55,12 +36,36 @@ case class StddevSamp(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
     require(moments.length == momentOrder + 1,
-      s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0) null
-    else if (n == 1.0) Double.NaN
-    else math.sqrt(moments(2) / (n - 1.0))
+    if (n == 0.0 || n == 1.0) Double.NaN else math.sqrt(moments(2) / (n - 1.0))
+  }
+}
+
+case class StddevPop(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends CentralMomentAgg(child) {
+
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override def prettyName: String = "stddev_pop"
+
+  override protected val momentOrder = 2
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0) Double.NaN else math.sqrt(moments(2) / n)
   }
 }

@@ -638,7 +638,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       assert (valueLength % 8 == 0);
       assert(longArray != null);
 
-      if (numElements == MAX_CAPACITY || !canGrowArray) {
+
+      if (numElements == MAX_CAPACITY
+        // The map could be reused from last spill (because of no enough memory to grow),
+        // then we don't try to grow again if hit the `growthThreshold`.
+        || !canGrowArray && numElements > growthThreshold) {
         return false;
       }
 
@@ -719,26 +723,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    acquireMemory(capacity * 16);
-    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
+    longArray = allocateArray(capacity * 2);
+    longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
-  }
-
-  /**
-   * Free the memory used by longArray.
-   */
-  public void freeArray() {
-    updatePeakMemoryUsed();
-    if (longArray != null) {
-      long used = longArray.memoryBlock().size();
-      longArray = null;
-      releaseMemory(used);
-    }
   }
 
   /**
@@ -748,7 +739,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This method is idempotent and can be called multiple times.
    */
   public void free() {
-    freeArray();
+    updatePeakMemoryUsed();
+    if (longArray != null) {
+      freeArray(longArray);
+      longArray = null;
+    }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
       MemoryBlock dataPage = dataPagesIterator.next();
@@ -834,6 +829,29 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Returns the underline long[] of longArray.
+   */
+  public LongArray getArray() {
+    assert(longArray != null);
+    return longArray;
+  }
+
+  /**
+   * Reset this map to initialized state.
+   */
+  public void reset() {
+    numElements = 0;
+    longArray.zeroOut();
+
+    while (dataPages.size() > 0) {
+      MemoryBlock dataPage = dataPages.removeLast();
+      freePage(dataPage);
+    }
+    currentPage = null;
+    pageCursor = 0;
+  }
+
+  /**
    * Grows the size of the hash table and re-hash everything.
    */
   @VisibleForTesting
@@ -867,7 +885,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       longArray.set(newPos * 2, keyPointer);
       longArray.set(newPos * 2 + 1, hashcode);
     }
-    releaseMemory(oldLongArray.memoryBlock().size());
+    freeArray(oldLongArray);
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
