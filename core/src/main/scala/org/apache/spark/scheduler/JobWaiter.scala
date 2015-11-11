@@ -35,12 +35,12 @@ private[spark] class JobWaiter[T](
   private val finishedTasks = new AtomicInteger(0)
   // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
   // partition RDDs), we set the jobResult directly to JobSucceeded.
-  private val jobPromise : Promise[Unit] =
+  private val jobPromise: Promise[Unit] =
     if (totalTasks == 0) Promise.successful(()) else Promise()
 
   def jobFinished: Boolean = jobPromise.isCompleted
 
-  def completionFuture : Future[Unit] = jobPromise.future
+  def completionFuture: Future[Unit] = jobPromise.future
 
   /**
    * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
@@ -52,11 +52,10 @@ private[spark] class JobWaiter[T](
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {
-    /*
-      The resultHandler call must be synchronized in case resultHandler itself
-      is not thread safe.
-     */
-    synchronized(resultHandler(index, result.asInstanceOf[T]))
+    // resultHandler call must be synchronized in case resultHandler itself is not thread safe.
+    synchronized {
+      resultHandler(index, result.asInstanceOf[T])
+    }
     if (finishedTasks.incrementAndGet() == totalTasks) {
       jobPromise.success(())
     }

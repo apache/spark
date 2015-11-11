@@ -138,7 +138,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   override def isCancelled: Boolean = _cancelled
 
   override def value: Option[Try[T]] =
-    jobWaiter.completionFuture.value map {res => res map {_ => resultFunc}}
+    jobWaiter.completionFuture.value.map {res => res.map {_ => resultFunc}}
 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 }
@@ -162,7 +162,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   override def cancel(): Unit = synchronized {
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
-    subActions foreach {_.cancel()}
+    subActions.foreach {_.cancel()}
   }
 
   /**
@@ -170,20 +170,21 @@ class ComplexFutureAction[T] extends FutureAction[T] {
    * should use runJob implementation in this promise. See takeAsync for example.
    */
   def run(func: => Future[T])(implicit executor: ExecutionContext): this.type = {
-    p tryCompleteWith func
+    p.tryCompleteWith(func)
     this
   }
 
   /**
-   * Runs a Spark job. This is a wrapper around the same functionality provided by SparkContext
+   * Submit a job for execution and return a FutureAction holding the result.
+   * This is a wrapper around the same functionality provided by SparkContext
    * to enable cancellation.
    */
-  def runJob[T, U, R](
+  def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       resultHandler: (Int, U) => Unit,
-      resultFunc: => R) : FutureAction[R] = synchronized {
+      resultFunc: => R): FutureAction[R] = synchronized {
     // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
     // command need to be in an atomic block.
     if (!isCancelled) {

@@ -102,7 +102,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
 
         val buf = new Array[Array[T]](p.size)
-        val job = f.runJob(self,
+        val job = f.submitJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
