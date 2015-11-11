@@ -50,7 +50,7 @@ private[spark] class AppClient(
   private val REGISTRATION_TIMEOUT_SECONDS = 20
   private val REGISTRATION_RETRIES = 3
 
-  private var endpoint = new AtomicReference[RpcEndpointRef]
+  private val endpoint = new AtomicReference[RpcEndpointRef]
   private val appId = new AtomicReference[String]
   private val registered = new AtomicBoolean(false)
 
@@ -102,7 +102,7 @@ private[spark] class AppClient(
       for (masterAddress <- masterRpcAddresses) yield {
         registerMasterThreadPool.submit(new Runnable {
           override def run(): Unit = try {
-            if (registered.get()) {
+            if (registered.get) {
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
@@ -129,7 +129,7 @@ private[spark] class AppClient(
       registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
         override def run(): Unit = {
           Utils.tryOrExit {
-            if (registered.get()) {
+            if (registered.get) {
               registerMasterFutures.get.foreach(_.cancel(true))
               registerMasterThreadPool.shutdownNow()
             } else if (nthRetry >= REGISTRATION_RETRIES) {
@@ -297,7 +297,7 @@ private[spark] class AppClient(
         case e: TimeoutException =>
           logInfo("Stop request to Master timed out; it may already be shut down.")
       }
-      endpoint = null
+      endpoint.set(null)
     }
   }
 
