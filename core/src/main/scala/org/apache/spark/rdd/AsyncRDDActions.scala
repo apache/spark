@@ -107,7 +107,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
           Unit)
-        job flatMap {case _ =>
+        job.flatMap {case _ =>
           buf.foreach(results ++= _.take(num - results.size))
           continue(partsScanned + numPartsToTry)
         }
