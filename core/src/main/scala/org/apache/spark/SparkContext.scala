@@ -1448,8 +1448,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Boolean =
-  {
+  def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(executorIds)
@@ -1471,8 +1470,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutor(executorId: String): Boolean =
-    super.killExecutor(executorId)
+  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
 
   /**
    * Request that the cluster manager kill the specified executor without adjusting the
