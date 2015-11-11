@@ -334,7 +334,7 @@ def date_range(
     if isinstance(delta, six.string_types):
         delta_iscron = True
         cron = croniter(delta, start_date)
-    else:
+    elif isinstance(delta, timedelta):
         delta = abs(delta)
     l = []
     if end_date:
