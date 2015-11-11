@@ -197,6 +197,17 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(Arrays.asList("1a", "3foobar"), flatMapped.collectAsList());
 
+    Dataset<Tuple2<Integer, String>> reduced = grouped.reduce(new ReduceFunction<String>() {
+      @Override
+      public String call(String v1, String v2) throws Exception {
+        return v1 + v2;
+      }
+    });
+
+    Assert.assertEquals(
+      Arrays.asList(tuple2(1, "a"), tuple2(3, "foobar")),
+      reduced.collectAsList());
+
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, e.INT());
     GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
