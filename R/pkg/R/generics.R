@@ -939,7 +939,7 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
-#' @rdname stddev
+#' @rdname sd
 #' @export
 setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 
@@ -983,7 +983,7 @@ setGeneric("skewness", function(x) { standardGeneric("skewness") })
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
-#' @rdname stddev
+#' @rdname sd
 #' @export
 setGeneric("stddev", function(x) { standardGeneric("stddev") })
 
@@ -1043,11 +1043,11 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
-#' @rdname variance
+#' @rdname var
 #' @export
 setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
 
-#' @rdname variance
+#' @rdname var
 #' @export
 setGeneric("variance", function(x) { standardGeneric("variance") })
 
