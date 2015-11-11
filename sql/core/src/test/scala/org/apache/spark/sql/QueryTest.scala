@@ -83,8 +83,8 @@ abstract class QueryTest extends PlanTest {
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.encoder}
-             |${ds.encoder.constructExpression.treeString}
+             |${ds.enc}
+             |${ds.enc.constructExpression.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
@@ -94,7 +94,7 @@ abstract class QueryTest extends PlanTest {
         s"""Decoded objects do not match expected objects:
            |Expected: ${expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted}
             |Actual ${decoded.toSet.toSeq.map((a: Any) => a.toString).sorted}
-            |${ds.encoder.constructExpression.treeString}
+            |${ds.enc.constructExpression.treeString}
          """.stripMargin)
     }
   }

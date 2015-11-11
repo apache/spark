@@ -320,9 +320,10 @@ case class MapPartitions[T, U](
     child: SparkPlan) extends UnaryNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val tBound = tEncoder.bind(child.output)
     child.execute().mapPartitions { iter =>
-      val tBoundEncoder = tEncoder.bind(child.output)
-      func(iter.map(tBoundEncoder.fromRow)).map(uEncoder.toRow)
+      // `uEncoder` is only used to encode a user object to row, thus don't need to bind.
+      func(iter.map(tBound.fromRow)).map(uEncoder.toRow)
     }
   }
 }
@@ -344,7 +345,8 @@ case class AppendColumns[T, U](
       val tBoundEncoder = tEncoder.bind(child.output)
       val combiner = GenerateUnsafeRowJoiner.create(tEncoder.schema, uEncoder.schema)
       iter.map { row =>
-        val newColumns = uEncoder.toRow(func(tBoundEncoder.fromRow(row)))
+        // `uEncoder` is only used to encode a user object to row, thus don't need to bind.
+      val newColumns = uEncoder.toRow(func(tBoundEncoder.fromRow(row)))
         combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
       }
     }
@@ -374,12 +376,14 @@ case class MapGroups[K, T, U](
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
-      val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+      val kBound = kEncoder.bind(groupingAttributes)
+      val tBound = tEncoder.bind(child.output)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
-          groupKeyEncoder.fromRow(key),
-          rowIter.map(tEncoder.fromRow))
+          kBound.fromRow(key),
+          rowIter.map(tBound.fromRow))
+        // `uEncoder` is only used to encode a user object to row, thus don't need to bind.
         result.map(uEncoder.toRow)
       }
     }
@@ -413,14 +417,17 @@ case class CoGroup[K, Left, Right, R](
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val groupKeyEncoder = kEncoder.bind(leftGroup)
+      val kBound = kEncoder.bind(leftGroup)
+      val leftBound = leftEnc.bind(left.output)
+      val rightBound = rightEnc.bind(right.output)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>
           val result = func(
-            groupKeyEncoder.fromRow(key),
-            leftResult.map(leftEnc.fromRow),
-            rightResult.map(rightEnc.fromRow))
+            kBound.fromRow(key),
+            leftResult.map(leftBound.fromRow),
+            rightResult.map(rightBound.fromRow))
+          // `rEncoder` is only used to encode a user object to row, thus don't need to bind.
           result.map(rEncoder.toRow)
       }
     }
