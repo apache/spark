@@ -258,20 +258,25 @@ class Analyzer(
       case p: Pivot if !p.childrenResolved => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
-        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap{ value =>
-          aggregates.map{ aggregate =>
-            val filteredAggregate = aggregate.transformDown{
-              case u: UnaryExpression if u.isInstanceOf[AggregateExpression] =>
-                u.withNewChildren(Seq(
-                  If(EqualTo(pivotColumn, Literal(value)), u.child, Literal(null))
-                ))
-              case other: AggregateExpression =>
-                throw new AnalysisException(
-                  s"Pivot does not support non unary aggregate expressions, found $other")
+        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
+          def ifExpr(expr: Expression) = {
+            If(EqualTo(pivotColumn, Literal(value)), expr, Literal(null))
+          }
+          aggregates.map { aggregate =>
+            val filteredAggregate = aggregate.transformDown {
+              // Assumption is the aggregate function ignores nulls. This is true for all current
+              // AggregateFunction's with the exception of First and Last in their default mode
+              // (which we handle) and possibly some Hive UDAF's.
+              case First(expr, _) =>
+                First(ifExpr(expr), Literal(true))
+              case Last(expr, _) =>
+                Last(ifExpr(expr), Literal(true))
+              case a: AggregateFunction =>
+                a.withNewChildren(a.children.map(ifExpr))
             }
             if (filteredAggregate.fastEquals(aggregate)) {
               throw new AnalysisException(
-                s"Unary aggregate expression required for pivot, found '$aggregate'")
+                s"Aggregate expression required for pivot, found '$aggregate'")
             }
             val name = if (singleAgg) value else value + " " + aggregate.prettyString
             Alias(filteredAggregate, name)()
@@ -1034,7 +1039,6 @@ class Analyzer(
       case p if !p.resolved => p // Skip unresolved nodes.
       case p: Project => p
       case f: Filter => f
-      case p: Pivot => p
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
