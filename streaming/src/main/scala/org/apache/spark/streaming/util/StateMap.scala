@@ -267,7 +267,7 @@ private[streaming] class OpenHashMapBasedStateMap[K: ClassTag, S: ClassTag](
 
     // Read the data of the delta
     val deltaMapSize = inputStream.readInt()
-    deltaMap = new OpenHashMap[K, StateInfo[S]]()
+    deltaMap = new OpenHashMap[K, StateInfo[S]](deltaMapSize)
     var deltaMapCount = 0
     while (deltaMapCount < deltaMapSize) {
       val key = inputStream.readObject().asInstanceOf[K]

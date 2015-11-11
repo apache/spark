@@ -24,10 +24,9 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Abstract class for getting and updating the tracked state in the `trackStateByKey` operation of
- * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
- * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+ * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
  *
- * Scala example of using `State`:
+ * Example of using `State`:
  * {{{
  *    // A tracking function that maintains an integer state and return a String
  *    def trackStateFunc(data: Option[Int], state: State[Int]): Option[String] = {
@@ -48,11 +47,6 @@ import org.apache.spark.annotation.Experimental
  *      ... // return something
  *    }
  *
- * }}}
- *
- * Java example:
- * {{{
- *      TODO(@zsxwing)
  * }}}
  */
 @Experimental
