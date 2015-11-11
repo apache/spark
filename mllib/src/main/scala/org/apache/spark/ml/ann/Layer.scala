@@ -814,9 +814,10 @@ private[ml] class FeedForwardTrainer(
    * @return SGD optimizer
    */
   def SGDOptimizer: GradientDescent = {
-    val sgd = new GradientDescent(_gradient, _updater)
-    optimizer = sgd
-    sgd
+    if (!optimizer.isInstanceOf[GradientDescent]){
+      optimizer = new GradientDescent(_gradient, _updater)
+    }
+    optimizer.asInstanceOf[GradientDescent]
   }
 
   /**
@@ -824,9 +825,10 @@ private[ml] class FeedForwardTrainer(
    * @return LBGS optimizer
    */
   def LBFGSOptimizer: LBFGS = {
-    val lbfgs = new LBFGS(_gradient, _updater)
-    optimizer = lbfgs
-    lbfgs
+    if (!optimizer.isInstanceOf[LBFGS]){
+      optimizer = new LBFGS(_gradient, _updater)
+    }
+    optimizer.asInstanceOf[LBFGS]
   }
 
   /**
