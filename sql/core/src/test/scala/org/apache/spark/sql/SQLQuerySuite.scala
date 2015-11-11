@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.math.MathContext
 import java.sql.Timestamp
 
+import com.google.common.io.Files
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.DefaultParserDialect
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -1881,18 +1882,44 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(e2.message.contains("Table not found"))
 
+    // JSON File
+    val tempDir = Files.createTempDir()
+    // invalid for not existed directory
     val e3 = intercept[AnalysisException] {
       // exception happens in analysis stage, because need to infer schema from json data
-      sql("select * from json.invalid_file")
+      sql("select * from json.not_existed_file")
     }
     assert(e3.message.contains("Input paths do not exist or are empty directories"))
-
-    val e4 = intercept[IOException] {
-      // exception happens in execution stage, no schema infer happens in analysis stage
-      // for text data
-      sql("select * from text.invalid_file").count()
+    // also invalid for empty directory because need to infer schema from input data
+    val e4 = intercept[AnalysisException] {
+      // exception happens in analysis stage, because need to infer schema from json data
+      sql(s"select * from json.`${tempDir.getCanonicalPath}`")
     }
-    assert(e4.getMessage.contains("Input paths do not exist or are empty directories"))
+    assert(e4.message.contains("Input paths do not exist or are empty directories"))
+
+    // Text File
+    // invalid for non-existed directory
+    val e5 = intercept[IOException] {
+      sql("select * from text.not_exist_file").count()
+    }
+    assert(e5.getMessage.contains("Input paths do not exist"))
+    // valid for empty directory
+    checkAnswer(sql(s"select count(*) from text.`${tempDir.getCanonicalPath}`"), Seq(Row(0)))
+
+    // Parquet File
+    // invalid for non-existed directory
+    val e6 = intercept[AssertionError] {
+      sql("select * from parquet.not_exist_file")
+    }
+    assert(e6.getMessage.contains("No predefined schema found,"
+      + " and no Parquet data files or summary files found under"))
+    // also invalid for empty director because need to infer schema from input data
+    val e7 = intercept[AssertionError] {
+      // exception happens in analysis stage, because need to infer schema from json data
+      sql(s"select * from parquet.`${tempDir.getCanonicalPath}`")
+    }
+    assert(e7.getMessage.contains("No predefined schema found,"
+      + " and no Parquet data files or summary files found under"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

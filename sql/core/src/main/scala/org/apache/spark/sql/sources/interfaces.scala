@@ -421,6 +421,9 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
+
+    var inputExists: Boolean = !paths.isEmpty
+
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
@@ -433,7 +436,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
+          inputExists = inputExists && fs.exists(qualified)
           logInfo(s"Listing $qualified on driver")
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
         }.filterNot { status =>
@@ -605,20 +608,22 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
         !name.startsWith("_") && !name.startsWith(".")
       }
     }
-    if (!allowEmptyInputPaths && inputStatuses.isEmpty) {
-       throw new IOException("Input paths do not exist or are empty directories, "
-         + "Input Paths=" + inputPaths.mkString(","))
+    if (!inputExists) {
+      throw new IOException("Input paths do not exist, input paths="
+        + inputPaths.mkString("[", ",", "]"))
+    } else if (inputStatuses.isEmpty) {
+      logWarning("Input paths are empty, input paths=" + inputPaths.mkString("[", ",", "]"))
+      sqlContext.sparkContext.emptyRDD[InternalRow]
+    } else {
+      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
     }
-
-    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
-   * By default inputPaths must be not empty. But it can be empty for some cases like JsonRelation
-   *
-   * @since 1.6.0
+   * Most of time, HadoopFsRelation should check the inputPaths, but for some cases it is not,
+   * e.g. JsonRelation may read from RDD[String]
    */
-  def allowEmptyInputPaths: Boolean = false
+  def inputExists: Boolean = fileStatusCache.inputExists
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
