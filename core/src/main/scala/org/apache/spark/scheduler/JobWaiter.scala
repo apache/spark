@@ -52,7 +52,11 @@ private[spark] class JobWaiter[T](
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = {
-    resultHandler(index, result.asInstanceOf[T])
+    /*
+      The resultHandler call must be synchronized in case resultHandler itself
+      is not thread safe.
+     */
+    synchronized(resultHandler(index, result.asInstanceOf[T]))
     if (finishedTasks.incrementAndGet() == totalTasks) {
       jobPromise.success(())
     }
