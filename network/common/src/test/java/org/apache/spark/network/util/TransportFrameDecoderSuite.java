@@ -24,6 +24,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -33,7 +35,7 @@ public class TransportFrameDecoderSuite {
   public void testFrameDecoding() throws Exception {
     Random rnd = new Random();
     TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    ChannelHandlerContext ctx = mockChannelHandlerContext();
 
     final int frameCount = 100;
     ByteBuf data = Unpooled.buffer();
@@ -46,12 +48,15 @@ public class TransportFrameDecoderSuite {
 
       while (data.isReadable()) {
         int size = rnd.nextInt(16 * 1024) + 256;
-        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)));
+        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
       }
 
       verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
+
+      decoder.channelInactive(ctx);
+      assertTrue("There shouldn't be dangling references to the data.", data.release());
     } finally {
-      data.release();
+      release(data);
     }
   }
 
@@ -60,7 +65,7 @@ public class TransportFrameDecoderSuite {
     final int interceptedReads = 3;
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     TransportFrameDecoder.Interceptor interceptor = spy(new MockInterceptor(interceptedReads));
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    ChannelHandlerContext ctx = mockChannelHandlerContext();
 
     byte[] data = new byte[8];
     ByteBuf len = Unpooled.copyLong(8 + data.length);
@@ -70,16 +75,18 @@ public class TransportFrameDecoderSuite {
       decoder.setInterceptor(interceptor);
       for (int i = 0; i < interceptedReads; i++) {
         decoder.channelRead(ctx, dataBuf);
-        dataBuf.release();
+        assertEquals(0, dataBuf.refCnt());
         dataBuf = Unpooled.wrappedBuffer(data);
       }
       decoder.channelRead(ctx, len);
       decoder.channelRead(ctx, dataBuf);
       verify(interceptor, times(interceptedReads)).handle(any(ByteBuf.class));
       verify(ctx).fireChannelRead(any(ByteBuffer.class));
+      assertEquals(0, len.refCnt());
+      assertEquals(0, dataBuf.refCnt());
     } finally {
-      len.release();
-      dataBuf.release();
+      release(len);
+      release(dataBuf);
     }
   }
 
@@ -108,6 +115,26 @@ public class TransportFrameDecoderSuite {
       decoder.channelRead(ctx, frame);
     } finally {
       frame.release();
+    }
+  }
+
+  private ChannelHandlerContext mockChannelHandlerContext() {
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    when(ctx.fireChannelRead(any())).thenAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock in) {
+        ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        buf.readerIndex(buf.readerIndex() + buf.readableBytes());
+        buf.release();
+        return null;
+      }
+    });
+    return ctx;
+  }
+
+  private void release(ByteBuf buf) {
+    if (buf.refCnt() > 0) {
+      buf.release(buf.refCnt());
     }
   }
 

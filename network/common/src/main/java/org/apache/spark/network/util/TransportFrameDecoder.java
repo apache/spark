@@ -56,7 +56,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       buffer = in.alloc().compositeBuffer();
     }
 
-    buffer.writeBytes(in);
+    buffer.addComponent(in).writerIndex(buffer.writerIndex() + in.readableBytes());
 
     while (buffer.isReadable()) {
       feedInterceptor();
