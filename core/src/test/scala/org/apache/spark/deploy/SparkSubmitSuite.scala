@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
@@ -37,10 +37,12 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class SparkSubmitSuite
   extends SparkFunSuite
   with Matchers
+  with BeforeAndAfterEach
   with ResetSystemProperties
   with Timeouts {
 
-  def beforeAll() {
+  override def beforeEach() {
+    super.beforeEach()
     System.setProperty("spark.testing", "true")
   }
 

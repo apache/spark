@@ -33,8 +33,12 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.util.ResetSystemProperties
 
-class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
+class RPackageUtilsSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with ResetSystemProperties {
 
   private val main = MavenCoordinate("a", "b", "c")
   private val dep1 = MavenCoordinate("a", "dep1", "c")
@@ -60,11 +64,9 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  def beforeAll() {
-    System.setProperty("spark.testing", "true")
-  }
-
   override def beforeEach(): Unit = {
+    super.beforeEach()
+    System.setProperty("spark.testing", "true")
     lineBuffer.clear()
   }
 
