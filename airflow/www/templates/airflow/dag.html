@@ -10,12 +10,12 @@
   <div>
     <h3 class="pull-left">
       {% if dag.parent_dag %}
-        <span class="pull-left" style='color:#AAA;'>SUBDAG: </span> <span> {{ dag.dag_id }}</span>
+        <span style='color:#AAA;'>SUBDAG: </span> <span> {{ dag.dag_id }}</span>
       {% else %}
-        <span class="pull-left" style='color:#AAA;'>DAG: </span> <span> {{ dag.dag_id }}</span>
+        <span style='color:#AAA;'>DAG: </span> <span> {{ dag.dag_id }}</span>
       {% endif %}
       {% if root %}
-        <span class="pull-left" style='color:#AAA;'>ROOT: </span> <span> {{ root }}</span>
+        <span style='color:#AAA;'>ROOT: </span> <span> {{ root }}</span>
       {% endif %}
     </h3>
     <h4 class="pull-right">
