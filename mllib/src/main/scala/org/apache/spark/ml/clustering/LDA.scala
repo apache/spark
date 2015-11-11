@@ -314,31 +314,27 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * Model fitted by [[LDA]].
  *
  * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
- * @param oldLocalModel  Underlying spark.mllib model.
- *                       If this model was produced by Online LDA, then this is the
- *                       only model representation.
- *                       If this model was produced by EM, then this local
- *                       representation may be built lazily.
  * @param sqlContext  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
 @Experimental
-class LDAModel private[ml] (
+sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
-    @Since("1.6.0") protected var oldLocalModel: Option[OldLocalLDAModel],
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
   extends Model[LDAModel] with LDAParams with Logging {
 
+  /**
+   * Underlying spark.mllib model.
+   * If this model was produced by Online LDA, then this is the only model representation.
+   * If this model was produced by EM, then this local representation may be built lazily.
+   */
+  @Since("1.6.0")
+  protected def oldLocalModel: OldLocalLDAModel
+
   /** Returns underlying spark.mllib model */
   @Since("1.6.0")
-  protected def getModel: OldLDAModel = oldLocalModel match {
-    case Some(m) => m
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LDAModel required local model format," +
-        " but the underlying model is missing.")
-  }
+  protected def getModel: OldLDAModel
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
@@ -353,15 +349,9 @@ class LDAModel private[ml] (
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("1.6.0")
-  override def copy(extra: ParamMap): LDAModel = {
-    val copied = new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
-    copyValues(copied, extra).setParent(parent)
-  }
-
-  @Since("1.6.0")
   override def transform(dataset: DataFrame): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.get.getTopicDistributionMethod(sqlContext.sparkContext))
+      val t = udf(oldLocalModel.getTopicDistributionMethod(sqlContext.sparkContext))
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol))))
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
@@ -412,14 +402,9 @@ class LDAModel private[ml] (
    * @return variational lower bound on the log likelihood of the entire corpus
    */
   @Since("1.6.0")
-  def logLikelihood(dataset: DataFrame): Double = oldLocalModel match {
-    case Some(m) =>
-      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
-      m.logLikelihood(oldDataset)
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LocalLDAModel.logLikelihood was called," +
-        " but the underlying model is missing.")
+  def logLikelihood(dataset: DataFrame): Double = {
+    val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+    oldLocalModel.logLikelihood(oldDataset)
   }
 
   /**
@@ -430,14 +415,9 @@ class LDAModel private[ml] (
    * @return Variational upper bound on log perplexity per token.
    */
   @Since("1.6.0")
-  def logPerplexity(dataset: DataFrame): Double = oldLocalModel match {
-    case Some(m) =>
-      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
-      m.logPerplexity(oldDataset)
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LocalLDAModel.logPerplexity was called," +
-        " but the underlying model is missing.")
+  def logPerplexity(dataset: DataFrame): Double = {
+    val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+    oldLocalModel.logPerplexity(oldDataset)
   }
 
   /**
@@ -465,6 +445,22 @@ class LDAModel private[ml] (
 }
 
 
+class LocalLDAModel private[ml] (
+    uid: String,
+    vocabSize: Int,
+    @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
+    sqlContext: SQLContext)
+  extends LDAModel(uid, vocabSize, sqlContext) {
+
+  override def copy(extra: ParamMap): LocalLDAModel = {
+    val copied = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+    copyValues(copied, extra).setParent(parent).asInstanceOf[LocalLDAModel]
+  }
+
+  override protected def getModel: OldLDAModel = oldLocalModel
+}
+
+
 /**
  * :: Experimental ::
  *
@@ -480,22 +476,18 @@ class DistributedLDAModel private[ml] (
     vocabSize: Int,
     private val oldDistributedModel: OldDistributedLDAModel,
     sqlContext: SQLContext)
-  extends LDAModel(uid, vocabSize, None, sqlContext) {
+  extends LDAModel(uid, vocabSize, sqlContext) {
+
+  override protected lazy val oldLocalModel: OldLocalLDAModel = oldDistributedModel.toLocal
+
+  override protected def getModel: OldLDAModel = oldDistributedModel
 
   /**
    * Convert this distributed model to a local representation.  This discards info about the
    * training dataset.
    */
   @Since("1.6.0")
-  def toLocal: LDAModel = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
-  }
-
-  @Since("1.6.0")
-  override protected def getModel: OldLDAModel = oldDistributedModel
+  def toLocal: LocalLDAModel = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): DistributedLDAModel = {
