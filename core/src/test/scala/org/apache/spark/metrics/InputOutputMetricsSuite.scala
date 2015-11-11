@@ -60,7 +60,9 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(tmpFile))
     for (x <- 1 to numRecords) {
+      // scalastyle:off println
       pw.println(RandomUtils.nextInt(0, numBuckets))
+      // scalastyle:on println
     }
     pw.close()
 
@@ -284,6 +286,10 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   private def runAndReturnMetrics(job: => Unit,
       collector: (SparkListenerTaskEnd) => Option[Long]): Long = {
     val taskMetrics = new ArrayBuffer[Long]()
+
+    // Avoid receiving earlier taskEnd events
+    sc.listenerBus.waitUntilEmpty(500)
+
     sc.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         collector(taskEnd).foreach(taskMetrics += _)

@@ -76,9 +76,9 @@ private[spark] abstract class WebUI(
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
     val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
@@ -105,6 +105,25 @@ private[spark] abstract class WebUI(
         handler.stop()
       }
     }
+  }
+
+  /**
+   * Add a handler for static content.
+   *
+   * @param resourceBase Root of where to find resources to serve.
+   * @param path Path in UI where to mount the resources.
+   */
+  def addStaticHandler(resourceBase: String, path: String): Unit = {
+    attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
+  }
+
+  /**
+   * Remove a static content handler.
+   *
+   * @param path Path in UI to unmount.
+   */
+  def removeStaticHandler(path: String): Unit = {
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
   /** Initialize all components of the server. */

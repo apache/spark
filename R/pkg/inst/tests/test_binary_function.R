@@ -38,13 +38,13 @@ test_that("union on two RDDs", {
   union.rdd <- unionRDD(rdd, text.rdd)
   actual <- collect(union.rdd)
   expect_equal(actual, c(as.list(nums), mockFile))
-  expect_true(getSerializedMode(union.rdd) == "byte")
+  expect_equal(getSerializedMode(union.rdd), "byte")
 
-  rdd<- map(text.rdd, function(x) {x})
+  rdd <- map(text.rdd, function(x) {x})
   union.rdd <- unionRDD(rdd, text.rdd)
   actual <- collect(union.rdd)
   expect_equal(actual, as.list(c(mockFile, mockFile)))
-  expect_true(getSerializedMode(union.rdd) == "byte")
+  expect_equal(getSerializedMode(union.rdd), "byte")
 
   unlink(fileName)
 })
@@ -76,7 +76,7 @@ test_that("zipPartitions() on RDDs", {
   expect_equal(actual,
                list(list(1, c(1,2), c(1,2,3)), list(2, c(3,4), c(4,5,6))))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 

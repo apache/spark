@@ -23,12 +23,11 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
  * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class FloatType private() extends FractionalType {
@@ -39,7 +38,9 @@ class FloatType private() extends FractionalType {
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+  private[sql] val ordering = new Ordering[Float] {
+    override def compare(x: Float, y: Float): Int = Utils.nanSafeCompareFloats(x, y)
+  }
   private[sql] val asIntegral = FloatAsIfIntegral
 
   /**

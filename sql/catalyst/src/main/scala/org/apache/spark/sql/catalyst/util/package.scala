@@ -124,7 +124,9 @@ package object util {
     val startTime = System.nanoTime()
     val ret = f
     val endTime = System.nanoTime()
+    // scalastyle:off println
     println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    // scalastyle:on println
     ret
   }
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.math.random
@@ -37,3 +38,4 @@ object SparkPi {
     spark.stop()
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -52,3 +53,4 @@ object BroadcastTest {
     sc.stop()
   }
 }
+// scalastyle:on println

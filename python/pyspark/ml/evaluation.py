@@ -17,19 +17,23 @@
 
 from abc import abstractmethod, ABCMeta
 
+from pyspark import since
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator']
+__all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
+           'MulticlassClassificationEvaluator']
 
 
 @inherit_doc
 class Evaluator(Params):
     """
     Base class for evaluators that compute metrics from predictions.
+
+    .. versionadded:: 1.4.0
     """
 
     __metaclass__ = ABCMeta
@@ -45,7 +49,8 @@ class Evaluator(Params):
         """
         raise NotImplementedError()
 
-    def evaluate(self, dataset, params={}):
+    @since("1.4.0")
+    def evaluate(self, dataset, params=None):
         """
         Evaluates the output with optional parameters.
 
@@ -55,6 +60,8 @@ class Evaluator(Params):
                        params
         :return: metric
         """
+        if params is None:
+            params = dict()
         if isinstance(params, dict):
             if params:
                 return self.copy(params)._evaluate(dataset)
@@ -62,6 +69,15 @@ class Evaluator(Params):
                 return self._evaluate(dataset)
         else:
             raise ValueError("Params must be a param map but got %s." % type(params))
+
+    @since("1.5.0")
+    def isLargerBetter(self):
+        """
+        Indicates whether the metric returned by :py:meth:`evaluate` should be maximized
+        (True, default) or minimized (False).
+        A given evaluator may support multiple metrics which may be maximized or minimized.
+        """
+        return True
 
 
 @inherit_doc
@@ -82,6 +98,10 @@ class JavaEvaluator(Evaluator, JavaWrapper):
         self._transfer_params_to_java()
         return self._java_obj.evaluate(dataset._jdf)
 
+    def isLargerBetter(self):
+        self._transfer_params_to_java()
+        return self._java_obj.isLargerBetter()
+
 
 @inherit_doc
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
@@ -99,6 +119,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
     0.83...
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -123,6 +145,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("1.4.0")
     def setMetricName(self, value):
         """
         Sets the value of :py:attr:`metricName`.
@@ -130,6 +153,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         self._paramMap[self.metricName] = value
         return self
 
+    @since("1.4.0")
     def getMetricName(self):
         """
         Gets the value of metricName or its default value.
@@ -137,6 +161,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         return self.getOrDefault(self.metricName)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, rawPredictionCol="rawPrediction", labelCol="label",
                   metricName="areaUnderROC"):
         """
@@ -160,11 +185,13 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     ...
     >>> evaluator = RegressionEvaluator(predictionCol="raw")
     >>> evaluator.evaluate(dataset)
-    -2.842...
+    2.842...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "r2"})
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
-    -2.649...
+    2.649...
+
+    .. versionadded:: 1.4.0
     """
     # Because we will maximize evaluation value (ref: `CrossValidator`),
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
@@ -190,6 +217,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("1.4.0")
     def setMetricName(self, value):
         """
         Sets the value of :py:attr:`metricName`.
@@ -197,6 +225,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         self._paramMap[self.metricName] = value
         return self
 
+    @since("1.4.0")
     def getMetricName(self):
         """
         Gets the value of metricName or its default value.
@@ -204,12 +233,84 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         return self.getOrDefault(self.metricName)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
                   metricName="rmse"):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
                   metricName="rmse")
         Sets params for regression evaluator.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+
+@inherit_doc
+class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
+    """
+    Evaluator for Multiclass Classification, which expects two input
+    columns: prediction and label.
+    >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
+    ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
+    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["prediction", "label"])
+    ...
+    >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
+    >>> evaluator.evaluate(dataset)
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precision"})
+    0.66...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "recall"})
+    0.66...
+
+    .. versionadded:: 1.5.0
+    """
+    # a placeholder to make it appear in the generated doc
+    metricName = Param(Params._dummy(), "metricName",
+                       "metric name in evaluation "
+                       "(f1|precision|recall|weightedPrecision|weightedRecall)")
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", labelCol="label",
+                 metricName="f1"):
+        """
+        __init__(self, predictionCol="prediction", labelCol="label", \
+                 metricName="f1")
+        """
+        super(MulticlassClassificationEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
+        # param for metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)
+        self.metricName = Param(self, "metricName",
+                                "metric name in evaluation"
+                                " (f1|precision|recall|weightedPrecision|weightedRecall)")
+        self._setDefault(predictionCol="prediction", labelCol="label",
+                         metricName="f1")
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @since("1.5.0")
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        self._paramMap[self.metricName] = value
+        return self
+
+    @since("1.5.0")
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
+    @keyword_only
+    @since("1.5.0")
+    def setParams(self, predictionCol="prediction", labelCol="label",
+                  metricName="f1"):
+        """
+        setParams(self, predictionCol="prediction", labelCol="label", \
+                  metricName="f1")
+        Sets params for multiclass classification evaluator.
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)

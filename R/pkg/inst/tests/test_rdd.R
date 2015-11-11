@@ -33,9 +33,9 @@ test_that("get number of partitions in RDD", {
 })
 
 test_that("first on RDD", {
-  expect_true(first(rdd) == 1)
+  expect_equal(first(rdd), 1)
   newrdd <- lapply(rdd, function(x) x + 1)
-  expect_true(first(newrdd) == 2)
+  expect_equal(first(newrdd), 2)
 })
 
 test_that("count and length on RDD", {
@@ -250,7 +250,7 @@ test_that("flatMapValues() on pairwise RDDs", {
   expect_equal(actual, list(list(1,1), list(1,2), list(2,3), list(2,4)))
 
   # Generate x to x+1 for every value
-  actual <- collect(flatMapValues(intRdd, function(x) { x:(x + 1) }))
+  actual <- collect(flatMapValues(intRdd, function(x) { x: (x + 1) }))
   expect_equal(actual,
                list(list(1L, -1), list(1L, 0), list(2L, 100), list(2L, 101),
                     list(2L, 1), list(2L, 2), list(1L, 200), list(1L, 201)))
@@ -293,7 +293,7 @@ test_that("sumRDD() on RDDs", {
 })
 
 test_that("keyBy on RDDs", {
-  func <- function(x) { x*x }
+  func <- function(x) { x * x }
   keys <- keyBy(rdd, func)
   actual <- collect(keys)
   expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
@@ -311,7 +311,7 @@ test_that("repartition/coalesce on RDDs", {
   r2 <- repartition(rdd, 6)
   expect_equal(numPartitions(r2), 6L)
   count <- length(collectPartition(r2, 0L))
-  expect_true(count >=0 && count <= 4)
+  expect_true(count >= 0 && count <= 4)
 
   # coalesce
   r3 <- coalesce(rdd, 1)
@@ -447,7 +447,7 @@ test_that("zipRDD() on RDDs", {
   expect_equal(actual,
                list(list(0, 1000), list(1, 1001), list(2, 1002), list(3, 1003), list(4, 1004)))
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
@@ -483,7 +483,7 @@ test_that("cartesian() on RDDs", {
   actual <- collect(cartesian(rdd, emptyRdd))
   expect_equal(actual, list())
 
-  mockFile = c("Spark is pretty.", "Spark is awesome.")
+  mockFile <- c("Spark is pretty.", "Spark is awesome.")
   fileName <- tempfile(pattern="spark-test", fileext=".tmp")
   writeLines(mockFile, fileName)
 
@@ -669,13 +669,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,2), list(1,3), list(3,3)))
   rdd2 <- parallelize(sc, list(list(1,1), list(2,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)), list(3, list(3, NULL)))
+  expected <- list(list(1, list(2, 1)), list(1, list(3, 1)),
+                   list(2, list(NULL, 4)), list(3, list(3, NULL)))
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 
   rdd1 <- parallelize(sc, list(list("a",2), list("a",3), list("c", 1)))
   rdd2 <- parallelize(sc, list(list("a",1), list("b",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
-  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)), list("a", list(3, 1)), list("c", list(1, NULL)))
+  expected <- list(list("b", list(NULL, 4)), list("a", list(2, 1)),
+                   list("a", list(3, 1)), list("c", list(1, NULL)))
   expect_equal(sortKeyValueList(actual),
                sortKeyValueList(expected))
 
@@ -683,13 +685,15 @@ test_that("fullOuterJoin() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)), list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
+               sortKeyValueList(list(list(1, list(1, NULL)), list(2, list(2, NULL)),
+                                     list(3, list(NULL, 3)), list(4, list(NULL, 4)))))
 
   rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
   rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expect_equal(sortKeyValueList(actual),
-               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)), list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
+               sortKeyValueList(list(list("a", list(1, NULL)), list("b", list(2, NULL)),
+                                     list("d", list(NULL, 4)), list("c", list(NULL, 3)))))
 })
 
 test_that("sortByKey() on pairwise RDDs", {

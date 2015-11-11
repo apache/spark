@@ -981,7 +981,7 @@ class SparkILoop(
     // which spins off a separate thread, then print the prompt and try
     // our best to look ready.  The interlocking lazy vals tend to
     // inter-deadlock, so we break the cycle with a single asynchronous
-    // message to an actor.
+    // message to an rpcEndpoint.
     if (isAsync) {
       intp initialize initializedCallback()
       createAsyncListener() // listens for signal to run postInitialization
@@ -1008,9 +1008,9 @@ class SparkILoop(
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
-      .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServerUri)
+      .setIfMissing("spark.app.name", "Spark shell")
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
@@ -1101,7 +1101,9 @@ object SparkILoop extends Logging {
             val s = super.readLine()
             // helping out by printing the line being interpreted.
             if (s != null)
+              // scalastyle:off println
               output.println(s)
+              // scalastyle:on println
             s
           }
         }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
@@ -35,7 +35,7 @@ object SVMSuite {
     weights: Array[Double],
     nPoints: Int,
     seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateSVMInput(intercept, weights, nPoints, seed))
+    generateSVMInput(intercept, weights, nPoints, seed).asJava
   }
 
   // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)

@@ -19,9 +19,7 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
-
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
@@ -30,12 +28,11 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.dstream.DStream
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
+@Since("0.8.0")
 object MLUtils {
 
   private[mllib] lazy val EPSILON = {
@@ -65,6 +62,7 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
+  @Since("1.0.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
@@ -114,6 +112,7 @@ object MLUtils {
 
   // Convenient methods for `loadLibSVMFile`.
 
+  @Since("1.0.0")
   @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
@@ -127,12 +126,14 @@ object MLUtils {
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
    * partitions.
    */
+  @Since("1.0.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
 
+  @Since("1.0.0")
   @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
@@ -141,6 +142,7 @@ object MLUtils {
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures)
 
+  @Since("1.0.0")
   @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
   def loadLibSVMFile(
       sc: SparkContext,
@@ -152,6 +154,7 @@ object MLUtils {
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
    * features determined automatically and the default number of partitions.
    */
+  @Since("1.0.0")
   def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, -1)
 
@@ -162,6 +165,7 @@ object MLUtils {
    *
    * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
    */
+  @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
@@ -182,12 +186,14 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return vectors stored as an RDD[Vector]
    */
+  @Since("1.1.0")
   def loadVectors(sc: SparkContext, path: String, minPartitions: Int): RDD[Vector] =
     sc.textFile(path, minPartitions).map(Vectors.parse)
 
   /**
    * Loads vectors saved using `RDD[Vector].saveAsTextFile` with the default number of partitions.
    */
+  @Since("1.1.0")
   def loadVectors(sc: SparkContext, path: String): RDD[Vector] =
     sc.textFile(path, sc.defaultMinPartitions).map(Vectors.parse)
 
@@ -198,6 +204,7 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return labeled points stored as an RDD[LabeledPoint]
    */
+  @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
     sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
@@ -205,6 +212,7 @@ object MLUtils {
    * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile` with the default number of
    * partitions.
    */
+  @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
 
@@ -221,6 +229,7 @@ object MLUtils {
    * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
    *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
    */
+  @Since("1.0.0")
   @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0.1")
   def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
     sc.textFile(dir).map { line =>
@@ -242,6 +251,7 @@ object MLUtils {
    * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
    *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
    */
+  @Since("1.0.0")
   @deprecated("Should use RDD[LabeledPoint].saveAsTextFile instead.", "1.0.1")
   def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
     val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
@@ -249,12 +259,11 @@ object MLUtils {
   }
 
   /**
-   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
-  @Experimental
+  @Since("1.0.0")
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
@@ -269,6 +278,7 @@ object MLUtils {
   /**
    * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
+  @Since("1.0.0")
   def appendBias(vector: Vector): Vector = {
     vector match {
       case dv: DenseVector =>

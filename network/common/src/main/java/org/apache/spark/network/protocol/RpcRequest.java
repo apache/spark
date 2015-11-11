@@ -60,6 +60,11 @@ public final class RpcRequest implements RequestMessage {
   }
 
   @Override
+  public int hashCode() {
+    return Objects.hashCode(requestId, Arrays.hashCode(message));
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof RpcRequest) {
       RpcRequest o = (RpcRequest) other;

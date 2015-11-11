@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.io.File
@@ -136,3 +137,4 @@ object DFSReadWriteTest {
 
   }
 }
+// scalastyle:on println

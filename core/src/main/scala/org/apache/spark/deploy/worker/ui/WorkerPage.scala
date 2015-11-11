@@ -17,10 +17,8 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
@@ -32,18 +30,15 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
-  private val workerActor = parent.worker.self
-  private val timeout = parent.timeout
+  private val workerEndpoint = parent.worker.self
 
   override def renderJson(request: HttpServletRequest): JValue = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, timeout)
+    val workerState = workerEndpoint.askWithRetry[WorkerStateResponse](RequestWorkerState)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "State", "Memory", "Job Details", "Logs")
     val runningExecutors = workerState.executors

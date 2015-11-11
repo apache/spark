@@ -59,7 +59,7 @@ private[mesos] class MesosSubmitRequestServlet(
   extends SubmitRequestServlet {
 
   private val DEFAULT_SUPERVISE = false
-  private val DEFAULT_MEMORY = 512 // mb
+  private val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // mb
   private val DEFAULT_CORES = 1.0
 
   private val nextDriverNumber = new AtomicLong(0)

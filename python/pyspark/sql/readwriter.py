@@ -15,13 +15,29 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+
 from py4j.java_gateway import JavaClass
 
-from pyspark.sql import since
+from pyspark import RDD, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but convert bool values to lower case string
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    else:
+        return str(value)
 
 
 class DataFrameReader(object):
@@ -73,12 +89,19 @@ class DataFrameReader(object):
         self._jreader = self._jreader.schema(jschema)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an input option for the underlying data source.
+        """
+        self._jreader = self._jreader.option(key, to_str(value))
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds input options for the underlying data source.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, options[k])
+            self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
@@ -90,9 +113,14 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned')
+        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        ...     'python/test_support/sql/people1.json'])
+        >>> df.dtypes
+        [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
         """
         if format is not None:
             self.format(format)
@@ -100,30 +128,48 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                paths = path
+                gateway = self._sqlContext._sc._gateway
+                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
+                for i in range(0, len(paths)):
+                    jpaths[i] = paths[i]
+                return self._df(self._jreader.load(jpaths))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
     @since(1.4)
     def json(self, path, schema=None):
         """
-        Loads a JSON file (one object per line) and returns the result as
-        a :class`DataFrame`.
+        Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
+        (one object per record) and returns the result as a :class`DataFrame`.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        :param path: string, path to the JSON dataset.
+        :param path: string represents path to the JSON dataset,
+                     or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
-        >>> df = sqlContext.read.json('python/test_support/sql/people.json')
-        >>> df.dtypes
+        >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
+        >>> df1.dtypes
+        [('age', 'bigint'), ('name', 'string')]
+        >>> rdd = sc.textFile('python/test_support/sql/people.json')
+        >>> df2 = sqlContext.read.json(rdd)
+        >>> df2.dtypes
         [('age', 'bigint'), ('name', 'string')]
 
         """
         if schema is not None:
             self.schema(schema)
-        return self._df(self._jreader.json(path))
+        if isinstance(path, basestring):
+            return self._df(self._jreader.json(path))
+        elif isinstance(path, RDD):
+            return self._df(self._jreader.json(path._jrdd))
+        else:
+            raise TypeError("path can be only string or RDD")
 
     @since(1.4)
     def table(self, tableName):
@@ -139,18 +185,44 @@ class DataFrameReader(object):
         return self._df(self._jreader.table(tableName))
 
     @since(1.4)
-    def parquet(self, *path):
+    def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         >>> df = sqlContext.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, path)))
+        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
+
+    @ignore_unicode_prefix
+    @since(1.6)
+    def text(self, path):
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+
+        Each line in the text file is a new row in the resulting DataFrame.
+
+        >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
+        >>> df.collect()
+        [Row(value=u'hello'), Row(value=u'this')]
+        """
+        return self._df(self._jreader.text(path))
+
+    @since(1.5)
+    def orc(self, path):
+        """Loads an ORC file, returning the result as a :class:`DataFrame`.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df.dtypes
+        [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
+        """
+        return self._df(self._jreader.orc(path))
 
     @since(1.4)
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
-             predicates=None, properties={}):
+             predicates=None, properties=None):
         """
         Construct a :class:`DataFrame` representing the database table accessible
         via JDBC URL `url` named `table` and connection `properties`.
@@ -176,6 +248,8 @@ class DataFrameReader(object):
                            should be included.
         :return: a DataFrame
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -235,6 +309,13 @@ class DataFrameWriter(object):
         self._jwrite = self._jwrite.format(source)
         return self
 
+    @since(1.5)
+    def option(self, key, value):
+        """Adds an output option for the underlying data source.
+        """
+        self._jwrite = self._jwrite.option(key, value)
+        return self
+
     @since(1.4)
     def options(self, **options):
         """Adds output options for the underlying data source.
@@ -256,12 +337,11 @@ class DataFrameWriter(object):
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        if len(cols) > 0:
-            self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
         return self
 
     @since(1.4)
-    def save(self, path=None, format=None, mode=None, partitionBy=(), **options):
+    def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -281,7 +361,9 @@ class DataFrameWriter(object):
 
         >>> df.write.mode('append').parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.partitionBy(partitionBy).mode(mode).options(**options)
+        self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         if path is None:
@@ -301,7 +383,7 @@ class DataFrameWriter(object):
         self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
 
     @since(1.4)
-    def saveAsTable(self, name, format=None, mode=None, partitionBy=(), **options):
+    def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):
         """Saves the content of the :class:`DataFrame` as the specified table.
 
         In the case the table already exists, behavior of this function depends on the
@@ -320,7 +402,9 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param options: all other string options
         """
-        self.partitionBy(partitionBy).mode(mode).options(**options)
+        self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         self._jwrite.saveAsTable(name)
@@ -342,7 +426,7 @@ class DataFrameWriter(object):
         self.mode(mode)._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode=None, partitionBy=()):
+    def parquet(self, path, mode=None, partitionBy=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -356,11 +440,46 @@ class DataFrameWriter(object):
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.partitionBy(partitionBy).mode(mode)
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
         self._jwrite.parquet(path)
 
+    @since(1.6)
+    def text(self, path):
+        """Saves the content of the DataFrame in a text file at the specified path.
+
+        The DataFrame must have only one column that is of string type.
+        Each row becomes a new line in the output file.
+        """
+        self._jwrite.text(path)
+
+    @since(1.5)
+    def orc(self, path, mode=None, partitionBy=None):
+        """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
+
+        ::Note: Currently ORC support is only available together with
+        :class:`HiveContext`.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
+
+        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        self._jwrite.orc(path)
+
     @since(1.4)
-    def jdbc(self, url, table, mode=None, properties={}):
+    def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster;\
@@ -378,6 +497,8 @@ class DataFrameWriter(object):
                            arbitrary string tag/value. Normally at least a
                            "user" and "password" property should be included.
         """
+        if properties is None:
+            properties = dict()
         jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -389,7 +510,7 @@ def _test():
     import os
     import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, HiveContext
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -401,6 +522,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
 
     (failure_count, test_count) = doctest.testmod(

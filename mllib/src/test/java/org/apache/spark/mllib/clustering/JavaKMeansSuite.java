@@ -18,14 +18,13 @@
 package org.apache.spark.mllib.clustering;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -48,7 +47,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Test
   public void runKMeansUsingStaticMethods() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
@@ -67,7 +66,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Test
   public void runKMeansUsingConstructor() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)
@@ -90,7 +89,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Test
   public void testPredictJavaRDD() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.dense(1.0, 2.0, 6.0),
       Vectors.dense(1.0, 3.0, 0.0),
       Vectors.dense(1.0, 4.0, 6.0)

@@ -202,8 +202,8 @@ setMethod("partitionBy",
 
             packageNamesArr <- serialize(.sparkREnv$.packages,
                                          connection = NULL)
-            broadcastArr <- lapply(ls(.broadcastNames), function(name) {
-                                   get(name, .broadcastNames) })
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
             jrdd <- getJRDD(x)
 
             # We create a PairwiseRRDD that extends RDD[(Int, Array[Byte])],
@@ -215,7 +215,6 @@ setMethod("partitionBy",
                                        serializedHashFuncBytes,
                                        getSerializedMode(x),
                                        packageNamesArr,
-                                       as.character(.sparkREnv$libname),
                                        broadcastArr,
                                        callJMethod(jrdd, "classTag"))
 
@@ -560,8 +559,8 @@ setMethod("join",
 # Left outer join two RDDs
 #
 # @description
-# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{leftouterjoin} This function left-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -597,8 +596,8 @@ setMethod("leftOuterJoin",
 # Right outer join two RDDs
 #
 # @description
-# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{rightouterjoin} This function right-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -634,8 +633,8 @@ setMethod("rightOuterJoin",
 # Full outer join two RDDs
 #
 # @description
-# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of the form list(K, V).
-# The key types of the two RDDs should be the same.
+# \code{fullouterjoin} This function full-outer-joins two RDDs where every element is of
+# the form list(K, V). The key types of the two RDDs should be the same.
 #
 # @param x An RDD to be joined. Should be an RDD where each element is
 #             list(K, V).
@@ -880,7 +879,7 @@ setMethod("sampleByKey",
                   if (withReplacement) {
                     count <- rpois(1, frac)
                     if (count > 0) {
-                      res[(len + 1):(len + count)] <- rep(list(elem), count)
+                      res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                       len <- len + count
                     }
                   } else {

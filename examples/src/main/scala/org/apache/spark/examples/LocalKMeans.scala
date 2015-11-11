@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -119,3 +120,4 @@ object LocalKMeans {
     println("Final centers: " + kPoints)
   }
 }
+// scalastyle:on println

@@ -19,6 +19,7 @@ package org.apache.spark.streaming.util
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -46,7 +47,8 @@ private[streaming] class FileBasedWriteAheadLog(
     logDirectory: String,
     hadoopConf: Configuration,
     rollingIntervalSecs: Int,
-    maxFailures: Int
+    maxFailures: Int,
+    closeFileAfterWrite: Boolean
   ) extends WriteAheadLog with Logging {
 
   import FileBasedWriteAheadLog._
@@ -79,6 +81,9 @@ private[streaming] class FileBasedWriteAheadLog(
     while (!succeeded && failures < maxFailures) {
       try {
         fileSegment = getLogWriter(time).write(byteBuffer)
+        if (closeFileAfterWrite) {
+          resetWriter()
+        }
         succeeded = true
       } catch {
         case ex: Exception =>
@@ -118,7 +123,6 @@ private[streaming] class FileBasedWriteAheadLog(
    * hence the implementation is kept simple.
    */
   def readAll(): JIterator[ByteBuffer] = synchronized {
-    import scala.collection.JavaConversions._
     val logFilesToRead = pastLogs.map{ _.path} ++ currentLogPath
     logInfo("Reading from the logs: " + logFilesToRead.mkString("\n"))
 
@@ -126,7 +130,7 @@ private[streaming] class FileBasedWriteAheadLog(
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
       CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
-    } flatMap { x => x }
+    }.flatten.asJava
   }
 
   /**

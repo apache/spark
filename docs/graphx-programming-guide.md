@@ -768,16 +768,14 @@ class GraphOps[VD, ED] {
     // Loop until no messages remain or maxIterations is achieved
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
-      // Receive the messages: -----------------------------------------------------------------------
-      // Run the vertex program on all vertices that receive messages
-      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
-      // Merge the new vertex values back into the graph
-      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }.cache()
-      // Send Messages: ------------------------------------------------------------------------------
-      // Vertices that didn't receive a message above don't appear in newVerts and therefore don't
-      // get to send messages.  More precisely the map phase of mapReduceTriplets is only invoked
-      // on edges in the activeDir of vertices in newVerts
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDir))).cache()
+      // Receive the messages and update the vertices.
+      g = g.joinVertices(messages)(vprog).cache()
+      val oldMessages = messages
+      // Send new messages, skipping edges where neither side received a message. We must cache
+      // messages so it can be materialized on the next line, allowing us to uncache the previous
+      // iteration.
+      messages = g.mapReduceTriplets(
+        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()
       i += 1
     }
@@ -800,7 +798,7 @@ import org.apache.spark.graphx._
 // Import random graph generation library
 import org.apache.spark.graphx.util.GraphGenerators
 // A graph with edge attributes containing distances
-val graph: Graph[Int, Double] =
+val graph: Graph[Long, Double] =
   GraphGenerators.logNormalGraph(sc, numVertices = 100).mapEdges(e => e.attr.toDouble)
 val sourceId: VertexId = 42 // The ultimate source
 // Initialize the graph such that all vertices except the root have distance infinity.
@@ -946,7 +944,7 @@ The three additional functions exposed by the `EdgeRDD` are:
 {% highlight scala %}
 // Transform the edge attributes while preserving the structure
 def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
-// Revere the edges reusing both attributes and structure
+// Reverse the edges reusing both attributes and structure
 def reverse: EdgeRDD[ED]
 // Join two `EdgeRDD`s partitioned using the same partitioning strategy.
 def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]

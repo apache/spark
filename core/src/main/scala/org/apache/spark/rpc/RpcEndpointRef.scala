@@ -17,8 +17,7 @@
 
 package org.apache.spark.rpc
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.Future
 import scala.reflect.ClassTag
 
 import org.apache.spark.util.RpcUtils
@@ -27,12 +26,12 @@ import org.apache.spark.{SparkException, Logging, SparkConf}
 /**
  * A reference for a remote [[RpcEndpoint]]. [[RpcEndpointRef]] is thread-safe.
  */
-private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
+private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   extends Serializable with Logging {
 
   private[this] val maxRetries = RpcUtils.numRetries(conf)
   private[this] val retryWaitMs = RpcUtils.retryWaitMs(conf)
-  private[this] val defaultAskTimeout = RpcUtils.askTimeout(conf)
+  private[this] val defaultAskTimeout = RpcUtils.askRpcTimeout(conf)
 
   /**
    * return the address for the [[RpcEndpointRef]]
@@ -52,7 +51,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    *
    * This method only sends the message once and never retries.
    */
-  def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
+  def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T]
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
@@ -68,7 +67,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * The default `timeout` will be used in every trial of calling `sendWithReply`. Because this
    * method retries, the message handling in the receiver side should be idempotent.
    *
-   * Note: this is a blocking action which may cost a lot of time,  so don't call it in an message
+   * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
    * loop of [[RpcEndpoint]].
    *
    * @param message the message to send
@@ -83,7 +82,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * retries. `timeout` will be used in every trial of calling `sendWithReply`. Because this method
    * retries, the message handling in the receiver side should be idempotent.
    *
-   * Note: this is a blocking action which may cost a lot of time, so don't call it in an message
+   * Note: this is a blocking action which may cost a lot of time, so don't call it in a message
    * loop of [[RpcEndpoint]].
    *
    * @param message the message to send
@@ -91,7 +90,7 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
    * @tparam T type of the reply message
    * @return the reply message from the corresponding [[RpcEndpoint]]
    */
-  def askWithRetry[T: ClassTag](message: Any, timeout: FiniteDuration): T = {
+  def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T = {
     // TODO: Consider removing multiple attempts
     var attempts = 0
     var lastException: Exception = null
@@ -99,9 +98,9 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
       attempts += 1
       try {
         val future = ask[T](message, timeout)
-        val result = Await.result(future, timeout)
+        val result = timeout.awaitResult(future)
         if (result == null) {
-          throw new SparkException("Actor returned null")
+          throw new SparkException("RpcEndpoint returned null")
         }
         return result
       } catch {
@@ -110,10 +109,14 @@ private[spark] abstract class RpcEndpointRef(@transient conf: SparkConf)
           lastException = e
           logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
-      Thread.sleep(retryWaitMs)
+
+      if (attempts < maxRetries) {
+        Thread.sleep(retryWaitMs)
+      }
     }
 
     throw new SparkException(
       s"Error sending message [message = $message]", lastException)
   }
+
 }

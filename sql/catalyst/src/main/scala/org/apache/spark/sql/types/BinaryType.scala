@@ -29,8 +29,6 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
  * :: DeveloperApi ::
  * The data type representing `Array[Byte]` values.
  * Please use the singleton [[DataTypes.BinaryType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class BinaryType private() extends AtomicType {

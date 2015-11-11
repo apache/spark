@@ -20,10 +20,10 @@ package org.apache.spark.util.collection
 import java.lang.{Float => JFloat, Integer => JInteger}
 import java.util.{Arrays, Comparator}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.util.random.XORShiftRandom
 
-class SorterSuite extends SparkFunSuite {
+class SorterSuite extends SparkFunSuite with Logging {
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
@@ -74,7 +74,7 @@ class SorterSuite extends SparkFunSuite {
   /** Runs an experiment several times. */
   def runExperiment(name: String, skip: Boolean = false)(f: => Unit, prepare: () => Unit): Unit = {
     if (skip) {
-      println(s"Skipped experiment $name.")
+      logInfo(s"Skipped experiment $name.")
       return
     }
 
@@ -86,11 +86,11 @@ class SorterSuite extends SparkFunSuite {
     while (i < 10) {
       val time = org.apache.spark.util.Utils.timeIt(1)(f, Some(prepare))
       next10 += time
-      println(s"$name: Took $time ms")
+      logInfo(s"$name: Took $time ms")
       i += 1
     }
 
-    println(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
+    logInfo(s"$name: ($firstTry ms first try, ${next10 / 10} ms average)")
   }
 
   /**

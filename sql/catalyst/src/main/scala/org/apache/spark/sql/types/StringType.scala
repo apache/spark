@@ -27,8 +27,6 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * :: DeveloperApi ::
  * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class StringType private() extends AtomicType {

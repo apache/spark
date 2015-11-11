@@ -85,7 +85,9 @@ object StoragePerfTester {
             latch.countDown()
           } catch {
             case e: Exception =>
+              // scalastyle:off println
               println("Exception in child thread: " + e + " " + e.getMessage)
+              // scalastyle:on println
               System.exit(1)
           }
         }
@@ -97,9 +99,11 @@ object StoragePerfTester {
     val bytesPerSecond = totalBytes.get() / time
     val bytesPerFile = (totalBytes.get() / (numOutputSplits * numMaps.toDouble)).toLong
 
+    // scalastyle:off println
     System.err.println("files_total\t\t%s".format(numMaps * numOutputSplits))
     System.err.println("bytes_per_file\t\t%s".format(Utils.bytesToString(bytesPerFile)))
     System.err.println("agg_throughput\t\t%s/s".format(Utils.bytesToString(bytesPerSecond.toLong)))
+    // scalastyle:on println
 
     executor.shutdown()
     sc.stop()

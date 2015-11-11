@@ -24,12 +24,21 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 
 class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 30000
+
+  var ssc: StreamingContext = _
+
+  override def afterFunction() {
+    super.afterFunction()
+    if (ssc != null) {
+      ssc.stop()
+    }
+  }
 
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
   test("parameter accuracy") {
@@ -50,7 +59,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
     }
 
     // apply model training to input stream
-    val ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
       model.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -84,7 +93,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
 
     // apply model training to input stream, storing the intermediate results
     // (we add a count to ensure the result is a DStream)
-    val ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[LabeledPoint]) => {
       model.trainOn(inputDStream)
       inputDStream.foreachRDD(x => history.append(math.abs(model.latestModel().weights(0) - B)))
       inputDStream.count()
@@ -118,7 +127,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
     }
 
     // apply model predictions to test stream
-    val ssc = setupStreams(testInput, (inputDStream: DStream[LabeledPoint]) => {
+    ssc = setupStreams(testInput, (inputDStream: DStream[LabeledPoint]) => {
       model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
     })
 
@@ -147,7 +156,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
     }
 
     // train and predict
-    val ssc = setupStreams(testInput, (inputDStream: DStream[LabeledPoint]) => {
+    ssc = setupStreams(testInput, (inputDStream: DStream[LabeledPoint]) => {
       model.trainOn(inputDStream)
       model.predictOnValues(inputDStream.map(x => (x.label, x.features)))
     })
@@ -167,7 +176,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
       .setNumIterations(10)
     val numBatches = 10
     val emptyInput = Seq.empty[Seq[LabeledPoint]]
-    val ssc = setupStreams(emptyInput,
+    ssc = setupStreams(emptyInput,
       (inputDStream: DStream[LabeledPoint]) => {
         model.trainOn(inputDStream)
         model.predictOnValues(inputDStream.map(x => (x.label, x.features)))

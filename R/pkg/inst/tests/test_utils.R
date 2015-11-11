@@ -45,10 +45,10 @@ test_that("serializeToBytes on RDD", {
   writeLines(mockFile, fileName)
 
   text.rdd <- textFile(sc, fileName)
-  expect_true(getSerializedMode(text.rdd) == "string")
+  expect_equal(getSerializedMode(text.rdd), "string")
   ser.rdd <- serializeToBytes(text.rdd)
   expect_equal(collect(ser.rdd), as.list(mockFile))
-  expect_true(getSerializedMode(ser.rdd) == "byte")
+  expect_equal(getSerializedMode(ser.rdd), "byte")
 
   unlink(fileName)
 })
@@ -119,7 +119,7 @@ test_that("cleanClosure on R functions", {
   # Test for overriding variables in base namespace (Issue: SparkR-196).
   nums <- as.list(1:10)
   rdd <- parallelize(sc, nums, 2L)
-  t = 4  # Override base::t in .GlobalEnv.
+  t <- 4  # Override base::t in .GlobalEnv.
   f <- function(x) { x > t }
   newF <- cleanClosure(f)
   env <- environment(newF)

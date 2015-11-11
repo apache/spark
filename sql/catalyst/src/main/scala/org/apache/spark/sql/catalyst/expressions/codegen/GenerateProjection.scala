@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.sql.BaseMutableRow
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 /**
  * Java can not access Projection (in package object)
  */
-abstract class BaseProject extends Projection {}
+abstract class BaseProjection extends Projection {}
+
+abstract class CodeGenMutableRow extends MutableRow with BaseGenericInternalRow
 
 /**
  * Generates bytecode that produces a new [[InternalRow]] object based on a fixed set of input
@@ -33,7 +35,6 @@ abstract class BaseProject extends Projection {}
  * primitive values.
  */
 object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
-  import scala.reflect.runtime.universe._
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
     in.map(ExpressionCanonicalizer.execute)
@@ -47,7 +48,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
     val columns = expressions.zipWithIndex.map {
       case (e, i) =>
         s"private ${ctx.javaType(e.dataType)} c$i = ${ctx.defaultValue(e.dataType)};\n"
-    }.mkString("\n      ")
+    }.mkString("\n")
 
     val initColumns = expressions.zipWithIndex.map {
       case (e, i) =>
@@ -58,7 +59,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           ${eval.code}
           nullBits[$i] = ${eval.isNull};
           if (!${eval.isNull}) {
-            c$i = ${eval.primitive};
+            c$i = ${eval.value};
           }
         }
         """
@@ -66,22 +67,21 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
     val getCases = (0 until expressions.size).map { i =>
       s"case $i: return c$i;"
-    }.mkString("\n        ")
+    }.mkString("\n")
 
     val updateCases = expressions.zipWithIndex.map { case (e, i) =>
       s"case $i: { c$i = (${ctx.boxedType(e.dataType)})value; return;}"
-    }.mkString("\n        ")
+    }.mkString("\n")
 
     val specificAccessorFunctions = ctx.primitiveTypes.map { jt =>
       val cases = expressions.zipWithIndex.flatMap {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
           Some(s"case $i: return c$i;")
         case _ => None
-      }.mkString("\n        ")
+      }.mkString("\n")
       if (cases.length > 0) {
         val getter = "get" + ctx.primitiveTypeName(jt)
         s"""
-      @Override
       public $jt $getter(int i) {
         if (isNullAt(i)) {
           return ${ctx.defaultValue(jt)};
@@ -102,11 +102,10 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case (e, i) if ctx.javaType(e.dataType) == jt =>
           Some(s"case $i: { c$i = value; return; }")
         case _ => None
-      }.mkString("\n        ")
+      }.mkString("\n")
       if (cases.length > 0) {
         val setter = "set" + ctx.primitiveTypeName(jt)
         s"""
-      @Override
       public void $setter(int i, $jt value) {
         nullBits[i] = false;
         switch (i) {
@@ -149,77 +148,90 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       """
     }.mkString("\n")
 
+    val copyColumns = expressions.zipWithIndex.map { case (e, i) =>
+        s"""if (!nullBits[$i]) arr[$i] = c$i;"""
+    }.mkString("\n")
+
     val code = s"""
     public SpecificProjection generate($exprType[] expr) {
       return new SpecificProjection(expr);
     }
 
-    class SpecificProjection extends ${typeOf[BaseProject]} {
-      private $exprType[] expressions = null;
+    class SpecificProjection extends ${classOf[BaseProjection].getName} {
+      private $exprType[] expressions;
+      ${declareMutableStates(ctx)}
+      ${declareAddedFunctions(ctx)}
 
       public SpecificProjection($exprType[] expr) {
         expressions = expr;
+        ${initMutableStates(ctx)}
       }
 
-      @Override
       public Object apply(Object r) {
-        return new SpecificRow(expressions, (InternalRow) r);
-      }
-    }
-
-    final class SpecificRow extends ${typeOf[BaseMutableRow]} {
-
-      $columns
-
-      public SpecificRow($exprType[] expressions, InternalRow i) {
-        $initColumns
+        // GenerateProjection does not work with UnsafeRows.
+        assert(!(r instanceof ${classOf[UnsafeRow].getName}));
+        return new SpecificRow((InternalRow) r);
       }
 
-      public int size() { return ${expressions.length};}
-      protected boolean[] nullBits = new boolean[${expressions.length}];
-      public void setNullAt(int i) { nullBits[i] = true; }
-      public boolean isNullAt(int i) { return nullBits[i]; }
+      final class SpecificRow extends ${classOf[CodeGenMutableRow].getName} {
 
-      public Object get(int i) {
-        if (isNullAt(i)) return null;
-        switch (i) {
-        $getCases
+        $columns
+
+        public SpecificRow(InternalRow ${ctx.INPUT_ROW}) {
+          $initColumns
         }
-        return null;
-      }
-      public void update(int i, Object value) {
-        if (value == null) {
-          setNullAt(i);
-          return;
-        }
-        nullBits[i] = false;
-        switch (i) {
-        $updateCases
-        }
-      }
-      $specificAccessorFunctions
-      $specificMutatorFunctions
 
-      @Override
-      public int hashCode() {
-        int result = 37;
-        $hashUpdates
-        return result;
-      }
+        public int numFields() { return ${expressions.length};}
+        protected boolean[] nullBits = new boolean[${expressions.length}];
+        public void setNullAt(int i) { nullBits[i] = true; }
+        public boolean isNullAt(int i) { return nullBits[i]; }
 
-      @Override
-      public boolean equals(Object other) {
-        if (other instanceof SpecificRow) {
-          SpecificRow row = (SpecificRow) other;
-          $columnChecks
-          return true;
+        public Object genericGet(int i) {
+          if (isNullAt(i)) return null;
+          switch (i) {
+          $getCases
+          }
+          return null;
         }
-        return super.equals(other);
+        public void update(int i, Object value) {
+          if (value == null) {
+            setNullAt(i);
+            return;
+          }
+          nullBits[i] = false;
+          switch (i) {
+          $updateCases
+          }
+        }
+        $specificAccessorFunctions
+        $specificMutatorFunctions
+
+        public int hashCode() {
+          int result = 37;
+          $hashUpdates
+          return result;
+        }
+
+        public boolean equals(Object other) {
+          if (other instanceof SpecificRow) {
+            SpecificRow row = (SpecificRow) other;
+            $columnChecks
+            return true;
+          }
+          return super.equals(other);
+        }
+
+        public InternalRow copy() {
+          Object[] arr = new Object[${expressions.length}];
+          ${copyColumns}
+          return new ${classOf[GenericInternalRow].getName}(arr);
+        }
       }
     }
     """
 
-    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n${code}")
+    logDebug(s"MutableRow, initExprs: ${expressions.mkString(",")} code:\n" +
+      CodeFormatter.format(code))
 
     compile(code).generate(ctx.references.toArray).asInstanceOf[Projection]
   }

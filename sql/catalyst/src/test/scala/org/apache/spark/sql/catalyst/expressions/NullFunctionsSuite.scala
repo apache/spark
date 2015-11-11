@@ -18,48 +18,89 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.types.{BooleanType, StringType, ShortType}
+import org.apache.spark.sql.types._
 
 class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("null checking") {
-    val row = create_row("^Ba*n", null, true, null)
-    val c1 = 'a.string.at(0)
-    val c2 = 'a.string.at(1)
-    val c3 = 'a.boolean.at(2)
-    val c4 = 'a.boolean.at(3)
+  def testAllTypes(testFunc: (Any, DataType) => Unit): Unit = {
+    testFunc(false, BooleanType)
+    testFunc(1.toByte, ByteType)
+    testFunc(1.toShort, ShortType)
+    testFunc(1, IntegerType)
+    testFunc(1L, LongType)
+    testFunc(1.0F, FloatType)
+    testFunc(1.0, DoubleType)
+    testFunc(Decimal(1.5), DecimalType(2, 1))
+    testFunc(new java.sql.Date(10), DateType)
+    testFunc(new java.sql.Timestamp(10), TimestampType)
+    testFunc("abcd", StringType)
+  }
 
-    checkEvaluation(c1.isNull, false, row)
-    checkEvaluation(c1.isNotNull, true, row)
+  test("isnull and isnotnull") {
+    testAllTypes { (value: Any, tpe: DataType) =>
+      checkEvaluation(IsNull(Literal.create(value, tpe)), false)
+      checkEvaluation(IsNotNull(Literal.create(value, tpe)), true)
+      checkEvaluation(IsNull(Literal.create(null, tpe)), true)
+      checkEvaluation(IsNotNull(Literal.create(null, tpe)), false)
+    }
+  }
 
-    checkEvaluation(c2.isNull, true, row)
-    checkEvaluation(c2.isNotNull, false, row)
+  test("IsNaN") {
+    checkEvaluation(IsNaN(Literal(Double.NaN)), true)
+    checkEvaluation(IsNaN(Literal(Float.NaN)), true)
+    checkEvaluation(IsNaN(Literal(math.log(-3))), true)
+    checkEvaluation(IsNaN(Literal.create(null, DoubleType)), false)
+    checkEvaluation(IsNaN(Literal(Double.PositiveInfinity)), false)
+    checkEvaluation(IsNaN(Literal(Float.MaxValue)), false)
+    checkEvaluation(IsNaN(Literal(5.5f)), false)
+  }
 
-    checkEvaluation(Literal.create(1, ShortType).isNull, false)
-    checkEvaluation(Literal.create(1, ShortType).isNotNull, true)
+  test("nanvl") {
+    checkEvaluation(NaNvl(Literal(5.0), Literal.create(null, DoubleType)), 5.0)
+    checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(5.0)), null)
+    checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(Double.NaN)), null)
+    checkEvaluation(NaNvl(Literal(Double.NaN), Literal(5.0)), 5.0)
+    checkEvaluation(NaNvl(Literal(Double.NaN), Literal.create(null, DoubleType)), null)
+    assert(NaNvl(Literal(Double.NaN), Literal(Double.NaN)).
+      eval(EmptyRow).asInstanceOf[Double].isNaN)
+  }
 
-    checkEvaluation(Literal.create(null, ShortType).isNull, true)
-    checkEvaluation(Literal.create(null, ShortType).isNotNull, false)
+  test("coalesce") {
+    testAllTypes { (value: Any, tpe: DataType) =>
+      val lit = Literal.create(value, tpe)
+      val nullLit = Literal.create(null, tpe)
+      checkEvaluation(Coalesce(Seq(nullLit)), null)
+      checkEvaluation(Coalesce(Seq(lit)), value)
+      checkEvaluation(Coalesce(Seq(nullLit, lit)), value)
+      checkEvaluation(Coalesce(Seq(nullLit, lit, lit)), value)
+      checkEvaluation(Coalesce(Seq(nullLit, nullLit, lit)), value)
+    }
+  }
 
-    checkEvaluation(Coalesce(c1 :: c2 :: Nil), "^Ba*n", row)
-    checkEvaluation(Coalesce(Literal.create(null, StringType) :: Nil), null, row)
-    checkEvaluation(Coalesce(Literal.create(null, StringType) :: c1 :: c2 :: Nil), "^Ba*n", row)
+  test("AtLeastNNonNulls") {
+    val mix = Seq(Literal("x"),
+      Literal.create(null, StringType),
+      Literal.create(null, DoubleType),
+      Literal(Double.NaN),
+      Literal(5f))
 
-    checkEvaluation(
-      If(c3, Literal.create("a", StringType), Literal.create("b", StringType)), "a", row)
-    checkEvaluation(If(c3, c1, c2), "^Ba*n", row)
-    checkEvaluation(If(c4, c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal.create(null, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal.create(true, BooleanType), c1, c2), "^Ba*n", row)
-    checkEvaluation(If(Literal.create(false, BooleanType), c2, c1), "^Ba*n", row)
-    checkEvaluation(If(Literal.create(false, BooleanType),
-      Literal.create("a", StringType), Literal.create("b", StringType)), "b", row)
+    val nanOnly = Seq(Literal("x"),
+      Literal(10.0),
+      Literal(Float.NaN),
+      Literal(math.log(-2)),
+      Literal(Double.MaxValue))
 
-    checkEvaluation(c1 in (c1, c2), true, row)
-    checkEvaluation(
-      Literal.create("^Ba*n", StringType) in (Literal.create("^Ba*n", StringType)), true, row)
-    checkEvaluation(
-      Literal.create("^Ba*n", StringType) in (Literal.create("^Ba*n", StringType), c2), true, row)
+    val nullOnly = Seq(Literal("x"),
+      Literal.create(null, DoubleType),
+      Literal.create(null, DecimalType.USER_DEFAULT),
+      Literal(Float.MaxValue),
+      Literal(false))
+
+    checkEvaluation(AtLeastNNonNulls(2, mix), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, mix), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nanOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nanOnly), false, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(3, nullOnly), true, EmptyRow)
+    checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 }

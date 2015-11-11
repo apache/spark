@@ -20,7 +20,7 @@ context("functions on binary files")
 # JavaSparkContext handle
 sc <- sparkR.init()
 
-mockFile = c("Spark is pretty.", "Spark is awesome.")
+mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("saveAsObjectFile()/objectFile() following textFile() works", {
   fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
@@ -82,7 +82,7 @@ test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
   saveAsObjectFile(rdd2, fileName2)
 
   rdd <- objectFile(sc, c(fileName1, fileName2))
-  expect_true(count(rdd) == 2)
+  expect_equal(count(rdd), 2)
 
   unlink(fileName1, recursive = TRUE)
   unlink(fileName2, recursive = TRUE)

@@ -19,9 +19,11 @@ package org.apache.spark.network.client;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -36,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -69,14 +72,42 @@ public class TransportClient implements Closeable {
 
   private final Channel channel;
   private final TransportResponseHandler handler;
+  @Nullable private String clientId;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
   }
 
+  public Channel getChannel() {
+    return channel;
+  }
+
   public boolean isActive() {
     return channel.isOpen() || channel.isActive();
+  }
+
+  public SocketAddress getSocketAddress() {
+    return channel.remoteAddress();
+  }
+
+  /**
+   * Returns the ID used by the client to authenticate itself when authentication is enabled.
+   *
+   * @return The client ID, or null if authentication is disabled.
+   */
+  public String getClientId() {
+    return clientId;
+  }
+
+  /**
+   * Sets the authenticated client ID. This is meant to be used by the authentication layer.
+   *
+   * Trying to set a different client ID after it's been set will result in an exception.
+   */
+  public void setClientId(String id) {
+    Preconditions.checkState(clientId == null, "Client ID has already been set.");
+    this.clientId = id;
   }
 
   /**
@@ -127,6 +158,46 @@ public class TransportClient implements Closeable {
           }
         }
       });
+  }
+
+  /**
+   * Request to stream the data with the given stream ID from the remote end.
+   *
+   * @param streamId The stream to fetch.
+   * @param callback Object to call with the stream data.
+   */
+  public void stream(final String streamId, final StreamCallback callback) {
+    final String serverAddr = NettyUtils.getRemoteAddress(channel);
+    final long startTime = System.currentTimeMillis();
+    logger.debug("Sending stream request for {} to {}", streamId, serverAddr);
+
+    // Need to synchronize here so that the callback is added to the queue and the RPC is
+    // written to the socket atomically, so that callbacks are called in the right order
+    // when responses arrive.
+    synchronized (this) {
+      handler.addStreamCallback(callback);
+      channel.writeAndFlush(new StreamRequest(streamId)).addListener(
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              long timeTaken = System.currentTimeMillis() - startTime;
+              logger.trace("Sending request for {} to {} took {} ms", streamId, serverAddr,
+                timeTaken);
+            } else {
+              String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
+                serverAddr, future.cause());
+              logger.error(errorMsg, future.cause());
+              channel.close();
+              try {
+                callback.onFailure(streamId, new IOException(errorMsg, future.cause()));
+              } catch (Exception e) {
+                logger.error("Uncaught exception in RPC response callback handler!", e);
+              }
+            }
+          }
+        });
+    }
   }
 
   /**
@@ -202,6 +273,7 @@ public class TransportClient implements Closeable {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("remoteAdress", channel.remoteAddress())
+      .add("clientId", clientId)
       .add("isActive", isActive())
       .toString();
   }

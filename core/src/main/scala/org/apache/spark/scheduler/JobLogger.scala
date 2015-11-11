@@ -125,7 +125,9 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       val date = new Date(System.currentTimeMillis())
       writeInfo = dateFormat.get.format(date) + ": " + info
     }
+    // scalastyle:off println
     jobIdToPrintWriter.get(jobId).foreach(_.println(writeInfo))
+    // scalastyle:on println
   }
 
   /**

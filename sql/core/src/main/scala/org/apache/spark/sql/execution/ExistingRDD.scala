@@ -17,19 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.sources.{HadoopFsRelation, BaseRelation}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
@@ -95,8 +92,23 @@ private[sql] case class LogicalRDD(
 /** Physical plan node for scanning data from an RDD. */
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow]) extends LeafNode {
+    rdd: RDD[InternalRow],
+    extraInformation: String,
+    override val outputsUnsafeRows: Boolean = false)
+  extends LeafNode {
+
   protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+}
+
+private[sql] object PhysicalRDD {
+  def createFromDataSource(
+      output: Seq[Attribute],
+      rdd: RDD[InternalRow],
+      relation: BaseRelation): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString, relation.isInstanceOf[HadoopFsRelation])
+  }
 }
 
 /** Logical plan node for scanning data from a local collection. */

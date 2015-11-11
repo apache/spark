@@ -52,8 +52,10 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
+    // scalastyle:off println
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+    // scalastyle:on println
     writer.close()
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
@@ -100,7 +102,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
     fileSystem.mkdirs(logDirPath)
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logDirPath, codecName)
-    val sc = new SparkContext("local-cluster[2,1,512]", "Test replay", conf)
+    val sc = new SparkContext("local-cluster[2,1,1024]", "Test replay", conf)
 
     // Run a few jobs
     sc.parallelize(1 to 100, 1).count()

@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import com.google.common.collect.MapMaker
+
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
@@ -28,7 +30,6 @@ import scala.runtime.ScalaRunTime
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
-
 
 /**
  * :: DeveloperApi ::
@@ -73,7 +74,8 @@ object SizeEstimator extends Logging {
   private val ALIGN_SIZE = 8
 
   // A cache of ClassInfo objects for each class
-  private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
+  // We use weakKeys to allow GC of dynamically created classes
+  private val classInfos = new MapMaker().weakKeys().makeMap[Class[_], ClassInfo]()
 
   // Object and pointer sizes are arch dependent
   private var is64bit = false
@@ -124,9 +126,11 @@ object SizeEstimator extends Logging {
       val server = ManagementFactory.getPlatformMBeanServer()
 
       // NOTE: This should throw an exception in non-Sun JVMs
+      // scalastyle:off classforname
       val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
       val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
           Class.forName("java.lang.String"))
+      // scalastyle:on classforname
 
       val bean = ManagementFactory.newPlatformMXBeanProxy(server,
         hotSpotMBeanName, hotSpotMBeanClass)
@@ -215,10 +219,10 @@ object SizeEstimator extends Logging {
     var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
     if (elementClass.isPrimitive) {
-      arrSize += alignSize(length * primitiveSize(elementClass))
+      arrSize += alignSize(length.toLong * primitiveSize(elementClass))
       state.size += arrSize
     } else {
-      arrSize += alignSize(length * pointerSize)
+      arrSize += alignSize(length.toLong * pointerSize)
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
@@ -334,7 +338,7 @@ object SizeEstimator extends Logging {
     // hg.openjdk.java.net/jdk8/jdk8/hotspot/file/tip/src/share/vm/classfile/classFileParser.cpp
     var alignedSize = shellSize
     for (size <- fieldSizes if sizeCount(size) > 0) {
-      val count = sizeCount(size)
+      val count = sizeCount(size).toLong
       // If there are internal gaps, smaller field can fit in.
       alignedSize = math.max(alignedSize, alignSizeUp(shellSize, size) + size * count)
       shellSize += size * count

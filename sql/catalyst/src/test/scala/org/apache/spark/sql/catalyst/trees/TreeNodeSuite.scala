@@ -20,10 +20,12 @@ package org.apache.spark.sql.catalyst.trees
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types.{IntegerType, StringType, NullType}
 
-case class Dummy(optKey: Option[Expression]) extends Expression {
+case class Dummy(optKey: Option[Expression]) extends Expression with CodegenFallback {
   override def children: Seq[Expression] = optKey.toSeq
   override def nullable: Boolean = true
   override def dataType: NullType = NullType
@@ -73,7 +75,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("+", "1", "*", "2", "-", "3", "4")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformDown {
-      case b: BinaryExpression => actual.append(b.symbol); b
+      case b: BinaryOperator => actual.append(b.symbol); b
       case l: Literal => actual.append(l.toString); l
     }
 
@@ -85,7 +87,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression transformUp {
-      case b: BinaryExpression => actual.append(b.symbol); b
+      case b: BinaryOperator => actual.append(b.symbol); b
       case l: Literal => actual.append(l.toString); l
     }
 
@@ -125,7 +127,7 @@ class TreeNodeSuite extends SparkFunSuite {
     val expected = Seq("1", "2", "3", "4", "-", "*", "+")
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
     expression foreachUp {
-      case b: BinaryExpression => actual.append(b.symbol);
+      case b: BinaryOperator => actual.append(b.symbol);
       case l: Literal => actual.append(l.toString);
     }
 

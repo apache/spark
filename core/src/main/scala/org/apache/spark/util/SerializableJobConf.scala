@@ -21,8 +21,6 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.hadoop.mapred.JobConf
 
-import org.apache.spark.util.Utils
-
 private[spark]
 class SerializableJobConf(@transient var value: JobConf) extends Serializable {
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {

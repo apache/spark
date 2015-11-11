@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import scala.util.Random
@@ -70,3 +71,4 @@ object SparkTC {
     spark.stop()
   }
 }
+// scalastyle:on println

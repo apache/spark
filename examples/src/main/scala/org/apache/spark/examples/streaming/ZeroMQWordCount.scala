@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import akka.actor.ActorSystem
@@ -97,3 +98,4 @@ object ZeroMQWordCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

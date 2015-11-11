@@ -76,6 +76,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           fail("Timeout: cannot finish all batches in 30 seconds")
         }
 
+        // Ensure progress listener has been notified of all events
+        ssc.scheduler.listenerBus.waitUntilEmpty(500)
+
         // Verify all "InputInfo"s have been reported
         assert(ssc.progressListener.numTotalReceivedRecords === input.size)
         assert(ssc.progressListener.numTotalProcessedRecords === input.size)
@@ -325,27 +328,31 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("test track the number of input stream") {
-    val ssc = new StreamingContext(conf, batchDuration)
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
 
-    class TestInputDStream extends InputDStream[String](ssc) {
-      def start() { }
-      def stop() { }
-      def compute(validTime: Time): Option[RDD[String]] = None
+      class TestInputDStream extends InputDStream[String](ssc) {
+        def start() {}
+
+        def stop() {}
+
+        def compute(validTime: Time): Option[RDD[String]] = None
+      }
+
+      class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
+        def getReceiver: Receiver[String] = null
+      }
+
+      // Register input streams
+      val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
+      val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
+
+      assert(ssc.graph.getInputStreams().length ==
+        receiverInputStreams.length + inputStreams.length)
+      assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
+      assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
+      assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
+      assert(receiverInputStreams.map(_.id) === Array(0, 1))
     }
-
-    class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-      def getReceiver: Receiver[String] = null
-    }
-
-    // Register input streams
-    val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
-    val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
-
-    assert(ssc.graph.getInputStreams().length == receiverInputStreams.length + inputStreams.length)
-    assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
-    assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
-    assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
-    assert(receiverInputStreams.map(_.id) === Array(0, 1))
   }
 
   def testFileStream(newFilesOnly: Boolean) {

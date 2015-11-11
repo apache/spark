@@ -27,7 +27,7 @@ import java.util.Map;
  */
 class CommandBuilderUtils {
 
-  static final String DEFAULT_MEM = "512m";
+  static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
   static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
@@ -311,6 +311,29 @@ class CommandBuilderUtils {
       quoted.appendCodePoint(cp);
     }
     return quoted.append('"').toString();
+  }
+
+  /**
+   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
+   * set it.
+   */
+  static void addPermGenSizeOpt(List<String> cmd) {
+    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
+    if (getJavaVendor() == JavaVendor.IBM) {
+      return;
+    }
+    String[] version = System.getProperty("java.version").split("\\.");
+    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
+      return;
+    }
+
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        return;
+      }
+    }
+
+    cmd.add("-XX:MaxPermSize=256m");
   }
 
 }

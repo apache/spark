@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{ArrayList => JArrayList, List => JList}
+import java.util.{Arrays, ArrayList => JArrayList, List => JList}
+import org.apache.log4j.LogManager
+import org.apache.spark.sql.AnalysisException
+
+import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -26,8 +30,6 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-
-import scala.collection.JavaConversions._
 
 private[hive] class SparkSQLDriver(
     val context: HiveContext = SparkSQLEnv.hiveContext)
@@ -43,14 +45,14 @@ private[hive] class SparkSQLDriver(
   private def getResultSetSchema(query: context.QueryExecution): Schema = {
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
-    if (analyzed.output.size == 0) {
-      new Schema(new FieldSchema("Response code", "string", "") :: Nil, null)
+    if (analyzed.output.isEmpty) {
+      new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
     } else {
       val fieldSchemas = analyzed.output.map { attr =>
         new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
       }
 
-      new Schema(fieldSchemas, null)
+      new Schema(fieldSchemas.asJava, null)
     }
   }
 
@@ -63,9 +65,12 @@ private[hive] class SparkSQLDriver(
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-      case cause: Throwable =>
-        logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null)
+        case ae: AnalysisException =>
+          logDebug(s"Failed in [$command]", ae)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
+        case cause: Throwable =>
+          logError(s"Failed in [$command]", cause)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)
     }
   }
 
@@ -79,7 +84,7 @@ private[hive] class SparkSQLDriver(
     if (hiveResponse == null) {
       false
     } else {
-      res.asInstanceOf[JArrayList[String]].addAll(hiveResponse)
+      res.asInstanceOf[JArrayList[String]].addAll(hiveResponse.asJava)
       hiveResponse = null
       true
     }

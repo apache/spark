@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -62,10 +63,85 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setSeed(42L)
       .fit(docDF)
 
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+
+    // These expectations are just magic values, characterizing the current
+    // behavior.  The test needs to be updated to be more general, see SPARK-11502
+    val magicExp = Vectors.dense(0.30153007534417237, -0.6833061711354689, 0.5116530778733167)
     model.transform(docDF).select("result", "expected").collect().foreach {
       case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1 ~== vector2 absTol 1E-5, "Transformed vector is different with expected.")
+        assert(vector1 ~== magicExp absTol 1E-5, "Transformed vector is different with expected.")
     }
+  }
+
+  test("getVectors") {
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+
+    val codes = Map(
+      "a" -> Array(-0.2811822295188904, -0.6356269121170044, -0.3020961284637451),
+      "b" -> Array(1.0309048891067505, -1.29472815990448, 0.22276712954044342),
+      "c" -> Array(-0.08456747233867645, 0.5137411952018738, 0.11731560528278351)
+    )
+    val expectedVectors = codes.toSeq.sortBy(_._1).map { case (w, v) => Vectors.dense(v) }
+
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val realVectors = model.getVectors.sort("word").select("vector").map {
+      case Row(v: Vector) => v
+    }.collect()
+    // These expectations are just magic values, characterizing the current
+    // behavior.  The test needs to be updated to be more general, see SPARK-11502
+    val magicExpected = Seq(
+      Vectors.dense(0.3326166272163391, -0.5603077411651611, -0.2309209555387497),
+      Vectors.dense(0.32463887333869934, -0.9306551218032837, 1.393115520477295),
+      Vectors.dense(-0.27150997519493103, 0.4372006058692932, -0.13465698063373566)
+    )
+
+    realVectors.zip(magicExpected).foreach {
+      case (real, expected) =>
+        assert(real ~== expected absTol 1E-5, "Actual vector is different from expected.")
+    }
+  }
+
+  test("findSynonyms") {
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    val sentence = "a b " * 100 + "a c " * 10
+    val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
+    val docDF = doc.zip(doc).toDF("text", "alsotext")
+
+    val model = new Word2Vec()
+      .setVectorSize(3)
+      .setInputCol("text")
+      .setOutputCol("result")
+      .setSeed(42L)
+      .fit(docDF)
+
+    val expectedSimilarity = Array(0.18032623242822343, -0.5717976464798823)
+    val (synonyms, similarity) = model.findSynonyms("a", 2).map {
+      case Row(w: String, sim: Double) => (w, sim)
+    }.collect().unzip
+
+    assert(synonyms.toArray === Array("b", "c"))
+    expectedSimilarity.zip(similarity).map {
+      case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
+    }
+
   }
 }
 
