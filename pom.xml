@@ -2265,7 +2265,7 @@
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>false</failOnViolation>
-          <includeTestSourceDirectory>false</includeTestSourceDirectory>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <failOnWarning>false</failOnWarning>
           <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
