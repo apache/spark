@@ -36,7 +36,7 @@ class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializ
 
   override def merge(b1: N, b2: N): N = numeric.plus(b1, b2)
 
-  override def present(reduction: N): N = reduction
+  override def finish(reduction: N): N = reduction
 }
 
 object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with Serializable {
@@ -50,7 +50,7 @@ object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
+  override def finish(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
 }
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)]
@@ -66,7 +66,7 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
     (b1._1 + b2._1, b1._2 + b2._2)
   }
 
-  override def present(reduction: (Long, Long)): (Long, Long) = reduction
+  override def finish(reduction: (Long, Long)): (Long, Long) = reduction
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
