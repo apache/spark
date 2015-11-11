@@ -252,24 +252,8 @@ private[spark] object SQLConf {
         "not be provided to ExchangeCoordinator.",
       isPublic = false)
 
-  val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
-    defaultValue = Some(true),
-    doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
-          "manages memory and dynamically generates bytecode for expression evaluation.")
-
-  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
-      " a specific query.",
-    isPublic = false)
-
-  val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, use the new optimized Tungsten physical execution backend.",
-    isPublic = false)
-
   val SUBEXPRESSION_ELIMINATION_ENABLED = booleanConf("spark.sql.subexpressionElimination.enabled",
-    defaultValue = Some(true),  // use CODEGEN_ENABLED as default
+    defaultValue = Some(true),
     doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
@@ -475,6 +459,9 @@ private[spark] object SQLConf {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
     val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
+    val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
+    val CODEGEN_ENABLED = "spark.sql.codegen"
+    val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
   }
 }
 
@@ -541,14 +528,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
-  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, getConf(TUNGSTEN_ENABLED))
-
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
-
   private[spark] def subexpressionEliminationEnabled: Boolean =
-    getConf(SUBEXPRESSION_ELIMINATION_ENABLED, codegenEnabled)
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

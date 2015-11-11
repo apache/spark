@@ -110,33 +110,23 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("Project metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "false",
-      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("Project", Map(
-          "number of rows" -> 2L)))
-      )
-    }
+    // Assume the execution plan is
+    // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
+    val df = person.select('name)
+    testSparkPlanMetrics(df, 1, Map(
+      0L ->("TungstenProject", Map(
+        "number of rows" -> 2L)))
+    )
   }
 
   test("TungstenProject metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("TungstenProject", Map(
-          "number of rows" -> 2L)))
-      )
-    }
+    // Assume the execution plan is
+    // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
+    val df = person.select('name)
+    testSparkPlanMetrics(df, 1, Map(
+      0L ->("TungstenProject", Map(
+        "number of rows" -> 2L)))
+    )
   }
 
   test("Filter metrics") {
@@ -150,71 +140,30 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("SortBasedAggregate metrics") {
-    // Because SortBasedAggregate may skip different rows if the number of partitions is different,
-    // this test should use the deterministic number of partitions.
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) ->
-      // SortBasedAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
-
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 3) -> TungstenExchange(nodeId = 2)
-      // -> ExternalSort(nodeId = 1)-> SortBasedAggregate(nodeId = 0)
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        3L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
-  }
-
   test("TungstenAggregate metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
-      // -> TungstenAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
+    // Assume the execution plan is
+    // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> TungstenAggregate(nodeId = 0)
+    val df = testData2.groupBy().count() // 2 partitions
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 6L,
+        "number of output rows" -> 2L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 2L,
+        "number of output rows" -> 1L)))
+    )
 
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).count()
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 6L,
+        "number of output rows" -> 4L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 4L,
+        "number of output rows" -> 3L)))
+    )
   }
 
   test("SortMergeJoin metrics") {
