@@ -282,7 +282,7 @@ class SchedulerJob(BaseJob):
 
         if slas:
             sla_dates = [sla.execution_date for sla in slas]
-            blocking_tis = (
+            qry = (
                 session
                 .query(TI)
                 .filter(TI.state != State.SUCCESS)
@@ -290,8 +290,15 @@ class SchedulerJob(BaseJob):
                 .filter(TI.dag_id == dag.dag_id)
                 .all()
             )
-            for ti in blocking_tis:
+            blocking_tis = []
+            for ti in qry:
+                if ti.task_id in dag.task_ids:
                     ti.task = dag.get_task(ti.task_id)
+                    blocking_tis.append(ti)
+                else:
+                    session.delete(ti)
+                    session.commit()
+
             blocking_tis = ([ti for ti in blocking_tis
                             if ti.are_dependencies_met(main_session=session)])
             task_list = "\n".join([
@@ -496,7 +503,7 @@ class SchedulerJob(BaseJob):
             if not pool:
                 # Arbitrary:
                 # If queued outside of a pool, trigger no more than 32 per run
-                open_slots = 32
+                open_slots = 128
             else:
                 open_slots = pools[pool].open_slots(session=session)
 
