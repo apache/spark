@@ -65,7 +65,7 @@ class MultilayerPerceptronClassifierSuite
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
-      .setSeed(11L)
+      .setSeed(123L)
       .setMaxIter(100)
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
@@ -86,7 +86,7 @@ class MultilayerPerceptronClassifierSuite
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
-      .setSeed(11L)
+      .setSeed(12L)
       .setMaxIter(100)
       .setTol(1e-6)
     val badModel = trainer.fit(dataFrame)
@@ -114,7 +114,7 @@ class MultilayerPerceptronClassifierSuite
         p == l
       }
     }
-    assert(goodOptimum && i == 3, "Should converge to a good optimum after the 3rd restart")
+    assert(goodOptimum && i == 5, "Should converge to a good optimum after the 5th restart")
   }
 
   test("3 class classification with 2 hidden layers") {
