@@ -309,13 +309,23 @@ class GroupedData protected[sql](
               s"The values of a pivot must be literals, found $other")
         }
       } else {
+        // This is to prevent unintended OOM errors when the number of distinct values is large
+        val maxValues = df.sqlContext.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
         // Get the distinct values of the column and sort them so its consistent
-        df.select(pivotColumn)
+        val values = df.select(pivotColumn)
           .distinct()
           .sort(pivotColumn)
           .map(_.get(0))
-          .collect()
+          .take(maxValues + 1)
           .map(Literal(_)).toSeq
+        if (values.length > maxValues) {
+          throw new RuntimeException(
+            s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
+              "this could indicate an error. " +
+              "If this was intended, set \"" + SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key + "\" " +
+              s"to at least the number of distinct values of the pivot column.")
+        }
+        values
       }
       new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, pivotValues))
     case _ =>

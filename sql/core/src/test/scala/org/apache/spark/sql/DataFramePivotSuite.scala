@@ -75,4 +75,13 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
+
+  test("pivot max values inforced") {
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES, 1)
+    intercept[RuntimeException](
+      courseSales.groupBy($"year").pivot($"course")
+    )
+    sqlContext.conf.setConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES,
+      SQLConf.DATAFRAME_PIVOT_MAX_VALUES.defaultValue.get)
+  }
 }
