@@ -211,7 +211,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       I wish there were a cleaner way to do this, but trying to use any sort of synchronization
       with this fails due to task serialization.
     */
-    val rdd = sc.parallelize(1 to 100, 4).mapPartitions(itr => {Thread.sleep(1000L); itr})
+    val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => Thread.sleep(1000L); itr}
     val f = action(rdd)
     f.onComplete(_ => ())(fakeExecutionContext)
     assert(!executorInvoked.isCompleted)
