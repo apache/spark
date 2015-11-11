@@ -395,6 +395,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     writeAsync(batchedWal, event1, 3L)
     eventually(timeout(1 second)) {
       assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 0)
     }
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
@@ -431,21 +432,28 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     val blockingWal = new BlockingWriteAheadLog(wal, walHandle)
     val batchedWal = new BatchedWriteAheadLog(blockingWal, sparkConf)
 
-    val event1 = ("hello", 3L)
-    val event2 = ("world", 5L)
-    val event3 = ("this", 8L)
-    val event4 = ("is", 9L)
-    val event5 = ("doge", 10L)
+    val event1 = "hello"
+    val event2 = "world"
+    val event3 = "this"
 
     // The queue.take() immediately takes the 3, and there is nothing left in the queue at that
     // moment. Then the promise blocks the writing of 3. The rest get queued.
-    val writePromises = Seq(event1, event2, event3, event4, event5).map { event =>
-      writeAsync(batchedWal, event._1, event._2)
+    val promise1 = writeAsync(batchedWal, event1, 3L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 0)
     }
+    // rest of the records will be batched while it takes time for 3 to get written
+    val promise2 = writeAsync(batchedWal, event2, 5L)
+    val promise3 = writeAsync(batchedWal, event3, 8L)
 
     eventually(timeout(1 second)) {
-      assert(walBatchingThreadPool.getActiveCount === 5)
+      assert(walBatchingThreadPool.getActiveCount === 3)
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 2) // event1 is being written
     }
+
+    val writePromises = Seq(promise1, promise2, promise3)
 
     batchedWal.close()
     eventually(timeout(1 second)) {
