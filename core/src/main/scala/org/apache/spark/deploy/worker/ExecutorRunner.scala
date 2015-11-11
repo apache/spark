@@ -126,7 +126,7 @@ private[deploy] class ExecutorRunner(
   private def fetchAndRunExecutor() {
     try {
       // Launch the process
-      val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
+      val builder = CommandUtils.buildProcessBuilder(appDesc.command,
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
       val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")

@@ -20,8 +20,6 @@ package org.apache.spark.executor
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.conf.Configuration
-
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 
@@ -154,6 +152,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
+
+      // for Executors, auth secret key is in env variable
+      val secret = sys.env.get(SecurityManager.ENV_AUTH_SECRET)
+
+      secret.foreach(executorConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, _))
+
       val port = executorConf.getInt("spark.executor.port", 0)
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
@@ -177,6 +181,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+
+      secret.foreach(driverConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, _))
+
       if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))

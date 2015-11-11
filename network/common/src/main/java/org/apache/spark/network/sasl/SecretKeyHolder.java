@@ -21,6 +21,9 @@ package org.apache.spark.network.sasl;
  * Interface for getting a secret key associated with some application.
  */
 public interface SecretKeyHolder {
+  String DEFAULT_SPARK_SASL_HTTP_USER = "sparkHttpUser";
+  String DEFAULT_SPARK_SASL_USER = "sparkSaslUser";
+
   /**
    * Gets an appropriate SASL User for the given appId.
    * @throws IllegalArgumentException if the given appId is not associated with a SASL user.

@@ -17,12 +17,11 @@
 
 package org.apache.spark.deploy.client
 
-import java.util.concurrent._
-import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture, _}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.{Logging, Namespace, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -258,7 +257,7 @@ private[spark] class AppClient(
 
   def start() {
     // Just launch an rpcEndpoint; it will call back into the listener.
-    endpoint = rpcEnv.setupEndpoint("AppClient", new ClientEndpoint(rpcEnv))
+    endpoint = rpcEnv.setupEndpoint(AppClient.ENDPOINT_NAME, new ClientEndpoint(rpcEnv))
   }
 
   def stop() {
@@ -272,6 +271,7 @@ private[spark] class AppClient(
       }
       endpoint = null
     }
+    rpcEnv.shutdown()
   }
 
   /**
@@ -302,4 +302,32 @@ private[spark] class AppClient(
     }
   }
 
+}
+
+private[spark] object AppClient {
+  val SYSTEM_NAME = "appClient"
+  val ENDPOINT_NAME = "client"
+
+  /**
+   * Creates and starts the [[AppClient]] object. It initializes RpcEnv with
+   * [[Namespace.Submission]] from the given configuration and sets up endpoint.
+   *
+   * @return the created instance of [[AppClient]]
+   */
+  def apply(
+    conf: SparkConf,
+    masterUrls: Array[String],
+    appDescription: ApplicationDescription,
+    listener: AppClientListener): AppClient = {
+
+    val appClientConf = conf.fromNamespace(Namespace.Submission)
+    val host = appClientConf.getOption("spark.host")
+        .orElse(conf.getOption("spark.driver.host"))
+        .getOrElse(Utils.localHostName())
+    val port = appClientConf.getInt("spark.port", 0)
+    val securityManager = new SecurityManager(appClientConf)
+
+    val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, appClientConf, securityManager)
+    new AppClient(rpcEnv, masterUrls, appDescription, listener, appClientConf)
+  }
 }

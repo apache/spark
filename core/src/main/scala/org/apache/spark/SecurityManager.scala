@@ -390,8 +390,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     } else {
       // user must have set spark.authenticate.secret config
       // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
-      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
-        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
+      sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF) match {
         case Some(value) => value
         case None =>
           throw new IllegalArgumentException(
@@ -457,14 +456,14 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * For now use a single hardcoded user.
    * @return the HTTP user as a String
    */
-  def getHttpUser(): String = "sparkHttpUser"
+  def getHttpUser(): String = SecretKeyHolder.DEFAULT_SPARK_SASL_HTTP_USER
 
   /**
    * Gets the user used for authenticating SASL connections.
    * For now use a single hardcoded user.
    * @return the SASL user as a String
    */
-  def getSaslUser(): String = "sparkSaslUser"
+  def getSaslUser(): String = SecretKeyHolder.DEFAULT_SPARK_SASL_USER
 
   /**
    * Gets the secret key.
@@ -478,12 +477,11 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 }
 
 private[spark] object SecurityManager {
-
   val SPARK_AUTH_CONF: String = "spark.authenticate"
   val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same
   // value as SPARK_AUTH_SECRET_CONF set in SparkConf
-  val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
+  val ENV_AUTH_SECRET = "SPARK_AUTH_SECRET"
 
   // key used to store the spark secret in the Hadoop UGI
   val SECRET_LOOKUP_KEY = "sparkCookie"

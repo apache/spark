@@ -33,7 +33,7 @@ class ExecutorRunnerTest extends SparkFunSuite {
       "publicAddr", new File(sparkHome), new File("ooga"), "blah", conf, Seq("localDir"),
       ExecutorState.RUNNING)
     val builder = CommandUtils.buildProcessBuilder(
-      appDesc.command, new SecurityManager(conf), 512, sparkHome, er.substituteVariables)
+      appDesc.command, 512, sparkHome, er.substituteVariables)
     val builderCommand = builder.command()
     assert(builderCommand.get(builderCommand.size() - 1) === appId)
   }

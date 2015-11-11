@@ -21,15 +21,15 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
+import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
-import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 
-import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, TaskState}
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -71,6 +71,11 @@ private[spark] class MesosExecutorBackend
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
+
+    // for Executors, auth secret key is in env variable
+    sys.env.get(SecurityManager.ENV_AUTH_SECRET)
+      .foreach(conf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, _))
+
     val port = conf.getInt("spark.executor.port", 0)
     val env = SparkEnv.createExecutorEnv(
       conf, executorId, slaveInfo.getHostname, port, cpusPerTask, isLocal = false)

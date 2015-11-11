@@ -364,6 +364,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.containsKey(key)
 
+  /**
+   * Returns a copy of this configuration with all the properties at `spark.namespace.xxx`
+   * copied to `spark.xxx`
+   */
+  private[spark] def fromNamespace(namespace: Namespace): SparkConf = {
+    namespace.removeFrom(this)
+  }
+
   /** Copy this object */
   override def clone: SparkConf = {
     new SparkConf(false).setAll(getAll)
