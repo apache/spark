@@ -388,13 +388,13 @@ case class Rollup(
 case class Pivot(
     groupByExprs: Seq[NamedExpression],
     pivotColumn: Expression,
-    pivotValues: Seq[String],
+    pivotValues: Seq[Literal],
     aggregates: Seq[Expression],
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
-    case aggregate :: Nil => pivotValues.map(AttributeReference(_, aggregate.dataType)())
+    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
     case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + " " + agg.prettyString, agg.dataType)())
+      aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
     }
   }
 }

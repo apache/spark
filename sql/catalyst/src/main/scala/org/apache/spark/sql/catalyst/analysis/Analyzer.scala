@@ -260,7 +260,7 @@ class Analyzer(
         val singleAgg = aggregates.size == 1
         val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
           def ifExpr(expr: Expression) = {
-            If(EqualTo(pivotColumn, Literal(value)), expr, Literal(null))
+            If(EqualTo(pivotColumn, value), expr, Literal(null))
           }
           aggregates.map { aggregate =>
             val filteredAggregate = aggregate.transformDown {
@@ -278,7 +278,7 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
-            val name = if (singleAgg) value else value + " " + aggregate.prettyString
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
             Alias(filteredAggregate, name)()
           }
         }

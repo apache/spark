@@ -297,18 +297,25 @@ class GroupedData protected[sql](
     * @since 1.6.0
     */
   @scala.annotation.varargs
-  def pivot(pivotColumn: Column, values: String*): GroupedData = groupType match {
+  def pivot(pivotColumn: Column, values: Column*): GroupedData = groupType match {
     case _: GroupedData.PivotType =>
       throw new UnsupportedOperationException("repeated pivots are not supported")
     case GroupedData.GroupByType =>
       val pivotValues = if (values.nonEmpty) {
-        values
+        values.map {
+          case Column(literal: Literal) => literal
+          case other =>
+            throw new UnsupportedOperationException(
+              s"The values of a pivot must be literals, found $other")
+        }
       } else {
         // Get the distinct values of the column and sort them so its consistent
-        df.select(pivotColumn.cast(StringType))
+        df.select(pivotColumn)
           .distinct()
-          .map(_.getString(0))
-          .collect().sorted.toSeq
+          .sort(pivotColumn)
+          .map(_.get(0))
+          .collect()
+          .map(Literal(_)).toSeq
       }
       new GroupedData(df, groupingExprs, GroupedData.PivotType(pivotColumn.expr, pivotValues))
     case _ =>
@@ -330,9 +337,9 @@ class GroupedData protected[sql](
     * @since 1.6.0
     */
   @scala.annotation.varargs
-  def pivot(pivotColumn: String, values: String*): GroupedData = {
+  def pivot(pivotColumn: String, values: Any*): GroupedData = {
     val resolvedPivotColumn = Column(df.resolve(pivotColumn))
-    pivot(resolvedPivotColumn, values: _*)
+    pivot(resolvedPivotColumn, values.map(functions.lit): _*)
   }
 }
 
@@ -372,5 +379,5 @@ private[sql] object GroupedData {
   /**
     * To indicate it's the PIVOT
     */
-  private[sql] case class PivotType(pivotCol: Expression, values: Seq[String]) extends GroupType
+  private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
 }

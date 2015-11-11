@@ -23,37 +23,45 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   import testImplicits._
 
-  test("pivot courses groupBy") {
+  test("pivot courses with literals") {
     checkAnswer(
-      courseSales.groupBy($"year").pivot($"course", "dotNET", "Java").agg(sum($"earnings")),
+      courseSales.groupBy($"year").pivot($"course", lit("dotNET"), lit("Java"))
+        .agg(sum($"earnings")),
       Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     )
   }
 
-  test("pivot year groupBy") {
+  test("pivot year with literals") {
     checkAnswer(
-      courseSales.groupBy($"course").pivot($"year", "2012", "2013").agg(sum($"earnings")),
+      courseSales.groupBy($"course").pivot($"year", lit(2012), lit(2013)).agg(sum($"earnings")),
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
 
-  test("pivot courses groupBy multiple") {
+  test("pivot courses with literals and multiple aggregations") {
     checkAnswer(
-      courseSales.groupBy($"year").pivot($"course", "dotNET", "Java")
+      courseSales.groupBy($"year").pivot($"course", lit("dotNET"), lit("Java"))
         .agg(sum($"earnings"), avg($"earnings")),
       Row(2012, 15000.0, 7500.0, 20000.0, 20000.0) ::
         Row(2013, 48000.0, 48000.0, 30000.0, 30000.0) :: Nil
     )
   }
 
-  test("pivot year groupBy with strings") {
+  test("pivot year with string values (cast)") {
     checkAnswer(
       courseSales.groupBy("course").pivot("year", "2012", "2013").sum("earnings"),
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
 
-  test("pivot courses groupBy with no values") {
+  test("pivot year with int values") {
+    checkAnswer(
+      courseSales.groupBy("course").pivot("year", 2012, 2013).sum("earnings"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("pivot courses with no values") {
     // Note Java comes before dotNet in sorted order
     checkAnswer(
       courseSales.groupBy($"year").pivot($"course").agg(sum($"earnings")),
@@ -61,7 +69,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
   }
 
-  test("pivot year groupBy with no values") {
+  test("pivot year with no values") {
     checkAnswer(
       courseSales.groupBy($"course").pivot($"year").agg(sum($"earnings")),
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
