@@ -59,7 +59,7 @@ public class SaslIntegrationSuite {
 
   // Use a long timeout to account for slow / overloaded build machines. In the normal case,
   // tests should finish way before the timeout expires.
-  private final static long TIMEOUT_MS = 10_000;
+  private static final long TIMEOUT_MS = 10_000;
 
   static TransportServer server;
   static TransportConf conf;
