@@ -59,12 +59,9 @@ object Utils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use TungstenAggregate.
-    val usesTungstenAggregate =
-      child.sqlContext.conf.unsafeEnabled &&
-      TungstenAggregate.supportsAggregate(
+    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-
 
     // 1. Create an Aggregate Operator for partial aggregations.
 
@@ -144,11 +141,9 @@ object Utils {
       child: SparkPlan): Seq[SparkPlan] = {
 
     val aggregateExpressions = functionsWithDistinct ++ functionsWithoutDistinct
-    val usesTungstenAggregate =
-      child.sqlContext.conf.unsafeEnabled &&
-        TungstenAggregate.supportsAggregate(
-          groupingExpressions,
-          aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
+      groupingExpressions,
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
 
     // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain more than one
     // DISTINCT aggregate function, all of those functions will have the same column expression.

@@ -90,10 +90,9 @@ case class SortMergeOuterJoin(
   }
 
   private def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled
-      && UnsafeProjection.canSupport(leftKeys)
-      && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(schema))
+    UnsafeProjection.canSupport(leftKeys) &&
+      UnsafeProjection.canSupport(rightKeys) &&
+      UnsafeProjection.canSupport(schema)
   }
 
   override def outputsUnsafeRows: Boolean = isUnsafeMode

@@ -28,10 +28,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-
 import org.apache.spark.util.Utils
+
 
 case class Fields(f1: Int, f2: Int, f3: Int, f4: Int, f5: Int)
 
@@ -92,44 +92,36 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("Max/Min on named_struct") {
-    def testOrderInStruct(): Unit = {
-      checkAnswer(sql(
-        """
-          |SELECT max(named_struct(
-          |           "key", key,
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_498")))
-      checkAnswer(sql(
-        """
-          |SELECT min(named_struct(
-          |           "key", key,
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_0")))
+    checkAnswer(sql(
+      """
+        |SELECT max(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_498")))
+    checkAnswer(sql(
+      """
+        |SELECT min(named_struct(
+        |           "key", key,
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_0")))
 
-      // nested struct cases
-      checkAnswer(sql(
-        """
-          |SELECT max(named_struct(
-          |           "key", named_struct(
-                              "key", key,
-                              "value", value),
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_498")))
-      checkAnswer(sql(
-        """
-          |SELECT min(named_struct(
-          |           "key", named_struct(
-                             "key", key,
-                             "value", value),
-          |           "value", value)).value FROM src
-        """.stripMargin), Seq(Row("val_0")))
-    }
-    val codegenDefault = hiveContext.getConf(SQLConf.CODEGEN_ENABLED)
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, true)
-    testOrderInStruct()
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, false)
-    testOrderInStruct()
-    hiveContext.setConf(SQLConf.CODEGEN_ENABLED, codegenDefault)
+    // nested struct cases
+    checkAnswer(sql(
+      """
+        |SELECT max(named_struct(
+        |           "key", named_struct(
+                            "key", key,
+                            "value", value),
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_498")))
+    checkAnswer(sql(
+      """
+        |SELECT min(named_struct(
+        |           "key", named_struct(
+                           "key", key,
+                           "value", value),
+        |           "value", value)).value FROM src
+      """.stripMargin), Seq(Row("val_0")))
   }
 
   test("SPARK-6409 UDAF Average test") {

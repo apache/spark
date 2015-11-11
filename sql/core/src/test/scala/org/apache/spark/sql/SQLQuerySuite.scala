@@ -261,8 +261,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("aggregation with codegen") {
-    val originalValue = sqlContext.conf.codegenEnabled
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
       .unionAll(sqlContext.table("testData"))
@@ -347,7 +345,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(null, null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
-      sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue)
     }
   }
 
@@ -565,12 +562,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("external sorting") {
     sortTest()
-  }
-
-  test("SPARK-6927 external sorting with codegen on") {
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      sortTest()
-    }
   }
 
   test("limit") {
@@ -1624,12 +1615,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("aggregation with codegen updates peak execution memory") {
-    withSQLConf((SQLConf.CODEGEN_ENABLED.key, "true")) {
-      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
-        testCodeGen(
-          "SELECT key, count(value) FROM testData GROUP BY key",
-          (1 to 100).map(i => Row(i, 1)))
-      }
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "aggregation with codegen") {
+      testCodeGen(
+        "SELECT key, count(value) FROM testData GROUP BY key",
+        (1 to 100).map(i => Row(i, 1)))
     }
   }
 
@@ -1783,9 +1772,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // This bug will be triggered when Tungsten is enabled and there are multiple
     // SortMergeJoin operators executed in the same task.
     val confs =
-      SQLConf.SORTMERGE_JOIN.key -> "true" ::
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" ::
-        SQLConf.TUNGSTEN_ENABLED.key -> "true" :: Nil
+      SQLConf.SORTMERGE_JOIN.key -> "true" :: SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1" :: Nil
     withSQLConf(confs: _*) {
       val df1 = (1 to 50).map(i => (s"str_$i", i)).toDF("i", "j")
       val df2 =

@@ -26,30 +26,21 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 class NestedLoopJoinNodeSuite extends LocalNodeTest {
 
   // Test all combinations of the three dimensions: with/out unsafe, build sides, and join types
-  private val maybeUnsafeAndCodegen = Seq(false, true)
   private val buildSides = Seq(BuildLeft, BuildRight)
   private val joinTypes = Seq(LeftOuter, RightOuter, FullOuter)
-  maybeUnsafeAndCodegen.foreach { unsafeAndCodegen =>
-    buildSides.foreach { buildSide =>
-      joinTypes.foreach { joinType =>
-        testJoin(unsafeAndCodegen, buildSide, joinType)
-      }
+  buildSides.foreach { buildSide =>
+    joinTypes.foreach { joinType =>
+      testJoin(buildSide, joinType)
     }
   }
 
   /**
    * Test outer nested loop joins with varying degrees of matches.
    */
-  private def testJoin(
-      unsafeAndCodegen: Boolean,
-      buildSide: BuildSide,
-      joinType: JoinType): Unit = {
-    val simpleOrUnsafe = if (!unsafeAndCodegen) "simple" else "unsafe"
-    val testNamePrefix = s"$simpleOrUnsafe / $buildSide / $joinType"
+  private def testJoin(buildSide: BuildSide, joinType: JoinType): Unit = {
+    val testNamePrefix = s"$buildSide / $joinType"
     val someData = (1 to 100).map { i => (i, "burger" + i) }.toArray
     val conf = new SQLConf
-    conf.setConf(SQLConf.UNSAFE_ENABLED, unsafeAndCodegen)
-    conf.setConf(SQLConf.CODEGEN_ENABLED, unsafeAndCodegen)
 
     // Actual test body
     def runTest(
@@ -63,7 +54,7 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
         resolveExpressions(
           new NestedLoopJoinNode(conf, node1, node2, buildSide, joinType, Some(cond)))
       }
-      val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
+      val makeUnsafeNode = wrapForUnsafe(makeNode)
       val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
       val expectedOutput = generateExpectedOutput(leftInput, rightInput, joinType)
       val actualOutput = hashJoinNode.collect().map { row =>
