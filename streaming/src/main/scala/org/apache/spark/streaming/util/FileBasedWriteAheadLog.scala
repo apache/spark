@@ -272,9 +272,10 @@ private[streaming] object FileBasedWriteAheadLog {
       threadpool: ThreadPoolExecutor,
       source: Seq[I],
       handler: I => Iterator[O]): Iterator[O] = {
+    val taskSupport = new ThreadPoolTaskSupport(threadpool)
     source.grouped(threadpool.getCorePoolSize).flatMap { element =>
       val parallelCollection = element.par
-      parallelCollection.tasksupport = new ThreadPoolTaskSupport(threadpool)
+      parallelCollection.tasksupport = taskSupport
       parallelCollection.map(handler)
     }.flatten
   }
