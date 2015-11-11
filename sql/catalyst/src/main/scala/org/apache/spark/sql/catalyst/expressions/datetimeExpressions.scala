@@ -360,7 +360,7 @@ abstract class UnixTime(timeExp: Expression, format: Expression)
             null
           }
         case StringType =>
-          val f = right.eval(input)
+          val f = format.eval(input)
           if (f == null) {
             null
           } else {
