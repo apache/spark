@@ -20,6 +20,8 @@ package org.apache.spark
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.annotation.DeveloperApi
+
 import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.Try
@@ -106,6 +108,7 @@ trait FutureAction[T] extends Future[T] {
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
+@DeveloperApi
 class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
   extends FutureAction[T] {
 
@@ -147,6 +150,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
  * takeSample. Cancellation works by setting the cancelled flag to true and interrupting the
  * action thread if it is being blocked by a job.
  */
+@DeveloperApi
 class ComplexFutureAction[T] extends FutureAction[T] {
 
   @volatile private var _cancelled = false
