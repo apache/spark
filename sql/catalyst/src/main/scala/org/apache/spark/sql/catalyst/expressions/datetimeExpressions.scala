@@ -304,6 +304,8 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  */
 case class ToUnixTimestamp(timeExp: Expression, format: Expression)
   extends UnixTime(timeExp, format) {
+  self =>
+
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
@@ -321,6 +323,8 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression)
  */
 case class UnixTimestamp(timeExp: Expression, format: Expression)
   extends UnixTime(timeExp, format) {
+  self =>
+
   def this(time: Expression) = {
     this(time, Literal("yyyy-MM-dd HH:mm:ss"))
   }
