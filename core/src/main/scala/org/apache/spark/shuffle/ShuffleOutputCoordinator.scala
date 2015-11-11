@@ -61,7 +61,7 @@ private[spark] object ShuffleOutputCoordinator extends Logging {
     commitOutputs(shuffleId, partitionId, tmpToDest, mapStatus, mapStatusFile, ser)
   }
 
-  @VisibleForTesting
+  /** Exposed for testing. */
   def commitOutputs(
       shuffleId: Int,
       partitionId: Int,
