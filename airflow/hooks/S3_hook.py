@@ -298,7 +298,8 @@ class S3Hook(BaseHook):
             error will be raised.
         :type replace: bool
         :param multipart_bytes: If provided, the file is uploaded in parts of
-            this size. If None, the whole file is uploaded at once.
+            this size (minimum 5242880). If None, the whole file is uploaded at
+            once.
         :type multipart_bytes: int
         """
         if not bucket_name:
@@ -358,10 +359,12 @@ class S3Hook(BaseHook):
         if not bucket_name:
             (bucket_name, key) = self.parse_s3_url(key)
         bucket = self.get_bucket(bucket_name)
-        if not self.check_for_key(key, bucket_name):
+        key_obj = bucket.get_key(key)
+        if not replace and key_obj:
+            raise ValueError("The key {key} already exists.".format(
+                **locals()))
+        if not key_obj:
             key_obj = bucket.new_key(key_name=key)
-        else:
-            key_obj = bucket.get_key(key)
         key_size = key_obj.set_contents_from_string(string_data,
                                                     replace=replace)
         logging.info("The key {key} now contains"
