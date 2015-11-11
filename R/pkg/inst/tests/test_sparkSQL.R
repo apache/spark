@@ -1525,6 +1525,22 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
   expect_equal(coltypes(x), "map<string,string>")
 })
 
+test_that("Method str()", {
+  # Structure of Iiris
+  iris2 <- iris
+  iris2$col <- TRUE
+  irisDF2 <- createDataFrame(sqlContext, iris2)
+  out <- capture.output(str(irisDF2))
+  expect_equal(length(out), 7)
+
+  # A random dataset with many columns
+  x <- runif(200, 1, 10)
+  df <- data.frame(t(as.matrix(data.frame(x,x,x,x,x,x,x,x,x))))
+  DF <- createDataFrame(sqlContext, df)
+  out <- capture.output(str(DF))
+  expect_equal(length(out), 103)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
