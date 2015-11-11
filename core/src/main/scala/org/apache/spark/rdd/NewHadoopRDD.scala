@@ -28,12 +28,11 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.input.WholeTextFileInputFormat
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.storage.StorageLevel
 
@@ -59,7 +58,6 @@ private[spark] class NewHadoopPartition(
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
- * @param conf The Hadoop configuration.
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
@@ -184,30 +182,32 @@ class NewHadoopRDD[K, V](
       }
 
       private def close() {
-        try {
-          if (reader != null) {
-            // Close reader and release it
+        if (reader != null) {
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
             reader.close()
-            reader = null
-
-            if (bytesReadCallback.isDefined) {
-              inputMetrics.updateBytesRead()
-            } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-                       split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
-              // If we can't get the bytes read from the FS stats, fall back to the split size,
-              // which may be inaccurate.
-              try {
-                inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
-              } catch {
-                case e: java.io.IOException =>
-                  logWarning("Unable to get input size to set InputMetrics for task", e)
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
               }
-            }
+          } finally {
+            reader = null
           }
-        } catch {
-          case e: Exception => {
-            if (!ShutdownHookManager.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
+          if (bytesReadCallback.isDefined) {
+            inputMetrics.updateBytesRead()
+          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+                     split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+            // If we can't get the bytes read from the FS stats, fall back to the split size,
+            // which may be inaccurate.
+            try {
+              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+            } catch {
+              case e: java.io.IOException =>
+                logWarning("Unable to get input size to set InputMetrics for task", e)
             }
           }
         }
@@ -280,32 +280,3 @@ private[spark] object NewHadoopRDD {
     }
   }
 }
-
-private[spark] class WholeTextFileRDD(
-    sc : SparkContext,
-    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
-    keyClass: Class[String],
-    valueClass: Class[String],
-    conf: Configuration,
-    minPartitions: Int)
-  extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
-
-  override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
-    val conf = getConf
-    inputFormat match {
-      case configurable: Configurable =>
-        configurable.setConf(conf)
-      case _ =>
-    }
-    val jobContext = newJobContext(conf, jobId)
-    inputFormat.setMinPartitions(jobContext, minPartitions)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
-    val result = new Array[Partition](rawSplits.size)
-    for (i <- 0 until rawSplits.size) {
-      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
-    }
-    result
-  }
-}
-

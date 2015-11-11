@@ -561,7 +561,7 @@ setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
-setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
 # @rdname tojson
 # @export
@@ -742,6 +742,10 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
+#' @rdname denseRank
+#' @export
+setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
+
 #' @rdname explode
 #' @export
 setGeneric("explode", function(x) { standardGeneric("explode") })
@@ -793,6 +797,10 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @rdname isNaN
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
+
+#' @rdname kurtosis
+#' @export
+setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
 
 #' @rdname lag
 #' @export
@@ -878,6 +886,10 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
+#' @rdname percentRank
+#' @export
+setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
+
 #' @rdname pmod
 #' @export
 setGeneric("pmod", function(y, x) { standardGeneric("pmod") })
@@ -893,6 +905,10 @@ setGeneric("rand", function(seed) { standardGeneric("rand") })
 #' @rdname randn
 #' @export
 setGeneric("randn", function(seed) { standardGeneric("randn") })
+
+#' @rdname rank
+#' @export
+setGeneric("rank", function(x, ...) { standardGeneric("rank") })
 
 #' @rdname regexp_extract
 #' @export
@@ -911,6 +927,10 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
 
+#' @rdname rowNumber
+#' @export
+setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
+
 #' @rdname rpad
 #' @export
 setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
@@ -918,6 +938,10 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @rdname rtrim
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
+
+#' @rdname sd
+#' @export
+setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
 
 #' @rdname second
 #' @export
@@ -951,9 +975,25 @@ setGeneric("signum", function(x) { standardGeneric("signum") })
 #' @export
 setGeneric("size", function(x) { standardGeneric("size") })
 
+#' @rdname skewness
+#' @export
+setGeneric("skewness", function(x) { standardGeneric("skewness") })
+
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
+
+#' @rdname sd
+#' @export
+setGeneric("stddev", function(x) { standardGeneric("stddev") })
+
+#' @rdname stddev_pop
+#' @export
+setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
+
+#' @rdname stddev_samp
+#' @export
+setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
 
 #' @rdname substring_index
 #' @export
@@ -1003,6 +1043,22 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
+#' @rdname var
+#' @export
+setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
+
+#' @rdname var
+#' @export
+setGeneric("variance", function(x) { standardGeneric("variance") })
+
+#' @rdname var_pop
+#' @export
+setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
+
+#' @rdname var_samp
+#' @export
+setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
 #' @rdname weekofyear
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
@@ -1027,3 +1083,11 @@ setGeneric("as.data.frame")
 #' @rdname attach
 #' @export
 setGeneric("attach")
+
+#' @rdname with
+#' @export
+setGeneric("with")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })

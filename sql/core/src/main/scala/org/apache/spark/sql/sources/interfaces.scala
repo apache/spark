@@ -233,6 +233,15 @@ abstract class BaseRelation {
    * @since 1.4.0
    */
   def needConversion: Boolean = true
+
+  /**
+   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
+   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
+   * data source relation.
+   *
+   * @since 1.6.0
+   */
+  def unhandledFilters(filters: Array[Filter]): Array[Filter] = filters
 }
 
 /**
@@ -419,11 +428,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   private var _partitionSpec: PartitionSpec = _
 
   private class FileStatusCache {
-    var leafFiles = mutable.Map.empty[Path, FileStatus]
+    var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
 
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
-    private def listLeafFiles(paths: Array[String]): Set[FileStatus] = {
+    private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
       if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
         HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
       } else {
@@ -441,10 +450,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
         val (dirs, files) = statuses.partition(_.isDir)
 
+        // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
         if (dirs.isEmpty) {
-          files.toSet
+          mutable.LinkedHashSet(files: _*)
         } else {
-          files.toSet ++ listLeafFiles(dirs.map(_.getPath.toString))
+          mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath.toString))
         }
       }
     }
@@ -455,7 +465,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       leafFiles.clear()
       leafDirToChildrenFiles.clear()
 
-      leafFiles ++= files.map(f => f.getPath -> f).toMap
+      leafFiles ++= files.map(f => f.getPath -> f)
       leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
     }
   }
@@ -466,8 +476,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     cache
   }
 
-  protected def cachedLeafStatuses(): Set[FileStatus] = {
-    fileStatusCache.leafFiles.values.toSet
+  protected def cachedLeafStatuses(): mutable.LinkedHashSet[FileStatus] = {
+    mutable.LinkedHashSet(fileStatusCache.leafFiles.values.toArray: _*)
   }
 
   final private[sql] def partitionSpec: PartitionSpec = {
@@ -585,11 +595,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  final private[sql] def buildScan(
+  final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
       val path = new Path(input)
 
@@ -604,7 +614,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    buildScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
   }
 
   /**
@@ -741,6 +751,44 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   /**
+   * For a non-partitioned relation, this method builds an `RDD[InternalRow]` containing all rows
+   * within this relation. For partitioned relations, this method is called for each selected
+   * partition, and builds an `RDD[InternalRow]` containing all rows within that single partition.
+   *
+   * Note:
+   *
+   * 1. Rows contained in the returned `RDD[InternalRow]` are assumed to be `UnsafeRow`s.
+   * 2. This interface is subject to change in future.
+   *
+   * @param requiredColumns Required columns.
+   * @param filters Candidate filters to be pushed down. The actual filter should be the conjunction
+   *        of all `filters`.  The pushed down filters are currently purely an optimization as they
+   *        will all be evaluated again. This means it is safe to use them with methods that produce
+   *        false positives such as filtering partitions based on a bloom filter.
+   * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
+   *        relation. For a partitioned relation, it contains paths of all data files in a single
+   *        selected partition.
+   * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
+   *        overhead of broadcasting the Configuration for every Hadoop RDD.
+   */
+  private[sql] def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+    val requiredSchema = StructType(requiredColumns.map(dataSchema.apply))
+    val internalRows = {
+      val externalRows = buildScan(requiredColumns, filters, inputFiles, broadcastedConf)
+      execution.RDDConversions.rowToRowRdd(externalRows, requiredSchema.map(_.dataType))
+    }
+
+    internalRows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredSchema)
+      iterator.map(unsafeProjection)
+    }
+  }
+
+  /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
@@ -787,7 +835,7 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Array[String],
       hadoopConf: Configuration,
-      sparkContext: SparkContext): Set[FileStatus] = {
+      sparkContext: SparkContext): mutable.LinkedHashSet[FileStatus] = {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -807,9 +855,10 @@ private[sql] object HadoopFsRelation extends Logging {
         status.getAccessTime)
     }.collect()
 
-    fakeStatuses.map { f =>
+    val hadoopFakeStatuses = fakeStatuses.map { f =>
       new FileStatus(
         f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
-    }.toSet
+    }
+    mutable.LinkedHashSet(hadoopFakeStatuses: _*)
   }
 }
