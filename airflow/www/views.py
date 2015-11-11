@@ -656,7 +656,9 @@ class Airflow(BaseView):
 
     @expose('/headers')
     def headers(self):
-        d = {k: v for k, v in request.headers}
+        d = {
+            'headers': {k: v for k, v in request.headers},
+        }
         if hasattr(current_user, 'is_superuser'):
             d['is_superuser'] = current_user.is_superuser()
             d['data_profiling'] = current_user.data_profiling()
