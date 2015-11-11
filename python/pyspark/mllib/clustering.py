@@ -266,7 +266,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         """
         return [
             MultivariateGaussian(gaussian[0], gaussian[1])
-            for gaussian in zip(*self.call("gaussians"))]
+            for gaussian in self.call("gaussians")]
 
     @property
     @since('1.4.0')
