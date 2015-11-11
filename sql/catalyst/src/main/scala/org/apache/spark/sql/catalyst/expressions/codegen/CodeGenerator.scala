@@ -109,15 +109,15 @@ class CodeGenContext {
 
   // State used for subexpression elimination.
   case class SubExprEliminationState(
-    val isLoaded: String, code: GeneratedExpressionCode, val fnName: String)
+      isLoaded: String,
+      code: GeneratedExpressionCode,
+      fnName: String)
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  val subExprEliminationExprs: mutable.HashMap[Expression, SubExprEliminationState] =
-    mutable.HashMap[Expression, SubExprEliminationState]()
+  val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
   // The collection of isLoaded variables that need to be reset on each row.
-  val subExprIsLoadedVariables: mutable.ArrayBuffer[String] =
-    mutable.ArrayBuffer.empty[String]
+  val subExprIsLoadedVariables = mutable.ArrayBuffer.empty[String]
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -361,7 +361,7 @@ class CodeGenContext {
       val expr = e.head
       val isLoaded = freshName("isLoaded")
       val isNull = freshName("isNull")
-      val primitive = freshName("primitive")
+      val value = freshName("value")
       val fnName = freshName("evalExpr")
 
       // Generate the code for this expression tree and wrap it in a function.
@@ -373,13 +373,13 @@ class CodeGenContext {
            |    ${code.code.trim}
            |    $isLoaded = true;
            |    $isNull = ${code.isNull};
-           |    $primitive = ${code.value};
+           |    $value = ${code.value};
            |  }
            |}
            """.stripMargin
       code.code = fn
       code.isNull = isNull
-      code.value = primitive
+      code.value = value
 
       addNewFunction(fnName, fn)
 
@@ -406,8 +406,8 @@ class CodeGenContext {
       // optimizations.
       addMutableState("boolean", isLoaded, s"$isLoaded = false;")
       addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), primitive,
-        s"$primitive = ${defaultValue(expr.dataType)};")
+      addMutableState(javaType(expr.dataType), value,
+        s"$value = ${defaultValue(expr.dataType)};")
       subExprIsLoadedVariables += isLoaded
 
       val state = SubExprEliminationState(isLoaded, code, fnName)
