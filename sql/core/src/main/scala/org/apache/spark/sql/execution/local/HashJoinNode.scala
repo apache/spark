@@ -46,10 +46,7 @@ trait HashJoinNode {
   private[this] var joinKeys: Projection = _
 
   protected def isUnsafeMode: Boolean = {
-    (codegenEnabled &&
-      unsafeEnabled &&
-      UnsafeProjection.canSupport(schema) &&
-      UnsafeProjection.canSupport(streamedKeys))
+    UnsafeProjection.canSupport(schema) && UnsafeProjection.canSupport(streamedKeys)
   }
 
   private def streamSideKeyGenerator: Projection = {
