@@ -2249,7 +2249,7 @@ setMethod("str", signature="DataFrame", definition=
               # The number of observations will be displayed only if the number
               # of rows of the dataset has already been cached.
               if (!is.null(cachedCount)) {
-                cat("'" %++% class(object) %++% "': " %++% cachedCount %++% " obs. of " %++% 
+                cat("'" %++% class(object) %++% "': " %++% cachedCount %++% " obs. of " %++%
                       length(names) %++% " variables:\n")
               } else {
                 cat("'" %++% class(object) %++% "': " %++% length(names) %++% " variables:\n")
@@ -2274,19 +2274,22 @@ setMethod("str", signature="DataFrame", definition=
                     firstElements <- paste("\"" %++% dataFrame[,i] %++% "\"", collapse = " ")
                   } else {
                     firstElements <- paste(dataFrame[,i], collapse = " ")
-                  } 
+                  }
 
                   # Add the corresponding number of spaces for alignment
                   spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
 
-                  # Get the short type. For 'character', it would be 'chr'; 'for numeric', it's 'num', etc.
+                  # Get the short type. For 'character', it would be 'chr'; 
+                  # 'for numeric', it's 'num', etc.
                   dataType <- SHORT_TYPES[[types[i]]]
                   if (is.null(dataType)) {
                     dataType <- substring(types[i], 1, 3)
                   }
 
-                  # Concatenate the colnames, coltypes, and first elements of each column
-                  line <- " $ " %++% names[i] %++% spaces %++% ": " %++% dataType %++% " " %++% firstElements
+                  # Concatenate the colnames, coltypes, and first 
+                  # elements of each column
+                  line <- " $ " %++% names[i] %++% spaces %++% ": " %++%
+                    dataType %++% " " %++% firstElements
 
                   # Chop off extra characters if this is too long
                   cat(substr(line, 1, MAX_CHAR_PER_ROW))
