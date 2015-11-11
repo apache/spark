@@ -378,9 +378,8 @@ class SchedulerJob(BaseJob):
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
                 next_run_date = datetime.now()
 
-            if (
-                    next_run_date and
-                    dag.following_schedule(next_run_date) <= datetime.now()):
+            schedule_end = dag.following_schedule(next_run_date)
+            if next_run_date and schedule_end and schedule_end <= datetime.now():
                 next_run = DagRun(
                     dag_id=dag.dag_id,
                     run_id='scheduled__' + next_run_date.isoformat(),
@@ -427,7 +426,7 @@ class SchedulerJob(BaseJob):
 
         active_runs = dag.get_active_runs()
 
-        # Making a set of task instances that are easy to skip based on state
+        logging.info('Getting list of tasks to skip for active runs.')
         skip_tis = set()
         if active_runs:
             qry = (
@@ -440,7 +439,11 @@ class SchedulerJob(BaseJob):
             )
             skip_tis = {(ti[0], ti[1]) for ti in qry.all()}
 
-        for task, dttm in product(dag.tasks, active_runs):
+        descartes = [obj for obj in product(dag.tasks, active_runs)]
+        logging.info(
+            'Scheduling {} tasks instances, '
+            'minus {} skippable ones'.format(len(descartes), len(skip_tis)))
+        for task, dttm in descartes:
             if task.adhoc or (task.task_id, dttm) in skip_tis:
                 continue
             ti = TI(task, dttm)
@@ -476,6 +479,7 @@ class SchedulerJob(BaseJob):
             .filter(TI.state == State.QUEUED)
             .all()
         )
+        logging.info("Prioritizing {} queued jobs".format(len(queued_tis)))
         session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
@@ -489,7 +493,14 @@ class SchedulerJob(BaseJob):
                 d[ti.pool].append(ti)
 
         for pool, tis in list(d.items()):
-            open_slots = pools[pool].open_slots(session=session)
+            if not pool:
+                # Arbitrary:
+                # If queued outside of a pool, trigger no more than 32 per run
+                open_slots = 32
+            else:
+                open_slots = pools[pool].open_slots(session=session)
+            logging.info(
+                "Pool {pool} has {open_slots} slots".format(**locals()))
             if not open_slots:
                 return
             tis = sorted(
