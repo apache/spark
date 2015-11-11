@@ -439,7 +439,7 @@ class SchedulerJob(BaseJob):
             )
             skip_tis = {(ti[0], ti[1]) for ti in qry.all()}
 
-        descartes = product(dag.tasks, active_runs)
+        descartes = [obj for obj in product(dag.tasks, active_runs)]
         logging.info(
             'Scheduling {} tasks instances, '
             'minus {} skippable ones'.format(len(descartes), len(skip_tis)))
@@ -479,6 +479,7 @@ class SchedulerJob(BaseJob):
             .filter(TI.state == State.QUEUED)
             .all()
         )
+        logging.info("Prioritizing {} queued jobs".format(len(queued_tis)))
         session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
@@ -498,6 +499,8 @@ class SchedulerJob(BaseJob):
                 open_slots = 32
             else:
                 open_slots = pools[pool].open_slots(session=session)
+            logging.info(
+                "Pool {pool} has {open_slots} slots".format(**locals()))
             if not open_slots:
                 return
             tis = sorted(
