@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.JavaConversions
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -42,6 +44,8 @@ case class ScalaUDF(
   // Accessors used in genCode
   def userDefinedFunc(): AnyRef = function
   def getChildren(): Seq[Expression] = children
+  def getDataType(): StructType = StructType(StructField("_c0", dataType) :: Nil)
+  def getInputSchema(): StructType = inputSchema
 
   lazy val inputSchema: StructType = {
       val fields = if (inputTypes == Nil) {
@@ -294,24 +298,6 @@ case class ScalaUDF(
 
   // scalastyle:on
 
-  // Generate codes used to convert the arguments to Scala type for user-defined funtions
-  private[this] def genCodeForConverter(
-      ctx: CodeGenContext,
-      scalaUDFTermIdx: Int,
-      index: Int): String = {
-    val converterClassName = classOf[Any => Any].getName
-    val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
-    val expressionClassName = classOf[Expression].getName
-    val scalaUDFClassName = classOf[ScalaUDF].getName
-
-    val converterTerm = ctx.freshName("converter")
-    ctx.addMutableState(converterClassName, converterTerm,
-      s"this.$converterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToScalaConverter(((${expressionClassName})((($scalaUDFClassName)" +
-          s"expressions[$scalaUDFTermIdx]).getChildren().apply($index))).dataType());")
-    converterTerm
-  }
-
   override def genCode(
       ctx: CodeGenContext,
       ev: GeneratedExpressionCode): String = {
@@ -323,19 +309,28 @@ case class ScalaUDF(
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
     val expressionClassName = classOf[Expression].getName
+    val expressionEncoderClassName = classOf[ExpressionEncoder[Row]].getName
+    val rowEncoderClassName = RowEncoder.getClass.getName + ".MODULE$"
+    val structTypeClassName = StructType.getClass.getName + ".MODULE$"
+    val rowClassName = Row.getClass.getName + ".MODULE$"
+    val rowClass = classOf[Row].getName
+    val internalRowClassName = classOf[InternalRow].getName
+    val javaConversionClassName = JavaConversions.getClass.getName + ".MODULE$"
 
-    // Generate codes used to convert the returned value of user-defined functions to Catalyst type
-    val catalystConverterTerm = ctx.freshName("catalystConverter")
-    ctx.addMutableState(converterClassName, catalystConverterTerm,
-      s"this.$catalystConverterTerm = ($converterClassName)$typeConvertersClassName" +
-        s".createToCatalystConverter((($scalaUDFClassName)expressions" +
-          s"[$scalaUDFTermIdx]).dataType());")
+    // Generate code for input encoder
+    val inputExpressionEncoderTerm = ctx.freshName("inputExpressionEncoder")
+    ctx.addMutableState(expressionEncoderClassName, inputExpressionEncoderTerm,
+      s"this.$inputExpressionEncoderTerm = ($expressionEncoderClassName)$rowEncoderClassName" +
+        s".apply((($scalaUDFClassName)expressions" +
+          s"[$scalaUDFTermIdx]).getInputSchema());")
+
+    // Generate code for output encoder
+    val outputExpressionEncoderTerm = ctx.freshName("outputExpressionEncoder")
+    ctx.addMutableState(expressionEncoderClassName, outputExpressionEncoderTerm,
+      s"this.$outputExpressionEncoderTerm = ($expressionEncoderClassName)$rowEncoderClassName" +
+        s".apply((($scalaUDFClassName)expressions[$scalaUDFTermIdx]).getDataType());")
 
     val resultTerm = ctx.freshName("result")
-
-    // This must be called before children expressions' codegen
-    // because ctx.references is used in genCodeForConverter
-    val converterTerms = (0 until children.size).map(genCodeForConverter(ctx, scalaUDFTermIdx, _))
 
     // Initialize user-defined function
     val funcClassName = s"scala.Function${children.size}"
@@ -347,23 +342,42 @@ case class ScalaUDF(
 
     // codegen for children expressions
     val evals = children.map(_.gen(ctx))
+    val evalsArgs = evals.map(_.value).mkString(", ")
+    val evalsAsSeq = s"$javaConversionClassName.asScalaIterable" +
+      s"(java.util.Arrays.asList($evalsArgs)).toList()"
+    val inputInternalRowTerm = ctx.freshName("inputRow")
+    val inputInternalRow = s"$rowClass $inputInternalRowTerm = " +
+      s"($rowClass)$inputExpressionEncoderTerm.fromRow(InternalRow.fromSeq($evalsAsSeq));"
 
     // Generate the codes for expressions and calling user-defined function
     // We need to get the boxedType of dataType's javaType here. Because for the dataType
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
-    val funcArguments = converterTerms.zip(evals).map {
-      case (converter, eval) => s"$converter.apply(${eval.value})"
-    }.mkString(",")
+
+    val funcArguments = (0 until children.size).map { i =>
+      s"$inputInternalRowTerm.get($i)"
+    }.mkString(", ")
+
+    val rowParametersTerm = ctx.freshName("rowParameters")
+    val innerRow = s"$rowClass $rowParametersTerm = $rowClassName.apply(" +
+      s"$javaConversionClassName.asScalaIterable" +
+      s"(java.util.Arrays.asList($funcTerm.apply($funcArguments))).toList());"
+    val internalRowTerm = ctx.freshName("internalRow")
+    val internalRow = s"$internalRowClassName $internalRowTerm = ($internalRowClassName)" +
+      s"${outputExpressionEncoderTerm}.toRow($rowParametersTerm).copy();"
+
+    val udfDataType = s"(($scalaUDFClassName)expressions[$scalaUDFTermIdx]).dataType()"
     val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
-      s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +
-        s".apply($funcTerm.apply($funcArguments));"
+      s"(${ctx.boxedType(ctx.javaType(dataType))}) $internalRowTerm.get(0, $udfDataType);"
 
     evalCode + s"""
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       Boolean ${ev.isNull};
 
+      $inputInternalRow
+      $innerRow
+      $internalRow
       $callFunc
 
       ${ev.value} = $resultTerm;

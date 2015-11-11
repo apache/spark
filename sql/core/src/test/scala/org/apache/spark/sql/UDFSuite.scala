@@ -204,32 +204,45 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     sqlContext.udf.register("complexDataFunc",
       (m: Map[String, Int], a: Seq[Int], b: Boolean) => { (m, a, b) } )
 
-    checkAnswer(
-      sql("SELECT tmp.t.* FROM (SELECT testDataFunc(key, value) AS t from testData) tmp").toDF(),
-      testData)
-    checkAnswer(
-      sql("""
-           | SELECT tmp.t.* FROM
-           | (SELECT decimalDataFunc(a, b) AS t FROM decimalData) tmp
-          """.stripMargin).toDF(), decimalData)
-    checkAnswer(
-      sql("""
-           | SELECT tmp.t.* FROM
-           | (SELECT binaryDataFunc(a, b) AS t FROM binaryData) tmp
-          """.stripMargin).toDF(), binaryData)
-    checkAnswer(
-      sql("""
-           | SELECT tmp.t.* FROM
-           | (SELECT arrayDataFunc(data, nestedData) AS t FROM arrayData) tmp
-          """.stripMargin).toDF(), arrayData.toDF())
-    checkAnswer(
-      sql("""
-           | SELECT mapDataFunc(data) AS t FROM mapData
-          """.stripMargin).toDF(), mapData.toDF())
-    checkAnswer(
-      sql("""
-           | SELECT tmp.t.* FROM
-           | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
-          """.stripMargin).toDF(), complexData.select("m", "a", "b"))
+    def udfTest(): Unit = {
+      checkAnswer(
+        sql("SELECT tmp.t.* FROM (SELECT testDataFunc(key, value) AS t from testData) tmp").toDF(),
+        testData)
+      checkAnswer(
+        sql("""
+             | SELECT tmp.t.* FROM
+             | (SELECT decimalDataFunc(a, b) AS t FROM decimalData) tmp
+            """.stripMargin).toDF(), decimalData)
+      checkAnswer(
+        sql("""
+             | SELECT tmp.t.* FROM
+             | (SELECT binaryDataFunc(a, b) AS t FROM binaryData) tmp
+            """.stripMargin).toDF(), binaryData)
+      checkAnswer(
+        sql("""
+             | SELECT tmp.t.* FROM
+             | (SELECT arrayDataFunc(data, nestedData) AS t FROM arrayData) tmp
+            """.stripMargin).toDF(), arrayData.toDF())
+      checkAnswer(
+        sql("""
+             | SELECT mapDataFunc(data) AS t FROM mapData
+            """.stripMargin).toDF(), mapData.toDF())
+      checkAnswer(
+        sql("""
+             | SELECT tmp.t.* FROM
+             | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
+            """.stripMargin).toDF(), complexData.select("m", "a", "b"))
+    }
+
+    withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
+        udfTest()
+      }
+    }
+    withSQLConf(SQLConf.UNSAFE_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
+        udfTest()
+      }
+    }
   }
 }
