@@ -41,22 +41,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       l += 1L
       l.add(1L)
     }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
   }
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
     val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
   }
 
   /**
@@ -523,10 +521,9 @@ private class BoxingFinder(
           if (!visitedMethods.contains(m)) {
             // Keep track of visited methods to avoid potential infinite cycles
             visitedMethods += m
-            BoxingFinder.getClassReader(classOfMethodOwner).foreach { cl =>
-              visitedMethods += m
-              cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
-            }
+            val cl = BoxingFinder.getClassReader(classOfMethodOwner)
+            visitedMethods += m
+            cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
           }
         }
       }
@@ -536,14 +533,14 @@ private class BoxingFinder(
 
 private object BoxingFinder {
 
-  def getClassReader(cls: Class[_]): Option[ClassReader] = {
+  def getClassReader(cls: Class[_]): ClassReader = {
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
     val baos = new ByteArrayOutputStream(128)
     // Copy data over, before delegating to ClassReader -
     // else we can run out of open file handles.
     Utils.copyStream(resourceStream, baos, true)
-    Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
 }
