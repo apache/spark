@@ -114,4 +114,15 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
   }
+
+  test("typed aggregation: in project list") {
+    val ds = Seq(1, 3, 2, 5).toDS()
+
+    checkAnswer(
+      ds.select(sum((i: Int) => i)),
+      11)
+    checkAnswer(
+      ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
+      11 -> 22)
+  }
 }
