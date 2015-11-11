@@ -623,8 +623,8 @@ object WriteAheadLogSuite {
       allowBatching: Boolean): Seq[String] = {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
     val data = wal.readAll().asScala.map(byteBufferToString).toSeq
-    // compute data, otherwise the lazy computation will fail because of wal.close() as the
-    // thread pool for parallel recovery gets killed
+    // The thread pool for parallel recovery gets killed with wal.close(). Therefore we need to
+    // eagerly compute data, otherwise the lazy computation will fail.
     data.length
     wal.close()
     data
