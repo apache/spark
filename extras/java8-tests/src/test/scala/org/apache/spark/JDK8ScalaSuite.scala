@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark
 
-import org.apache.spark.sql.Encoder
-
-package object encoders {
-  private[sql] def encoderFor[A : Encoder]: ExpressionEncoder[A] = implicitly[Encoder[A]] match {
-    case e: ExpressionEncoder[A] => e
-    case _ => sys.error(s"Only expression encoders are supported today")
+/**
+ * Test cases where JDK8-compiled Scala user code is used with Spark.
+ */
+class JDK8ScalaSuite extends SparkFunSuite with SharedSparkContext {
+  test("basic RDD closure test (SPARK-6152)") {
+    sc.parallelize(1 to 1000).map(x => x * x).count()
   }
 }
