@@ -92,7 +92,10 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, EmittedType] exte
  * :: Experimental ::
  * Builder object for creating instances of [[org.apache.spark.streaming.StateSpec StateSpec]]
  * that is used for specifying the parameters of the DStream transformation `trackStateByKey`
- * operation of a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
+ * that is used for specifying the parameters of the DStream transformation
+ * `trackStateByKey` operation of a
+ * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+ * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
  *
  * Example in Scala:
  * {{{
@@ -118,7 +121,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, EmittedType] exte
 object StateSpec {
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
-   * `trackStateByKey` operation on a
+   * of the `trackStateByKey` operation on a
    * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
    *
    * @param trackingFunction The function applied on every data item to manage the associated state
@@ -137,7 +140,7 @@ object StateSpec {
 
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
-   * `trackStateByKey` operation on a
+   * of the `trackStateByKey` operation on a
    * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
    *
    * @param trackingFunction The function applied on every data item to manage the associated state
@@ -159,7 +162,7 @@ object StateSpec {
 
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all
-   * the specifications `trackStateByKey` operation on a
+   * the specifications of the `trackStateByKey` operation on a
    * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]].
    *
    * @param javaTrackingFunction The function applied on every data item to manage the associated
@@ -181,7 +184,7 @@ object StateSpec {
 
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
-   * `trackStateByKey` operation on a
+   * of the `trackStateByKey` operation on a
    * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]].
    *
    * @param javaTrackingFunction The function applied on every data item to manage the associated

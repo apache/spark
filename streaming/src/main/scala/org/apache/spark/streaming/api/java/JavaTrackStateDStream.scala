@@ -25,7 +25,7 @@ import org.apache.spark.streaming.dstream.TrackStateDStream
  * :: Experimental ::
  * [[JavaDStream]] representing the stream of records emitted by the tracking function in the
  * `trackStateByKey` operation on a [[JavaPairDStream]]. Additionally, it also gives access to the
- * stream of state snapshots, that is, the state data of ll keys after a batch has updated them.
+ * stream of state snapshots, that is, the state data of all keys after a batch has updated them.
  *
  * @tparam KeyType Class of the state key
  * @tparam ValueType Class of the state value
