@@ -25,7 +25,6 @@ import java.util.Iterator;
 
 import scala.Option;
 import scala.Product2;
-import scala.Tuple2;
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
 import scala.collection.immutable.Map;
@@ -211,11 +210,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
-    final File tmpDataFile;
+    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
+    final File tmpDataFile = tmpShuffleFile(dataFile);
+    final File tmpIndexFile = tmpShuffleFile(indexFile);
     try {
-      final Tuple2<File, long[]> t = mergeSpills(spills);
-      partitionLengths = t._2();
-      tmpDataFile = t._1();
+      partitionLengths = mergeSpills(spills, tmpDataFile);
     } finally {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && ! spill.file.delete()) {
@@ -223,10 +223,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    final File tmpIndexFile = shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, tmpIndexFile);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
 
     return JavaConverters.asScalaBufferConverter(Arrays.asList(
       new TmpDestShuffleFile(tmpIndexFile, indexFile),
@@ -263,8 +261,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private Tuple2<File, long[]> mergeSpills(SpillInfo[] spills) throws IOException {
-    final File outputFile = blockManager.diskBlockManager().createTempShuffleBlock()._2();
+  private long[] mergeSpills(SpillInfo[] spills, File outputFile) throws IOException {
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -274,12 +271,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
-        return new Tuple2<>(outputFile, new long[partitioner.numPartitions()]);
+        return new long[partitioner.numPartitions()];
       } else if (spills.length == 1) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         Files.move(spills[0].file, outputFile);
-        return new Tuple2<>(outputFile, spills[0].partitionLengths);
+        return spills[0].partitionLengths;
       } else {
         final long[] partitionLengths;
         // There are multiple spills to merge, so none of these spill files' lengths were counted
@@ -314,7 +311,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // SpillInfo's bytes.
         writeMetrics.decShuffleBytesWritten(spills[spills.length - 1].file.length());
         writeMetrics.incShuffleBytesWritten(outputFile.length());
-        return new Tuple2<>(outputFile, partitionLengths);
+        return partitionLengths;
       }
     } catch (IOException e) {
       if (outputFile.exists() && !outputFile.delete()) {

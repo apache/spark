@@ -72,7 +72,7 @@ public class UnsafeShuffleWriterSuite {
   File mapStatusFile;
   File tempDir;
   long[] partitionSizesInMergedFile;
-  final LinkedList<File> tmpShuffleFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
   SparkConf conf;
   final Serializer serializer = new KryoSerializer(new SparkConf());
   TaskMetrics taskMetrics;
@@ -116,7 +116,7 @@ public class UnsafeShuffleWriterSuite {
     indexFile.delete();
     mapStatusFile.delete();
     partitionSizesInMergedFile = null;
-    tmpShuffleFilesCreated.clear();
+    spillFilesCreated.clear();
     conf = new SparkConf()
       .set("spark.buffer.pageSize", "1m")
       .set("spark.unsafe.offHeap", "false");
@@ -178,13 +178,14 @@ public class UnsafeShuffleWriterSuite {
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
     when(shuffleBlockResolver.getIndexFile(anyInt(), anyInt())).thenReturn(indexFile);
-    doAnswer(new Answer<File>() {
+    doAnswer(new Answer<Void>() {
       @Override
-      public File answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
         partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-        return diskBlockManager.createTempShuffleBlock()._2();
+        return null;
       }
-    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
+    }).when(shuffleBlockResolver)
+      .writeIndexFile(anyInt(), anyInt(), any(long[].class), any(File.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {
@@ -193,7 +194,7 @@ public class UnsafeShuffleWriterSuite {
           InvocationOnMock invocationOnMock) throws Throwable {
           TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
           File file = File.createTempFile("spillFile", ".spill", tempDir);
-          tmpShuffleFilesCreated.add(file);
+          spillFilesCreated.add(file);
           return Tuple2$.MODULE$.apply(blockId, file);
         }
       });
@@ -220,7 +221,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   private void assertSpillFilesWereCleanedUp() {
-    for (File spillFile : tmpShuffleFilesCreated) {
+    for (File spillFile : spillFilesCreated) {
       assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
         spillFile.exists());
     }
@@ -357,8 +358,7 @@ public class UnsafeShuffleWriterSuite {
       serializer.newInstance());
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
-    // this includes the tmp index & data files, before the output is committed
-    assertEquals(4, tmpShuffleFilesCreated.size());
+    assertEquals(2, spillFilesCreated.size());
 
     long sumOfPartitionSizes = 0;
     for (long size: partitionSizesInMergedFile) {
@@ -426,8 +426,7 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, bigByteArray));
     }
     Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
-    // this includes the tmp index & data files, before the output is committed
-    assertEquals(4, tmpShuffleFilesCreated.size());
+    assertEquals(2, spillFilesCreated.size());
     MapStatus mapStatus = writer.stop(true).get();
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile,
       serializer.newInstance());
@@ -450,8 +449,7 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     Seq<TmpDestShuffleFile> files = writer.write(dataToWrite.iterator());
-    // this includes the tmp index & data files, before the output is committed
-    assertEquals(4, tmpShuffleFilesCreated.size());
+    assertEquals(2, spillFilesCreated.size());
     MapStatus mapStatus = writer.stop(true).get();
     ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile,
       serializer.newInstance());

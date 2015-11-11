@@ -78,13 +78,6 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
     when(blockResolver.getIndexFile(0, 0)).thenReturn(indexFile)
     // the index file will be empty, but that is fine for these tests
-    when(blockResolver.writeIndexFile(anyInt(), anyInt(), any())).thenAnswer(new Answer[File] {
-      override def answer(invocationOnMock: InvocationOnMock): File = {
-        val f = diskBlockManager.createTempShuffleBlock()._2
-        f.createNewFile()
-        f
-      }
-    })
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(blockManager.getDiskWriter(
       any[BlockId],
@@ -148,7 +141,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(writer.getPartitionLengths.sum === 0)
     assert(outputFile.exists())
     assert(outputFile.length() === 0)
-    assert(temporaryFilesCreated.size === 2)
+    assert(temporaryFilesCreated.isEmpty)
     val shuffleWriteMetrics = taskContext.taskMetrics().shuffleWriteMetrics.get
     assert(shuffleWriteMetrics.shuffleBytesWritten === 0)
     assert(shuffleWriteMetrics.shuffleRecordsWritten === 0)

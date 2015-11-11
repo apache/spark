@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io.{File, IOException}
+import java.util.UUID
 
 import org.apache.spark.scheduler.MapStatus
 
@@ -39,6 +40,21 @@ private[spark] abstract class ShuffleWriter[K, V] {
 
   /** Close this writer, passing along whether the map completed */
   def stop(success: Boolean): Option[MapStatus]
+
+  /**
+   * Returns the file with a random UUID appended.  Useful for getting a tmp file in the same
+   * dir which can be atomically renamed to final destination file.
+   */
+  def tmpShuffleFile(file: File): File = ShuffleWriter.tmpShuffleFile(file)
+}
+
+
+private[spark] object ShuffleWriter {
+  /**
+    * Returns the file with a random UUID appended.  Useful for getting a tmp file in the same
+    * dir which can be atomically renamed to final destination file.
+    */
+  def tmpShuffleFile(file: File): File = new File(file.getAbsolutePath + "." + UUID.randomUUID())
 }
 
 /**

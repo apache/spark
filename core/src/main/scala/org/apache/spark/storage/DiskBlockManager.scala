@@ -125,19 +125,6 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   /**
-   * Produces a unique block id and File suitable for storing shuffled data files, which are
-   * uncompressed, before they are moved to their final location by the
-   * [[org.apache.spark.shuffle.ShuffleOutputCoordinator]]
-   */
-  def createUncompressedTempShuffleBlock(): (TempUncompressedShuffleBlockId, File) = {
-    var blockId = new TempUncompressedShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
-      blockId = new TempUncompressedShuffleBlockId(UUID.randomUUID())
-    }
-    (blockId, getFile(blockId))
-  }
-
-  /**
    * Create local directories for storing block data. These directories are
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.

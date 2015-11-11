@@ -65,12 +65,13 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val (_, tmpDataFile) = blockManager.diskBlockManager.createUncompressedTempShuffleBlock()
-    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, tmpDataFile)
-    val tmpIndexFile = shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
     val dataFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     val indexFile = shuffleBlockResolver.getIndexFile(dep.shuffleId, mapId)
+    val tmpDataFile = tmpShuffleFile(dataFile)
+    val tmpIndexFile = tmpShuffleFile(indexFile)
+    val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
+    val partitionLengths = sorter.writePartitionedFile(blockId, tmpDataFile)
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths, tmpIndexFile)
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
     Seq(
