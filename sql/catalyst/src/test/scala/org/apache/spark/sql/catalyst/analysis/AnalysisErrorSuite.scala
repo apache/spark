@@ -23,7 +23,58 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
+
+import scala.beans.{BeanProperty, BeanInfo}
+
+@BeanInfo
+private[sql] case class GroupableData(@BeanProperty data: Int)
+
+private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
+
+  override def sqlType: DataType = IntegerType
+
+  override def serialize(obj: Any): Int = {
+    obj match {
+      case groupableData: GroupableData => groupableData.data
+    }
+  }
+
+  override def deserialize(datum: Any): GroupableData = {
+    datum match {
+      case data: Int => GroupableData(data)
+    }
+  }
+
+  override def userClass: Class[GroupableData] = classOf[GroupableData]
+
+  private[spark] override def asNullable: GroupableUDT = this
+}
+
+@BeanInfo
+private[sql] case class UngroupableData(@BeanProperty data: Array[Int])
+
+private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
+
+  override def sqlType: DataType = ArrayType(IntegerType)
+
+  override def serialize(obj: Any): ArrayData = {
+    obj match {
+      case groupableData: UngroupableData => new GenericArrayData(groupableData.data)
+    }
+  }
+
+  override def deserialize(datum: Any): UngroupableData = {
+    datum match {
+      case data: Array[Int] => UngroupableData(data)
+    }
+  }
+
+  override def userClass: Class[UngroupableData] = classOf[UngroupableData]
+
+  private[spark] override def asNullable: UngroupableUDT = this
+}
 
 case class TestFunction(
     children: Seq[Expression],
@@ -171,16 +222,18 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
+    // Since we manually construct the logical plan at here and Sum only accetp
+    // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val plan =
       Aggregate(
         Nil,
-        Alias(Sum(AttributeReference("a", IntegerType)(exprId = ExprId(1))), "b")() :: Nil,
+        Alias(sum(AttributeReference("a", LongType)(exprId = ExprId(1))), "b")() :: Nil,
         LocalRelation(
-          AttributeReference("a", IntegerType)(exprId = ExprId(2))))
+          AttributeReference("a", LongType)(exprId = ExprId(2))))
 
     assert(plan.resolved)
 
-    assertAnalysisError(plan, "resolved attribute(s) a#1 missing from a#2" :: Nil)
+    assertAnalysisError(plan, "resolved attribute(s) a#1L missing from a#2L" :: Nil)
   }
 
   test("error test for self-join") {
@@ -192,28 +245,65 @@ class AnalysisErrorSuite extends AnalysisTest {
     assert(error.message.contains("Conflicting attributes"))
   }
 
-  test("aggregation can't work on binary and map types") {
+  test("check grouping expression data types") {
+    def checkDataType(dataType: DataType, shouldSuccess: Boolean): Unit = {
+      val plan =
+        Aggregate(
+          AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
+          Alias(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+          LocalRelation(
+            AttributeReference("a", dataType)(exprId = ExprId(2)),
+            AttributeReference("b", IntegerType)(exprId = ExprId(1))))
+
+      shouldSuccess match {
+        case true =>
+          assertAnalysisSuccess(plan, true)
+        case false =>
+          assertAnalysisError(plan, "expression a cannot be used in grouping expression" :: Nil)
+      }
+
+    }
+
+    val supportedDataTypes = Seq(
+      StringType,
+      NullType, BooleanType,
+      ByteType, ShortType, IntegerType, LongType,
+      FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
+      DateType, TimestampType,
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", StringType, nullable = true),
+      new GroupableUDT())
+    supportedDataTypes.foreach { dataType =>
+      checkDataType(dataType, shouldSuccess = true)
+    }
+
+    val unsupportedDataTypes = Seq(
+      BinaryType,
+      ArrayType(IntegerType),
+      MapType(StringType, LongType),
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
+      new UngroupableUDT())
+    unsupportedDataTypes.foreach { dataType =>
+      checkDataType(dataType, shouldSuccess = false)
+    }
+  }
+
+  test("we should fail analysis when we find nested aggregate functions") {
     val plan =
       Aggregate(
-        AttributeReference("a", BinaryType)(exprId = ExprId(2)) :: Nil,
-        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+        AttributeReference("a", IntegerType)(exprId = ExprId(2)) :: Nil,
+        Alias(sum(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1)))), "c")() :: Nil,
         LocalRelation(
-          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
+          AttributeReference("a", IntegerType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-    assertAnalysisError(plan,
-      "binary type expression a cannot be used in grouping expression" :: Nil)
-
-    val plan2 =
-      Aggregate(
-        AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)) :: Nil,
-        Alias(Sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
-        LocalRelation(
-          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))))
-
-    assertAnalysisError(plan2,
-      "map type expression a cannot be used in grouping expression" :: Nil)
+    assertAnalysisError(
+      plan,
+      "It is not allowed to use an aggregate function in the argument of " +
+        "another aggregate function." :: Nil)
   }
 
   test("Join can't work on binary and map types") {

@@ -49,8 +49,8 @@ private[spark] class AppClient(
   private val REGISTRATION_TIMEOUT_SECONDS = 20
   private val REGISTRATION_RETRIES = 3
 
-  private var endpoint: RpcEndpointRef = null
-  private var appId: String = null
+  @volatile private var endpoint: RpcEndpointRef = null
+  @volatile private var appId: String = null
   @volatile private var registered = false
 
   private class ClientEndpoint(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint
@@ -76,6 +76,11 @@ private[spark] class AppClient(
     // A scheduled executor for scheduling the registration actions
     private val registrationRetryThread =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("appclient-registration-retry-thread")
+
+    // A thread pool to perform receive then reply actions in a thread so as not to block the
+    // event loop.
+    private val askAndReplyThreadPool =
+      ThreadUtils.newDaemonCachedThreadPool("appclient-receive-and-reply-threadpool")
 
     override def onStart(): Unit = {
       try {
@@ -200,7 +205,7 @@ private[spark] class AppClient(
 
       case r: RequestExecutors =>
         master match {
-          case Some(m) => context.reply(m.askWithRetry[Boolean](r))
+          case Some(m) => askAndReplyAsync(m, context, r)
           case None =>
             logWarning("Attempted to request executors before registering with Master.")
             context.reply(false)
@@ -208,11 +213,30 @@ private[spark] class AppClient(
 
       case k: KillExecutors =>
         master match {
-          case Some(m) => context.reply(m.askWithRetry[Boolean](k))
+          case Some(m) => askAndReplyAsync(m, context, k)
           case None =>
             logWarning("Attempted to kill executors before registering with Master.")
             context.reply(false)
         }
+    }
+
+    private def askAndReplyAsync[T](
+        endpointRef: RpcEndpointRef,
+        context: RpcCallContext,
+        msg: T): Unit = {
+      // Create a thread to ask a message and reply with the result.  Allow thread to be
+      // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
+      askAndReplyThreadPool.execute(new Runnable {
+        override def run(): Unit = {
+          try {
+            context.reply(endpointRef.askWithRetry[Boolean](msg))
+          } catch {
+            case ie: InterruptedException => // Cancelled
+            case NonFatal(t) =>
+              context.sendFailure(t)
+          }
+        }
+      })
     }
 
     override def onDisconnected(address: RpcAddress): Unit = {
@@ -252,6 +276,7 @@ private[spark] class AppClient(
       registrationRetryThread.shutdownNow()
       registerMasterFutures.foreach(_.cancel(true))
       registerMasterThreadPool.shutdownNow()
+      askAndReplyThreadPool.shutdownNow()
     }
 
   }

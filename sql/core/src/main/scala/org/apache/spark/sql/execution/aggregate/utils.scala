@@ -28,8 +28,8 @@ object Utils {
 
   def planAggregateWithoutPartial(
       groupingExpressions: Seq[NamedExpression],
-      aggregateExpressions: Seq[AggregateExpression2],
-      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
+      aggregateExpressions: Seq[AggregateExpression],
+      aggregateFunctionToAttribute: Map[(AggregateFunction, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
@@ -54,8 +54,8 @@ object Utils {
 
   def planAggregateWithoutDistinct(
       groupingExpressions: Seq[NamedExpression],
-      aggregateExpressions: Seq[AggregateExpression2],
-      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
+      aggregateExpressions: Seq[AggregateExpression],
+      aggregateFunctionToAttribute: Map[(AggregateFunction, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use TungstenAggregate.
@@ -137,9 +137,9 @@ object Utils {
 
   def planAggregateWithOneDistinct(
       groupingExpressions: Seq[NamedExpression],
-      functionsWithDistinct: Seq[AggregateExpression2],
-      functionsWithoutDistinct: Seq[AggregateExpression2],
-      aggregateFunctionToAttribute: Map[(AggregateFunction2, Boolean), Attribute],
+      functionsWithDistinct: Seq[AggregateExpression],
+      functionsWithoutDistinct: Seq[AggregateExpression],
+      aggregateFunctionToAttribute: Map[(AggregateFunction, Boolean), Attribute],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
@@ -253,16 +253,16 @@ object Utils {
         // Children of an AggregateFunction with DISTINCT keyword has already
         // been evaluated. At here, we need to replace original children
         // to AttributeReferences.
-        case agg @ AggregateExpression2(aggregateFunction, mode, true) =>
+        case agg @ AggregateExpression(aggregateFunction, mode, true) =>
           val rewrittenAggregateFunction = aggregateFunction.transformDown {
             case expr if expr == distinctColumnExpression => distinctColumnAttribute
-          }.asInstanceOf[AggregateFunction2]
+          }.asInstanceOf[AggregateFunction]
           // We rewrite the aggregate function to a non-distinct aggregation because
           // its input will have distinct arguments.
           // We just keep the isDistinct setting to true, so when users look at the query plan,
           // they still can see distinct aggregations.
           val rewrittenAggregateExpression =
-            AggregateExpression2(rewrittenAggregateFunction, Complete, isDistinct = true)
+            AggregateExpression(rewrittenAggregateFunction, Complete, isDistinct = true)
 
           val aggregateFunctionAttribute = aggregateFunctionToAttribute(agg.aggregateFunction, true)
           (rewrittenAggregateExpression, aggregateFunctionAttribute)
