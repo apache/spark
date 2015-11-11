@@ -436,25 +436,26 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * update/remove the state and return a transformed data, which forms the
    * [[JavaTrackStateDStream]].
    *
-   * The specifications of this transformation is made through the [[JavaStateSpec]] class. Besides
-   * the tracking function, there are a number of optional parameters - initial state data, number
-   * of partitions, timeouts, etc. See the [[JavaStateSpec]] for more details.
+   * The specifications of this transformation is made through the
+   * [[org.apache.spark.streaming.StateSpec StateSpec]] class. Besides the tracking function, there
+   * are a number of optional parameters - initial state data, number of partitions, timeouts, etc.
+   * See the [[org.apache.spark.streaming.StateSpec StateSpec]] for more details.
    *
    * Example of using `trackStateByKey`:
    * {{{
    *   // A tracking function that maintains an integer state and return a String
-   *   Function2<Optional<Integer>, JavaState<Integer>, Optional<String>> trackStateFunc =
-   *       new Function2<Optional<Integer>, JavaState<Integer>, Optional<String>>() {
+   *   Function2<Optional<Integer>, State<Integer>, Optional<String>> trackStateFunc =
+   *       new Function2<Optional<Integer>, State<Integer>, Optional<String>>() {
    *
    *         @Override
-   *         public Optional<String> call(Optional<Integer> one, JavaState<Integer> state) {
+   *         public Optional<String> call(Optional<Integer> one, State<Integer> state) {
    *           // Check if state exists, accordingly update/remove state and return transformed data
    *         }
    *       };
    *
    *    JavaTrackStateDStream[Integer, Integer, Integer, String] trackStateDStream =
    *        keyValueDStream.trackStateByKey[Int, String](
-   *            JavaStateSpec.function(trackingFunction).numPartitions(10));
+   *            StateSpec.function(trackingFunction).numPartitions(10));
    * }}}
    *
    * @param spec          Specification of this transformation
@@ -462,12 +463,11 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @tparam EmittedType  Class type of the tranformed data return by the tracking function
    */
   @Experimental
-  def trackStateByKey[StateType, EmittedType](spec: JavaStateSpec[K, V, StateType, EmittedType]):
+  def trackStateByKey[StateType, EmittedType](spec: StateSpec[K, V, StateType, EmittedType]):
     JavaTrackStateDStream[K, V, StateType, EmittedType] = {
-    new JavaTrackStateDStream(
-      dstream.trackStateByKey(spec.stateSpec)(
-        JavaSparkContext.fakeClassTag,
-        JavaSparkContext.fakeClassTag))
+    new JavaTrackStateDStream(dstream.trackStateByKey(spec)(
+      JavaSparkContext.fakeClassTag,
+      JavaSparkContext.fakeClassTag))
   }
 
   private def convertUpdateStateFunction[S](in: JFunction2[JList[V], Optional[S], Optional[S]]):

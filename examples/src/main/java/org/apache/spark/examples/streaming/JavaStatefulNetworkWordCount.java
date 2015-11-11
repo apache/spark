@@ -31,6 +31,8 @@ import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
+import org.apache.spark.streaming.State;
+import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.Time;
 import org.apache.spark.streaming.api.java.*;
 
@@ -88,12 +90,12 @@ public class JavaStatefulNetworkWordCount {
         });
 
     // Update the cumulative count function
-    final Function4<Time, String, Optional<Integer>, JavaState<Integer>, Optional<Tuple2<String, Integer>>> trackStateFunc =
-        new Function4<Time, String, Optional<Integer>, JavaState<Integer>, Optional<Tuple2<String, Integer>>>() {
+    final Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> trackStateFunc =
+        new Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>>() {
 
           @Override
-          public Optional<Tuple2<String, Integer>> call(Time time, String word, Optional<Integer> one, JavaState<Integer> state) {
-            int sum = one.or(0) + state.getOption().or(0);
+          public Optional<Tuple2<String, Integer>> call(Time time, String word, Optional<Integer> one, State<Integer> state) {
+            int sum = one.or(0) + (state.exists() ? state.get() : 0);
             Tuple2<String, Integer> output = new Tuple2<String, Integer>(word, sum);
             state.update(sum);
             return Optional.of(output);
@@ -102,7 +104,7 @@ public class JavaStatefulNetworkWordCount {
 
     // This will give a Dstream made of state (which is the cumulative count of the words)
     JavaTrackStateDStream<String, Integer, Integer, Tuple2<String, Integer>> stateDstream =
-            wordsDstream.trackStateByKey(JavaStateSpec.function(trackStateFunc).initialState(initialRDD));
+        wordsDstream.trackStateByKey(StateSpec.function(trackStateFunc).initialState(initialRDD));
 
     stateDstream.print();
     ssc.start();
