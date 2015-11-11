@@ -34,11 +34,12 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -115,7 +116,8 @@ private[sql] object DataFrame {
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: QueryExecution) extends Serializable {
+    @DeveloperApi @transient val queryExecution: QueryExecution)
+  extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
@@ -231,15 +233,6 @@ class DataFrame private[sql](
     }
 
     sb.toString()
-  }
-
-  override def toString: String = {
-    try {
-      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
-    }
   }
 
   /**
@@ -749,10 +742,14 @@ class DataFrame private[sql](
       // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
       // make it a NamedExpression.
       case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
+
       case Column(expr: NamedExpression) => expr
-      // Leave an unaliased explode with an empty list of names since the analyzer will generate the
-      // correct defaults after the nested expression's type has been resolved.
+
+      // Leave an unaliased generator with an empty list of names since the analyzer will generate
+      // the correct defaults after the nested expression's type has been resolved.
       case Column(explode: Explode) => MultiAlias(explode, Nil)
+      case Column(jt: JsonTuple) => MultiAlias(jt, Nil)
+
       case Column(expr: Expression) => Alias(expr, expr.prettyString)()
     }
     Project(namedExpressions.toSeq, logicalPlan)
@@ -1338,7 +1335,7 @@ class DataFrame private[sql](
       if (groupColExprIds.contains(attr.exprId)) {
         attr
       } else {
-        Alias(First(attr), attr.name)()
+        Alias(new First(attr).toAggregateExpression(), attr.name)()
       }
     }
     Aggregate(groupCols, aggCols, logicalPlan)
@@ -1381,11 +1378,11 @@ class DataFrame private[sql](
 
     // The list of summary statistics to compute, in the form of expressions.
     val statistics = List[(String, Expression => Expression)](
-      "count" -> Count,
-      "mean" -> Average,
-      "stddev" -> StddevSamp,
-      "min" -> Min,
-      "max" -> Max)
+      "count" -> ((child: Expression) => Count(child).toAggregateExpression()),
+      "mean" -> ((child: Expression) => Average(child).toAggregateExpression()),
+      "stddev" -> ((child: Expression) => StddevSamp(child).toAggregateExpression()),
+      "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
+      "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
     val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
 
@@ -1478,17 +1475,53 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
    * @group action
    * @since 1.3.0
    */
   def take(n: Int): Array[Row] = head(n)
 
   /**
+   * Returns the first `n` rows in the [[DataFrame]] as a list.
+   *
+   * Running take requires moving data into the application's driver process, and doing so with
+   * a very large `n` can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.6.0
+   */
+  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n) : _*)
+
+  /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * For Java API, use [[collectAsList]].
+   *
    * @group action
    * @since 1.3.0
    */
   def collect(): Array[Row] = collect(needCallback = true)
+
+  /**
+   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
+   *
+   * Running collect requires moving all the data into the application's driver process, and
+   * doing so on a very large dataset can crash the driver process with OutOfMemoryError.
+   *
+   * @group action
+   * @since 1.3.0
+   */
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+    withNewExecutionId {
+      java.util.Arrays.asList(rdd.collect() : _*)
+    }
+  }
 
   private def collect(needCallback: Boolean): Array[Row] = {
     def execute(): Array[Row] = withNewExecutionId {
@@ -1499,17 +1532,6 @@ class DataFrame private[sql](
       withCallback("collect", this)(_ => execute())
     } else {
       execute()
-    }
-  }
-
-  /**
-   * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
-   * @group action
-   * @since 1.3.0
-   */
-  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
-    withNewExecutionId {
-      java.util.Arrays.asList(rdd.collect() : _*)
     }
   }
 

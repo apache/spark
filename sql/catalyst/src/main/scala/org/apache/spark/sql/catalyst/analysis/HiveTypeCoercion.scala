@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -295,14 +296,17 @@ object HiveTypeCoercion {
         i.makeCopy(Array(Cast(a, StringType), b.map(Cast(_, StringType))))
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-      case SumDistinct(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
       case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
-      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
-      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
-      case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
-      case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
+      case VariancePop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        VariancePop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
+      case VarianceSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        VarianceSamp(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
+      case Skewness(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        Skewness(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
+      case Kurtosis(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        Kurtosis(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
     }
   }
 
@@ -561,12 +565,6 @@ object HiveTypeCoercion {
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
-
-      case s @ SumDistinct(e @ DecimalType()) => s // Decimal is already the biggest.
-      case SumDistinct(e @ IntegralType()) if e.dataType != LongType =>
-        SumDistinct(Cast(e, LongType))
-      case SumDistinct(e @ FractionalType()) if e.dataType != DoubleType =>
-        SumDistinct(Cast(e, DoubleType))
 
       case s @ Average(e @ DecimalType()) => s // Decimal is already the biggest.
       case Average(e @ IntegralType()) if e.dataType != LongType =>

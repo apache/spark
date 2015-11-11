@@ -1017,7 +1017,7 @@ class SQLTests(ReusedPySparkTestCase):
         row = Row(a="length string", b=75)
         df = self.sqlCtx.createDataFrame([row])
         result = df.select(functions.expr("length(a)")).collect()[0].asDict()
-        self.assertEqual(13, result["'length(a)"])
+        self.assertEqual(13, result["length(a)"])
 
     def test_replace(self):
         schema = StructType([
@@ -1229,6 +1229,23 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         ]
         for r, ex in zip(rs, expected):
             self.assertEqual(tuple(r), ex[:len(r)])
+
+    def test_collect_functions(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql import functions
+
+        self.assertEqual(
+            sorted(df.select(functions.collect_set(df.key).alias('r')).collect()[0].r),
+            [1, 2])
+        self.assertEqual(
+            sorted(df.select(functions.collect_list(df.key).alias('r')).collect()[0].r),
+            [1, 1, 1, 2])
+        self.assertEqual(
+            sorted(df.select(functions.collect_set(df.value).alias('r')).collect()[0].r),
+            ["1", "2"])
+        self.assertEqual(
+            sorted(df.select(functions.collect_list(df.value).alias('r')).collect()[0].r),
+            ["1", "2", "2", "2"])
 
 
 if __name__ == "__main__":

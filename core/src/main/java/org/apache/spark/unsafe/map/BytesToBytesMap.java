@@ -20,7 +20,6 @@ package org.apache.spark.unsafe.map;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -724,11 +723,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private void allocate(int capacity) {
     assert (capacity >= 0);
-    // The capacity needs to be divisible by 64 so that our bit set can be sized properly
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    acquireMemory(capacity * 16);
-    longArray = new LongArray(MemoryBlock.fromLongArray(new long[capacity * 2]));
+    longArray = allocateArray(capacity * 2);
+    longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
     this.mask = capacity - 1;
@@ -743,9 +741,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void free() {
     updatePeakMemoryUsed();
     if (longArray != null) {
-      long used = longArray.memoryBlock().size();
+      freeArray(longArray);
       longArray = null;
-      releaseMemory(used);
     }
     Iterator<MemoryBlock> dataPagesIterator = dataPages.iterator();
     while (dataPagesIterator.hasNext()) {
@@ -834,9 +831,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the underline long[] of longArray.
    */
-  public long[] getArray() {
+  public LongArray getArray() {
     assert(longArray != null);
-    return (long[]) longArray.memoryBlock().getBaseObject();
+    return longArray;
   }
 
   /**
@@ -844,7 +841,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   public void reset() {
     numElements = 0;
-    Arrays.fill(getArray(), 0);
+    longArray.zeroOut();
+
     while (dataPages.size() > 0) {
       MemoryBlock dataPage = dataPages.removeLast();
       freePage(dataPage);
@@ -887,7 +885,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       longArray.set(newPos * 2, keyPointer);
       longArray.set(newPos * 2 + 1, hashcode);
     }
-    releaseMemory(oldLongArray.memoryBlock().size());
+    freeArray(oldLongArray);
 
     if (enablePerfMetrics) {
       timeSpentResizingNs += System.nanoTime() - resizeStartTime;
