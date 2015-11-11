@@ -602,6 +602,7 @@ def get_parser():
     parser_webserver.add_argument(
         "-k", "--workerclass",
         default=configuration.get('webserver', 'WORKER_CLASS'),
+        choices=['sync', 'eventlet', 'gevent', 'tornado'],
         help="The worker class to use for gunicorn")
     parser_webserver.add_argument(
         "-hn", "--hostname",
