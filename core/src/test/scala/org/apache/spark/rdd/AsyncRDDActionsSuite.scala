@@ -199,7 +199,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   private def testAsyncAction[R](action: RDD[Int] => FutureAction[R])
-    (starter: =>Semaphore) : Unit = {
+    (starter: => Semaphore) : Unit = {
     val executionContextInvoked = Promise[Unit]
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
