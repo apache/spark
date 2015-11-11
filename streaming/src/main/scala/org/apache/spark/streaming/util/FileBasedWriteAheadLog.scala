@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.{Iterator => JIterator}
 
 import scala.collection.JavaConverters._
@@ -136,9 +137,7 @@ private[streaming] class FileBasedWriteAheadLog(
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      val parallelFilesToRead = logFilesToRead.par
-      parallelFilesToRead.tasksupport = new ThreadPoolTaskSupport(threadpool)
-      parallelFilesToRead.map(readFile).flatten.toIterator.asJava
+      parallelIteratorCreator(threadpool, logFilesToRead, readFile).asJava
     }
   }
 
@@ -261,5 +260,22 @@ private[streaming] object FileBasedWriteAheadLog {
           None
       }
     }.sortBy { _.startTime }
+  }
+
+  /**
+   * This creates an iterator from a parallel collection, by keeping at most `n` objects in memory
+   * at any given time, where `n` is the size of the thread pool. This is crucial for use cases
+   * where we create `FileBasedWriteAheadLogReader`s during parallel recovery. We don't want to
+   * open up `k` streams altogether where `k` is the size of the Seq that we want to parallelize.
+   */
+  def parallelIteratorCreator[I, O](
+      threadpool: ThreadPoolExecutor,
+      source: Seq[I],
+      handler: I => Iterator[O]): Iterator[O] = {
+    val parallelCollection = source.grouped(threadpool.getPoolSize).toSeq.flatMap { element =>
+      element.map(handler)
+    }.par
+    parallelCollection.tasksupport = new ThreadPoolTaskSupport(threadpool)
+    parallelCollection.flatten.toIterator
   }
 }
