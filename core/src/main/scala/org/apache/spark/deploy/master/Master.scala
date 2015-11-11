@@ -207,7 +207,7 @@ private[deploy] class Master(
     self.send(RevokedLeadership)
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {

@@ -163,7 +163,7 @@ private[spark] abstract class YarnSchedulerBackend(
       }
     }
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)

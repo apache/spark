@@ -75,7 +75,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisteredExecutor(hostname) =>
       logInfo("Successfully registered with driver")
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)

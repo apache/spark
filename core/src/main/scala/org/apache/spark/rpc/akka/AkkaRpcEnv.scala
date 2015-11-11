@@ -172,7 +172,7 @@ private[spark] class AkkaRpcEnv private[akka] (
       if (needReply) {
         endpoint.receiveAndReply(callCtx)
       } else {
-        endpoint.receive
+        endpoint.receive(callCtx)
       }
     }
     try {

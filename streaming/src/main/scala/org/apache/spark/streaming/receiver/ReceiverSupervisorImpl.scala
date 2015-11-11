@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.base.Throwables
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.rpc.{RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
@@ -74,7 +74,7 @@ private[streaming] class ReceiverSupervisorImpl(
     "Receiver-" + streamId + "-" + System.currentTimeMillis(), new ThreadSafeRpcEndpoint {
       override val rpcEnv: RpcEnv = env.rpcEnv
 
-      override def receive: PartialFunction[Any, Unit] = {
+      override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
         case StopReceiver =>
           logInfo("Received stop signal")
           ReceiverSupervisorImpl.this.stop("Stopped by driver", None)

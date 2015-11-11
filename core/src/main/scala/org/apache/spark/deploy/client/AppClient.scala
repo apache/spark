@@ -150,7 +150,7 @@ private[spark] class AppClient(
       masterRpcAddresses.contains(remoteAddress)
     }
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case RegisteredApplication(appId_, masterRef) =>
         // FIXME How to handle the following cases?
         // 1. A master receives multiple registrations and sends back multiple

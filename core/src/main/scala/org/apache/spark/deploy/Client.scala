@@ -165,7 +165,7 @@ private class ClientEndpoint(
     }
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
 
     case SubmitDriverResponse(master, success, driverId, message) =>
       logInfo(message)

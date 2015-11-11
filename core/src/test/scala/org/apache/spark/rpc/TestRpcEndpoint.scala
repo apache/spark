@@ -39,7 +39,7 @@ class TestRpcEndpoint extends ThreadSafeRpcEndpoint with TripleEquals {
 
   @volatile private var stopped = false
 
-  override def receive: PartialFunction[Any, Unit] = {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case message: Any => receiveMessages += message
   }
 

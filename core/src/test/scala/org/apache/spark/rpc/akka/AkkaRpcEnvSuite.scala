@@ -34,7 +34,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     val ref = env.setupEndpoint("test_endpoint", new RpcEndpoint {
       override val rpcEnv = env
 
-      override def receive = {
+      override def receive(context: RpcCallContext) = {
         case _ =>
       }
     })

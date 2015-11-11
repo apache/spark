@@ -444,7 +444,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     @volatile private var active: Boolean = true
 
-    override def receive: PartialFunction[Any, Unit] = {
+    override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
       // Local messages
       case StartAllReceivers(receivers) =>
         val scheduledLocations = schedulingPolicy.scheduleReceivers(receivers, getExecutors)

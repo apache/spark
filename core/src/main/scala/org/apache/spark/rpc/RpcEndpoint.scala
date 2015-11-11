@@ -66,7 +66,7 @@ private[spark] trait RpcEndpoint {
    * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]. If receiving a
    * unmatched message, [[SparkException]] will be thrown and sent to `onError`.
    */
-  def receive: PartialFunction[Any, Unit] = {
+  def receive(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 

@@ -100,7 +100,7 @@ private[netty] class Inbox(
         message match {
           case ContentMessage(_sender, content, needReply, context) =>
             // The partial function to call
-            val pf = if (needReply) endpoint.receiveAndReply(context) else endpoint.receive
+            val pf = if (needReply) endpoint.receiveAndReply(context) else endpoint.receive(context)
             try {
               pf.applyOrElse[Any, Unit](content, { msg =>
                 throw new SparkException(s"Unsupported message $message from ${_sender}")

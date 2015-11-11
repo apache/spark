@@ -395,7 +395,7 @@ private[deploy] class Worker(
     }
   }
 
-  override def receive: PartialFunction[Any, Unit] = synchronized {
+  override def receive(context: RpcCallContext): PartialFunction[Any, Unit] = synchronized {
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
