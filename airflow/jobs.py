@@ -489,7 +489,12 @@ class SchedulerJob(BaseJob):
                 d[ti.pool].append(ti)
 
         for pool, tis in list(d.items()):
-            open_slots = pools[pool].open_slots(session=session)
+            if not pool:
+                # Arbitrary:
+                # If queued outside of a pool, trigger no more than 32 per run
+                open_slots = 32
+            else:
+                open_slots = pools[pool].open_slots(session=session)
             if not open_slots:
                 return
             tis = sorted(
