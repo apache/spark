@@ -181,7 +181,20 @@ Next, we discuss how to use this approach in your streaming application.
 		);
 	</div>
 	<div data-lang="python" markdown="1">
-		Not supported yet
+		offsetRanges = []
+
+		def storeOffsetRanges(rdd):
+		    global offsetRanges
+		    offsetRanges = rdd.offsetRanges()
+		    return rdd
+
+		def printOffsetRanges(rdd):
+		    for o in offsetRanges:
+		        print "%s %s %s %s" % (o.topic, o.partition, o.fromOffset, o.untilOffset)
+
+		directKafkaStream\
+		    .transform(storeOffsetRanges)\
+		    .foreachRDD(printOffsetRanges)
 	</div>
    	</div>
 
