@@ -24,7 +24,8 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * Abstract class for getting and updating the tracked state in the `trackStateByKey` operation of
- * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
+ * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+ * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
  *
  * Scala example of using `State`:
  * {{{

@@ -29,8 +29,10 @@ import org.apache.spark.{HashPartitioner, Partitioner}
  * :: Experimental ::
  * Abstract class representing all the specifications of the DStream transformation
  * `trackStateByKey` operation of a
- * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
- * Use the [[org.apache.spark.streaming.StateSpec StateSpec.function()]] to create instances of
+ * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
+ * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+ * Use the [[org.apache.spark.streaming.StateSpec StateSpec.apply()]] or
+ * [[org.apache.spark.streaming.StateSpec StateSpec.create()]] to create instances of
  * this class.
  *
  * Example in Scala:
