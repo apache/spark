@@ -18,17 +18,15 @@
 package org.apache.spark.shuffle
 
 import java.io._
-import java.util.UUID
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkEnv, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-
-import IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -80,10 +78,10 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
    * */
-  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
+  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long], dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
-    val tmp = new File(indexFile.getAbsolutePath + "." + UUID.randomUUID())
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(tmp)))
+    val indexTmp = Utils.tempFileWith(indexFile)
+    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
     Utils.tryWithSafeFinally {
       // We take in lengths of each block, need to convert it to offsets.
       var offset = 0L
@@ -95,9 +93,28 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
     } {
       out.close()
     }
-    indexFile.deleteOnExit()
-    if (!tmp.renameTo(indexFile)) {
-      throw new IOException(s"fail to rename index file $tmp to $indexFile")
+
+    val dataFile = getDataFile(shuffleId, mapId)
+    synchronized {
+      if (dataFile.exists() && indexFile.exists()) {
+        if (dataTmp != null && dataTmp.exists()) {
+          dataTmp.delete()
+        }
+        indexTmp.delete()
+      } else {
+        if (indexFile.exists()) {
+          indexFile.delete()
+        }
+        if (!indexTmp.renameTo(indexFile)) {
+          throw new IOException("fail to rename data file " + indexTmp + " to " + indexFile)
+        }
+        if (dataFile.exists()) {
+          dataFile.delete()
+        }
+        if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
+          throw new IOException("fail to rename data file " + dataTmp + " to " + dataFile)
+        }
+      }
     }
   }
 

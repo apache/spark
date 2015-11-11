@@ -17,14 +17,12 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.{IOException, File}
-import java.util.UUID
-
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
@@ -69,21 +67,10 @@ private[spark] class SortShuffleWriter[K, V, C](
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
     val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
-    val tmp = new File(output.getAbsolutePath + "." + UUID.randomUUID())
+    val tmp = Utils.tempFileWith(output)
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
     val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
-    if (!output.exists()) {
-      shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
-      if (output.exists()) {
-        output.delete()
-      }
-      if (!tmp.renameTo(output)) {
-        throw new IOException("fail to rename data file " + tmp + " to " + output)
-      }
-    } else {
-      tmp.delete()
-    }
-
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths, tmp)
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }
 

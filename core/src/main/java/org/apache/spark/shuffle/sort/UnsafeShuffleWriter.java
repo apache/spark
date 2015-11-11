@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
-import java.util.UUID;
 
 import scala.Option;
 import scala.Product2;
@@ -54,6 +53,7 @@ import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.util.Utils;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -207,7 +207,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     sorter = null;
     final long[] partitionLengths;
     final File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    final File tmp = new File(output.getAbsolutePath() + "." + UUID.randomUUID());
+    final File tmp = Utils.tempFileWith(output);
     try {
       partitionLengths = mergeSpills(spills, tmp);
     } finally {
@@ -217,17 +217,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    if (!output.exists()) {
-      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
-      if (output.exists()) {
-        output.delete();
-      }
-      if (!tmp.renameTo(output)) {
-        throw new IOException("fail to rename data file " + tmp + " to " + output);
-      }
-    } else {
-      tmp.delete();
-    }
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, tmp);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
   }
 
