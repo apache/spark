@@ -154,7 +154,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
           s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
-            s"will be ignored. Unsafe mode will continue to be used.")
+            s"will be ignored. Sort merge join will continue to be used.")
         Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
       }
       (keyValueOutput, runFunc)
