@@ -1322,11 +1322,17 @@ if __name__ == "__main__":
             "or 'build/mvn -Pkinesis-asl package' before running this test.")
 
     sys.stderr.write("Running tests: %s \n" % (str(testcases)))
+    failed = False
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         if xmlrunner:
-            unittest.main(tests, verbosity=3,
-                          testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+            result = unittest.main(tests, verbosity=3,
+                                   testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+            if not result.wasSuccessful():
+                failed = True
         else:
-            unittest.TextTestRunner(verbosity=3).run(tests)
+            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+    sys.exit(failed)
