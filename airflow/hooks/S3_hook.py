@@ -33,13 +33,13 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
     :type profile: str
     """
     Config = configparser.ConfigParser()
-    if Config.read(config_file_name):
+    if Config.read(config_file_name):  # pragma: no cover
         sections = Config.sections()
     else:
         raise AirflowException("Couldn't read {0}".format(config_file_name))
     # Setting option names depending on file format
     conf_format = config_format.lower()
-    if conf_format == 'boto':
+    if conf_format == 'boto':  # pragma: no cover
         if profile is not None and 'profile ' + profile in sections:
             cred_section = 'profile ' + profile
         else:
@@ -49,7 +49,7 @@ def _parse_s3_config(config_file_name, config_format='boto', profile=None):
     else:
         cred_section = 'default'
     # Option names
-    if conf_format in ('boto', 'aws'):
+    if conf_format in ('boto', 'aws'):  # pragma: no cover
         key_id_option = 'aws_access_key_id'
         secret_key_option = 'aws_secret_access_key'
         # security_token_option = 'aws_security_token'
