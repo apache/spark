@@ -441,7 +441,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
           logInfo(s"Listing $qualified on dr iver")
           // Dummy jobconf to get to the pathFilter defined in configuration
           val jobConf = new JobConf(hadoopConf, this.getClass())

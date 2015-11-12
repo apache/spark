@@ -1399,6 +1399,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+
   test("SPARK-11544 test pathfilter") {
     def filterFunc(file: File): Boolean = {
       val name = file.getCanonicalFile.getName()
