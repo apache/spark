@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
-
-import scala.reflect.ClassTag
 
 /**
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
@@ -123,9 +123,9 @@ object Encoders {
 
     new ExpressionEncoder[Any](
       schema,
-      false,
+      flat = false,
       extractExpressions,
       constructExpression,
-      ClassTag.apply(cls))
+      ClassTag(cls))
   }
 }
