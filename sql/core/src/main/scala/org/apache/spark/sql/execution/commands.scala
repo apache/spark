@@ -148,6 +148,17 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       (keyValueOutput, runFunc)
 
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
+            s"will be ignored. Sort merge join will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
+      }
+      (keyValueOutput, runFunc)
+
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
