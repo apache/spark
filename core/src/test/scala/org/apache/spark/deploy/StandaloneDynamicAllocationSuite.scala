@@ -31,6 +31,10 @@ import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import scala.concurrent.Await
+import org.apache.spark.deploy.DeployMessages.MasterStateResponse
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
+import java.util.concurrent.TimeUnit
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
@@ -402,6 +406,28 @@ class StandaloneDynamicAllocationSuite
     apps = getApplications()
     assert(apps.head.executors.size === 1)
     assert(apps.head.getExecutorLimit === 1)
+  }
+
+  test("disable force kill for busy executors (SPARK-9552)") {
+    sc = new SparkContext(appConf.set("spark.dynamicAllocation.testing", "true"))
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 2)
+      assert(apps.head.getExecutorLimit === Int.MaxValue)
+    }
+    // sync executors between the Master and the driver, needed because
+    // the driver refuses to kill executors it does not know about
+    syncExecutors(sc)
+    val executors = getExecutorIds(sc)
+    assert(executors.size === 2)
+    // try to kill busy executor
+    assert(sc.killExecutor(executors.head))
+    var apps = getApplications()
+    // won't kill busy executor
+    assert(apps.head.executors.size === 2)
   }
 
   // ===============================

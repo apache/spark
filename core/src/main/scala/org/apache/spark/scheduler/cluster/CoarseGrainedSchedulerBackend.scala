@@ -410,8 +410,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * Request that the cluster manager kill the specified executors.
    * @return whether the kill request is acknowledged.
    */
-  final override def killExecutors(
-      executorIds: Seq[String]): Boolean = synchronized {
+  final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
     killExecutors(executorIds, replace = false, force = false)
   }
 
@@ -433,19 +432,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       logWarning(s"Executor to kill $id does not exist!")
     }
 
-    // force killing all busy and idle executors
-    // otherwise, only idle executors are valid to be killed
-    val idleExecutors =
-      if (force) {
-        knownExecutors
-      } else {
-        knownExecutors.filter { id =>
-          logWarning(s"Busy executor $id is not valid to be killed!")
-          !scheduler.isExecutorBusy(id)}
-      }
-
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-    val executorsToKill = idleExecutors.filter { id => !executorsPendingToRemove.contains(id) }
+    // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
+    val executorsToKill = knownExecutors
+      .filter { id => !executorsPendingToRemove.contains(id) }
+      .filter { id => force || !scheduler.isExecutorBusy(id) }
+      // for test only
+      .filter { id => force || !scheduler.sc.getConf.getBoolean("spark.dynamicAllocation.testing", false)}
     executorsPendingToRemove ++= executorsToKill
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
@@ -458,7 +451,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
-    !executorsToKill.isEmpty && doKillExecutors(executorsToKill)
+    doKillExecutors(executorsToKill)
   }
 
   /**
