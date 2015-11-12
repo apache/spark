@@ -374,7 +374,7 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testTypedAggregation() {
-    Encoder<Tuple2<String, Integer>> encoder = e.tuple(e.STRING(), e.INT());
+    Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
     List<Tuple2<String, Integer>> data =
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
     Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
@@ -386,15 +386,17 @@ public class JavaDatasetSuite implements Serializable {
           return value._1();
         }
       },
-      e.STRING());
+      Encoders.STRING());
 
-    Dataset<Tuple2<String, Integer>> agged = grouped.agg(new IntSumOf().toColumn(e.INT(), e.INT()));
+    Dataset<Tuple2<String, Integer>> agged =
+      grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
 
     Dataset<Tuple4<String, Integer, Long, Long>> agged2 = grouped.agg(
-      new IntSumOf().toColumn(e.INT(), e.INT()),
+      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()),
       expr("sum(_2)"),
-      count("*")).as(e.tuple(e.STRING(), e.INT(), e.LONG(), e.LONG()));
+      count("*"))
+      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT(), Encoders.LONG(), Encoders.LONG()));
     Assert.assertEquals(
       Arrays.asList(
         new Tuple4<String, Integer, Long, Long>("a", 3, 3L, 2L),
@@ -415,7 +417,12 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     @Override
-    public Integer present(Integer reduction) {
+    public Integer merge(Integer b1, Integer b2) {
+      return b1 + b2;
+    }
+
+    @Override
+    public Integer finish(Integer reduction) {
       return reduction;
     }
   }
