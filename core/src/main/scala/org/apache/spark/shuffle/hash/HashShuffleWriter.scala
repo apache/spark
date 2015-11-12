@@ -109,14 +109,23 @@ private[spark] class HashShuffleWriter[K, V](
       writer.fileSegment().length
     }
     // rename all shuffle files to final paths
-    shuffle.writers.zip(sizes).foreach { case (writer: DiskBlockObjectWriter, size: Long) =>
-      if (size > 0) {
+    // Note: there is only one ShuffleBlockResolver in executor
+    shuffleBlockResolver.synchronized {
+      shuffle.writers.zipWithIndex.foreach { case (writer, i) =>
         val output = blockManager.diskBlockManager.getFile(writer.blockId)
-        if (output.exists()) {
-          writer.file.delete()
+        if (sizes(i) > 0) {
+          if (output.exists()) {
+            // update the size of output for MapStatus
+            sizes(i) = output.length()
+            writer.file.delete()
+          } else {
+            if (!writer.file.renameTo(output)) {
+              throw new IOException(s"fail to rename ${writer.file} to $output")
+            }
+          }
         } else {
-          if (!writer.file.renameTo(output)) {
-            throw new IOException(s"fail to rename ${writer.file} to $output")
+          if (output.exists()) {
+            output.delete()
           }
         }
       }

@@ -26,7 +26,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{SparkEnv, Logging, SparkConf}
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -39,10 +39,17 @@ import org.apache.spark.{Logging, SparkConf, SparkEnv}
  */
 // Note: Changes to the format in this file should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
-private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver
+private[spark] class IndexShuffleBlockResolver(
+    conf: SparkConf,
+    _blockManager: BlockManager = null)
+  extends ShuffleBlockResolver
   with Logging {
 
-  private lazy val blockManager = SparkEnv.get.blockManager
+  private lazy val blockManager = if (_blockManager == null) {
+    SparkEnv.get.blockManager
+  } else {
+    _blockManager
+  }
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
@@ -74,11 +81,65 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
   }
 
   /**
+   * Check whether there are index file and data file also they are matched with each other, returns
+   * the lengths of each block in data file, if there are matched, or return null.
+   */
+  private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
+    val lengths = new Array[Long](blocks)
+    if (index.length() == (blocks + 1) * 8) {
+      // Read the lengths of blocks
+      val f = try {
+        new FileInputStream(index)
+      } catch {
+        case e: IOException =>
+          return null
+      }
+      val in = new DataInputStream(new BufferedInputStream(f))
+      try {
+        // Convert the offsets into lengths of each block
+        var offset = in.readLong()
+        if (offset != 0L) {
+          return null
+        }
+        var i = 0
+        while (i < blocks) {
+          val off = in.readLong()
+          lengths(i) = off - offset
+          offset = off
+          i += 1
+        }
+      } catch {
+        case e: IOException =>
+          return null
+      } finally {
+        in.close()
+      }
+
+      val size = lengths.reduce(_ + _)
+      // `length` returns 0 if it not exists.
+      if (data.length() == size) {
+        lengths
+      } else {
+        null
+      }
+    } else {
+      null
+    }
+  }
+
+  /**
    * Write an index file with the offsets of each block, plus a final offset at the end for the
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
+   *
+   * It will commit the data and index file as an atomic operation, use the existed ones (lengths of
+   * blocks will be refreshed), or replace them with new ones.
    * */
-  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long], dataTmp: File): Unit = {
+  def writeIndexFileAndCommit(
+      shuffleId: Int,
+      mapId: Int,
+      lengths: Array[Long],
+      dataTmp: File): Unit = {
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
@@ -95,21 +156,23 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
     }
 
     val dataFile = getDataFile(shuffleId, mapId)
+    // Note: there is only one IndexShuffleBlockResolver per executor
     synchronized {
-      if (dataFile.exists() && indexFile.exists()) {
-        if (dataTmp != null && dataTmp.exists()) {
-          dataTmp.delete()
-        }
+      val existedLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
+      if (existedLengths != null) {
+        // Use the lengths of existed output for MapStatus
+        System.arraycopy(existedLengths, 0, lengths, 0, lengths.length)
+        dataTmp.delete()
         indexTmp.delete()
       } else {
         if (indexFile.exists()) {
           indexFile.delete()
         }
-        if (!indexTmp.renameTo(indexFile)) {
-          throw new IOException("fail to rename data file " + indexTmp + " to " + indexFile)
-        }
         if (dataFile.exists()) {
           dataFile.delete()
+        }
+        if (!indexTmp.renameTo(indexFile)) {
+          throw new IOException("fail to rename data file " + indexTmp + " to " + indexFile)
         }
         if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
           throw new IOException("fail to rename data file " + dataTmp + " to " + dataFile)

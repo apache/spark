@@ -176,7 +176,7 @@ public class UnsafeShuffleWriterSuite {
         return null;
       }
     }).when(shuffleBlockResolver)
-      .writeIndexFile(anyInt(), anyInt(), any(long[].class), any(File.class));
+      .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), any(File.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {
