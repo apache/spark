@@ -1248,12 +1248,16 @@ class Log(Base):
         self.dttm = datetime.now()
         self.event = event
         self.extra = extra
-        self.owner = owner or task_instance.task.owner
+
+        task_owner = None
 
         if task_instance:
             self.dag_id = task_instance.dag_id
             self.task_id = task_instance.task_id
             self.execution_date = task_instance.execution_date
+            task_owner = task_instance.task.owner
+            
+        self.owner = owner or task_owner
 
 
 @functools.total_ordering
