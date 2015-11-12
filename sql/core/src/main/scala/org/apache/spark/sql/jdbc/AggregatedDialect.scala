@@ -34,8 +34,12 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
     dialects.map(_.canHandle(url)).reduce(_ && _)
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
+      sqlType: Int,
+      typeName: String,
+      precision: Int,
+      scale: Int,
+      md: MetadataBuilder): Option[DataType] = {
+    dialects.flatMap(_.getCatalystType(sqlType, typeName, precision, scale, md)).headOption
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = {

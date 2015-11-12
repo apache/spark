@@ -64,13 +64,18 @@ abstract class JdbcDialect {
    * Get the custom datatype mapping for the given jdbc meta information.
    * @param sqlType The sql type (see java.sql.Types)
    * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
-   * @param size The size of the type.
+   * @param precision The precision of the type.
+   * @param scale The scale of the type.
    * @param md Result metadata associated with this type.
    * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
    *         or null if the default type mapping should be used.
    */
   def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+    sqlType: Int,
+    typeName: String,
+    precision: Int,
+    scale: Int,
+    md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.

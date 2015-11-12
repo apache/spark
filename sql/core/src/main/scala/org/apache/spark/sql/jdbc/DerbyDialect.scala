@@ -27,7 +27,11 @@ private object DerbyDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:derby")
 
   override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int,
+      typeName: String,
+      precision: Int,
+      scale: Int,
+      md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
   }
 
