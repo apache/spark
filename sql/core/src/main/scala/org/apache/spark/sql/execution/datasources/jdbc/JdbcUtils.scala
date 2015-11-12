@@ -23,7 +23,7 @@ import java.util.Properties
 import scala.util.Try
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.jdbc.{JdbcType, JdbcDialects}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -96,6 +96,11 @@ object JdbcUtils extends Logging {
     }
   }
 
+  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+    dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
+      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.simpleString}"))
+  }
+
   /**
    * Saves a partition of a DataFrame to the JDBC database.  This is done in
    * a single database transaction in order to avoid repeatedly inserting
@@ -115,8 +120,9 @@ object JdbcUtils extends Logging {
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
-      jdbcTypes: Array[JdbcType],
-      batchSize: Int): Iterator[Byte] = {
+      nullTypes: Array[Int],
+      batchSize: Int,
+      dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
     try {
@@ -130,7 +136,7 @@ object JdbcUtils extends Logging {
           var i = 0
           while (i < numFields) {
             if (row.isNullAt(i)) {
-              stmt.setNull(i + 1, jdbcTypes(i).jdbcNullType)
+              stmt.setNull(i + 1, nullTypes(i))
             } else {
               rddSchema.fields(i).dataType match {
                 case IntegerType => stmt.setInt(i + 1, row.getInt(i))
@@ -146,9 +152,8 @@ object JdbcUtils extends Logging {
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                 case ArrayType(et, _) =>
-                  assert(jdbcTypes(i).databaseTypeDefinition.endsWith("[]"))
                   val array = conn.createArrayOf(
-                    jdbcTypes(i).databaseTypeDefinition.dropRight(2).toLowerCase,
+                    getJdbcType(et, dialect).databaseTypeDefinition.toLowerCase,
                     row.getSeq[AnyRef](i).toArray)
                   stmt.setArray(i + 1, array)
                 case _ => throw new IllegalArgumentException(
@@ -199,10 +204,7 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
       val name = field.name
-      val typ: String =
-        dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition)
-          .orElse(getCommonJDBCType(field.dataType).map(_.databaseTypeDefinition))
-          .getOrElse(throw new IllegalArgumentException(s"Don't know how to save $field to JDBC"))
+      val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }}
@@ -218,11 +220,8 @@ object JdbcUtils extends Logging {
       table: String,
       properties: Properties = new Properties()) {
     val dialect = JdbcDialects.get(url)
-    val jdbcTypes: Array[JdbcType] = df.schema.fields.map { field =>
-      dialect.getJDBCType(field.dataType)
-        .orElse(getCommonJDBCType(field.dataType))
-        .getOrElse(
-          throw new IllegalArgumentException(s"Can't get JDBC type for field $field"))
+    val nullTypes: Array[Int] = df.schema.fields.map { field =>
+      getJdbcType(field.dataType, dialect).jdbcNullType
     }
 
     val rddSchema = df.schema
@@ -230,7 +229,7 @@ object JdbcUtils extends Logging {
     val getConnection: () => Connection = JDBCRDD.getConnector(driver, url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
     df.foreachPartition { iterator =>
-      savePartition(getConnection, table, iterator, rddSchema, jdbcTypes, batchSize)
+      savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }
   }
 
