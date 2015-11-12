@@ -35,7 +35,7 @@ import org.apache.spark._
 private[streaming] case class TrackStateRDDRecord[K, S, E](
     var stateMap: StateMap[K, S], var emittedRecords: Seq[E])
 
-object TrackStateRDDRecord {
+private[streaming] object TrackStateRDDRecord {
   def updateRecordWithData[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
     prevRecord: Option[TrackStateRDDRecord[K, S, E]],
     dataIterator: Iterator[(K, V)],

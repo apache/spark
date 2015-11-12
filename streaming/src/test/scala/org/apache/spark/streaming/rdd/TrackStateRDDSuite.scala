@@ -226,18 +226,16 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       // Assert that the function was called only for the keys present in the data
       assert(TrackStateRDDSuite.touchedStateKeys.size === testData.size,
         "More number of keys are being touched than that is expected")
-
       assert(TrackStateRDDSuite.touchedStateKeys.toSet === testData.toMap.keys,
         "Keys not in the data are being touched unexpectedly")
 
       // Assert that the test RDD's data has not changed
-      //assertRDD(initStateRDD, initStateWthTime, Set.empty)
+      assertRDD(initStateRDD, initStateWthTime, Set.empty)
       newStateRDD
     }
 
     // Test no-op, no state should change
     testStateUpdates(initStateRDD, Seq(), initStateWthTime)   // should not scan any state
-
     testStateUpdates(
       initStateRDD, Seq(("k1", 0)), initStateWthTime)         // should not update existing state
     testStateUpdates(
@@ -251,7 +249,6 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       Set(("k1", 0, initTime), ("k2", 0, initTime), ("k3", 0, updateTime), ("k4", 0, updateTime)))
 
     // Test updating of state
-    println("---------------")
     val rdd3 = testStateUpdates(
       initStateRDD, Seq(("k1", 1)),                   // should increment k1's state 0 -> 1
       Set(("k1", 1, updateTime), ("k2", 0, initTime)))
