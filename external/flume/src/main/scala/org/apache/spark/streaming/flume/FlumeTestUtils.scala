@@ -19,6 +19,7 @@ package org.apache.spark.streaming.flume
 
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
+import java.util.{List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
@@ -59,10 +60,10 @@ private[flume] class FlumeTestUtils {
   }
 
   /** Send data to the flume receiver */
-  def writeInput(input: Seq[String], enableCompression: Boolean): Unit = {
+  def writeInput(input: JList[String], enableCompression: Boolean): Unit = {
     val testAddress = new InetSocketAddress("localhost", testPort)
 
-    val inputEvents = input.map { item =>
+    val inputEvents = input.asScala.map { item =>
       val event = new AvroFlumeEvent
       event.setBody(ByteBuffer.wrap(item.getBytes(UTF_8)))
       event.setHeaders(Collections.singletonMap("test", "header"))

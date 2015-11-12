@@ -611,14 +611,12 @@ class CheckpointTests(unittest.TestCase):
     @staticmethod
     def tearDownClass():
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
+        jStreamingContextOption = \
+            SparkContext._jvm.org.apache.spark.streaming.StreamingContext.getActive()
         if jStreamingContextOption.nonEmpty():
             jStreamingContextOption.get().stop()
-        jSparkContextOption = SparkContext._jvm.SparkContext.get()
-        if jSparkContextOption.nonEmpty():
-            jSparkContextOption.get().stop()
 
-    def __init__(self):
+    def setUp(self):
         self.ssc = None
         self.sc = None
         self.cpd = None
@@ -653,7 +651,7 @@ class CheckpointTests(unittest.TestCase):
         self.cpd = tempfile.mkdtemp("test_streaming_cps")
         self.setupCalled = False
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
-        self.assertFalse(self.setupCalled)
+        self.assertTrue(self.setupCalled)
 
         self.ssc.start()
 
