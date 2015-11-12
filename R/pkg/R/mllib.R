@@ -45,11 +45,13 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0) {
+          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
+            standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
+            formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", deparse(formula), data@sdf, family, lambda,
-                                 alpha)
+                                 "fitRModelFormula", formula, data@sdf, family, lambda,
+                                 alpha, standardize, solver)
             return(new("PipelineModel", model = model))
           })
 
@@ -87,14 +89,28 @@ setMethod("predict", signature(object = "PipelineModel"),
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
 #'}
-setMethod("summary", signature(x = "PipelineModel"),
-          function(x, ...) {
+setMethod("summary", signature(object = "PipelineModel"),
+          function(object, ...) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelName", object@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelFeatures", x@model)
-            weights <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelWeights", x@model)
-            coefficients <- as.matrix(unlist(weights))
-            colnames(coefficients) <- c("Estimate")
-            rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+                                   "getModelFeatures", object@model)
+            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getModelCoefficients", object@model)
+            if (modelName == "LinearRegressionModel") {
+              devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                               "getModelDevianceResiduals", object@model)
+              devianceResiduals <- matrix(devianceResiduals, nrow = 1)
+              colnames(devianceResiduals) <- c("Min", "Max")
+              rownames(devianceResiduals) <- rep("", times = 1)
+              coefficients <- matrix(coefficients, ncol = 4)
+              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
+              rownames(coefficients) <- unlist(features)
+              return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
+            } else {
+              coefficients <- as.matrix(unlist(coefficients))
+              colnames(coefficients) <- c("Estimate")
+              rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
+            }
           })

@@ -24,17 +24,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
- * :: Experimental ::
  * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
  * transformation code by overriding the convert method.
  */
-@Experimental
 trait Converter[T, + U] extends Serializable {
   def convert(obj: T): U
 }

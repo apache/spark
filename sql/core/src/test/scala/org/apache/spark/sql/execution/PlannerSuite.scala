@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -38,7 +38,7 @@ class PlannerSuite extends SharedSQLContext {
   private def testPartialAggregationPlan(query: LogicalPlan): Unit = {
     val planner = sqlContext.planner
     import planner._
-    val plannedOption = HashAggregation(query).headOption.orElse(Aggregation(query).headOption)
+    val plannedOption = Aggregation(query).headOption
     val planned =
       plannedOption.getOrElse(
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
@@ -97,10 +97,10 @@ class PlannerSuite extends SharedSQLContext {
           """.stripMargin).queryExecution.executedPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
       }
     }
 
@@ -150,10 +150,10 @@ class PlannerSuite extends SharedSQLContext {
         val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
 
         sqlContext.clearCache()
       }
@@ -268,7 +268,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case Exchange(_, _) => true }.isEmpty) {
+    if (outputPlan.collect { case e: Exchange => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
     }
   }
@@ -306,7 +306,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case Exchange(_, _) => true }.isEmpty) {
+    if (outputPlan.collect { case e: Exchange => true }.isEmpty) {
       fail(s"Exchange should have been added:\n$outputPlan")
     }
   }
@@ -326,7 +326,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case Exchange(_, _) => true }.nonEmpty) {
+    if (outputPlan.collect { case e: Exchange => true }.nonEmpty) {
       fail(s"Exchange should not have been added:\n$outputPlan")
     }
   }
@@ -349,8 +349,57 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case Exchange(_, _) => true }.nonEmpty) {
+    if (outputPlan.collect { case e: Exchange => true }.nonEmpty) {
       fail(s"No Exchanges should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements adds sort when there is no existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq.empty) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingB)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+      fail(s"Sort should have been added:\n$outputPlan")
+    }
+  }
+
+  test("EnsureRequirements skips sort when required ordering is prefix of existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA, orderingB)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.nonEmpty) {
+      fail(s"No sorts should have been added:\n$outputPlan")
+    }
+  }
+
+  // This is a regression test for SPARK-11135
+  test("EnsureRequirements adds sort when required ordering isn't a prefix of existing ordering") {
+    val orderingA = SortOrder(Literal(1), Ascending)
+    val orderingB = SortOrder(Literal(2), Ascending)
+    assert(orderingA != orderingB)
+    val inputPlan = DummySparkPlan(
+      children = DummySparkPlan(outputOrdering = Seq(orderingA)) :: Nil,
+      requiredChildOrdering = Seq(Seq(orderingA, orderingB)),
+      requiredChildDistribution = Seq(UnspecifiedDistribution)
+    )
+    val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
+    assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+      fail(s"Sort should have been added:\n$outputPlan")
     }
   }
 
