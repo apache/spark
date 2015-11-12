@@ -93,6 +93,25 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
+  /**
+   * Returns the expression for this column either with an existing or auto assigned name.
+   */
+  private[sql] def named: NamedExpression = expr match {
+    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+    // make it a NamedExpression.
+    case u: UnresolvedAttribute => UnresolvedAlias(u)
+
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case explode: Explode => MultiAlias(explode, Nil)
+    case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case expr: Expression => Alias(expr, expr.prettyString)()
+  }
+
   override def toString: String = expr.prettyString
 
   override def equals(that: Any): Boolean = that match {

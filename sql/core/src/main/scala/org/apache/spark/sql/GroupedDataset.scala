@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.types.StructType
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
-import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.{Queryable, QueryExecution}
-
+import org.apache.spark.sql.execution.QueryExecution
 
 /**
  * :: Experimental ::
@@ -44,25 +40,21 @@ import org.apache.spark.sql.execution.{Queryable, QueryExecution}
  */
 @Experimental
 class GroupedDataset[K, T] private[sql](
-    private val kEncoder: Encoder[K],
-    private val tEncoder: Encoder[T],
+    kEncoder: Encoder[K],
+    tEncoder: Encoder[T],
     val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
-    private val groupingAttributes: Seq[Attribute]) extends Queryable with Serializable {
+    private val groupingAttributes: Seq[Attribute]) extends Serializable {
 
-  def schema: StructType = ???
+  // Similar to [[Dataset]], we use unresolved encoders for later composition and resolved encoders
+  // when constructing new logical plans that will operate on the output of the current
+  // queryexecution.
 
-  private implicit val kEnc = kEncoder match {
-    case e: ExpressionEncoder[K] => e.unbind(groupingAttributes).resolve(groupingAttributes)
-    case other =>
-      throw new UnsupportedOperationException("Only expression encoders are currently supported")
-  }
+  private implicit val unresolvedKEncoder = encoderFor(kEncoder)
+  private implicit val unresolvedTEncoder = encoderFor(tEncoder)
 
-  private implicit val tEnc = tEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(dataAttributes)
-    case other =>
-      throw new UnsupportedOperationException("Only expression encoders are currently supported")
-  }
+  private val resolvedKEncoder = unresolvedKEncoder.resolve(groupingAttributes)
+  private val resolvedTEncoder = unresolvedTEncoder.resolve(dataAttributes)
 
   /** Encoders for built in aggregations. */
   private implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
@@ -81,7 +73,7 @@ class GroupedDataset[K, T] private[sql](
   def asKey[L : Encoder]: GroupedDataset[L, T] =
     new GroupedDataset(
       encoderFor[L],
-      tEncoder,
+      unresolvedTEncoder,
       queryExecution,
       dataAttributes,
       groupingAttributes)
@@ -97,7 +89,7 @@ class GroupedDataset[K, T] private[sql](
   }
 
   /**
-   * Applies the given function to each group of data.  For each unique group, the function will
+   * Applies the given function to each group of data.  For each unique group, the function  will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
    * as a new [[Dataset]].
@@ -110,7 +102,12 @@ class GroupedDataset[K, T] private[sql](
   def flatMap[U : Encoder](f: (K, Iterator[T]) => TraversableOnce[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
-      MapGroups(f, groupingAttributes, logicalPlan))
+      MapGroups(
+        f,
+        resolvedKEncoder,
+        resolvedTEncoder,
+        groupingAttributes,
+        logicalPlan))
   }
 
   def flatMap[U](f: FlatMapGroupFunction[K, T, U], encoder: Encoder[U]): Dataset[U] = {
@@ -142,9 +139,9 @@ class GroupedDataset[K, T] private[sql](
    */
   def reduce(f: (T, T) => T): Dataset[(K, T)] = {
     val func = (key: K, it: Iterator[T]) => Iterator(key -> it.reduce(f))
-    println(ExpressionEncoder.tuple(kEnc, tEnc).constructExpression.treeString)
 
-    flatMap(func)(ExpressionEncoder.tuple(kEncoder.asInstanceOf[ExpressionEncoder[K]], tEncoder.asInstanceOf[ExpressionEncoder[T]]))
+    implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedTEncoder)
+    flatMap(func)
   }
 
   def reduce(f: ReduceFunction[T]): Dataset[(K, T)] = {
@@ -163,14 +160,16 @@ class GroupedDataset[K, T] private[sql](
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
-    println(tEnc)
-    val namedColumns = nameColumns(columns.map(_.withInputType(tEnc, dataAttributes)))
-    val execution = new QueryExecution(sqlContext, Aggregate(groupingAttributes, groupingAttributes ++ namedColumns, logicalPlan))
+    val namedColumns =
+      columns.map(
+        _.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes).named)
+    val aggregate = Aggregate(groupingAttributes, groupingAttributes ++ namedColumns, logicalPlan)
+    val execution = new QueryExecution(sqlContext, aggregate)
 
     new Dataset(
       sqlContext,
       execution,
-      ExpressionEncoder.tuple(kEnc +: encoders))
+      ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
   }
 
   /**
@@ -223,7 +222,7 @@ class GroupedDataset[K, T] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[T], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit def uEnc: Encoder[U] = other.tEncoder
+    implicit def uEnc: Encoder[U] = other.unresolvedTEncoder
     new Dataset[R](
       sqlContext,
       CoGroup(

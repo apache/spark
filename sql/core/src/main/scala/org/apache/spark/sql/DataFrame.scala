@@ -735,7 +735,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    Project(nameColumns(cols), logicalPlan)
+    Project(cols.map(_.named), logicalPlan)
   }
 
   /**

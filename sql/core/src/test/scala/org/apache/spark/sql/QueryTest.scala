@@ -82,8 +82,8 @@ abstract class QueryTest extends PlanTest {
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.encoder}
-             |${ds.encoder.constructExpression.treeString}
+             |${ds.resolvedTEncoder}
+             |${ds.resolvedTEncoder.fromRowExpression.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
@@ -96,7 +96,7 @@ abstract class QueryTest extends PlanTest {
       fail(
         s"""Decoded objects do not match expected objects:
             |$comparision
-            |${ds.encoder.constructExpression.treeString}
+            |${ds.resolvedTEncoder.fromRowExpression.treeString}
          """.stripMargin)
     }
   }

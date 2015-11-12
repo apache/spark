@@ -712,7 +712,6 @@ object HiveTypeCoercion {
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
-          println(s"$in -> $expected")
           // If we cannot do the implicit cast, just use the original input.
           implicitCast(in, expected).getOrElse(in)
         }
