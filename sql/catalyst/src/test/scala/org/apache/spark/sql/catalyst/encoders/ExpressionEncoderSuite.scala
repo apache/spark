@@ -237,7 +237,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       }
       val convertedData = encoder.toRow(inputData)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.resolve(schema)
+      val boundEncoder = encoder.resolve(schema).bind(schema)
       val convertedBack = try boundEncoder.fromRow(convertedData) catch {
         case e: Exception =>
           fail(
