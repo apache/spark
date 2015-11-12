@@ -350,11 +350,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           df
             .queryExecution
             .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-            .child.
-            execute()
+            .child
+            .execute()
 
         // The result should be single row.
-        // When a filter is pushed to Parquet, Parquet can apply it to eveyr row.
+        // When a filter is pushed to Parquet, Parquet can apply it to every row.
         // So, we can check the number of rows returned from the Parquet
         // to make sure our filter pushdown work.
         assert(childRDD.count == 1)
