@@ -45,9 +45,7 @@ module Jekyll
       version = spark_version_short == spark_version ? "v#{spark_version}" : "master"
 
       hint = "<div><small>Find full example code here: " \
-        "<a href=\"https://github.com/apache/spark/tree/" \
-        "#{version}/examples/src/main/#{clean_markup}\">" \
-        "examples/src/main/#{clean_markup}</a></small></div>"
+        "<u>examples/src/main/#{clean_markup}</u></small></div>"
 
       rendered_code + hint
     end
