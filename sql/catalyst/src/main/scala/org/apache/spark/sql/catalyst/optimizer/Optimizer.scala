@@ -137,8 +137,8 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     val andConditions = splitConjunctivePredicates(condition)
     andConditions.partition(_.deterministic) match {
       case (deterministic, nondeterministic) =>
-        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
-        nondeterministic.reduceOption(And).getOrElse(Literal(true))
+        deterministic.reduceLeftOption(And).getOrElse(Literal(true)) ->
+        nondeterministic.reduceLeftOption(And).getOrElse(Literal(true))
     }
   }
 
@@ -506,11 +506,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
             if (ldiff.isEmpty || rdiff.isEmpty) {
               // (a || b || c || ...) && (a || b) => (a || b)
-              common.reduce(Or)
+              common.reduceLeft(Or)
             } else {
               // (a || b || c || ...) && (a || b || d || ...) =>
               // ((c || ...) && (d || ...)) || a || b
-              (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+              (common :+ And(ldiff.reduceLeft(Or), rdiff.reduceLeft(Or))).reduceLeft(Or)
             }
           }
       }  // end of And(left, right)
@@ -544,11 +544,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals(_)))
             if (ldiff.isEmpty || rdiff.isEmpty) {
               // (a && b) || (a && b && c && ...) => a && b
-              common.reduce(And)
+              common.reduceLeft(And)
             } else {
               // (a && b && c && ...) || (a && b && d && ...) =>
               // ((c && ...) || (d && ...)) && a && b
-              (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+              (common :+ Or(ldiff.reduceLeft(And), rdiff.reduceLeft(And))).reduceLeft(And)
             }
           }
       }  // end of Or(left, right)
@@ -640,8 +640,8 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
           filter
         } else {
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
-          Filter(nondeterministic.reduce(And),
+          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduceLeft(And)
+          Filter(nondeterministic.reduceLeft(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
@@ -670,10 +670,10 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
         conjunct => conjunct.references subsetOf g.child.outputSet
       }
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
+        val pushDownPredicate = pushDown.reduceLeft(And)
         val withPushdown = Generate(g.generator, join = g.join, outer = g.outer,
           g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
-        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+        stayUp.reduceLeftOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter
       }
@@ -694,9 +694,9 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
         conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
       }
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
+        val pushDownPredicate = pushDown.reduceLeft(And)
         val withPushdown = aggregate.copy(child = Filter(pushDownPredicate, grandChild))
-        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+        stayUp.reduceLeftOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter
       }

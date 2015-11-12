@@ -48,7 +48,7 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
     }
 
     sqlContext.sparkContext.parallelize(from to to).map(i =>
-      Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
+      Row.fromSeq(rowBuilders.map(_(i)).reduceLeftOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 

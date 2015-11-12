@@ -628,7 +628,7 @@ object HiveTypeCoercion {
             case Seq(elseVal) if elseVal.dataType != commonType =>
               Seq(Cast(elseVal, commonType))
             case other => other
-          }.reduce(_ ++ _)
+          }.reduceLeft(_ ++ _)
           c match {
             case _: CaseWhen => CaseWhen(castedBranches)
             case CaseKeyWhen(key, _) => CaseKeyWhen(key, castedBranches)
@@ -643,7 +643,7 @@ object HiveTypeCoercion {
             case Seq(whenExpr, thenExpr) if whenExpr.dataType != commonType =>
               Seq(Cast(whenExpr, commonType), thenExpr)
             case other => other
-          }.reduce(_ ++ _)
+          }.reduceLeft(_ ++ _)
           CaseKeyWhen(Cast(c.key, commonType), castedBranches)
         }.getOrElse(c)
     }

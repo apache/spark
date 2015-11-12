@@ -34,7 +34,7 @@ private[orc] object OrcFilters extends Logging {
   def createFilter(filters: Array[Filter]): Option[SearchArgument] = {
     for {
       // Combines all filters with `And`s to produce a single conjunction predicate
-      conjunction <- filters.reduceOption(And)
+      conjunction <- filters.reduceLeftOption(And)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()

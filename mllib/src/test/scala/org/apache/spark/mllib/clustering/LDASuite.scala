@@ -565,7 +565,7 @@ private[clustering] object LDASuite {
     Array[Double](0.2, 0.2, 0.05, 0.05, 0.5) // topic 2
   )
   def tinyTopics: Matrix = new DenseMatrix(numRows = tinyVocabSize, numCols = tinyK,
-    values = tinyTopicsAsArray.fold(Array.empty[Double])(_ ++ _))
+    values = tinyTopicsAsArray.foldLeft(Array.empty[Double])(_ ++ _))
   def tinyTopicDescription: Array[(Array[Int], Array[Double])] = tinyTopicsAsArray.map { topic =>
     val (termWeights, terms) = topic.zipWithIndex.sortBy(-_._1).unzip
     (terms.toArray, termWeights.toArray)

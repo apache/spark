@@ -30,7 +30,7 @@ class AnalysisSuite extends AnalysisTest {
   test("union project *") {
     val plan = (1 to 100)
       .map(_ => testRelation)
-      .fold[LogicalPlan](testRelation) { (a, b) =>
+      .foldLeft[LogicalPlan](testRelation) { (a, b) =>
         a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
       }
 

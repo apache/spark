@@ -201,7 +201,7 @@ private[sql] object InferSchema {
         case (StructType(fields1), StructType(fields2)) =>
           val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
             case (name, fieldTypes) =>
-              val dataType = fieldTypes.view.map(_.dataType).reduce(compatibleType)
+              val dataType = fieldTypes.view.map(_.dataType).reduceLeft(compatibleType)
               StructField(name, dataType, nullable = true)
           }
           StructType(newFields.toSeq.sortBy(_.name))

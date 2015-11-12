@@ -257,7 +257,7 @@ private[sql] object ParquetFilters {
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>
-        (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)
+        (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceLeftOption(FilterApi.and)
 
       case sources.Or(lhs, rhs) =>
         for {

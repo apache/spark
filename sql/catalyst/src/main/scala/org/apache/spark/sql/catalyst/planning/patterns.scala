@@ -124,7 +124,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if (joinKeys.nonEmpty) {
         val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
-        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
+        Some((joinType, leftKeys, rightKeys, otherPredicates.reduceLeftOption(And), left, right))
       } else {
         None
       }

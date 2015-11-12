@@ -147,7 +147,7 @@ class SimpleTextRelation(
             val literal = Literal.create(value, dataType)
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
-        }.reduceOption(expressions.And).getOrElse(Literal(true))
+        }.reduceLeftOption(expressions.And).getOrElse(Literal(true))
         InterpretedPredicate.create(filterCondition, inputAttributes)
       }
 

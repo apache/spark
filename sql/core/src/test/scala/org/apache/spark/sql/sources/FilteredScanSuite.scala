@@ -115,7 +115,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
     }
 
     sqlContext.sparkContext.parallelize(from to to).filter(eval).map(i =>
-      Row.fromSeq(rowBuilders.map(_(i)).reduceOption(_ ++ _).getOrElse(Seq.empty)))
+      Row.fromSeq(rowBuilders.map(_(i)).reduceLeftOption(_ ++ _).getOrElse(Seq.empty)))
   }
 }
 

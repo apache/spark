@@ -242,7 +242,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     if (partitionPruningPredicates.nonEmpty) {
       val predicate =
         partitionPruningPredicates
-          .reduceOption(expressions.And)
+          .reduceLeftOption(expressions.And)
           .getOrElse(Literal(true))
 
       val boundPredicate = InterpretedPredicate.create(predicate.transform {
@@ -424,7 +424,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
+        (translateFilter(left) ++ translateFilter(right)).reduceLeftOption(sources.And)
 
       case expressions.Or(left, right) =>
         for {
