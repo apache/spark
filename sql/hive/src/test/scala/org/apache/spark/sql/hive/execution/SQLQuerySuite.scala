@@ -70,7 +70,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   private val sqlContext = _sqlContext
 
   test("UDTF") {
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    val jarPath = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+
+    // SPARK-11595 Fixes ADD JAR when input path contains URL scheme
+    val jarURL = s"file://$jarPath"
+
+    sql(s"ADD JAR $jarURL")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
