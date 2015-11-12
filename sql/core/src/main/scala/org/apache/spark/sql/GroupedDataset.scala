@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql
 
-import java.util.{Iterator => JIterator}
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.function.{Function2 => JFunction2, Function3 => JFunction3, _}
+import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
@@ -127,13 +125,24 @@ class GroupedDataset[K, T] private[sql](
    */
   def map[U : Encoder](f: (K, Iterator[T]) => U): Dataset[U] = {
     val func = (key: K, it: Iterator[T]) => Iterator(f(key, it))
-    new Dataset[U](
-      sqlContext,
-      MapGroups(func, groupingAttributes, logicalPlan))
+    flatMap(func)
   }
 
   def map[U](f: MapGroupFunction[K, T, U], encoder: Encoder[U]): Dataset[U] = {
     map((key, data) => f.call(key, data.asJava))(encoder)
+  }
+
+  /**
+   * Reduces the elements of each group of data using the specified binary function.
+   * The given function must be commutative and associative or the result may be non-deterministic.
+   */
+  def reduce(f: (T, T) => T): Dataset[(K, T)] = {
+    val func = (key: K, it: Iterator[T]) => Iterator(key -> it.reduce(f))
+    flatMap(func)(ExpressionEncoder.tuple(kEnc, tEnc))
+  }
+
+  def reduce(f: ReduceFunction[T]): Dataset[(K, T)] = {
+    reduce(f.call _)
   }
 
   // To ensure valid overloading.
