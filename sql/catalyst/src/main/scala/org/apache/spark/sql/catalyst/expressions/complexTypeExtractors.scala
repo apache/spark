@@ -101,7 +101,7 @@ object ExtractValue {
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends UnaryExpression {
 
-  override def dataType: DataType = field.dataType
+  override def dataType: DataType = child.dataType.asInstanceOf[StructType](ordinal).dataType
   override def nullable: Boolean = child.nullable || field.nullable
   override def toString: String = s"$child.${field.name}"
 

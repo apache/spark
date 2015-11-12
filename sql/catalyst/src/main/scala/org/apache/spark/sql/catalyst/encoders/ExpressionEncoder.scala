@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType}
 
 /**
  * A factory for constructing encoders that convert objects and primitves to and from the
@@ -67,14 +67,41 @@ object ExpressionEncoder {
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
     val schema =
       StructType(
-        encoders.zipWithIndex.map { case (e, i) => StructField(s"_${i + 1}", e.schema)})
+        encoders.zipWithIndex.map { case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)})
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
-    val extractExpressions = encoders.map {
-      case e if e.flat => e.extractExpressions.head
-      case other => CreateStruct(other.extractExpressions)
+
+    // Rebind the encoders to the nested schema that will be produced by the aggregation.
+    val newConstructExpressions = encoders.zipWithIndex.map {
+      case (e, i) if !e.flat =>
+        println(s"=== $i - nested ===")
+        println(e.constructExpression.treeString)
+        println()
+        println(e.nested(i).constructExpression.treeString)
+
+        e.nested(i).constructExpression
+      case (e, i) =>
+        println(s"=== $i - flat ===")
+        println(e.constructExpression.treeString)
+        println()
+        println(e.shift(i).constructExpression.treeString)
+
+        e.shift(i).constructExpression
     }
+
     val constructExpression =
-      NewInstance(cls, encoders.map(_.constructExpression), false, ObjectType(cls))
+      NewInstance(cls, newConstructExpressions, false, ObjectType(cls))
+
+    val input = BoundReference(0, ObjectType(cls), false)
+    val extractExpressions = encoders.zipWithIndex.map {
+      case (e, i) if !e.flat => CreateStruct(e.extractExpressions.map(_ transformUp {
+        case b: BoundReference =>
+          Invoke(input, s"_${i + 1}", b.dataType, Nil)
+      }))
+      case (e, i) => e.extractExpressions.head transformUp {
+        case b: BoundReference =>
+          Invoke(input, s"_${i + 1}", b.dataType, Nil)
+      }
+    }
 
     new ExpressionEncoder[Any](
       schema,
@@ -121,9 +148,12 @@ case class ExpressionEncoder[T](
    * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
    * copy the result before making another call if required.
    */
-  def toRow(t: T): InternalRow = {
+  def toRow(t: T): InternalRow = try {
     inputRow(0) = t
     extractProjection(inputRow)
+  } catch {
+    case e: Exception =>
+      throw new RuntimeException(s"Error while encoding: $e\n${extractExpressions.map(_.treeString).mkString("\n")}", e)
   }
 
   /**
@@ -188,6 +218,24 @@ case class ExpressionEncoder[T](
   def shift(delta: Int): ExpressionEncoder[T] = {
     copy(constructExpression = constructExpression transform {
       case r: BoundReference => r.copy(ordinal = r.ordinal + delta)
+    })
+  }
+
+  /**
+   * Returns a copy of this encoder where the expressions used to create an object given an
+   * input row have been modified to pull the object out from a nested struct, instead of the
+   * top level fields.
+   */
+  def nested(i: Int): ExpressionEncoder[T] = {
+    val input = BoundReference(i, NullType, true)
+    copy(constructExpression = constructExpression transformUp {
+      case u: Attribute =>
+        UnresolvedExtractValue(input, Literal(u.name))
+      case b: BoundReference =>
+        GetStructField(
+          input,
+          StructField(s"i[${b.ordinal}]", b.dataType),
+          b.ordinal)
     })
   }
 

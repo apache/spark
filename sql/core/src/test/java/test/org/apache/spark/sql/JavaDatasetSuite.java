@@ -157,7 +157,6 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(6, reduced);
   }
 
-  @Test
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());

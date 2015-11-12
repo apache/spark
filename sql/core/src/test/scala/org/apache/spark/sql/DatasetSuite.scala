@@ -219,7 +219,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("groupBy function, reduce") {
-    val ds = Seq("abc", "xzy", "hello").toDS()
+    val ds = Seq("abc", "xyz", "hello").toDS()
     val agged = ds.groupBy(_.length).reduce(_ + _)
 
     checkAnswer(

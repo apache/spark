@@ -78,8 +78,7 @@ case class TypedAggregateExpression(
 
   override lazy val resolved: Boolean = aEncoder.isDefined
 
-  override lazy val inputTypes: Seq[DataType] =
-    aEncoder.map(_.schema.map(_.dataType)).getOrElse(Nil)
+  override lazy val inputTypes: Seq[DataType] = Nil
 
   override val aggBufferSchema: StructType = bEncoder.schema
 

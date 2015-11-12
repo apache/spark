@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.types.StructType
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -26,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression, Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 
 
 /**
@@ -44,9 +46,11 @@ import org.apache.spark.sql.execution.QueryExecution
 class GroupedDataset[K, T] private[sql](
     private val kEncoder: Encoder[K],
     private val tEncoder: Encoder[T],
-    queryExecution: QueryExecution,
+    val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
-    private val groupingAttributes: Seq[Attribute]) extends Serializable {
+    private val groupingAttributes: Seq[Attribute]) extends Queryable with Serializable {
+
+  def schema: StructType = ???
 
   private implicit val kEnc = kEncoder match {
     case e: ExpressionEncoder[K] => e.unbind(groupingAttributes).resolve(groupingAttributes)
@@ -138,7 +142,9 @@ class GroupedDataset[K, T] private[sql](
    */
   def reduce(f: (T, T) => T): Dataset[(K, T)] = {
     val func = (key: K, it: Iterator[T]) => Iterator(key -> it.reduce(f))
-    flatMap(func)(ExpressionEncoder.tuple(kEnc, tEnc))
+    println(ExpressionEncoder.tuple(kEnc, tEnc).constructExpression.treeString)
+
+    flatMap(func)(ExpressionEncoder.tuple(kEncoder.asInstanceOf[ExpressionEncoder[K]], tEncoder.asInstanceOf[ExpressionEncoder[T]]))
   }
 
   def reduce(f: ReduceFunction[T]): Dataset[(K, T)] = {
@@ -156,37 +162,15 @@ class GroupedDataset[K, T] private[sql](
    * TODO: does not handle aggrecations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val aliases = (groupingAttributes ++ columns.map(_.expr)).map {
-      case u: UnresolvedAttribute => UnresolvedAlias(u)
-      case expr: NamedExpression => expr
-      case expr: Expression => Alias(expr, expr.prettyString)()
-    }
-
-    val unresolvedPlan = Aggregate(groupingAttributes, aliases, logicalPlan)
-
-    // Fill in the input encoders for any aggregators in the plan.
-    val withEncoders = unresolvedPlan transformAllExpressions {
-      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(
-          aEncoder = Some(tEnc.asInstanceOf[ExpressionEncoder[Any]]),
-          children = dataAttributes)
-    }
-    val execution = new QueryExecution(sqlContext, withEncoders)
-
-    val columnEncoders = columns.map(_.encoder.asInstanceOf[ExpressionEncoder[_]])
-
-    // Rebind the encoders to the nested schema that will be produced by the aggregation.
-    val encoders = (kEnc +: columnEncoders).zip(execution.analyzed.output).map {
-      case (e: ExpressionEncoder[_], a) if !e.flat =>
-        e.nested(a).resolve(execution.analyzed.output)
-      case (e, a) =>
-        e.unbind(a :: Nil).resolve(execution.analyzed.output)
-    }
+    val encoders = columns.map(_.encoder)
+    println(tEnc)
+    val namedColumns = nameColumns(columns.map(_.withInputType(tEnc, dataAttributes)))
+    val execution = new QueryExecution(sqlContext, Aggregate(groupingAttributes, groupingAttributes ++ namedColumns, logicalPlan))
 
     new Dataset(
       sqlContext,
       execution,
-      ExpressionEncoder.tuple(encoders))
+      ExpressionEncoder.tuple(kEnc +: encoders))
   }
 
   /**

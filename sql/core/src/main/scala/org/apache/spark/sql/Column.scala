@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
@@ -45,7 +47,25 @@ private[sql] object Column {
  *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
  * @tparam U The output type of this column.
  */
-class TypedColumn[-T, U](expr: Expression, val encoder: Encoder[U]) extends Column(expr)
+class TypedColumn[-T, U](
+    expr: Expression,
+    private[sql] val encoder: ExpressionEncoder[U]) extends Column(expr) {
+
+  /**
+   * Inserts the specific input type and schema into any expressions that are expected to operate
+   * on a decoded object.
+   */
+  private[sql] def withInputType(
+      inputEncoder: ExpressionEncoder[_],
+      schema: Seq[Attribute]): TypedColumn[T, U] = {
+    new TypedColumn[T, U] (expr transform {
+      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(
+          aEncoder = Some(inputEncoder.asInstanceOf[ExpressionEncoder[Any]]),
+          children = schema)
+    }, encoder)
+  }
+}
 
 /**
  * :: Experimental ::

@@ -82,45 +82,45 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("typed aggregation: TypedAggregator, expr, expr") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-
-    checkAnswer(
-      ds.groupBy(_._1).agg(
-        sum(_._2),
-        expr("sum(_2)").as[Int],
-        count("*")),
-      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
-  }
-
-  test("typed aggregation: complex case") {
-    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-
-    checkAnswer(
-      ds.groupBy(_._1).agg(
-        expr("avg(_2)").as[Double],
-        TypedAverage.toColumn),
-      ("a", 2.0, 2.0), ("b", 3.0, 3.0))
-  }
-
-  test("typed aggregation: complex result type") {
-    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-
-    checkAnswer(
-      ds.groupBy(_._1).agg(
-        expr("avg(_2)").as[Double],
-        ComplexResultAgg.toColumn),
-      ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
-  }
-
-  test("typed aggregation: in project list") {
-    val ds = Seq(1, 3, 2, 5).toDS()
-
-    checkAnswer(
-      ds.select(sum((i: Int) => i)),
-      11)
-    checkAnswer(
-      ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
-      11 -> 22)
-  }
+//  test("typed aggregation: TypedAggregator, expr, expr") {
+//    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+//
+//    checkAnswer(
+//      ds.groupBy(_._1).agg(
+//        sum(_._2),
+//        expr("sum(_2)").as[Int],
+//        count("*")),
+//      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
+//  }
+//
+//  test("typed aggregation: complex case") {
+//    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+//
+//    checkAnswer(
+//      ds.groupBy(_._1).agg(
+//        expr("avg(_2)").as[Double],
+//        TypedAverage.toColumn),
+//      ("a", 2.0, 2.0), ("b", 3.0, 3.0))
+//  }
+//
+//  test("typed aggregation: complex result type") {
+//    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+//
+//    checkAnswer(
+//      ds.groupBy(_._1).agg(
+//        expr("avg(_2)").as[Double],
+//        ComplexResultAgg.toColumn),
+//      ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
+//  }
+//
+//  test("typed aggregation: in project list") {
+//    val ds = Seq(1, 3, 2, 5).toDS()
+//
+//    checkAnswer(
+//      ds.select(sum((i: Int) => i)),
+//      11)
+//    checkAnswer(
+//      ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
+//      11 -> 22)
+//  }
 }
