@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
@@ -31,7 +32,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
 import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
-
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -58,7 +58,8 @@ import org.apache.spark.util.Utils
 private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
-    mode: SaveMode)
+    mode: SaveMode,
+    codec: Option[Class[_ <: CompressionCodec]])
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -126,7 +127,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
           """.stripMargin)
 
         val writerContainer = if (partitionColumns.isEmpty && relation.maybeBucketSpec.isEmpty) {
-          new DefaultWriterContainer(relation, job, isAppend)
+          new DefaultWriterContainer(relation, job, isAppend, codec)
         } else {
           val output = df.queryExecution.executedPlan.output
           val (partitionOutput, dataOutput) =
@@ -140,7 +141,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
             output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
             sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
-            isAppend)
+            isAppend,
+            codec)
         }
 
         // This call shouldn't be put into the `try` block below because it only initializes and
