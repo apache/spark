@@ -325,7 +325,7 @@ sealed abstract class LDAModel private[ml] (
   extends Model[LDAModel] with LDAParams with Logging {
 
   // NOTE to developers:
-  //  This abstraction should contain all important functionality for basic usage.
+  //  This abstraction should contain all important functionality for basic LDA usage.
   //  Specializations of this class can contain expert-only functionality.
 
   /**
