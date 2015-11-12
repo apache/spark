@@ -27,5 +27,4 @@ import org.apache.spark.annotation.DeveloperApi
 class SQLMetricInfo(
     val name: String,
     val accumulatorId: Long,
-    val metricParam: String) {
-}
+    val metricParam: String)
