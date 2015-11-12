@@ -424,6 +424,81 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
+  test("skip remaining records when using rate controller") {
+    val topic = "backpressure2"
+    val topicPartition = TopicAndPartition(topic, 0)
+    kafkaTestUtils.createTopic(topic)
+    val kafkaParams = Map(
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "auto.offset.reset" -> "smallest"
+    )
+
+    val batchIntervalMilliseconds = 100
+    val estimator = new ConstantEstimator(100)
+    val messageKeys = (1 to 200).map(_.toString)
+    val messages = messageKeys.map((_, 1)).toMap
+
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.kafka.maxRatePerPartition", "100")
+      .set("spark.streaming.kafka.skipRemainingRecords", "true")
+
+    // Setup the streaming context
+    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
+
+    val kafkaStream = withClue("Error creating direct stream") {
+      val kc = new KafkaCluster(kafkaParams)
+      val messageHandler = (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message)
+      val m = kc.getEarliestLeaderOffsets(Set(topicPartition))
+        .fold(e => Map.empty[TopicAndPartition, Long], m => m.mapValues(lo => lo.offset))
+
+      new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
+        ssc, kafkaParams, m, messageHandler) {
+        override protected[streaming] val rateController =
+          Some(new DirectKafkaRateController(id, estimator))
+      }
+    }
+
+    val collectedData =
+      new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
+
+    // Used for assertion failure messages.
+    def dataToString: String =
+      collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
+
+    // This is to collect the raw data received from Kafka
+    kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
+      val data = rdd.map { _._2 }.collect()
+      collectedData += data
+    }
+
+    ssc.start()
+
+    // Try different rate limits.
+    // Send data to Kafka and wait for arrays of data to appear matching the rate.
+    Seq(100, 50, 20).foreach { rate =>
+      collectedData.clear()       // Empty this buffer on each pass.
+      estimator.updateRate(rate)  // Set a new rate.
+      // Expect blocks of data equal to "rate", scaled by the interval length in secs.
+      val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
+      kafkaTestUtils.sendMessages(topic, messages)
+      eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
+        // Assert that rate estimator values are used to determine maxMessagesPerPartition.
+        // Funky "-" in message makes the complete assertion message read better.
+        var totalSize: Int = 0
+        collectedData.map(totalSize += _.size)
+        assert(totalSize < messageKeys.size && totalSize > 0 && collectedData.last.size == 0,
+          s"No records are skipped for rate $rate when " +
+            s"spark.streaming.kafka.skipRemainingRecords = true")
+      }
+    }
+
+    ssc.stop()
+  }
+
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
