@@ -65,7 +65,7 @@ public class JavaLBFGSExample {
     double regParam = 0.1;
     Vector initialWeightsWithIntercept = Vectors.dense(new double[numFeatures + 1]);
 
-    Tuple2<Vector, double[]> result = LBFGS.runLBFGS(
+    Tuple2<Vector, double[], Integer> result = LBFGS.runLBFGS(
       training.rdd(),
       new LogisticGradient(),
       new SquaredL2Updater(),
