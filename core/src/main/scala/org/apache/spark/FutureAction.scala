@@ -126,6 +126,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   @throws(classOf[Exception])
   override def result(atMost: Duration)(implicit permit: CanAwait): T = {
     jobWaiter.completionFuture.ready(atMost)
+    assert(value.isDefined, "Future has not completed properly")
     value.get.get
   }
 
