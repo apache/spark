@@ -2056,7 +2056,7 @@ class DAG(object):
         has been reached
         """
         TI = TaskInstance
-        qry = session.query(func.count(TI)).filter(
+        qry = session.query(func.count(TI.task_id)).filter(
             TI.dag_id == self.dag_id,
             TI.task_id.in_(self.task_ids),
             TI.state == State.RUNNING,
