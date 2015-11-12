@@ -59,11 +59,11 @@ If you are proposing a feature:
 
 Assuming you are working in a virtualenv. Install development requirements:
 
-cd $AIRFLOW_HOME
-virtualenv env
-source env/bin/activate
-pip install -r requirements.txt
-python setup.py develop
+    cd $AIRFLOW_HOME
+    virtualenv env
+    source env/bin/activate
+    pip install -r requirements.txt
+    python setup.py develop
 
 Tests can then be run with (see also the [Running unit tests](#running-unit-tests) section below):
 
@@ -116,7 +116,7 @@ Once your unit test environment is setup, you should be able to simply run
 For example, in order to just execute the "core" unit tests, run the following: 
 
 ```
-./run_unit_tests.sh tests.core:CoreTests
+./run_unit_tests.sh tests.core:CoreTest
 ```
 
 or a single test method: 
