@@ -49,7 +49,7 @@ private[streaming] trait PythonStreamingListener{
       outputOperationCompleted: JavaStreamingListenerOutputOperationCompleted) { }
 }
 
-class PythonStreamingListenerWrapper(listener: PythonStreamingListener)
+private[streaming] class PythonStreamingListenerWrapper(listener: PythonStreamingListener)
   extends JavaStreamingListener {
 
   /** Called when a receiver has been started */

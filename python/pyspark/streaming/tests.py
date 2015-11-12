@@ -443,24 +443,39 @@ class StreamingListenerTests(PySparkStreamingTestCase):
 
         self.assertEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
-
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+            self.assertTrue(info.streamIdToInputInfo().isEmpty())
+            self.assertFalse(info.outputOperationInfos().isEmpty())
+            self.assertIsNotNone(info.outputOperationInfos().get(0))
             self.assertEqual(info.schedulingDelay(), -1)
             self.assertEqual(info.processingDelay(), -1)
             self.assertEqual(info.totalDelay(), -1)
+            self.assertEqual(info.numRecords(), 0)
 
         self.assertEqual(len(batchInfosStarted), 4)
         for info in batchInfosStarted:
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+            self.assertTrue(info.streamIdToInputInfo().isEmpty())
+            self.assertFalse(info.outputOperationInfos().isEmpty())
+            self.assertIsNotNone(info.outputOperationInfos().get(0))
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertEqual(info.processingDelay(), -1)
             self.assertEqual(info.totalDelay(), -1)
+            self.assertEqual(info.numRecords(), 0)
 
         self.assertEqual(len(batchInfosCompleted), 4)
-
         for info in batchInfosCompleted:
-
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+            self.assertTrue(info.streamIdToInputInfo().isEmpty())
+            self.assertFalse(info.outputOperationInfos().isEmpty())
+            self.assertIsNotNone(info.outputOperationInfos().get(0))
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertGreaterEqual(info.processingDelay(), 0)
             self.assertGreaterEqual(info.totalDelay(), 0)
+            self.assertEqual(info.numRecords(), 0)
 
 
 class WindowFunctionTests(PySparkStreamingTestCase):
