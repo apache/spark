@@ -77,7 +77,7 @@ class EquivalentExpressions {
    * an empty collection if there are none.
    */
   def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.get(Expr(e)).getOrElse(mutable.MutableList())
+    equivalenceMap.getOrElse(Expr(e), mutable.MutableList())
   }
 
   /**
