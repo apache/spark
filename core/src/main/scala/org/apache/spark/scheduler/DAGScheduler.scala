@@ -126,6 +126,7 @@ class DAGScheduler(
       sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
       sc.env.blockManager.master,
       sc.env)
+    logDebug("Starting DAGScheduler")
   }
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
