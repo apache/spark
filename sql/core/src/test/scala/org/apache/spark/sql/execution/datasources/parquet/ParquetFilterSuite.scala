@@ -65,13 +65,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           filters
       }.flatten.reduceLeftOption(_ && _)
 
-      assert(maybeRelation.exists(_.isInstanceOf[ParquetRelation]), "Source type is not Parquet.")
+      assert(maybeRelation.exists(_.isInstanceOf[ParquetRelation]), "Datasource is not Parquet")
 
-      assert(maybeAnalyzedPredicate.isDefined, "No filter is given to the query.")
+      assert(maybeAnalyzedPredicate.isDefined, "No filter is given to the query")
 
       val relation = maybeRelation.get
-      val (_, selectedFilters) = DataSourceStrategy.selectFilters(relation, maybeAnalyzedPredicate.toSeq)
-      assert(selectedFilters.nonEmpty, "No filter is pushed down.")
+      val (_, selectedFilters) =
+        DataSourceStrategy.selectFilters(relation, maybeAnalyzedPredicate.toSeq)
+      assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
       selectedFilters.foreach { pred =>
         val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
@@ -115,7 +116,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
   }
 
-  private def extractSourceRDDToDataFrame(df: DataFrame): DataFrame ={
+  private def extractSourceRDDToDataFrame(df: DataFrame): DataFrame = {
 
     // This is the source RDD without Spark-side filtering.
     val schema = df.schema
