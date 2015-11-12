@@ -195,7 +195,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("stddev") {
-    val testData2ADev = math.sqrt(4 / 5.0)
+    val testData2ADev = math.sqrt(4.0 / 5.0)
     checkAnswer(
       testData2.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
       Row(testData2ADev, math.sqrt(4 / 6.0), testData2ADev))
@@ -205,7 +205,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
     emptyTableData.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
-    Row(null, null, null))
+    Row(Double.NaN, Double.NaN, Double.NaN))
   }
 
   test("zero sum") {

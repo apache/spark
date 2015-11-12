@@ -1007,7 +1007,7 @@ test_that("group by, agg functions", {
   df3 <- agg(gd, age = "stddev")
   expect_is(df3, "DataFrame")
   df3_local <- collect(df3)
-  expect_equal(0, df3_local[df3_local$name == "Andy",][1, 2])
+  expect_true(is.nan(df3_local[df3_local$name == "Andy",][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "DataFrame")
@@ -1038,7 +1038,7 @@ test_that("group by, agg functions", {
   df7 <- agg(gd2, value = "stddev")
   df7_local <- collect(df7)
   expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
-  expect_equal(0, df7_local[df7_local$name == "ID2",][1, 2])
+  expect_true(is.nan(df7_local[df7_local$name == "ID2",][1, 2]))
 
   mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
                   "{\"name\":\"Andy\", \"age\":30}",
