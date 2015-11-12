@@ -353,12 +353,6 @@ private[spark] object SQLConf {
     defaultValue = Some(5 * 60),
     doc = "Timeout in seconds for the broadcast wait time in broadcast joins.")
 
-  // Options that control which operators can be chosen by the query planner.  These should be
-  // considered hints and may be ignored by future versions of Spark SQL.
-  val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(true),
-    doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
-
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
     doc = "Set a Fair Scheduler pool for a JDBC client session")
@@ -469,6 +463,7 @@ private[spark] object SQLConf {
     val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
     val CODEGEN_ENABLED = "spark.sql.codegen"
     val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
+    val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
   }
 }
 
@@ -532,8 +527,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
-
-  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
