@@ -299,7 +299,20 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
 }
 
 /**
- * Converts time string with given pattern
+ * Converts time string with given pattern.
+ * Deterministic version of [[UnixTimestamp]], must have at least one parameter.
+ */
+case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
+  override def left: Expression = timeExp
+  override def right: Expression = format
+
+  def this(time: Expression) = {
+    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+  }
+}
+
+/**
+ * Converts time string with given pattern.
  * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
  * to Unix time stamp (in seconds), returns null if fail.
  * Note that hive Language Manual says it returns 0 if fail, but in fact it returns null.
@@ -308,9 +321,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
  * If the first parameter is a Date or Timestamp instead of String, we will ignore the
  * second parameter.
  */
-case class UnixTimestamp(timeExp: Expression, format: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
-
+case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   override def left: Expression = timeExp
   override def right: Expression = format
 
@@ -321,6 +332,9 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
   def this() = {
     this(CurrentTimestamp())
   }
+}
+
+abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
@@ -347,7 +361,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression)
             null
           }
         case StringType =>
-          val f = format.eval(input)
+          val f = right.eval(input)
           if (f == null) {
             null
           } else {
