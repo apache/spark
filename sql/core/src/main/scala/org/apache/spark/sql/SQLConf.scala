@@ -437,6 +437,13 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
+  val DATAFRAME_PIVOT_MAX_VALUES = intConf(
+    "spark.sql.pivotMaxValues",
+    defaultValue = Some(10000),
+    doc = "When doing a pivot without specifying values for the pivot column this is the maximum " +
+      "number of (distinct) values that will be collected without error."
+  )
+
   val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
     defaultValue = Some(true),
     isPublic = false,
