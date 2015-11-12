@@ -453,8 +453,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    *
    * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
    *         predicate [[Expression]]s that are either not convertible or cannot be handled by
-   *         `relation`. The second element contains all converted data source [[Filter]]s that can
-   *        be handled by `relation`.
+   *         `relation`. The second element contains all converted data source [[Filter]]s that
+   *         will be pushed down to the data source.
    */
   protected[sql] def selectFilters(
     relation: BaseRelation,
@@ -476,7 +476,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Catalyst predicate expressions that cannot be translated to data source filters.
     val unrecognizedPredicates = predicates.filterNot(translatedMap.contains)
 
-    // Data source filters that cannot be handled by `relation`
+    // Data source filters that cannot be handled by `relation`. The semantic of a unhandled filter
+    // at here is that a data source may not be able to apply this filter to every row
+    // of the underlying dataset.
     val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
 
     val (unhandled, handled) = translated.partition {
@@ -491,6 +493,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // Translated data source filters that can be handled by `relation`
     val (_, handledFilters) = handled.unzip
 
-    (unrecognizedPredicates ++ unhandledPredicates, handledFilters)
+    // translated contains all filters that have been converted to the public Filter interface.
+    // We should always push them to the data source no matter whether the data source can apply
+    // a filter to every row or not.
+    val (_, translatedFilters) = translated.unzip
+
+    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
   }
 }

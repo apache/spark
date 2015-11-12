@@ -235,9 +235,11 @@ abstract class BaseRelation {
   def needConversion: Boolean = true
 
   /**
-   * Given an array of [[Filter]]s, returns an array of [[Filter]]s that this data source relation
-   * cannot handle.  Spark SQL will apply all returned [[Filter]]s against rows returned by this
-   * data source relation.
+   * Returns the list of [[Filter]]s that this datasource may not be able to handle.
+   * These returned [[Filter]]s will be evaluated by Spark SQL after data is output by a scan.
+   * By default, this function will return all filters, as it is always safe to
+   * double evaluate a [[Filter]]. However, specific implementations can override this function to
+   * avoid double filtering when they are capable of processing a filter internally.
    *
    * @since 1.6.0
    */
