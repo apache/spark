@@ -22,6 +22,7 @@ import scala.collection.mutable
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import breeze.stats.distributions.StudentsT
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.ml.feature.Instance
@@ -30,7 +31,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
@@ -341,6 +342,58 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
+
+  /**
+   * Returns a [[Writer]] instance for this ML instance.
+   *
+   * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
+   * An option to save [[summary]] may be added in the future.
+   */
+  override def write: Writer = new LinearRegressionWriter(this)
+}
+
+/** [[Writer]] instance for [[LinearRegressionModel]] */
+private[regression] class LinearRegressionWriter(instance: LinearRegressionModel)
+  extends Writer with Logging {
+
+  private case class Data(intercept: Double, coefficients: Vector)
+
+  override protected def saveImpl(path: String): Unit = {
+    // Save metadata and Params
+    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    // Save model data: intercept, coefficients
+    val data = Data(instance.intercept, instance.coefficients)
+    val dataPath = new Path(path, "data").toString
+    sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
+  }
+}
+
+object LinearRegressionModel extends Readable[LinearRegressionModel] {
+
+  override def read: Reader[LinearRegressionModel] = new LinearRegressionReader
+
+  override def load(path: String): LinearRegressionModel = read.load(path)
+}
+
+
+private[regression] class LinearRegressionReader extends Reader[LinearRegressionModel] {
+
+  /** Checked against metadata when loading model */
+  private val className = "org.apache.spark.ml.regression.LinearRegressionModel"
+
+  override def load(path: String): LinearRegressionModel = {
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+    val dataPath = new Path(path, "data").toString
+    val data = sqlContext.read.format("parquet").load(dataPath)
+      .select("intercept", "coefficients").head()
+    val intercept = data.getDouble(0)
+    val coefficients = data.getAs[Vector](1)
+    val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
+
+    DefaultParamsReader.getAndSetParams(model, metadata)
+    model
+  }
 }
 
 /**
@@ -354,7 +407,7 @@ class LinearRegressionModel private[ml] (
     val coefficients: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams {
+  with LinearRegressionParams with Writable {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
