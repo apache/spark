@@ -1,7 +1,6 @@
 from future import standard_library
 standard_library.install_aliases()
 import logging
-import json
 import re
 import fnmatch
 import configparser
@@ -77,32 +76,29 @@ class S3Hook(BaseHook):
             s3_conn_id='s3_default'):
         self.s3_conn_id = s3_conn_id
         self.s3_conn = self.get_connection(s3_conn_id)
-        self.profile = None
-        self._sts_conn_required = False
-        self._creds_in_config_file = False
-        try:
-            self.extra_params = json.loads(self.s3_conn.extra)
-            if 'aws_secret_access_key' in self.extra_params:
-                self._a_key = self.extra_params['aws_access_key_id']
-                self._s_key = self.extra_params['aws_secret_access_key']
-            else:
-                self._creds_in_config_file = True
-                self.s3_config_format = self.extra_params['s3_config_format']
-                self.s3_config_file = self.extra_params['s3_config_file']
-            if 'profile' in self.extra_params:
-                self.profile = self.extra_params['profile']
-            self._sts_conn_required = 'aws_account_id' in self.extra_params
-            if self._sts_conn_required:
-                self.aws_account_id = self.extra_params['aws_account_id']
-                self.aws_iam_role = self.extra_params['aws_iam_role']
-                self.role_arn = "arn:aws:iam::" + self.aws_account_id
-                self.role_arn += ":role/" + self.aws_iam_role
-        except TypeError as e:
-            raise AirflowException("S3 connection needs to set configuration"
-                            " parameters in extra")
-        except KeyError as e:
-            raise AirflowException("S3 connection definition needs to include"
-                            " {p} in extra".format(p=e.message))
+        self.extra_params = self.s3_conn.extra_dejson
+        self.profile = self.extra_params.get('profile')
+        self._creds_in_conn = 'aws_secret_access_key' in self.extra_params
+        self._creds_in_config_file = 's3_config_file' in self.extra_params
+        self._default_to_boto = False
+        if self._creds_in_conn:
+            self._a_key = self.extra_params['aws_access_key_id']
+            self._s_key = self.extra_params['aws_secret_access_key']
+        elif self._creds_in_config_file:
+            self.s3_config_file = self.extra_params['s3_config_file']
+            # The format can be None and will default to boto in the parser
+            self.s3_config_format = self.extra_params.get('s3_config_format')
+        else:
+            self._default_to_boto = True
+        # STS support for cross account resource access
+        self._sts_conn_required = ('aws_account_id' in self.extra_params or
+                                   'role_arn' in self.extra_params)
+        if self._sts_conn_required:
+            self.role_arn = (self.extra_params.get('role_arn') or
+                             "arn:aws:iam::" +
+                             self.extra_params['aws_account_id'] +
+                             ":role/" +
+                             self.extra_params['aws_iam_role'])
         self.connection = self.get_conn()
 
     def __getstate__(self):
@@ -117,10 +113,10 @@ class S3Hook(BaseHook):
     def _parse_s3_url(self, s3url):
         warnings.warn(
             'Please note: S3Hook._parse_s3_url() is now '
-            'S3Hook.parse_s3_url() (no leading underscore).', 
+            'S3Hook.parse_s3_url() (no leading underscore).',
             DeprecationWarning)
         return self.parse_s3_url(s3url)
-        
+
     @staticmethod
     def parse_s3_url(s3url):
         parsed_url = urlparse(s3url)
@@ -138,11 +134,14 @@ class S3Hook(BaseHook):
         """
         Returns the boto S3Connection object.
         """
+        if self._default_to_boto:
+            return S3Connection(profile_name=self.profile)
+        a_key = s_key = None
         if self._creds_in_config_file:
             a_key, s_key = _parse_s3_config(self.s3_config_file,
                                             self.s3_config_format,
                                             self.profile)
-        else:
+        elif self._creds_in_conn:
             a_key = self._a_key
             s_key = self._s_key
         if self._sts_conn_required:
@@ -161,7 +160,8 @@ class S3Hook(BaseHook):
                 )
         else:
             connection = S3Connection(aws_access_key_id=a_key,
-                                      aws_secret_access_key=s_key)
+                                      aws_secret_access_key=s_key,
+                                      profile_name=self.profile)
         return connection
 
     def check_for_bucket(self, bucket_name):
@@ -339,7 +339,6 @@ class S3Hook(BaseHook):
         else:
             key_obj = bucket.get_key(key)
         key_size = key_obj.set_contents_from_string(string_data,
-                                                      replace=replace)
+                                                    replace=replace)
         logging.info("The key {key} now contains"
                      " {key_size} bytes".format(**locals()))
-
