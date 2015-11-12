@@ -324,6 +324,10 @@ sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
   extends Model[LDAModel] with LDAParams with Logging {
 
+  // NOTE to developers:
+  //  This abstraction should contain all important functionality for basic usage.
+  //  Specializations of this class can contain expert-only functionality.
+
   /**
    * Underlying spark.mllib model.
    * If this model was produced by Online LDA, then this is the only model representation.
@@ -332,7 +336,7 @@ sealed abstract class LDAModel private[ml] (
   @Since("1.6.0")
   protected def oldLocalModel: OldLocalLDAModel
 
-  /** Returns underlying spark.mllib model */
+  /** Returns underlying spark.mllib model, which may be local or distributed */
   @Since("1.6.0")
   protected def getModel: OldLDAModel
 
@@ -383,11 +387,11 @@ sealed abstract class LDAModel private[ml] (
    *          (on the order of vocabSize x k).
    */
   @Since("1.6.0")
-  def topicsMatrix: Matrix = getModel.topicsMatrix
+  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
   @Since("1.6.0")
-  def isDistributed: Boolean = false
+  def isDistributed: Boolean
 
   /**
    * Calculates a lower bound on the log likelihood of the entire corpus.
@@ -445,6 +449,15 @@ sealed abstract class LDAModel private[ml] (
 }
 
 
+/**
+ * :: Experimental ::
+ *
+ * Local (non-distributed) model fitted by [[LDA]].
+ *
+ * This model stores the inferred topics only; it does not store info about the training dataset.
+ */
+@Since("1.6.0")
+@Experimental
 class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
@@ -452,19 +465,24 @@ class LocalLDAModel private[ml] (
     sqlContext: SQLContext)
   extends LDAModel(uid, vocabSize, sqlContext) {
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): LocalLDAModel = {
     val copied = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
     copyValues(copied, extra).setParent(parent).asInstanceOf[LocalLDAModel]
   }
 
   override protected def getModel: OldLDAModel = oldLocalModel
+
+  @Since("1.6.0")
+  override def isDistributed: Boolean = false
 }
 
 
 /**
  * :: Experimental ::
  *
- * Distributed model fitted by [[LDA]] using Expectation-Maximization (EM).
+ * Distributed model fitted by [[LDA]].
+ * This type of model is currently only produced by Expectation-Maximization (EM).
  *
  * This model stores the inferred topics, the full training dataset, and the topic distribution
  * for each training document.
@@ -478,7 +496,15 @@ class DistributedLDAModel private[ml] (
     sqlContext: SQLContext)
   extends LDAModel(uid, vocabSize, sqlContext) {
 
-  override protected lazy val oldLocalModel: OldLocalLDAModel = oldDistributedModel.toLocal
+  /** Used to implement [[oldLocalModel]] as a lazy val, but with cheap [[copy()]] */
+  private var oldLocalModelOption: Option[OldLocalLDAModel] = None
+
+  override protected def oldLocalModel: OldLocalLDAModel = {
+    if (oldLocalModelOption.isEmpty) {
+      oldLocalModelOption = Some(oldDistributedModel.toLocal)
+    }
+    oldLocalModelOption.get
+  }
 
   override protected def getModel: OldLDAModel = oldDistributedModel
 
@@ -492,37 +518,13 @@ class DistributedLDAModel private[ml] (
   @Since("1.6.0")
   override def copy(extra: ParamMap): DistributedLDAModel = {
     val copied = new DistributedLDAModel(uid, vocabSize, oldDistributedModel, sqlContext)
-    if (oldLocalModel.nonEmpty) copied.oldLocalModel = oldLocalModel
+    copied.oldLocalModelOption = oldLocalModelOption
     copyValues(copied, extra).setParent(parent)
     copied
   }
 
   @Since("1.6.0")
-  override def topicsMatrix: Matrix = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.topicsMatrix
-  }
-
-  @Since("1.6.0")
   override def isDistributed: Boolean = true
-
-  @Since("1.6.0")
-  override def logLikelihood(dataset: DataFrame): Double = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.logLikelihood(dataset)
-  }
-
-  @Since("1.6.0")
-  override def logPerplexity(dataset: DataFrame): Double = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.logPerplexity(dataset)
-  }
 
   /**
    * Log likelihood of the observed tokens in the training set,
@@ -665,7 +667,7 @@ class LDA @Since("1.6.0") (
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
-        new LDAModel(uid, m.vocabSize, Some(m), dataset.sqlContext)
+        new LocalLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
     }
