@@ -3,9 +3,11 @@ import doctest
 import os
 from time import sleep
 import unittest
+
 from airflow import configuration
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros
+from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
@@ -125,10 +127,17 @@ class CoreTest(unittest.TestCase):
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
     def test_check_operators(self):
+
+        conn_id = "sqlite_default"
+
+        captainHook = BaseHook.get_hook(conn_id=conn_id)
+        captainHook.run("CREATE TABLE operator_test_table (a, b)")
+        captainHook.run("insert into operator_test_table values (1,2)")
+        
         t = operators.CheckOperator(
             task_id='check',
-            sql="SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES",
-            conn_id="mysql_default",
+            sql="select count(*) from operator_test_table" ,
+            conn_id=conn_id,
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
@@ -136,10 +145,13 @@ class CoreTest(unittest.TestCase):
             task_id='value_check',
             pass_value=95,
             tolerance=0.1,
-            conn_id="mysql_default",
+            conn_id=conn_id,
             sql="SELECT 100",
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
+        captainHook.run("drop table operator_test_table")
+
 
     def test_clear_api(self):
         task = self.dag_bash.tasks[0]
