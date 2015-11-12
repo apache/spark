@@ -620,7 +620,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> combined = pairStream.<Integer>combineByKey(i -> i,
-        (x, y) -> x + y, (x, y) -> x + y, new HashPartitioner(2));
+      (x, y) -> x + y, (x, y) -> x + y, new HashPartitioner(2));
 
     JavaTestUtils.attachTestOutputStream(combined);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
@@ -703,7 +703,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaPairDStream<String, Integer> reduceWindowed =
       pairStream.reduceByKeyAndWindow((x, y) -> x + y, (x, y) -> x - y, new Duration(2000),
-          new Duration(1000));
+        new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
