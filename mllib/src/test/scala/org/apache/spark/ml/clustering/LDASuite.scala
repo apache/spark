@@ -156,7 +156,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
 
     MLTestingUtils.checkCopy(model)
 
-    assert(!model.isInstanceOf[DistributedLDAModel])
+    assert(model.isInstanceOf[LocalLDAModel])
     assert(model.vocabSize === vocabSize)
     assert(model.estimatedDocConcentration.size === k)
     assert(model.topicsMatrix.numRows === vocabSize)
@@ -210,7 +210,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.isDistributed)
 
     val localModel = model.toLocal
-    assert(!localModel.isInstanceOf[DistributedLDAModel])
+    assert(localModel.isInstanceOf[LocalLDAModel])
 
     // training logLikelihood, logPrior
     val ll = model.trainingLogLikelihood
