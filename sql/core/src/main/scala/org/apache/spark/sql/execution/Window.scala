@@ -247,11 +247,7 @@ case class Window(
 
         // Get all relevant projections.
         val result = createResultProjection(unboundExpressions)
-        val grouping = if (child.outputsUnsafeRows) {
-          UnsafeProjection.create(partitionSpec, child.output)
-        } else {
-          newProjection(partitionSpec, child.output)
-        }
+        val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
         // Manage the stream and the grouping.
         var nextRow: InternalRow = EmptyRow

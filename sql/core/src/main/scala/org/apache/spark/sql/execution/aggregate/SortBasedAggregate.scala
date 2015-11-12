@@ -78,11 +78,9 @@ case class SortBasedAggregate(
         // so return an empty iterator.
         Iterator[InternalRow]()
       } else {
-        val groupingKeyProjection = if (UnsafeProjection.canSupport(groupingExpressions)) {
+        val groupingKeyProjection =
           UnsafeProjection.create(groupingExpressions, child.output)
-        } else {
-          newMutableProjection(groupingExpressions, child.output)()
-        }
+
         val outputIter = new SortBasedAggregationIterator(
           groupingKeyProjection,
           groupingExpressions.map(_.toAttribute),

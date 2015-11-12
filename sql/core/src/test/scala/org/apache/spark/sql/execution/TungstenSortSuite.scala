@@ -74,7 +74,6 @@ class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
         sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
-      assert(TungstenSort.supportsSchema(inputDf.schema))
       checkThatPlansAgree(
         inputDf,
         plan => ConvertToSafe(

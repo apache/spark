@@ -30,32 +30,6 @@ import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 
-case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-
-  override private[sql] lazy val metrics = Map(
-    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-
-  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val numRows = longMetric("numRows")
-    child.execute().mapPartitions { iter =>
-      val reusableProjection = buildProjection()
-      iter.map { row =>
-        numRows += 1
-        reusableProjection(row)
-      }
-    }
-  }
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-}
-
-
-/**
- * A variant of [[Project]] that returns [[UnsafeRow]]s.
- */
 case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
   override private[sql] lazy val metrics = Map(
