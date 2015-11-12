@@ -201,7 +201,7 @@
     <dependency>
       <groupId>org.json4s</groupId>
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-      <version>3.2.10</version>
+      <version>3.3.0</version>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
