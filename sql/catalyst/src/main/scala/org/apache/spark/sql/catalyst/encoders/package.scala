@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.Encoder
+
 package object encoders {
   private[sql] def encoderFor[A : Encoder]: ExpressionEncoder[A] = implicitly[Encoder[A]] match {
     case e: ExpressionEncoder[A] => e
     case _ => sys.error(s"Only expression encoders are supported today")
   }
 }
-

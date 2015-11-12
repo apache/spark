@@ -21,8 +21,8 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable
 
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
-import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
+import org.apache.xbean.asm5._
+import org.apache.xbean.asm5.Opcodes._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
@@ -41,22 +41,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       l += 1L
       l.add(1L)
     }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
   }
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
     val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
-    BoxingFinder.getClassReader(f.getClass).foreach { cl =>
-      val boxingFinder = new BoxingFinder()
-      cl.accept(boxingFinder, 0)
-      assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
-    }
+    val cl = BoxingFinder.getClassReader(f.getClass)
+    val boxingFinder = new BoxingFinder()
+    cl.accept(boxingFinder, 0)
+    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
   }
 
   /**
@@ -112,33 +110,23 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("Project metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "false",
-      SQLConf.TUNGSTEN_ENABLED.key -> "false") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("Project", Map(
-          "number of rows" -> 2L)))
-      )
-    }
+    // Assume the execution plan is
+    // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
+    val df = person.select('name)
+    testSparkPlanMetrics(df, 1, Map(
+      0L ->("TungstenProject", Map(
+        "number of rows" -> 2L)))
+    )
   }
 
   test("TungstenProject metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = person.select('name)
-      testSparkPlanMetrics(df, 1, Map(
-        0L ->("TungstenProject", Map(
-          "number of rows" -> 2L)))
-      )
-    }
+    // Assume the execution plan is
+    // PhysicalRDD(nodeId = 1) -> TungstenProject(nodeId = 0)
+    val df = person.select('name)
+    testSparkPlanMetrics(df, 1, Map(
+      0L ->("TungstenProject", Map(
+        "number of rows" -> 2L)))
+    )
   }
 
   test("Filter metrics") {
@@ -152,71 +140,30 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("SortBasedAggregate metrics") {
-    // Because SortBasedAggregate may skip different rows if the number of partitions is different,
-    // this test should use the deterministic number of partitions.
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "false",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 2) -> TungstenExchange(nodeId = 1) ->
-      // SortBasedAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
-
-      // Assume the execution plan is
-      // ... -> SortBasedAggregate(nodeId = 3) -> TungstenExchange(nodeId = 2)
-      // -> ExternalSort(nodeId = 1)-> SortBasedAggregate(nodeId = 0)
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        3L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("SortBasedAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
-  }
-
   test("TungstenAggregate metrics") {
-    withSQLConf(
-      SQLConf.UNSAFE_ENABLED.key -> "true",
-      SQLConf.CODEGEN_ENABLED.key -> "true",
-      SQLConf.TUNGSTEN_ENABLED.key -> "true") {
-      // Assume the execution plan is
-      // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
-      // -> TungstenAggregate(nodeId = 0)
-      val df = testData2.groupBy().count() // 2 partitions
-      testSparkPlanMetrics(df, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 2L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 2L,
-          "number of output rows" -> 1L)))
-      )
+    // Assume the execution plan is
+    // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> TungstenAggregate(nodeId = 0)
+    val df = testData2.groupBy().count() // 2 partitions
+    testSparkPlanMetrics(df, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 6L,
+        "number of output rows" -> 2L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 2L,
+        "number of output rows" -> 1L)))
+    )
 
-      // 2 partitions and each partition contains 2 keys
-      val df2 = testData2.groupBy('a).count()
-      testSparkPlanMetrics(df2, 1, Map(
-        2L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 6L,
-          "number of output rows" -> 4L)),
-        0L -> ("TungstenAggregate", Map(
-          "number of input rows" -> 4L,
-          "number of output rows" -> 3L)))
-      )
-    }
+    // 2 partitions and each partition contains 2 keys
+    val df2 = testData2.groupBy('a).count()
+    testSparkPlanMetrics(df2, 1, Map(
+      2L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 6L,
+        "number of output rows" -> 4L)),
+      0L -> ("TungstenAggregate", Map(
+        "number of input rows" -> 4L,
+        "number of output rows" -> 3L)))
+    )
   }
 
   test("SortMergeJoin metrics") {
@@ -486,7 +433,7 @@ private class BoxingFinder(
     method: MethodIdentifier[_] = null,
     val boxingInvokes: mutable.Set[String] = mutable.Set.empty,
     visitedMethods: mutable.Set[MethodIdentifier[_]] = mutable.Set.empty)
-  extends ClassVisitor(ASM4) {
+  extends ClassVisitor(ASM5) {
 
   private val primitiveBoxingClassName =
     Set("java/lang/Long",
@@ -503,11 +450,12 @@ private class BoxingFinder(
     MethodVisitor = {
     if (method != null && (method.name != name || method.desc != desc)) {
       // If method is specified, skip other methods.
-      return new MethodVisitor(ASM4) {}
+      return new MethodVisitor(ASM5) {}
     }
 
-    new MethodVisitor(ASM4) {
-      override def visitMethodInsn(op: Int, owner: String, name: String, desc: String) {
+    new MethodVisitor(ASM5) {
+      override def visitMethodInsn(
+          op: Int, owner: String, name: String, desc: String, itf: Boolean) {
         if (op == INVOKESPECIAL && name == "<init>" || op == INVOKESTATIC && name == "valueOf") {
           if (primitiveBoxingClassName.contains(owner)) {
             // Find boxing methods, e.g, new java.lang.Long(l) or java.lang.Long.valueOf(l)
@@ -522,10 +470,9 @@ private class BoxingFinder(
           if (!visitedMethods.contains(m)) {
             // Keep track of visited methods to avoid potential infinite cycles
             visitedMethods += m
-            BoxingFinder.getClassReader(classOfMethodOwner).foreach { cl =>
-              visitedMethods += m
-              cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
-            }
+            val cl = BoxingFinder.getClassReader(classOfMethodOwner)
+            visitedMethods += m
+            cl.accept(new BoxingFinder(m, boxingInvokes, visitedMethods), 0)
           }
         }
       }
@@ -535,22 +482,14 @@ private class BoxingFinder(
 
 private object BoxingFinder {
 
-  def getClassReader(cls: Class[_]): Option[ClassReader] = {
+  def getClassReader(cls: Class[_]): ClassReader = {
     val className = cls.getName.replaceFirst("^.*\\.", "") + ".class"
     val resourceStream = cls.getResourceAsStream(className)
     val baos = new ByteArrayOutputStream(128)
     // Copy data over, before delegating to ClassReader -
     // else we can run out of open file handles.
     Utils.copyStream(resourceStream, baos, true)
-    // ASM4 doesn't support Java 8 classes, which requires ASM5.
-    // So if the class is ASM5 (E.g., java.lang.Long when using JDK8 runtime to run these codes),
-    // then ClassReader will throw IllegalArgumentException,
-    // However, since this is only for testing, it's safe to skip these classes.
-    try {
-      Some(new ClassReader(new ByteArrayInputStream(baos.toByteArray)))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
+    new ClassReader(new ByteArrayInputStream(baos.toByteArray))
   }
 
 }

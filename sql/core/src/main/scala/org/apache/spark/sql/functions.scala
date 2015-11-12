@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, Encoder}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
@@ -82,9 +82,6 @@ object functions extends LegacyFunctions {
     isDistinct: Boolean = false): Column = {
     Column(func.toAggregateExpression(isDistinct))
   }
-
-  private implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
-
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -269,7 +266,8 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(columnName: String): TypedColumn[Any, Long] = count(Column(columnName)).as[Long]
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(ExpressionEncoder[Long](flat = true))
 
   /**
    * Aggregate function: returns the number of distinct items in a group.

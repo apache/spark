@@ -58,7 +58,7 @@ case class Exchange(
    * Returns true iff we can support the data type, and we are not doing range partitioning.
    */
   private lazy val tungstenMode: Boolean = {
-    unsafeEnabled && codegenEnabled && GenerateUnsafeProjection.canSupport(child.schema) &&
+    GenerateUnsafeProjection.canSupport(child.schema) &&
       !newPartitioning.isInstanceOf[RangePartitioning]
   }
 
