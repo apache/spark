@@ -21,8 +21,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
-import org.apache.spark.ml.{DefaultPipelineReadable, DefaultPipelineWritable, Transformer}
+import org.apache.spark.ml.util._
+import org.apache.spark.ml.Transformer
 import org.apache.spark.mllib.feature
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  */
 @Experimental
 class HashingTF(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultPipelineWritable {
+  extends Transformer with HasInputCol with HasOutputCol with Writable {
 
   def this() = this(Identifiable.randomUID("hashingTF"))
 
@@ -77,12 +77,11 @@ class HashingTF(override val uid: String)
   }
 
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Experimental
-object HashingTF extends DefaultPipelineReadable[HashingTF] {
-  /**
-   * Create a [[HashingTF]] instance using uid
-   */
-  override def newInstance(uid: String): HashingTF = new HashingTF(uid)
+object HashingTF extends Readable[HashingTF] {
+  override def read: Reader[HashingTF] = new DefaultParamsReader[HashingTF]
 }
