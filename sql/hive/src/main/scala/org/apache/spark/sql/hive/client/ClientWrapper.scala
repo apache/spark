@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
@@ -60,7 +59,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 private[hive] class ClientWrapper(
     override val version: HiveVersion,
     config: Map[String, String],
-    initClassLoader: ClassLoader)
+    initClassLoader: ClassLoader,
+    val clientLoader: IsolatedClientLoader)
   extends ClientInterface
   with Logging {
 
@@ -150,31 +150,29 @@ private[hive] class ClientWrapper(
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
     val ret = try {
-      val oldState = SessionState.get()
-      if (oldState == null) {
-        val initialConf = new HiveConf(classOf[SessionState])
-        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-        // the initial value will be the current thread's context class loader
-        // (i.e. initClassLoader at here).
-        // We call initialConf.setClassLoader(initClassLoader) at here to make
-        // this action explicit.
-        initialConf.setClassLoader(initClassLoader)
-        config.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
-            logDebug(s"Hive Config: $k=xxx")
-          } else {
-            logDebug(s"Hive Config: $k=$v")
-          }
-          initialConf.set(k, v)
+      val initialConf = new HiveConf(classOf[SessionState])
+      // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+      // the initial value will be the current thread's context class loader
+      // (i.e. initClassLoader at here).
+      // We call initialConf.setClassLoader(initClassLoader) at here to make
+      // this action explicit.
+      initialConf.setClassLoader(initClassLoader)
+      config.foreach { case (k, v) =>
+        if (k.toLowerCase.contains("password")) {
+          logDebug(s"Hive Config: $k=xxx")
+        } else {
+          logDebug(s"Hive Config: $k=$v")
         }
-        val newState = new SessionState(initialConf)
-        SessionState.start(newState)
-        newState.out = new PrintStream(outputBuffer, true, "UTF-8")
-        newState.err = new PrintStream(outputBuffer, true, "UTF-8")
-        newState
-      } else {
-        oldState
+        initialConf.set(k, v)
       }
+      val state = new SessionState(initialConf)
+      if (clientLoader.cachedHive != null) {
+        Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
+      }
+      SessionState.start(state)
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
     }
@@ -188,11 +186,6 @@ private[hive] class ClientWrapper(
     conf.get(key, defaultValue)
   }
 
-  // TODO: should be a def?s
-  // When we create this val client, the HiveConf of it (conf) is the one associated with state.
-  @GuardedBy("this")
-  private var client = Hive.get(conf)
-
   // We use hive's conf for compatibility.
   private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
   private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
@@ -200,7 +193,7 @@ private[hive] class ClientWrapper(
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
    */
-  private def retryLocked[A](f: => A): A = synchronized {
+  private def retryLocked[A](f: => A): A = clientLoader.synchronized {
     // Hive sometimes retries internally, so set a deadline to avoid compounding delays.
     val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
     var numTries = 0
@@ -215,13 +208,8 @@ private[hive] class ClientWrapper(
           logWarning(
             "HiveClientWrapper got thrift exception, destroying client and retrying " +
               s"(${retryLimit - numTries} tries remaining)", e)
+          clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
-          try {
-            client = Hive.get(state.getConf, true)
-          } catch {
-            case e: Exception if causedByThrift(e) =>
-              logWarning("Failed to refresh hive client, will retry.", e)
-          }
       }
     } while (numTries <= retryLimit && System.nanoTime < deadline)
     if (System.nanoTime > deadline) {
@@ -242,13 +230,26 @@ private[hive] class ClientWrapper(
     false
   }
 
+  def client: Hive = {
+    if (clientLoader.cachedHive != null) {
+      clientLoader.cachedHive.asInstanceOf[Hive]
+    } else {
+      val c = Hive.get(conf)
+      clientLoader.cachedHive = c
+      c
+    }
+  }
+
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  private def withHiveState[A](f: => A): A = retryLocked {
+  def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     // Set the thread local metastore client to the client associated with this ClientWrapper.
     Hive.set(client)
+    // The classloader in clientLoader could be changed after addJar, always use the latest
+    // classloader
+    state.getConf.setClassLoader(clientLoader.classLoader)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
@@ -543,6 +544,23 @@ private[hive] class ClientWrapper(
       numDP,
       holdDDLTime,
       listBucketingEnabled)
+  }
+
+  def addJar(path: String): Unit = {
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    clientLoader.addJar(jarURL)
+    runSqlHive(s"ADD JAR $path")
+  }
+
+  def newSession(): ClientWrapper = {
+    clientLoader.createClient().asInstanceOf[ClientWrapper]
   }
 
   def reset(): Unit = withHiveState {

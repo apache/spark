@@ -186,6 +186,16 @@ private[spark] object SQLConf {
 
   import SQLConfEntry._
 
+  val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
+    defaultValue = Some(true),
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
+      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "have effect.",
+    isPublic = true)
+
   val COMPRESS_CACHED = booleanConf("spark.sql.inMemoryColumnarStorage.compressed",
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
@@ -222,6 +232,25 @@ private[spark] object SQLConf {
   val SHUFFLE_PARTITIONS = intConf("spark.sql.shuffle.partitions",
     defaultValue = Some(200),
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
+
+  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
+    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+      defaultValue = Some(64 * 1024 * 1024),
+      doc = "The target post-shuffle input size in bytes of a task.")
+
+  val ADAPTIVE_EXECUTION_ENABLED = booleanConf("spark.sql.adaptive.enabled",
+    defaultValue = Some(false),
+    doc = "When true, enable adaptive query execution.")
+
+  val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
+    intConf("spark.sql.adaptive.minNumPostShufflePartitions",
+      defaultValue = Some(-1),
+      doc = "The advisory minimal number of post-shuffle partitions provided to " +
+        "ExchangeCoordinator. This setting is used in our test to make sure we " +
+        "have enough parallelism to expose issues that will not be exposed with a " +
+        "single partition. When the value is a non-positive value, this setting will" +
+        "not be provided to ExchangeCoordinator.",
+      isPublic = false)
 
   val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
     defaultValue = Some(true),
@@ -292,10 +321,9 @@ private[spark] object SQLConf {
 
   val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
     key = "spark.sql.parquet.writeLegacyFormat",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.",
-    isPublic = false)
+      "Spark SQL schema and vice versa.")
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
@@ -319,7 +347,7 @@ private[spark] object SQLConf {
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
 
-  val CANONICALIZE_VIEW = booleanConf("spark.sql.canonicalizeView",
+  val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
     defaultValue = Some(false),
     doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
           "Note that this function is experimental and should ony be used when you are using " +
@@ -423,6 +451,12 @@ private[spark] object SQLConf {
   val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
     defaultValue = Some(true), doc = "<TODO>")
 
+  val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
+    defaultValue = Some(true),
+    isPublic = false,
+    doc = "When true, we could use `datasource`.`path` as table in SQL query"
+  )
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -472,6 +506,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
+  private[spark] def targetPostShuffleInputSize: Long =
+    getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+
+  private[spark] def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  private[spark] def minNumPostShufflePartitions: Int =
+    getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
   private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
@@ -480,7 +522,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def canonicalizeView: Boolean = getConf(CANONICALIZE_VIEW)
+  private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
 
@@ -530,6 +572,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   /** ********************** SQLConf functionality methods ************ */
 

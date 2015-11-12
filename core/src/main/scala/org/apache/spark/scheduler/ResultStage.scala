@@ -41,7 +41,27 @@ private[spark] class ResultStage(
    * The active job for this result stage. Will be empty if the job has already finished
    * (e.g., because the job was cancelled).
    */
-  var resultOfJob: Option[ActiveJob] = None
+  private[this] var _activeJob: Option[ActiveJob] = None
+
+  def activeJob: Option[ActiveJob] = _activeJob
+
+  def setActiveJob(job: ActiveJob): Unit = {
+    _activeJob = Option(job)
+  }
+
+  def removeActiveJob(): Unit = {
+    _activeJob = None
+  }
+
+  /**
+   * Returns the sequence of partition ids that are missing (i.e. needs to be computed).
+   *
+   * This can only be called when there is an active job.
+   */
+  override def findMissingPartitions(): Seq[Int] = {
+    val job = activeJob.get
+    (0 until job.numPartitions).filter(id => !job.finished(id))
+  }
 
   override def toString: String = "ResultStage " + id
 }

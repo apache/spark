@@ -156,11 +156,15 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq("-encoding", "UTF-8"),
 
+    scalacOptions in Compile ++= Seq(
+      "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
+    ),
+
     // Implements -Xfatal-warnings, ignoring deprecation warnings.
     // Code snippet taken from https://issues.scala-lang.org/browse/SI-8410.
     compile in Compile := {
       val analysis = (compile in Compile).value
-      val s = streams.value
+      val out = streams.value
 
       def logProblem(l: (=> String) => Unit, f: File, p: xsbti.Problem) = {
         l(f.toString + ":" + p.position.line.fold("")(_ + ":") + " " + p.message)
@@ -177,7 +181,14 @@ object SparkBuild extends PomBuild {
             failed = failed + 1
           }
 
-          logProblem(if (deprecation) s.log.warn else s.log.error, k, p)
+          val printer: (=> String) => Unit = s => if (deprecation) {
+            out.log.warn(s)
+          } else {
+            out.log.error("[warn] " + s)
+          }
+
+          logProblem(printer, k, p)
+
         }
       }
 
@@ -196,7 +207,8 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExcludedDependencies.settings ++ Revolver.settings))
+    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
+      ExcludedDependencies.settings ++ Revolver.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -281,6 +293,14 @@ object Flume {
 }
 
 /**
+ * Overrides to work around sbt's dependency resolution being different from Maven's.
+ */
+object DependencyOverrides {
+  lazy val settings = Seq(
+    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
+}
+
+/**
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
   */
@@ -305,7 +325,7 @@ object OldDeps {
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
-    scalaVersion := "2.10.4",
+    scalaVersion := "2.10.5",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
@@ -489,6 +509,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
   }
 
+  val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
+
   lazy val settings = scalaJavaUnidocSettings ++ Seq (
     publish := {},
 
@@ -531,8 +553,19 @@ object Unidoc {
       "-noqualifier", "java.lang"
     ),
 
-    // Group similar methods together based on the @group annotation.
-    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq("-groups")
+    // Use GitHub repository for Scaladoc source linke
+    unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
+
+    scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
+      "-groups" // Group similar methods together based on the @group annotation.
+    ) ++ (
+      // Add links to sources when generating Scaladoc for a non-snapshot release
+      if (!isSnapshot.value) {
+        Opts.doc.sourceUrl(unidocSourceBase.value + "€{FILE_PATH}.scala")
+      } else {
+        Seq()
+      }
+    )
   )
 }
 

@@ -59,14 +59,14 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 
   /**
    * Param for quantile probabilities array.
-   * Values of the quantile probabilities array should be in the range [0, 1]
+   * Values of the quantile probabilities array should be in the range (0, 1)
    * and the array should be non-empty.
    * @group param
    */
   @Since("1.6.0")
   final val quantileProbabilities: DoubleArrayParam = new DoubleArrayParam(this,
     "quantileProbabilities", "quantile probabilities array",
-    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1)) && t.length > 0)
+    (t: Array[Double]) => t.forall(ParamValidators.inRange(0, 1, false, false)) && t.length > 0)
 
   /** @group getParam */
   @Since("1.6.0")
@@ -200,17 +200,17 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     val numFeatures = dataset.select($(featuresCol)).take(1)(0).getAs[Vector](0).size
     /*
-       The weights vector has three parts:
+       The parameters vector has three parts:
        the first element: Double, log(sigma), the log of scale parameter
        the second element: Double, intercept of the beta parameter
        the third to the end elements: Doubles, regression coefficients vector of the beta parameter
      */
-    val initialWeights = Vectors.zeros(numFeatures + 2)
+    val initialParameters = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialWeights.toBreeze.toDenseVector)
+      initialParameters.toBreeze.toDenseVector)
 
-    val weights = {
+    val parameters = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
       var state: optimizer.State = null
       while (states.hasNext) {
@@ -227,9 +227,9 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
 
     if (handlePersistence) instances.unpersist()
 
-    val coefficients = Vectors.dense(weights.slice(2, weights.length))
-    val intercept = weights(1)
-    val scale = math.exp(weights(0))
+    val coefficients = Vectors.dense(parameters.slice(2, parameters.length))
+    val intercept = parameters(1)
+    val scale = math.exp(parameters(0))
     val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
     copyValues(model.setParent(this))
   }
@@ -369,17 +369,17 @@ class AFTSurvivalRegressionModel private[ml] (
  *   \frac{\partial (-\iota)}{\partial (\log\sigma)}=
  *   \sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
  * }}}
- * @param weights The log of scale parameter, the intercept and
+ * @param parameters including three part: The log of scale parameter, the intercept and
  *                regression coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
  */
-private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
+private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
   // beta is the intercept and regression coefficients to the covariates
-  private val beta = weights.slice(1, weights.length)
+  private val beta = parameters.slice(1, parameters.length)
   // sigma is the scale parameter of the AFT model
-  private val sigma = math.exp(weights(0))
+  private val sigma = math.exp(parameters(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
@@ -449,15 +449,15 @@ private class AFTAggregator(weights: BDV[Double], fitIntercept: Boolean)
 
 /**
  * AFTCostFun implements Breeze's DiffFunction[T] for AFT cost.
- * It returns the loss and gradient at a particular point (coefficients).
+ * It returns the loss and gradient at a particular point (parameters).
  * It's used in Breeze's convex optimization routines.
  */
 private class AFTCostFun(data: RDD[AFTPoint], fitIntercept: Boolean)
   extends DiffFunction[BDV[Double]] {
 
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
+  override def calculate(parameters: BDV[Double]): (Double, BDV[Double]) = {
 
-    val aftAggregator = data.treeAggregate(new AFTAggregator(coefficients, fitIntercept))(
+    val aftAggregator = data.treeAggregate(new AFTAggregator(parameters, fitIntercept))(
       seqOp = (c, v) => (c, v) match {
         case (aggregator, instance) => aggregator.add(instance)
       },

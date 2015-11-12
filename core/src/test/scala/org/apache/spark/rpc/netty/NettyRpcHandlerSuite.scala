@@ -30,7 +30,7 @@ import org.apache.spark.rpc._
 class NettyRpcHandlerSuite extends SparkFunSuite {
 
   val env = mock(classOf[NettyRpcEnv])
-  when(env.deserialize(any(classOf[Array[Byte]]))(any())).
+  when(env.deserialize(any(classOf[TransportClient]), any(classOf[Array[Byte]]))(any())).
     thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null, false))
 
   test("receive") {
@@ -42,10 +42,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
     nettyRpcHandler.receive(client, null, null)
 
-    when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40001))
-    nettyRpcHandler.receive(client, null, null)
-
-    verify(dispatcher, times(1)).broadcastMessage(Associated(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 40000)))
   }
 
   test("connectionTerminated") {
@@ -60,8 +57,9 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress("localhost", 40000))
     nettyRpcHandler.connectionTerminated(client)
 
-    verify(dispatcher, times(1)).broadcastMessage(Associated(RpcAddress("localhost", 12345)))
-    verify(dispatcher, times(1)).broadcastMessage(Disassociated(RpcAddress("localhost", 12345)))
+    verify(dispatcher, times(1)).postToAll(RemoteProcessConnected(RpcAddress("localhost", 40000)))
+    verify(dispatcher, times(1)).postToAll(
+      RemoteProcessDisconnected(RpcAddress("localhost", 40000)))
   }
 
 }
