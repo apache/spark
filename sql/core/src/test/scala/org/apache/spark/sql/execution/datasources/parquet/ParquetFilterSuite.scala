@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.RDDConversions
 import org.apache.spark.sql.sources.BaseRelation
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
