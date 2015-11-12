@@ -629,26 +629,12 @@ test_that("names() colnames() set the column names", {
 
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
-})
 
-test_that("coltypes() set the column types", {
-  df <- selectExpr(jsonFile(sqlContext, jsonPath), "name", "(age * 1.21) as age")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
-
-  df1 <- select(df, cast(df$age, "integer"))
-  coltypes(df) <- c("character", "integer")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
-  value <- collect(df[, 2])[[3, 1]]
-  expect_equal(value, collect(df1)[[3, 1]])
-  expect_equal(value, 22)
-
-  coltypes(df) <- c(NA, "numeric")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
-
-  expect_error(coltypes(df) <- c("character"),
-               "Length of type vector should match the number of columns for DataFrame")
-  expect_error(coltypes(df) <- c("environment", "list"),
-               "Only atomic type is supported for column types")
+  # Test base::colnames
+  m2 <- cbind(1, 1:4)
+  expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
+  colnames(m2) <- c("x","Y")
+  expect_equal(colnames(m2), c("x", "Y"))
 })
 
 test_that("head() and first() return the correct data", {
@@ -1645,7 +1631,7 @@ test_that("with() on a DataFrame", {
   expect_equal(nrow(sum2), 35)
 })
 
-test_that("Method coltypes() to get R's data types of a DataFrame", {
+test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 
   data <- data.frame(c1=c(1,2,3),
@@ -1664,6 +1650,24 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
   x <- createDataFrame(sqlContext, list(list(as.environment(
     list("a"="b", "c"="d", "e"="f")))))
   expect_equal(coltypes(x), "map<string,string>")
+
+  df <- selectExpr(jsonFile(sqlContext, jsonPath), "name", "(age * 1.21) as age")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
+
+  df1 <- select(df, cast(df$age, "integer"))
+  coltypes(df) <- c("character", "integer")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
+  value <- collect(df[, 2])[[3, 1]]
+  expect_equal(value, collect(df1)[[3, 1]])
+  expect_equal(value, 22)
+
+  coltypes(df) <- c(NA, "numeric")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
+
+  expect_error(coltypes(df) <- c("character"),
+               "Length of type vector should match the number of columns for DataFrame")
+  expect_error(coltypes(df) <- c("environment", "list"),
+               "Only atomic type is supported for column types")
 })
 
 unlink(parquetPath)

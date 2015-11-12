@@ -263,6 +263,7 @@ setMethod("dtypes",
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' columns(df)
+#' colnames(df)
 #'}
 setMethod("columns",
           signature(x = "DataFrame"),
@@ -295,7 +296,7 @@ setMethod("names<-",
 #' @name colnames
 setMethod("colnames",
           signature(x = "DataFrame"),
-          function(x) {
+          function(x, do.NULL = TRUE, prefix = "col") {
             columns(x)
           })
 
@@ -308,24 +309,67 @@ setMethod("colnames<-",
             dataFrame(sdf)
           })
 
-rToScalaTypes <- new.env()
-rToScalaTypes[["integer"]]   <- "integer" # in R, integer is 32bit
-rToScalaTypes[["numeric"]]   <- "double"  # in R, numeric == double which is 64bit
-rToScalaTypes[["double"]]    <- "double"
-rToScalaTypes[["character"]] <- "string"
-rToScalaTypes[["logical"]]   <- "boolean"
+#' coltypes
+#'
+#' Get column types of a DataFrame
+#'
+#' @name coltypes
+#' @param x (DataFrame)
+#' @return value (character) A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+#' @family dataframe_funcs
+#' @export
+#' @examples
+#'\dontrun{
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' coltypes(irisDF)
+#'}
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # Get the data types of the DataFrame by invoking dtypes() function
+            types <- sapply(dtypes(x), function(x) {x[[2]]})
+
+            # Map Spark data types into R's data types using DATA_TYPES environment
+            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+              # Check for primitive types
+              type <- PRIMITIVE_TYPES[[x]]
+
+              if (is.null(type)) {
+                # Check for complex types
+                for (t in names(COMPLEX_TYPES)) {
+                  if (substring(x, 1, nchar(t)) == t) {
+                    type <- COMPLEX_TYPES[[t]]
+                    break
+                  }
+                }
+
+                if (is.null(type)) {
+                  stop(paste("Unsupported data type: ", x))
+                }
+              }
+              type
+            })
+
+            # Find which types don't have mapping to R
+            naIndices <- which(is.na(rTypes))
+
+            # Assign the original scala data types to the unmatched ones
+            rTypes[naIndices] <- types[naIndices]
+
+            rTypes
+          })
 
 #' coltypes
 #'
 #' Set the column types of a DataFrame.
 #'
-#' @name coltypes
+#' @name coltypes<-
 #' @param x (DataFrame)
-#' @return value (character) A character vector with the target column types for the given
+#' @param value (character) A character vector with the target column types for the given
 #'    DataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
 #'    to keep that column as-is.
 #' @rdname coltypes
-#' @aliases coltypes
 #' @export
 #' @examples
 #'\dontrun{
@@ -341,7 +385,10 @@ setMethod("coltypes<-",
           function(x, value) {
             cols <- columns(x)
             ncols <- length(cols)
-            if (length(value) == 0 || length(value) != ncols) {
+            if (length(value) == 0) {
+              stop("Cannot set types of an empty DataFrame with no Column")
+            }
+            if (length(value) != ncols) {
               stop("Length of type vector should match the number of columns for DataFrame")
             }
             newCols <- lapply(seq_len(ncols), function(i) {
@@ -2173,51 +2220,3 @@ setMethod("with",
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
 
-#' Returns the column types of a DataFrame.
-#'
-#' @name coltypes
-#' @title Get column types of a DataFrame
-#' @family dataframe_funcs
-#' @param x (DataFrame)
-#' @return value (character) A character vector with the column types of the given DataFrame
-#' @rdname coltypes
-#' @examples \dontrun{
-#' irisDF <- createDataFrame(sqlContext, iris)
-#' coltypes(irisDF)
-#' }
-setMethod("coltypes",
-          signature(x = "DataFrame"),
-          function(x) {
-            # Get the data types of the DataFrame by invoking dtypes() function
-            types <- sapply(dtypes(x), function(x) {x[[2]]})
-
-            # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
-
-              # Check for primitive types
-              type <- PRIMITIVE_TYPES[[x]]
-
-              if (is.null(type)) {
-                # Check for complex types
-                for (t in names(COMPLEX_TYPES)) {
-                  if (substring(x, 1, nchar(t)) == t) {
-                    type <- COMPLEX_TYPES[[t]]
-                    break
-                  }
-                }
-
-                if (is.null(type)) {
-                  stop(paste("Unsupported data type: ", x))
-                }
-              }
-              type
-            })
-
-            # Find which types don't have mapping to R
-            naIndices <- which(is.na(rTypes))
-
-            # Assign the original scala data types to the unmatched ones
-            rTypes[naIndices] <- types[naIndices]
-
-            rTypes
-          })

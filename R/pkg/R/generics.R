@@ -387,13 +387,17 @@ setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
 #' @rdname columns
 #' @export
-setGeneric("colnames", function(x) { standardGeneric("colnames") })
+setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
 
 #' @rdname columns
 #' @export
 setGeneric("colnames<-", function(x, value) { standardGeneric("colnames<-") })
 
-#' @rdname columns
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
+
+#' @rdname coltypes
 #' @export
 setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
 
@@ -1094,6 +1098,3 @@ setGeneric("attach")
 #' @export
 setGeneric("with")
 
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
