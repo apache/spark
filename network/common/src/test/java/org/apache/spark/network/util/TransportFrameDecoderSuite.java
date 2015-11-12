@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -35,7 +36,7 @@ public class TransportFrameDecoderSuite {
   public void testFrameDecoding() throws Exception {
     Random rnd = new Random();
     TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mockChannelHandlerContext();
+    ChannelHandlerContext ctx = mockChannelHandlerContext(true);
 
     final int frameCount = 100;
     ByteBuf data = Unpooled.buffer();
@@ -65,7 +66,7 @@ public class TransportFrameDecoderSuite {
     final int interceptedReads = 3;
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     TransportFrameDecoder.Interceptor interceptor = spy(new MockInterceptor(interceptedReads));
-    ChannelHandlerContext ctx = mockChannelHandlerContext();
+    ChannelHandlerContext ctx = mockChannelHandlerContext(true);
 
     byte[] data = new byte[8];
     ByteBuf len = Unpooled.copyLong(8 + data.length);
@@ -87,6 +88,27 @@ public class TransportFrameDecoderSuite {
     } finally {
       release(len);
       release(dataBuf);
+    }
+  }
+
+  @Test
+  public void testRetainedByteBuf() throws Exception {
+    TransportFrameDecoder decoder = new TransportFrameDecoder();
+    ChannelHandlerContext ctx = mockChannelHandlerContext(false);
+
+    byte[] frame = new byte[1024];
+    ByteBuf data = Unpooled.buffer();
+    data.writeLong(frame.length + 8);
+    data.writeBytes(frame);
+
+    try {
+      decoder.channelRead(ctx, data);
+      // Because the mock context is not releasing the buffer slice passed to it, the frame
+      // decoder should not clear the read data from its internal composite buffer, so there
+      // should still be a reference to the original buffer.
+      assertEquals(1, data.refCnt());
+    } finally {
+      release(data);
     }
   }
 
@@ -118,14 +140,15 @@ public class TransportFrameDecoderSuite {
     }
   }
 
-  private ChannelHandlerContext mockChannelHandlerContext() {
+  private ChannelHandlerContext mockChannelHandlerContext(final boolean releaseBuffer) {
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
     when(ctx.fireChannelRead(any())).thenAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock in) {
-        ByteBuf buf = (ByteBuf) in.getArguments()[0];
-        buf.readerIndex(buf.readerIndex() + buf.readableBytes());
-        buf.release();
+        if (releaseBuffer) {
+          ByteBuf buf = (ByteBuf) in.getArguments()[0];
+          buf.release();
+        }
         return null;
       }
     });
