@@ -144,6 +144,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               <strong>Total Time Across All Tasks: </strong>
               {UIUtils.formatDuration(stageData.executorRunTime)}
             </li>
+            <li>
+              <strong>Locality Level Summary: </strong>
+              {getLocalitySummaryString(stageData)}
+            </li>
             {if (stageData.hasInput) {
               <li>
                 <strong>Input Size / Records: </strong>
@@ -191,10 +195,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           </span>
           <div class="additional-metrics collapsed">
             <ul>
-              <li>
-                <strong>Locality Level Summary: </strong>
-                {getLocalitySummaryString(stageData)}
-              </li>
               <li>
                   <input type="checkbox" id="select-all-metrics"/>
                   <span class="additional-metric-title"><em>(De)select All</em></span>
