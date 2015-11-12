@@ -69,13 +69,14 @@ private[spark] abstract class Task[T](
     metricsSystem: MetricsSystem)
   : (T, AccumulatorUpdates) = {
     context = new TaskContextImpl(
-      stageId,
-      partitionId,
-      taskAttemptId,
-      attemptNumber,
-      taskMemoryManager,
-      metricsSystem,
-      internalAccumulators,
+      stageId = stageId,
+      stageAttemptId = stageAttemptId,
+      partitionId = partitionId,
+      taskAttemptId = taskAttemptId,
+      attemptNumber = attemptNumber,
+      taskMemoryManager = taskMemoryManager,
+      metricsSystem = metricsSystem,
+      internalAccumulators = internalAccumulators,
       runningLocally = false)
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())

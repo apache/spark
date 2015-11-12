@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark._
@@ -123,9 +124,13 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,
+      stageAttemptId: Int,
       context: TaskContext): ShuffleWriter[K, V] = {
+    val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, V, _]]
+    val shuffleId = baseShuffleHandle.shuffleId
+      addShuffleAttempt(shuffleId, stageAttemptId)
     numMapsForShuffle.putIfAbsent(
-      handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
+      handle.shuffleId, baseShuffleHandle.numMaps)
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -135,6 +140,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           context.taskMemoryManager(),
           unsafeShuffleHandle,
           mapId,
+          stageAttemptId,
           context,
           env.conf)
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
@@ -143,18 +149,22 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver],
           bypassMergeSortHandle,
           mapId,
+          stageAttemptId,
           context,
           env.conf)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
-        new SortShuffleWriter(shuffleBlockResolver, other, mapId, context)
+        new SortShuffleWriter(shuffleBlockResolver, other, mapId, stageAttemptId, context)
     }
   }
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     Option(numMapsForShuffle.remove(shuffleId)).foreach { numMaps =>
+      val attempts = clearStageAttemptsForShuffle(shuffleId)
       (0 until numMaps).foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+        attempts.foreach { stageAttemptId =>
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId)
+        }
       }
     }
     true
@@ -164,8 +174,18 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   override def stop(): Unit = {
     shuffleBlockResolver.stop()
   }
-}
 
+  private[shuffle] override def getShuffleFiles(
+      handle: ShuffleHandle,
+      mapId: Int,
+      reduceId: Int,
+      stageAttemptId: Int): Seq[File] = {
+    Seq(
+      shuffleBlockResolver.getDataFile(handle.shuffleId, mapId, stageAttemptId),
+      shuffleBlockResolver.getIndexFile(handle.shuffleId, mapId, stageAttemptId)
+    )
+  }
+}
 
 private[spark] object SortShuffleManager extends Logging {
 

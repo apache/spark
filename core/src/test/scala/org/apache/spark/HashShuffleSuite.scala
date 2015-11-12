@@ -19,6 +19,8 @@ package org.apache.spark
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.shuffle.ShuffleSuite
+
 class HashShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   // This test suite should run all tests in ShuffleSuite with hash-based shuffle.

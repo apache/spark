@@ -83,6 +83,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final ShuffleWriteMetrics writeMetrics;
   private final int shuffleId;
   private final int mapId;
+  private final int stageAttemptId;
   private final Serializer serializer;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
 
@@ -103,6 +104,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       IndexShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
       int mapId,
+      int stageAttemptId,
       TaskContext taskContext,
       SparkConf conf) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
@@ -111,6 +113,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
+    this.stageAttemptId = stageAttemptId;
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
@@ -125,8 +128,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     assert (partitionWriters == null);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
-      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
-      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, stageAttemptId, partitionLengths);
+      mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), stageAttemptId,
+        partitionLengths);
       return;
     }
     final SerializerInstance serInstance = serializer.newInstance();
@@ -156,9 +160,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
 
     partitionLengths =
-      writePartitionedFile(shuffleBlockResolver.getDataFile(shuffleId, mapId));
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+      writePartitionedFile(shuffleBlockResolver.getDataFile(shuffleId, mapId, stageAttemptId));
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, stageAttemptId, partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), stageAttemptId,
+      partitionLengths);
   }
 
   @VisibleForTesting
@@ -231,7 +236,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             partitionWriters = null;
           }
         }
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
+        shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId);
         return None$.empty();
       }
     }

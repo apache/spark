@@ -141,7 +141,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
     // TaskEndReason
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
-      "Some exception")
+      20, "Some exception")
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskEndReason
     val exceptionFailure = new ExceptionFailure(exception, None)
@@ -158,7 +158,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
     // BlockId
     testBlockId(RDDBlockId(1, 2))
-    testBlockId(ShuffleBlockId(1, 2, 3))
+    testBlockId(ShuffleBlockId(1, 2, 3, 4))
     testBlockId(BroadcastBlockId(1L, "insert_words_of_wisdom_here"))
     testBlockId(TaskResultBlockId(1L))
     testBlockId(StreamBlockId(1, 2L))
@@ -266,13 +266,20 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("FetchFailed backwards compatibility") {
     // FetchFailed in Spark 1.1.0 does not have an "Message" property.
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19, 20,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
       .removeField({ _._1 == "Message" })
     val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
-      "Unknown reason")
+      20, "Unknown reason")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
+
+    // FetchFailed pre Spark 1.6.0 does not have "Stage Attempt ID" property
+    val pre16Event = JsonProtocol.taskEndReasonToJson(fetchFailed)
+      .removeField({ _._1 == "Stage Attempt ID" })
+    val expectedPre16FetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18,
+      19, 0, "ignored")
+    assert(expectedPre16FetchFailed === JsonProtocol.taskEndReasonFromJson(pre16Event))
   }
 
   test("ShuffleReadMetrics: Local bytes read and time taken backwards compatibility") {

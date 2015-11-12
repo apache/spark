@@ -129,7 +129,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
 
       // Merging spilled files should not throw assertion error
       taskContext.taskMetrics.shuffleWriteMetrics = Some(new ShuffleWriteMetrics)
-      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0), outputFile)
+      sorter.writePartitionedFile(ShuffleBlockId(0, 0, 0, 0), outputFile)
     } {
       // Clean up
       if (sc != null) {

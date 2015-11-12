@@ -239,7 +239,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     // Go through all the failure cases to make sure we are counting them as failures.
     val taskFailedReasons = Seq(
       Resubmitted,
-      new FetchFailed(null, 0, 0, 0, "ignored"),
+      new FetchFailed(null, 0, 0, 0, 0, "ignored"),
       ExceptionFailure("Exception", "description", null, null, None, None),
       TaskResultLost,
       TaskKilled,

@@ -73,6 +73,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final ShuffleWriteMetrics writeMetrics;
   private final int shuffleId;
   private final int mapId;
+  private final int stageAttemptId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
@@ -89,6 +90,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private MyByteArrayOutputStream serBuffer;
   private SerializationStream serOutputStream;
+  /**
+   * This is just to allow tests to explore more code paths, without requiring too much complexity
+   * in the test cases.  In normal usage, it will be true.
+   */
+  private final boolean allowSpillMove;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -103,6 +109,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       TaskMemoryManager memoryManager,
       SerializedShuffleHandle<K, V> handle,
       int mapId,
+      int stageAttemptId,
       TaskContext taskContext,
       SparkConf sparkConf) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
@@ -115,6 +122,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleBlockResolver = shuffleBlockResolver;
     this.memoryManager = memoryManager;
     this.mapId = mapId;
+    this.stageAttemptId = stageAttemptId;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = Serializer.getSerializer(dep.serializer()).newInstance();
@@ -123,6 +131,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     taskContext.taskMetrics().shuffleWriteMetrics_$eq(Option.apply(writeMetrics));
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
+    this.allowSpillMove = sparkConf.getBoolean("spark.shuffle.unsafe.testing.allowSpillMove", true);
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
     open();
   }
@@ -215,8 +224,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, stageAttemptId, partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+      blockManager.shuffleServerId(), stageAttemptId, partitionLengths);
   }
 
   @VisibleForTesting
@@ -249,7 +259,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpills(SpillInfo[] spills) throws IOException {
-    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId, stageAttemptId);
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -260,7 +270,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (spills.length == 0) {
         new FileOutputStream(outputFile).close(); // Create an empty file
         return new long[partitioner.numPartitions()];
-      } else if (spills.length == 1) {
+      } else if (spills.length == 1 && allowSpillMove) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         Files.move(spills[0].file, outputFile);
@@ -325,7 +335,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SpillInfo[] spills,
       File outputFile,
       @Nullable CompressionCodec compressionCodec) throws IOException {
-    assert (spills.length >= 2);
+    assert (spills.length >= 2 || !allowSpillMove);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new FileInputStream[spills.length];
@@ -379,7 +389,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, File outputFile) throws IOException {
-    assert (spills.length >= 2);
+    assert (spills.length >= 2 || !allowSpillMove);
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final FileChannel[] spillInputChannels = new FileChannel[spills.length];
@@ -463,7 +473,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           return Option.apply(mapStatus);
         } else {
           // The map task failed, so delete our output data.
-          shuffleBlockResolver.removeDataByMap(shuffleId, mapId);
+          shuffleBlockResolver.removeDataByMap(shuffleId, mapId, stageAttemptId);
           return Option.apply(null);
         }
       }

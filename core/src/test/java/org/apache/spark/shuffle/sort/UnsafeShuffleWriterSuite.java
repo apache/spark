@@ -164,14 +164,15 @@ public class UnsafeShuffleWriterSuite {
       }
     );
 
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt(), anyInt()))
+      .thenReturn(mergedOutputFile);
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
-        partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
+        partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[3];
         return null;
       }
-    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), any(long[].class));
+    }).when(shuffleBlockResolver).writeIndexFile(anyInt(), anyInt(), anyInt(), any(long[].class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer<Tuple2<TempShuffleBlockId, File>>() {
@@ -201,6 +202,7 @@ public class UnsafeShuffleWriterSuite {
       taskMemoryManager,
       new SerializedShuffleHandle<Object, Object>(0, 1, shuffleDep),
       0, // map id
+      0, // stage attempt id
       taskContext,
       conf
     );
@@ -501,6 +503,7 @@ public class UnsafeShuffleWriterSuite {
         taskMemoryManager,
         new SerializedShuffleHandle<>(0, 1, shuffleDep),
         0, // map id
+        0, // stageAttemptId
         taskContext,
         conf);
 

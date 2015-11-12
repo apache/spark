@@ -21,6 +21,7 @@ import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.shuffle.ShuffleIdAndAttempt
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -60,8 +61,8 @@ object StoragePerfTester {
     val hashShuffleManager = sc.env.shuffleManager.asInstanceOf[HashShuffleManager]
 
     def writeOutputBytes(mapId: Int, total: AtomicLong): Unit = {
-      val shuffle = hashShuffleManager.shuffleBlockResolver.forMapTask(1, mapId, numOutputSplits,
-        new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
+      val shuffle = hashShuffleManager.shuffleBlockResolver.forMapTask(ShuffleIdAndAttempt(1, 0),
+        mapId, numOutputSplits, new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
         writers(i % numOutputSplits).write(writeKey, writeValue)

@@ -108,6 +108,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.SQLContext.createSession")
       ) ++ Seq(
+        // SPARK-8029.  False positive, this is a @Private java class
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_="),
         ProblemFilters.exclude[MissingClassProblem](

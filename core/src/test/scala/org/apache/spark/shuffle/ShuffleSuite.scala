@@ -15,15 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.shuffle
+
+import java.util.concurrent._
 
 import org.scalatest.Matchers
 
-import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.scheduler.{MyRDD, SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
+import org.apache.spark.shuffle.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId}
 import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -270,8 +275,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     rdd.count()
 
     // Delete one of the local shuffle blocks.
-    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
-    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0))
+    val hashFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0, 0))
+    val sortFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleDataBlockId(0, 0, 0, 0))
     assert(hashFile.exists() || sortFile.exists())
 
     if (hashFile.exists()) {
@@ -316,6 +321,119 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.recordsWritten === numRecords)
     assert(metrics.bytesWritten === metrics.byresRead)
     assert(metrics.bytesWritten > 0)
+  }
+
+  def multipleAttemptConfs: Seq[(String, SparkConf)] = Seq("basic" -> conf)
+
+  multipleAttemptConfs.foreach { case (name, multipleAttemptConf) =>
+    test("multiple attempts for one task: conf = " + name) {
+      sc = new SparkContext("local", "test", multipleAttemptConf)
+      val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val manager = sc.env.shuffleManager
+      val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
+      val metricsSystem = sc.env.metricsSystem
+      val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+
+      // first attempt -- its successful
+      val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0, 0,
+        new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create(sc), false, stageAttemptId = 0, taskMetrics = new TaskMetrics))
+      val data1 = (1 to 10).map { x => x -> x}
+
+      // second attempt -- also successful.  We'll write out different data,
+      // just to simulate the fact that the records may get written differently
+      // depending on what gets spilled, what gets combined, etc.
+      val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create(sc), false, stageAttemptId = 1, taskMetrics = new TaskMetrics))
+      val data2 = (11 to 20).map { x => x -> x}
+
+      // interleave writes of both attempts -- we want to test that both attempts can occur
+      // simultaneously, and everything is still OK
+      val interleaver = new InterleaveIterators(
+        data1, {iter: Iterator[(Int, Int)] => writer1.write(iter); writer1.stop(true)},
+        data2, {iter: Iterator[(Int, Int)] => writer2.write(iter); writer2.stop(true)})
+      val (mapOutput1, mapOutput2) = interleaver.run()
+
+      // register the output from attempt 1, and try to read it
+      mapOutput1.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+      val reader1 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create(sc), false, taskMetrics = new TaskMetrics))
+      reader1.read().toIndexedSeq should be (data1.toIndexedSeq)
+
+      // now for attempt 2 (registeringMapOutputs always blows away all previous outputs, so we
+      // won't find the output for attempt 1)
+      mapOutput2.foreach { mapStatus => mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))}
+
+      val reader2 = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+        new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
+          InternalAccumulator.create(sc), false, taskMetrics = new TaskMetrics))
+      reader2.read().toIndexedSeq should be(data2.toIndexedSeq)
+
+      // make sure that when the shuffle gets unregistered, we cleanup from all attempts
+      val shuffleFiles1 = manager.getShuffleFiles(shuffleHandle, 0, 0, 0)
+      val shuffleFiles2 = manager.getShuffleFiles(shuffleHandle, 0, 0, 1)
+      // we are relying on getShuffleFiles to be accurate.  We can't be positive its correct, but
+      // at least this makes sure they are returning something which seems plausible
+      assert(shuffleFiles1.nonEmpty)
+      assert(shuffleFiles2.nonEmpty)
+      assert(shuffleFiles1.toSet.intersect(shuffleFiles2.toSet).isEmpty)
+      val shuffleFiles = shuffleFiles1 ++ shuffleFiles2
+      shuffleFiles.foreach { file => assert(file.exists()) }
+
+      // now unregister, and check all the files were deleted
+      manager.unregisterShuffle(0)
+      shuffleFiles.foreach { file => assert(!file.exists()) }
+      // also make sure shuffleToAttempts gets cleanded up
+      manager.clearStageAttemptsForShuffle(0).size should be (0)
+    }
+  }
+
+}
+
+/**
+ * Utility to help tests make sure that we can process two different iterators simultaneously
+ * in different threads.  This makes sure that in your test, you don't completely process data1 with
+ * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
+ * process one element, before pausing to wait for the other function to "catch up".
+ */
+class InterleaveIterators[T, R](
+    data1: Seq[T],
+    f1: Iterator[T] => R,
+    data2: Seq[T],
+    f2: Iterator[T] => R) {
+
+  require(data1.size == data2.size)
+
+  val barrier = new CyclicBarrier(2)
+  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
+    def hasNext: Boolean = sub.hasNext
+
+    def next: E = {
+      barrier.await()
+      sub.next()
+    }
+  }
+
+  val c1 = new Callable[R] {
+    override def call(): R = f1(new BarrierIterator(1, data1.iterator))
+  }
+  val c2 = new Callable[R] {
+    override def call(): R = f2(new BarrierIterator(2, data2.iterator))
+  }
+
+  val e: ExecutorService = Executors.newFixedThreadPool(2)
+
+  def run(): (R, R) = {
+    val future1 = e.submit(c1)
+    val future2 = e.submit(c2)
+    val r1 = future1.get()
+    val r2 = future2.get()
+    e.shutdown()
+    (r1, r2)
   }
 }
 

@@ -17,9 +17,12 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
+
+import com.google.common.annotations.VisibleForTesting
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -63,7 +66,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
     val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
-  private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
+  private val shuffleStates = new TimeStampedHashMap[ShuffleIdAndAttempt, ShuffleState]
 
   private val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
@@ -72,17 +75,22 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
    * Get a ShuffleWriterGroup for the given map task, which will register it as complete
    * when the writers are closed successfully
    */
-  def forMapTask(shuffleId: Int, mapId: Int, numReducers: Int, serializer: Serializer,
+  def forMapTask(
+      shuffleAndAttempt: ShuffleIdAndAttempt,
+      mapId: Int,
+      numReducers: Int,
+      serializer: Serializer,
       writeMetrics: ShuffleWriteMetrics): ShuffleWriterGroup = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numReducers))
-      private val shuffleState = shuffleStates(shuffleId)
+      shuffleStates.putIfAbsent(shuffleAndAttempt, new ShuffleState(numReducers))
+      private val shuffleState = shuffleStates(shuffleAndAttempt)
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
       val writers: Array[DiskBlockObjectWriter] = {
         Array.tabulate[DiskBlockObjectWriter](numReducers) { bucketId =>
-          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
+          val blockId = ShuffleBlockId(shuffleAndAttempt.shuffleId, mapId, bucketId,
+            shuffleAndAttempt.stageAttemptId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
@@ -113,29 +121,35 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   }
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */
-  def removeShuffle(shuffleId: ShuffleId): Boolean = {
+  def removeShuffle(shuffleAndAttempt: ShuffleIdAndAttempt): Boolean = {
     // Do not change the ordering of this, if shuffleStates should be removed only
     // after the corresponding shuffle blocks have been removed
-    val cleaned = removeShuffleBlocks(shuffleId)
-    shuffleStates.remove(shuffleId)
+    val cleaned = removeShuffleBlocks(shuffleAndAttempt)
+    shuffleStates.remove(shuffleAndAttempt)
     cleaned
   }
 
+  @VisibleForTesting
+  private[shuffle] def getShuffleFiles(blockId: ShuffleBlockId): Seq[File] = {
+    Seq(blockManager.diskBlockManager.getFile(blockId))
+  }
+
   /** Remove all the blocks / files related to a particular shuffle. */
-  private def removeShuffleBlocks(shuffleId: ShuffleId): Boolean = {
-    shuffleStates.get(shuffleId) match {
+  private def removeShuffleBlocks(shuffleAndAttempt: ShuffleIdAndAttempt): Boolean = {
+    shuffleStates.get(shuffleAndAttempt) match {
       case Some(state) =>
         for (mapId <- state.completedMapTasks.asScala; reduceId <- 0 until state.numReducers) {
-          val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
+          val blockId = new ShuffleBlockId(shuffleAndAttempt.shuffleId, mapId, reduceId,
+            shuffleAndAttempt.stageAttemptId)
           val file = blockManager.diskBlockManager.getFile(blockId)
           if (!file.delete()) {
             logWarning(s"Error deleting ${file.getPath()}")
           }
         }
-        logInfo("Deleted all files for shuffle " + shuffleId)
+        logInfo("Deleted all files for shuffle " + shuffleAndAttempt)
         true
       case None =>
-        logInfo("Could not find files for shuffle " + shuffleId + " for deleting")
+        logInfo("Could not find files for shuffle " + shuffleAndAttempt + " for deleting")
         false
     }
   }

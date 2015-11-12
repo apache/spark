@@ -17,7 +17,6 @@
 
 package org.apache.spark.shuffle
 
-import java.nio.ByteBuffer
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.storage.ShuffleBlockId
 
@@ -29,8 +28,6 @@ private[spark]
  * implementations when shuffle data is retrieved.
  */
 trait ShuffleBlockResolver {
-  type ShuffleId = Int
-
   /**
    * Retrieve the data for the specified block. If the data for that block is not available,
    * throws an unspecified exception.
@@ -39,3 +36,5 @@ trait ShuffleBlockResolver {
 
   def stop(): Unit
 }
+
+private[spark] case class ShuffleIdAndAttempt(shuffleId: Int, stageAttemptId: Int)

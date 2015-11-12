@@ -34,6 +34,7 @@ private[spark] class TaskContextImpl(
     @transient private val metricsSystem: MetricsSystem,
     internalAccumulators: Seq[Accumulator[Long]],
     val runningLocally: Boolean = false,
+    val stageAttemptId: Int = 0,  // for testing
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
