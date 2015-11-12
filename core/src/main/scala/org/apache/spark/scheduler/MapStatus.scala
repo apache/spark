@@ -156,12 +156,14 @@ private[spark] class MapStatusTrackingEmptyBlocks private (
     loc.writeExternal(out)
     out.writeObject(markedBlocks)
     out.writeLong(avgSize)
+    out.writeBoolean(isSparse)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
     markedBlocks = in.readObject().asInstanceOf[OpenHashSet[Int]]
     avgSize = in.readLong()
+    isSparse = in.readBoolean()
   }
 }
 
