@@ -91,6 +91,32 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-11694 Parquet logical types are not being tested properly") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 a(INT_8);
+        |  required int32 b(INT_16);
+        |  required int32 c(DATE);
+        |  required int32 d(DECIMAL(1,0));
+        |  required int64 e(DECIMAL(10,0));
+        |} +      """.stripMargin)
+
+    withTempPath { location =>
+      val extraMetadata = Map.empty[String, String].asJava
+      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val path = new Path(location.getCanonicalPath)
+      val footer = List(
+        new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))
+      ).asJava
+
+      ParquetFileWriter.writeMetadataFile(sparkContext.hadoopConfiguration, path, footer)
+      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
+
+      assert(sparkTypes ==
+        Seq(ByteType, ShortType, DateType, DecimalType(1, 0), DecimalType(10, 0)))
+    }
+  }
+
   test("string") {
     val data = (1 to 4).map(i => Tuple1(i.toString))
     // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
