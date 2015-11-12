@@ -82,5 +82,5 @@ INDEX
 gen-java.*
 .*avpr
 org.apache.spark.sql.sources.DataSourceRegister
-org.apache.spark.scheduler.SparkListenerEventRegister
+org.apache.spark.scheduler.SparkListenerRegister
 .*parquet
