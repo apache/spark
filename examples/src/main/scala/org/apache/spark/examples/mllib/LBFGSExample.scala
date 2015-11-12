@@ -54,7 +54,7 @@ object LBFGSExample {
     val regParam = 0.1
     val initialWeightsWithIntercept = Vectors.dense(new Array[Double](numFeatures + 1))
 
-    val (weightsWithIntercept, loss) = LBFGS.runLBFGS(
+    val (weightsWithIntercept, loss, _) = LBFGS.runLBFGS(
       training,
       new LogisticGradient(),
       new SquaredL2Updater(),
