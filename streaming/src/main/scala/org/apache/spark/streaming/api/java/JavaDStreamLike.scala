@@ -17,11 +17,10 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.util
 import java.lang.{Long => JLong}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -145,8 +144,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * an array.
    */
   def glom(): JavaDStream[JList[T]] =
-    new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
-
+    new JavaDStream(dstream.glom().map(_.toSeq.asJava))
 
 
   /** Return the [[org.apache.spark.streaming.StreamingContext]] associated with this DStream */
@@ -169,7 +167,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def flatMap[U](f: FlatMapFunction[T, U]): JavaDStream[U] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x).asScala
+    def fn: (T) => Iterable[U] = (x: T) => f.call(x).asScala
     new JavaDStream(dstream.flatMap(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
 
@@ -179,7 +177,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def flatMapToPair[K2, V2](f: PairFlatMapFunction[T, K2, V2]): JavaPairDStream[K2, V2] = {
     import scala.collection.JavaConverters._
-    def fn = (x: T) => f.call(x).asScala
+    def fn: (T) => Iterable[(K2, V2)] = (x: T) => f.call(x).asScala
     def cm: ClassTag[(K2, V2)] = fakeClassTag
     new JavaPairDStream(dstream.flatMap(fn)(cm))(fakeClassTag[K2], fakeClassTag[V2])
   }
@@ -190,7 +188,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * of the RDD.
    */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaDStream[U] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[U] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     new JavaDStream(dstream.mapPartitions(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
 
@@ -201,7 +201,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def mapPartitionsToPair[K2, V2](f: PairFlatMapFunction[java.util.Iterator[T], K2, V2])
   : JavaPairDStream[K2, V2] = {
-    def fn = (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+    def fn: (Iterator[T]) => Iterator[(K2, V2)] = {
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
+    }
     new JavaPairDStream(dstream.mapPartitions(fn))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -278,7 +280,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Return all the RDDs between 'fromDuration' to 'toDuration' (both included)
    */
   def slice(fromTime: Time, toTime: Time): JList[R] = {
-    new util.ArrayList(dstream.slice(fromTime, toTime).map(wrapRDD(_)).toSeq)
+    dstream.slice(fromTime, toTime).map(wrapRDD).asJava
   }
 
   /**
@@ -287,7 +289,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *
    * @deprecated  As of release 0.9.0, replaced by foreachRDD
    */
-  @Deprecated
+  @deprecated("Use foreachRDD", "0.9.0")
   def foreach(foreachFunc: JFunction[R, Void]) {
     foreachRDD(foreachFunc)
   }
@@ -298,7 +300,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *
    * @deprecated  As of release 0.9.0, replaced by foreachRDD
    */
-  @Deprecated
+  @deprecated("Use foreachRDD", "0.9.0")
   def foreach(foreachFunc: JFunction2[R, Time, Void]) {
     foreachRDD(foreachFunc)
   }
@@ -415,8 +417,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
     implicit val cmv2: ClassTag[V2] = fakeClassTag
     implicit val cmw: ClassTag[W] = fakeClassTag
 
-    def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[W] =
+    def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[W] = {
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
+    }
     dstream.transformWith[(K2, V2), W](other.dstream, scalaTransform(_, _, _))
   }
 

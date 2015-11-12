@@ -17,53 +17,90 @@
 
 package org.apache.spark.sql.columnar
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.types._
 
-class ColumnStatsSuite extends FunSuite {
-  testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
-  testColumnStats(classOf[ShortColumnStats], SHORT, Row(Short.MaxValue, Short.MinValue, 0))
-  testColumnStats(classOf[IntColumnStats], INT, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[LongColumnStats], LONG, Row(Long.MaxValue, Long.MinValue, 0))
-  testColumnStats(classOf[FloatColumnStats], FLOAT, Row(Float.MaxValue, Float.MinValue, 0))
-  testColumnStats(classOf[DoubleColumnStats], DOUBLE, Row(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[FixedDecimalColumnStats], FIXED_DECIMAL(15, 10), Row(null, null, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Row(null, null, 0))
-  testColumnStats(classOf[DateColumnStats], DATE, Row(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[TimestampColumnStats], TIMESTAMP, Row(null, null, 0))
+class ColumnStatsSuite extends SparkFunSuite {
+  testColumnStats(classOf[BooleanColumnStats], BOOLEAN, createRow(true, false, 0))
+  testColumnStats(classOf[ByteColumnStats], BYTE, createRow(Byte.MaxValue, Byte.MinValue, 0))
+  testColumnStats(classOf[ShortColumnStats], SHORT, createRow(Short.MaxValue, Short.MinValue, 0))
+  testColumnStats(classOf[IntColumnStats], INT, createRow(Int.MaxValue, Int.MinValue, 0))
+  testColumnStats(classOf[LongColumnStats], LONG, createRow(Long.MaxValue, Long.MinValue, 0))
+  testColumnStats(classOf[FloatColumnStats], FLOAT, createRow(Float.MaxValue, Float.MinValue, 0))
+  testColumnStats(classOf[DoubleColumnStats], DOUBLE,
+    createRow(Double.MaxValue, Double.MinValue, 0))
+  testColumnStats(classOf[StringColumnStats], STRING, createRow(null, null, 0))
+  testDecimalColumnStats(createRow(null, null, 0))
 
-  def testColumnStats[T <: NativeType, U <: ColumnStats](
+  def createRow(values: Any*): GenericInternalRow = new GenericInternalRow(values.toArray)
+
+  def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
       columnType: NativeColumnType[T],
-      initialStatistics: Row): Unit = {
+      initialStatistics: GenericInternalRow): Unit = {
 
     val columnStatsName = columnStatsClass.getSimpleName
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      columnStats.collectedStatistics.toSeq.zip(initialStatistics.toSeq).foreach {
+      columnStats.collectedStatistics.values.zip(initialStatistics.values).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
 
     test(s"$columnStatsName: non-empty") {
-      import ColumnarTestUtils._
+      import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
       val columnStats = columnStatsClass.newInstance()
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_(0).asInstanceOf[T#JvmType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
+      val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
+      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
       val stats = columnStats.collectedStatistics
 
-      assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
-      assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
-      assertResult(10, "Wrong null count")(stats(2))
-      assertResult(20, "Wrong row count")(stats(3))
-      assertResult(stats(4), "Wrong size in bytes") {
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.values(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.values(1))
+      assertResult(10, "Wrong null count")(stats.values(2))
+      assertResult(20, "Wrong row count")(stats.values(3))
+      assertResult(stats.values(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
+    }
+  }
+
+  def testDecimalColumnStats[T <: AtomicType, U <: ColumnStats](
+      initialStatistics: GenericInternalRow): Unit = {
+
+    val columnStatsName = classOf[DecimalColumnStats].getSimpleName
+    val columnType = COMPACT_DECIMAL(15, 10)
+
+    test(s"$columnStatsName: empty") {
+      val columnStats = new DecimalColumnStats(15, 10)
+      columnStats.collectedStatistics.values.zip(initialStatistics.values).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"$columnStatsName: non-empty") {
+      import org.apache.spark.sql.columnar.ColumnarTestUtils._
+
+      val columnStats = new DecimalColumnStats(15, 10)
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(columnStats.gatherStats(_, 0))
+
+      val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
+      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val stats = columnStats.collectedStatistics
+
+      assertResult(values.min(ordering), "Wrong lower bound")(stats.values(0))
+      assertResult(values.max(ordering), "Wrong upper bound")(stats.values(1))
+      assertResult(10, "Wrong null count")(stats.values(2))
+      assertResult(20, "Wrong row count")(stats.values(3))
+      assertResult(stats.values(4), "Wrong size in bytes") {
         rows.map { row =>
           if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
         }.sum

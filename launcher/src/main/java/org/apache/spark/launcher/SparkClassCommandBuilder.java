@@ -28,7 +28,7 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 /**
  * Command builder for internal Spark classes.
- * <p/>
+ * <p>
  * This class handles building the command to launch all internal Spark classes except for
  * SparkSubmit (which is handled by {@link SparkSubmitCommandBuilder} class.
  */
@@ -69,6 +69,11 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     } else if (className.equals("org.apache.spark.executor.MesosExecutorBackend")) {
       javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
       memKey = "SPARK_EXECUTOR_MEMORY";
+    } else if (className.equals("org.apache.spark.deploy.ExternalShuffleService") ||
+        className.equals("org.apache.spark.deploy.mesos.MesosExternalShuffleService")) {
+      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
+      javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
+      memKey = "SPARK_DAEMON_MEMORY";
     } else if (className.startsWith("org.apache.spark.tools.")) {
       String sparkHome = getSparkHome();
       File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
@@ -89,6 +94,9 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         toolsDir.getAbsolutePath(), className);
 
       javaOptsKeys.add("SPARK_JAVA_OPTS");
+    } else {
+      javaOptsKeys.add("SPARK_JAVA_OPTS");
+      memKey = "SPARK_DRIVER_MEMORY";
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);

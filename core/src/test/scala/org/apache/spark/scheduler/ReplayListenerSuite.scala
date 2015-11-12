@@ -18,12 +18,13 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
+import java.net.URI
 
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SPARK_VERSION}
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
@@ -31,7 +32,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 /**
  * Test whether ReplayListenerBus replays events from logs correctly.
  */
-class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
+class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
   private var testDir: File = _
@@ -49,10 +50,12 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val fstream = fileSystem.create(logFilePath)
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
+      125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
+    // scalastyle:off println
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+    // scalastyle:on println
     writer.close()
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
@@ -99,7 +102,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     fileSystem.mkdirs(logDirPath)
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logDirPath, codecName)
-    val sc = new SparkContext("local-cluster[2,1,512]", "Test replay", conf)
+    val sc = new SparkContext("local-cluster[2,1,1024]", "Test replay", conf)
 
     // Run a few jobs
     sc.parallelize(1 to 100, 1).count()
@@ -145,7 +148,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * log the events.
    */
   private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", "testdir", conf) {
+    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
 
     override def start() { }
 

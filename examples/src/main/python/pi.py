@@ -1,3 +1,4 @@
+from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -35,7 +36,7 @@ if __name__ == "__main__":
         y = random() * 2 - 1
         return 1 if x ** 2 + y ** 2 < 1 else 0
 
-    count = sc.parallelize(xrange(1, n + 1), partitions).map(f).reduce(add)
-    print "Pi is roughly %f" % (4.0 * count / n)
+    count = sc.parallelize(range(1, n + 1), partitions).map(f).reduce(add)
+    print("Pi is roughly %f" % (4.0 * count / n))
 
     sc.stop()

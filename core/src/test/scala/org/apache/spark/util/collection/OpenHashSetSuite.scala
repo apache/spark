@@ -17,12 +17,12 @@
 
 package org.apache.spark.util.collection
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.SizeEstimator
 
-class OpenHashSetSuite extends FunSuite with Matchers {
+class OpenHashSetSuite extends SparkFunSuite with Matchers {
 
   test("size for specialized, primitive int") {
     val loadFactor = 0.7

@@ -20,9 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -75,8 +73,8 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
-class ScalaReflectionSuite extends FunSuite {
-  import ScalaReflection._
+class ScalaReflectionSuite extends SparkFunSuite {
+  import org.apache.spark.sql.catalyst.ScalaReflection._
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -104,7 +102,7 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
-        StructField("decimalField", DecimalType.Unlimited, nullable = true),
+        StructField("decimalField", DecimalType.SYSTEM_DEFAULT, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
@@ -218,7 +216,7 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DoubleType === typeOfObject(1.7976931348623157E308))
 
     // DecimalType
-    assert(DecimalType.Unlimited ===
+    assert(DecimalType.SYSTEM_DEFAULT ===
       typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
 
     // DateType
@@ -231,19 +229,19 @@ class ScalaReflectionSuite extends FunSuite {
     assert(NullType === typeOfObject(null))
 
     def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
-      case value: java.math.BigDecimal => DecimalType.Unlimited
+      case value: java.math.BigInteger => DecimalType.SYSTEM_DEFAULT
+      case value: java.math.BigDecimal => DecimalType.SYSTEM_DEFAULT
       case _ => StringType
     }
 
-    assert(DecimalType.Unlimited === typeOfObject1(
+    assert(DecimalType.SYSTEM_DEFAULT === typeOfObject1(
       new BigInteger("92233720368547758070")))
-    assert(DecimalType.Unlimited === typeOfObject1(
+    assert(DecimalType.SYSTEM_DEFAULT === typeOfObject1(
       new java.math.BigDecimal("1.7976931348623157E318")))
     assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
 
     def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
+      case value: java.math.BigInteger => DecimalType.SYSTEM_DEFAULT
     }
 
     intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
@@ -253,14 +251,14 @@ class ScalaReflectionSuite extends FunSuite {
     }
 
     assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
+    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1, 2, 3))))
   }
 
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
-    assert(convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
@@ -268,9 +266,9 @@ class ScalaReflectionSuite extends FunSuite {
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
     val dataType = schemaFor[OptionalData].dataType
-    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      Row(1, 1, 1, 1, 1, 1, true))
-    assert(convertToCatalyst(data, dataType) === convertedData)
+    val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      InternalRow(1, 1, 1, 1, 1, 1, true))
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("infer schema from case class with multiple constructors") {

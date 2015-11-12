@@ -17,25 +17,23 @@
 
 package org.apache.spark.network.yarn;
 
-import java.lang.Override;
+import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.List;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.server.api.AuxiliaryService;
-import org.apache.hadoop.yarn.server.api.ApplicationInitializationContext;
-import org.apache.hadoop.yarn.server.api.ApplicationTerminationContext;
-import org.apache.hadoop.yarn.server.api.ContainerInitializationContext;
-import org.apache.hadoop.yarn.server.api.ContainerTerminationContext;
+import org.apache.hadoop.yarn.server.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.sasl.SaslServerBootstrap;
 import org.apache.spark.network.sasl.ShuffleSecretManager;
-import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.yarn.util.HadoopConfigProvider;
@@ -77,11 +75,26 @@ public class YarnShuffleService extends AuxiliaryService {
   private TransportServer shuffleServer = null;
 
   // Handles registering executors and opening shuffle blocks
-  private ExternalShuffleBlockHandler blockHandler;
+  @VisibleForTesting
+  ExternalShuffleBlockHandler blockHandler;
+
+  // Where to store & reload executor info for recovering state after an NM restart
+  @VisibleForTesting
+  File registeredExecutorFile;
+
+  // just for testing when you want to find an open port
+  @VisibleForTesting
+  static int boundPort = -1;
+
+  // just for integration tests that want to look at this file -- in general not sensible as
+  // a static
+  @VisibleForTesting
+  static YarnShuffleService instance;
 
   public YarnShuffleService() {
     super("spark_shuffle");
     logger.info("Initializing YARN shuffle service for Spark");
+    instance = this;
   }
 
   /**
@@ -98,24 +111,42 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+
+    // In case this NM was killed while there were running spark applications, we need to restore
+    // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
+    // If we don't find one, then we choose a file to use to save the state next time.  Even if
+    // an application was stopped while the NM was down, we expect yarn to call stopApplication()
+    // when it comes back
+    registeredExecutorFile =
+      findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
+
     TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
-    blockHandler = new ExternalShuffleBlockHandler(transportConf);
-    RpcHandler rpcHandler = blockHandler;
+    try {
+      blockHandler = new ExternalShuffleBlockHandler(transportConf, registeredExecutorFile);
+    } catch (Exception e) {
+      logger.error("Failed to initialize external shuffle service", e);
+    }
+
+    List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
     if (authEnabled) {
       secretManager = new ShuffleSecretManager();
-      rpcHandler = new SaslRpcHandler(rpcHandler, secretManager);
+      bootstraps.add(new SaslServerBootstrap(transportConf, secretManager));
     }
 
     int port = conf.getInt(
       SPARK_SHUFFLE_SERVICE_PORT_KEY, DEFAULT_SPARK_SHUFFLE_SERVICE_PORT);
-    TransportContext transportContext = new TransportContext(transportConf, rpcHandler);
-    shuffleServer = transportContext.createServer(port);
+    TransportContext transportContext = new TransportContext(transportConf, blockHandler);
+    shuffleServer = transportContext.createServer(port, bootstraps);
+    // the port should normally be fixed, but for tests its useful to find an open port
+    port = shuffleServer.getPort();
+    boundPort = port;
     String authEnabledString = authEnabled ? "enabled" : "not enabled";
     logger.info("Started YARN shuffle service for Spark on port {}. " +
-      "Authentication is {}.", port, authEnabledString);
+      "Authentication is {}.  Registered executor file is {}", port, authEnabledString,
+      registeredExecutorFile);
   }
 
   @Override
@@ -158,6 +189,16 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Stopping container {}", containerId);
   }
 
+  private File findRegisteredExecutorFile(String[] localDirs) {
+    for (String dir: localDirs) {
+      File f = new File(dir, "registeredExecutors.ldb");
+      if (f.exists()) {
+        return f;
+      }
+    }
+    return new File(localDirs[0], "registeredExecutors.ldb");
+  }
+
   /**
    * Close the shuffle server to clean up any associated state.
    */
@@ -166,6 +207,9 @@ public class YarnShuffleService extends AuxiliaryService {
     try {
       if (shuffleServer != null) {
         shuffleServer.close();
+      }
+      if (blockHandler != null) {
+        blockHandler.close();
       }
     } catch (Exception e) {
       logger.error("Exception when stopping service", e);
@@ -177,5 +221,4 @@ public class YarnShuffleService extends AuxiliaryService {
   public ByteBuffer getMetaData() {
     return ByteBuffer.allocate(0);
   }
-
 }

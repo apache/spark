@@ -17,47 +17,121 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.scalatest.FunSuite
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 
-import org.apache.spark.sql.catalyst.expressions.{Projection, Row}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.collection.CompactBuffer
 
 
-class HashedRelationSuite extends FunSuite {
+class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   // Key is simply the record itself
   private val keyProjection = new Projection {
-    override def apply(row: Row): Row = row
+    override def apply(row: InternalRow): InternalRow = row
   }
 
   test("GeneralHashedRelation") {
-    val data = Array(Row(0), Row(1), Row(2), Row(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
+    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
+    val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
     assert(hashed.isInstanceOf[GeneralHashedRelation])
 
-    assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))
-    assert(hashed.get(data(1)) == CompactBuffer[Row](data(1)))
-    assert(hashed.get(Row(10)) === null)
+    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
+    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
+    assert(hashed.get(InternalRow(10)) === null)
 
-    val data2 = CompactBuffer[Row](data(2))
+    val data2 = CompactBuffer[InternalRow](data(2))
     data2 += data(2)
-    assert(hashed.get(data(2)) == data2)
+    assert(hashed.get(data(2)) === data2)
+    assert(numDataRows.value.value === data.length)
   }
 
   test("UniqueKeyHashedRelation") {
-    val data = Array(Row(0), Row(1), Row(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
+    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
+    val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
     assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
 
-    assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))
-    assert(hashed.get(data(1)) == CompactBuffer[Row](data(1)))
-    assert(hashed.get(data(2)) == CompactBuffer[Row](data(2)))
-    assert(hashed.get(Row(10)) === null)
+    assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
+    assert(hashed.get(data(1)) === CompactBuffer[InternalRow](data(1)))
+    assert(hashed.get(data(2)) === CompactBuffer[InternalRow](data(2)))
+    assert(hashed.get(InternalRow(10)) === null)
 
     val uniqHashed = hashed.asInstanceOf[UniqueKeyHashedRelation]
-    assert(uniqHashed.getValue(data(0)) == data(0))
-    assert(uniqHashed.getValue(data(1)) == data(1))
-    assert(uniqHashed.getValue(data(2)) == data(2))
-    assert(uniqHashed.getValue(Row(10)) == null)
+    assert(uniqHashed.getValue(data(0)) === data(0))
+    assert(uniqHashed.getValue(data(1)) === data(1))
+    assert(uniqHashed.getValue(data(2)) === data(2))
+    assert(uniqHashed.getValue(InternalRow(10)) === null)
+    assert(numDataRows.value.value === data.length)
+  }
+
+  test("UnsafeHashedRelation") {
+    val schema = StructType(StructField("a", IntegerType, true) :: Nil)
+    val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
+    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
+    val toUnsafe = UnsafeProjection.create(schema)
+    val unsafeData = data.map(toUnsafe(_).copy()).toArray
+
+    val buildKey = Seq(BoundReference(0, IntegerType, false))
+    val keyGenerator = UnsafeProjection.create(buildKey)
+    val hashed = UnsafeHashedRelation(unsafeData.iterator, numDataRows, keyGenerator, 1)
+    assert(hashed.isInstanceOf[UnsafeHashedRelation])
+
+    assert(hashed.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
+    assert(hashed.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
+    assert(hashed.get(toUnsafe(InternalRow(10))) === null)
+
+    val data2 = CompactBuffer[InternalRow](unsafeData(2).copy())
+    data2 += unsafeData(2).copy()
+    assert(hashed.get(unsafeData(2)) === data2)
+
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    hashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val hashed2 = new UnsafeHashedRelation()
+    hashed2.readExternal(in)
+    assert(hashed2.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
+    assert(hashed2.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
+    assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
+    assert(hashed2.get(unsafeData(2)) === data2)
+    assert(numDataRows.value.value === data.length)
+
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    hashed2.asInstanceOf[UnsafeHashedRelation].writeExternal(out2)
+    out2.flush()
+    // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
+    // as they are inserted
+    assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+  }
+
+  test("test serialization empty hash map") {
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    val hashed = new UnsafeHashedRelation(
+      new java.util.HashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
+    hashed.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val hashed2 = new UnsafeHashedRelation()
+    hashed2.readExternal(in)
+
+    val schema = StructType(StructField("a", IntegerType, true) :: Nil)
+    val toUnsafe = UnsafeProjection.create(schema)
+    val row = toUnsafe(InternalRow(0))
+    assert(hashed2.get(row) === null)
+
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    hashed2.writeExternal(out2)
+    out2.flush()
+    assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
   }
 }

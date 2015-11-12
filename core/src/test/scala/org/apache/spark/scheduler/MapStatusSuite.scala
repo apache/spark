@@ -18,14 +18,13 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
 
 import scala.util.Random
 
-class MapStatusSuite extends FunSuite {
+class MapStatusSuite extends SparkFunSuite {
 
   test("compressSize") {
     assert(MapStatus.compressSize(0L) === 0)

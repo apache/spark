@@ -18,9 +18,7 @@
 package org.apache.spark.streaming.util
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.OpenHashMap
-import scala.collection.JavaConversions.mapAsScalaMap
 
 private[streaming]
 object RawTextHelper {
@@ -29,7 +27,7 @@ object RawTextHelper {
    * Splits lines and counts the words.
    */
   def splitAndCountPartitions(iter: Iterator[String]): Iterator[(String, Long)] = {
-    val map = new OpenHashMap[String,Long]
+    val map = new OpenHashMap[String, Long]
     var i = 0
     var j = 0
     while (iter.hasNext) {
@@ -71,7 +69,7 @@ object RawTextHelper {
     var count = 0
 
     while(data.hasNext) {
-      value = data.next
+      value = data.next()
       if (value != null) {
         count += 1
         if (len == 0) {
@@ -100,7 +98,7 @@ object RawTextHelper {
    * before real workload starts.
    */
   def warmUp(sc: SparkContext) {
-    for(i <- 0 to 1) {
+    for (i <- 0 to 1) {
       sc.parallelize(1 to 200000, 1000)
         .map(_ % 1331).map(_.toString)
         .mapPartitions(splitAndCountPartitions).reduceByKey(_ + _, 10)
@@ -108,9 +106,13 @@ object RawTextHelper {
     }
   }
 
-  def add(v1: Long, v2: Long) = (v1 + v2)
+  def add(v1: Long, v2: Long): Long = {
+    v1 + v2
+  }
 
-  def subtract(v1: Long, v2: Long) = (v1 - v2)
+  def subtract(v1: Long, v2: Long): Long = {
+    v1 - v2
+  }
 
-  def max(v1: Long, v2: Long) = math.max(v1, v2)
+  def max(v1: Long, v2: Long): Long = math.max(v1, v2)
 }

@@ -18,21 +18,27 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.sql.test.TestSQLContext$;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -43,14 +49,16 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Before
   public void setUp() {
-    sqlContext = TestSQLContext$.MODULE$;
-    javaCtx = new JavaSparkContext(sqlContext.sparkContext());
+    SparkContext context = new SparkContext("local[*]", "testing");
+    javaCtx = new JavaSparkContext(context);
+    sqlContext = new SQLContext(context);
   }
 
   @After
   public void tearDown() {
-    javaCtx = null;
+    sqlContext.sparkContext().stop();
     sqlContext = null;
+    javaCtx = null;
   }
 
   public static class Person implements Serializable {
@@ -76,7 +84,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void applySchema() {
-    List<Person> personList = new ArrayList<Person>(2);
+    List<Person> personList = new ArrayList<>(2);
     Person person1 = new Person();
     person1.setName("Michael");
     person1.setAge(29);
@@ -88,12 +96,13 @@ public class JavaApplySchemaSuite implements Serializable {
 
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
       new Function<Person, Row>() {
+        @Override
         public Row call(Person person) throws Exception {
           return RowFactory.create(person.getName(), person.getAge());
         }
       });
 
-    List<StructField> fields = new ArrayList<StructField>(2);
+    List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
@@ -111,7 +120,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
   @Test
   public void dataFrameRDDOperations() {
-    List<Person> personList = new ArrayList<Person>(2);
+    List<Person> personList = new ArrayList<>(2);
     Person person1 = new Person();
     person1.setName("Michael");
     person1.setAge(29);
@@ -122,27 +131,28 @@ public class JavaApplySchemaSuite implements Serializable {
     personList.add(person2);
 
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
-            new Function<Person, Row>() {
-              public Row call(Person person) throws Exception {
-                return RowFactory.create(person.getName(), person.getAge());
-              }
-            });
+        new Function<Person, Row>() {
+          @Override
+          public Row call(Person person) {
+            return RowFactory.create(person.getName(), person.getAge());
+          }
+        });
 
-    List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
+    List<StructField> fields = new ArrayList<>(2);
+    fields.add(DataTypes.createStructField("", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
     DataFrame df = sqlContext.applySchema(rowRDD, schema);
     df.registerTempTable("people");
     List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
-
+      @Override
       public String call(Row row) {
-        return row.getString(0) + "_" + row.get(1).toString();
+        return row.getString(0) + "_" + row.get(1);
       }
     }).collect();
 
-    List<String> expected = new ArrayList<String>(2);
+    List<String> expected = new ArrayList<>(2);
     expected.add("Michael_29");
     expected.add("Yin_28");
 
@@ -158,8 +168,9 @@ public class JavaApplySchemaSuite implements Serializable {
       "{\"string\":\"this is another simple string.\", \"integer\":11, \"long\":21474836469, " +
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
-    List<StructField> fields = new ArrayList<StructField>(7);
-    fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(), true));
+    List<StructField> fields = new ArrayList<>(7);
+    fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(20, 0),
+      true));
     fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
     fields.add(DataTypes.createStructField("double", DataTypes.DoubleType, true));
     fields.add(DataTypes.createStructField("integer", DataTypes.LongType, true));
@@ -167,10 +178,10 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("null", DataTypes.StringType, true));
     fields.add(DataTypes.createStructField("string", DataTypes.StringType, true));
     StructType expectedSchema = DataTypes.createStructType(fields);
-    List<Row> expectedResult = new ArrayList<Row>(2);
+    List<Row> expectedResult = new ArrayList<>(2);
     expectedResult.add(
       RowFactory.create(
-        new java.math.BigDecimal("92233720368547758070"),
+        new BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
         10,
@@ -179,7 +190,7 @@ public class JavaApplySchemaSuite implements Serializable {
         "this is a simple string."));
     expectedResult.add(
       RowFactory.create(
-        new java.math.BigDecimal("92233720368547758069"),
+        new BigDecimal("92233720368547758069"),
         false,
         1.7976931348623157E305,
         11,
@@ -187,14 +198,14 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    DataFrame df1 = sqlContext.jsonRDD(jsonRDD);
+    DataFrame df1 = sqlContext.read().json(jsonRDD);
     StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
     df1.registerTempTable("jsonTable1");
     List<Row> actual1 = sqlContext.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    DataFrame df2 = sqlContext.jsonRDD(jsonRDD, expectedSchema);
+    DataFrame df2 = sqlContext.read().schema(expectedSchema).json(jsonRDD);
     StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
     df2.registerTempTable("jsonTable2");

@@ -29,7 +29,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 ##
 
-usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop) <spark-command> <spark-instance-number> <args...>"
+usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop|submit|status) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
 if [ $# -le 1 ]; then
@@ -37,10 +37,11 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
 # get arguments
 
@@ -86,7 +87,7 @@ spark_rotate_log ()
     fi
 }
 
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
@@ -97,7 +98,7 @@ export SPARK_PRINT_LAUNCH_COMMAND="1"
 
 # get log directory
 if [ "$SPARK_LOG_DIR" = "" ]; then
-  export SPARK_LOG_DIR="$SPARK_HOME/logs"
+  export SPARK_LOG_DIR="${SPARK_HOME}/logs"
 fi
 mkdir -p "$SPARK_LOG_DIR"
 touch "$SPARK_LOG_DIR"/.spark_test > /dev/null 2>&1
@@ -129,7 +130,7 @@ run_command() {
 
   if [ -f "$pid" ]; then
     TARGET_ID="$(cat "$pid")"
-    if [[ $(ps -p "$TARGET_ID" -o args=) =~ $command ]]; then
+    if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
       echo "$command running as process $TARGET_ID.  Stop it first."
       exit 1
     fi
@@ -137,7 +138,7 @@ run_command() {
 
   if [ "$SPARK_MASTER" != "" ]; then
     echo rsync from "$SPARK_MASTER"
-    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "$SPARK_HOME"
+    rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' "$SPARK_MASTER/" "${SPARK_HOME}"
   fi
 
   spark_rotate_log "$log"
@@ -145,12 +146,12 @@ run_command() {
 
   case "$mode" in
     (class)
-      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
       newpid="$!"
       ;;
 
     (submit)
-      nohup nice -n "$SPARK_NICENESS" "$SPARK_PREFIX"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
+      nohup nice -n "$SPARK_NICENESS" "${SPARK_HOME}"/bin/spark-submit --class $command "$@" >> "$log" 2>&1 < /dev/null &
       newpid="$!"
       ;;
 
@@ -163,7 +164,7 @@ run_command() {
   echo "$newpid" > "$pid"
   sleep 2
   # Check if the process has died; in that case we'll tail the log so the user can see
-  if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
+  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
     echo "failed to launch $command:"
     tail -2 "$log" | sed 's/^/  /'
     echo "full log in $log"
@@ -192,6 +193,23 @@ case $option in
       fi
     else
       echo "no $command to stop"
+    fi
+    ;;
+
+  (status)
+
+    if [ -f $pid ]; then
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
+        echo $command is running.
+        exit 0
+      else
+        echo $pid file is present but $command not running
+        exit 1
+      fi
+    else
+      echo $command not running.
+      exit 2
     fi
     ;;
 

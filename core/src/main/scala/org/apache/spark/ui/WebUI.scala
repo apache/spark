@@ -37,7 +37,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  * pages. The use of tabs is optional, however; a WebUI may choose to include pages directly.
  */
 private[spark] abstract class WebUI(
-    securityManager: SecurityManager,
+    val securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -48,7 +48,7 @@ private[spark] abstract class WebUI(
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
-  protected val localHostName = Utils.localHostName()
+  protected val localHostName = Utils.localHostNameForURI()
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
   private val className = Utils.getFormattedClassName(this)
 
@@ -62,12 +62,12 @@ private[spark] abstract class WebUI(
     tab.pages.foreach(attachPage)
     tabs += tab
   }
-  
+
   def detachTab(tab: WebUITab) {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
-  
+
   def detachPage(page: WebUIPage) {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
@@ -76,16 +76,13 @@ private[spark] abstract class WebUI(
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
     val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderHandler)
-    pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
-      .append(renderJsonHandler)
-    
   }
 
   /** Attach a handler to this UI. */
@@ -100,7 +97,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  protected def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)
@@ -108,6 +105,25 @@ private[spark] abstract class WebUI(
         handler.stop()
       }
     }
+  }
+
+  /**
+   * Add a handler for static content.
+   *
+   * @param resourceBase Root of where to find resources to serve.
+   * @param path Path in UI where to mount the resources.
+   */
+  def addStaticHandler(resourceBase: String, path: String): Unit = {
+    attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
+  }
+
+  /**
+   * Remove a static content handler.
+   *
+   * @param path Path in UI to unmount.
+   */
+  def removeStaticHandler(path: String): Unit = {
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
   }
 
   /** Initialize all components of the server. */

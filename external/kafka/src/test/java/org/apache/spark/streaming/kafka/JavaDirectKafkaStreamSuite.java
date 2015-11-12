@@ -18,9 +18,8 @@
 package org.apache.spark.streaming.kafka;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Arrays;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import scala.Tuple2;
 
@@ -34,6 +33,7 @@ import org.junit.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -41,40 +41,46 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
-  private transient KafkaStreamSuiteBase suiteBase = null;
+  private transient KafkaTestUtils kafkaTestUtils = null;
 
   @Before
   public void setUp() {
-      suiteBase = new KafkaStreamSuiteBase() { };
-      suiteBase.setupKafka();
-      System.clearProperty("spark.driver.port");
-      SparkConf sparkConf = new SparkConf()
-              .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
-      ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
+    kafkaTestUtils = new KafkaTestUtils();
+    kafkaTestUtils.setup();
+    SparkConf sparkConf = new SparkConf()
+      .setMaster("local[4]").setAppName(this.getClass().getSimpleName());
+    ssc = new JavaStreamingContext(sparkConf, Durations.milliseconds(200));
   }
 
   @After
   public void tearDown() {
+    if (ssc != null) {
       ssc.stop();
       ssc = null;
-      System.clearProperty("spark.driver.port");
-      suiteBase.tearDownKafka();
+    }
+
+    if (kafkaTestUtils != null) {
+      kafkaTestUtils.teardown();
+      kafkaTestUtils = null;
+    }
   }
 
   @Test
   public void testKafkaStream() throws InterruptedException {
-    String topic1 = "topic1";
-    String topic2 = "topic2";
+    final String topic1 = "topic1";
+    final String topic2 = "topic2";
+    // hold a reference to the current offset ranges, so it can be used downstream
+    final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
 
     String[] topic1data = createTopicAndSendData(topic1);
     String[] topic2data = createTopicAndSendData(topic2);
 
-    HashSet<String> sent = new HashSet<String>();
+    Set<String> sent = new HashSet<>();
     sent.addAll(Arrays.asList(topic1data));
     sent.addAll(Arrays.asList(topic2data));
 
-    HashMap<String, String> kafkaParams = new HashMap<String, String>();
-    kafkaParams.put("metadata.broker.list", suiteBase.brokerAddress());
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
     kafkaParams.put("auto.offset.reset", "smallest");
 
     JavaDStream<String> stream1 = KafkaUtils.createDirectStream(
@@ -85,10 +91,21 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         StringDecoder.class,
         kafkaParams,
         topicToSet(topic1)
+    ).transformToPair(
+        // Make sure you can get offset ranges from the rdd
+        new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
+          @Override
+          public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) {
+            OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+            offsetRanges.set(offsets);
+            Assert.assertEquals(topic1, offsets[0].topic());
+            return rdd;
+          }
+        }
     ).map(
         new Function<Tuple2<String, String>, String>() {
           @Override
-          public String call(Tuple2<String, String> kv) throws Exception {
+          public String call(Tuple2<String, String> kv) {
             return kv._2();
           }
         }
@@ -102,22 +119,27 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         StringDecoder.class,
         String.class,
         kafkaParams,
-        topicOffsetToMap(topic2, (long) 0),
+        topicOffsetToMap(topic2, 0L),
         new Function<MessageAndMetadata<String, String>, String>() {
           @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) throws Exception {
+          public String call(MessageAndMetadata<String, String> msgAndMd) {
             return msgAndMd.message();
           }
         }
     );
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
-    final HashSet<String> result = new HashSet<String>();
+    final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
     unifiedStream.foreachRDD(
         new Function<JavaRDD<String>, Void>() {
           @Override
-          public Void call(JavaRDD<String> rdd) throws Exception {
+          public Void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
+            for (OffsetRange o : offsetRanges.get()) {
+              System.out.println(
+                o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
+              );
+            }
             return null;
           }
         }
@@ -133,22 +155,22 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ssc.stop();
   }
 
-  private HashSet<String> topicToSet(String topic) {
-    HashSet<String> topicSet = new HashSet<String>();
+  private static Set<String> topicToSet(String topic) {
+    Set<String> topicSet = new HashSet<>();
     topicSet.add(topic);
     return topicSet;
   }
 
-  private HashMap<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
-    HashMap<TopicAndPartition, Long> topicMap = new HashMap<TopicAndPartition, Long>();
+  private static Map<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
+    Map<TopicAndPartition, Long> topicMap = new HashMap<>();
     topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
     return topicMap;
   }
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    suiteBase.createTopic(topic);
-    suiteBase.sendMessages(topic, data);
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, data);
     return data;
   }
 }

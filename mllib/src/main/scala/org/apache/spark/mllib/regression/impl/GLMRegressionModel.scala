@@ -32,7 +32,7 @@ private[regression] object GLMRegressionModel {
 
   object SaveLoadV1_0 {
 
-    def thisFormatVersion = "1.0"
+    def thisFormatVersion: String = "1.0"
 
     /** Model data for model import/export */
     case class Data(weights: Vector, intercept: Double)
@@ -60,7 +60,7 @@ private[regression] object GLMRegressionModel {
       val data = Data(weights, intercept)
       val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
       // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.saveAsParquetFile(Loader.dataPath(path))
+      dataRDD.write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -72,7 +72,7 @@ private[regression] object GLMRegressionModel {
     def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
       val datapath = Loader.dataPath(path)
       val sqlContext = new SQLContext(sc)
-      val dataRDD = sqlContext.parquetFile(datapath)
+      val dataRDD = sqlContext.read.parquet(datapath)
       val dataArray = dataRDD.select("weights", "intercept").take(1)
       assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
       val data = dataArray(0)

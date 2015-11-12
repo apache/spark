@@ -22,8 +22,7 @@ import java.net.{URI, URISyntaxException}
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
-
-import org.apache.spark.util.{IntParam, MemoryParam}
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the driver client.
@@ -35,14 +34,14 @@ private[deploy] class ClientArguments(args: Array[String]) {
   var logLevel = Level.WARN
 
   // launch parameters
-  var master: String = ""
+  var masters: Array[String] = null
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
   private var _driverOptions = ListBuffer[String]()
-  def driverOptions = _driverOptions.toSeq
+  def driverOptions: Seq[String] = _driverOptions.toSeq
 
   // kill parameters
   var driverId: String = ""
@@ -73,20 +72,22 @@ private[deploy] class ClientArguments(args: Array[String]) {
       cmd = "launch"
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
+        // scalastyle:off println
         println(s"Jar url '${_jarUrl}' is not in valid format.")
         println(s"Must be a jar file path in URL format " +
           "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
+        // scalastyle:on println
         printUsageAndExit(-1)
       }
 
       jarUrl = _jarUrl
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       mainClass = _mainClass
       _driverOptions ++= tail
 
     case "kill" :: _master :: _driverId :: tail =>
       cmd = "kill"
-      master = _master
+      masters = Utils.parseStandaloneMasterUrls(_master)
       driverId = _driverId
 
     case _ =>
@@ -111,14 +112,16 @@ private[deploy] class ClientArguments(args: Array[String]) {
       |                                  (default: $DEFAULT_SUPERVISE)
       |   -v, --verbose                  Print more debugging output
      """.stripMargin
+    // scalastyle:off println
     System.err.println(usage)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }
 
 private[deploy] object ClientArguments {
   val DEFAULT_CORES = 1
-  val DEFAULT_MEMORY = 512 // MB
+  val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // MB
   val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {

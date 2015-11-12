@@ -55,8 +55,8 @@ import org.apache.spark.graphx.impl.VertexRDDImpl
  * @tparam VD the vertex attribute associated with each vertex in the set.
  */
 abstract class VertexRDD[VD](
-    @transient sc: SparkContext,
-    @transient deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
+    sc: SparkContext,
+    deps: Seq[Dependency[_]]) extends RDD[(VertexId, VD)](sc, deps) {
 
   implicit protected def vdTag: ClassTag[VD]
 
@@ -120,6 +120,22 @@ abstract class VertexRDD[VD](
    * original VertexRDD.  The resulting VertexRDD retains the same index.
    */
   def mapValues[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexRDD[VD2]
+
+  /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other an RDD to run the set operation against
+   */
+  def minus(other: RDD[(VertexId, VD)]): VertexRDD[VD]
+
+  /**
+   * For each VertexId present in both `this` and `other`, minus will act as a set difference
+   * operation returning only those unique VertexId's present in `this`.
+   *
+   * @param other a VertexRDD to run the set operation against
+   */
+  def minus(other: VertexRDD[VD]): VertexRDD[VD]
 
   /**
    * For each vertex present in both `this` and `other`, `diff` returns only those vertices with
