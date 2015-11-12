@@ -496,6 +496,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // translated contains all filters that have been converted to the public Filter interface.
     // We should always push them to the data source no matter whether the data source can apply
     // a filter to every row or not.
-    (unrecognizedPredicates ++ unhandledPredicates, translated.map(_._2))
+    val (_, translatedFilters) = translated.unzip
+
+    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
   }
 }
