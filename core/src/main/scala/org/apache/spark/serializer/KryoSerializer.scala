@@ -21,6 +21,8 @@ import java.io.{EOFException, IOException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 import javax.annotation.Nullable
 
+import org.roaringbitmap.{BitmapContainer, RoaringBitmap, RoaringArray, ArrayContainer}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -362,6 +364,12 @@ private[serializer] object KryoSerializer {
     classOf[StorageLevel],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
+    classOf[RoaringBitmap],
+    classOf[RoaringArray],
+    classOf[RoaringArray.Element],
+    classOf[Array[RoaringArray.Element]],
+    classOf[ArrayContainer],
+    classOf[BitmapContainer],
     classOf[BitSet],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
