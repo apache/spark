@@ -421,7 +421,7 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
     // try to kill busy executor
-    assert(sc.killExecutor(executors.head))
+    assert(sc.killAndReplaceExecutor(executors.head))
     var apps = getApplications()
     // won't kill busy executor
     assert(apps.head.executors.size === 2)
