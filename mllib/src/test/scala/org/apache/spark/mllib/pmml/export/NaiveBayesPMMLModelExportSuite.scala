@@ -75,8 +75,8 @@ class NaiveBayesPMMLModelExportSuite extends SparkFunSuite {
     i = 0
     while (bayesOutputIter.hasNext) {
       val targetCount = bayesOutputIter.next()
-      assert(targetCount.getValue === "target_" + i)
-      assert(targetCount.getCount === pi(i))
+      assert(targetCount.getValue.toDouble === i)
+      assert(targetCount.getCount === math.exp(pi(i)))
       i += 1
     }
   }

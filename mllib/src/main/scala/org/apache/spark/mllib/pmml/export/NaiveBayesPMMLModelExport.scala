@@ -81,15 +81,26 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
           .withValues(SArray(new Value().withValue(i.toDouble.toString)): _*))
         miningSchema.withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
 
-        val pairs = labelIndices.map { label =>
-          new TargetValueCount().withValue(label.toDouble.toString).withCount(model.theta(label)(i))
+        val pairsExist = labelIndices.map { label =>
+          new TargetValueCount().withValue(label.toDouble.toString).withCount(math.exp(model.theta(label)(i)))
         }
 
+        val pairCountsExist = new PairCounts()
+          .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairsExist: _*))
+          .withValue("1.0")
+
+        val pairsAbsent = labelIndices.map { label =>
+          new TargetValueCount().withValue(label.toDouble.toString).withCount(1.0 - math.exp(model.theta(label)(i)))
+        }
+
+        val pairCountsAbsent = new PairCounts()
+          .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairsAbsent: _*))
+          .withValue("0.0")
+
+
         val bayesInput = new BayesInput()
-        val pairCounts = new PairCounts()
-          .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairs: _*))
-          .withValue(i.toDouble.toString)
-        bayesInput.withFieldName(fields(i)).withPairCounts(pairCounts)
+
+        bayesInput.withFieldName(fields(i)).withPairCounts(pairCountsExist, pairCountsAbsent)
         bayesInputs.withBayesInputs(bayesInput)
       }
     } else {
