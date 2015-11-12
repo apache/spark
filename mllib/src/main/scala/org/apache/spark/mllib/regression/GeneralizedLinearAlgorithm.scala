@@ -305,7 +305,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
       initialWeights
     }
 
-    val weightsWithIntercept = optimizer.optimize(data, initialWeightsWithIntercept)
+    val (weightsWithIntercept, _, _) = optimizer.optimize(data, initialWeightsWithIntercept)
 
     val intercept = if (addIntercept && numOfLinearPredictor == 1) {
       weightsWithIntercept(weightsWithIntercept.size - 1)

@@ -58,7 +58,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val convergenceTol = 1e-12
     val numIterations = 10
 
-    val (_, loss) = LBFGS.runLBFGS(
+    val (_, loss, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       simpleUpdater,
@@ -76,7 +76,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val stepSize = 1.0
     // Well, GD converges slower, so it requires more iterations!
     val numGDIterations = 50
-    val (_, lossGD) = GradientDescent.runMiniBatchSGD(
+    val (_, lossGD, _) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       simpleUpdater,
@@ -102,7 +102,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val convergenceTol = 1e-12
     val numIterations = 10
 
-    val (weightLBFGS, lossLBFGS) = LBFGS.runLBFGS(
+    val (weightLBFGS, lossLBFGS, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -114,7 +114,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
 
     val numGDIterations = 50
     val stepSize = 1.0
-    val (weightGD, lossGD) = GradientDescent.runMiniBatchSGD(
+    val (weightGD, lossGD, _) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -148,7 +148,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     val numIterations = 8
     var convergenceTol = 0.0
 
-    val (_, lossLBFGS1) = LBFGS.runLBFGS(
+    val (_, lossLBFGS1, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -163,7 +163,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert(lossLBFGS1.length == 9)
 
     convergenceTol = 0.1
-    val (_, lossLBFGS2) = LBFGS.runLBFGS(
+    val (_, lossLBFGS2, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -178,7 +178,7 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
     assert((lossLBFGS2(2) - lossLBFGS2(3)) / lossLBFGS2(2) < convergenceTol)
 
     convergenceTol = 0.01
-    val (_, lossLBFGS3) = LBFGS.runLBFGS(
+    val (_, lossLBFGS3, _) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -210,11 +210,11 @@ class LBFGSSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers 
       .setNumIterations(numIterations)
       .setRegParam(regParam)
 
-    val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
+    val (weightLBFGS, _, _) = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
 
     val numGDIterations = 50
     val stepSize = 1.0
-    val (weightGD, _) = GradientDescent.runMiniBatchSGD(
+    val (weightGD, _, _) = GradientDescent.runMiniBatchSGD(
       dataRDD,
       gradient,
       squaredL2Updater,
@@ -249,6 +249,6 @@ class LBFGSClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     val random = new Random(0)
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val weights = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
+    val (weights, _, _) = lbfgs.optimize(examples, Vectors.dense(Array.fill(n)(random.nextDouble)))
   }
 }

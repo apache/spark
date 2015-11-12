@@ -113,8 +113,9 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     this
   }
 
-  override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = LBFGS.runLBFGS(
+  override def optimize(data: RDD[(Double, Vector)],
+                        initialWeights: Vector): (Vector, Double, Integer) = {
+    val (weights, lossHistory, iter) = LBFGS.runLBFGS(
       data,
       gradient,
       updater,
@@ -123,7 +124,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
       maxNumIterations,
       regParam,
       initialWeights)
-    weights
+    (weights, lossHistory.last, iter)
   }
 
 }
@@ -163,7 +164,7 @@ object LBFGS extends Logging {
       convergenceTol: Double,
       maxNumIterations: Int,
       regParam: Double,
-      initialWeights: Vector): (Vector, Array[Double]) = {
+      initialWeights: Vector): (Vector, Array[Double], Integer) = {
 
     val lossHistory = mutable.ArrayBuilder.make[Double]
 
@@ -188,13 +189,14 @@ object LBFGS extends Logging {
     }
     lossHistory += state.value
     val weights = Vectors.fromBreeze(state.x)
+    val iter = state.iter
 
     val lossHistoryArray = lossHistory.result()
 
     logInfo("LBFGS.runLBFGS finished. Last 10 losses %s".format(
       lossHistoryArray.takeRight(10).mkString(", ")))
 
-    (weights, lossHistoryArray)
+    (weights, lossHistoryArray, iter)
   }
 
   /**

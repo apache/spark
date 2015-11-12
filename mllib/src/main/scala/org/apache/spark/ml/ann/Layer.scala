@@ -875,7 +875,7 @@ private[ml] class FeedForwardTrainer(
    * @return model
    */
   def train(data: RDD[(Vector, Vector)]): TopologyModel = {
-    val newWeights = optimizer.optimize(dataStacker.stack(data), getWeights)
+    val (newWeights, _, _) = optimizer.optimize(dataStacker.stack(data), getWeights)
     topology.getInstance(newWeights)
   }
 
