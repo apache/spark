@@ -114,8 +114,15 @@ private[deploy] object RPackageUtils extends Logging {
     try {
       val builder = new ProcessBuilder(installCmd)
       builder.redirectErrorStream(true)
+
+      // Put the SparkR package directory into R library search paths in case this R package
+      // may depend on SparkR.
       val env = builder.environment()
-      env.clear()
+      val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
+      env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))
+      env.put("R_PROFILE_USER",
+        Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
+
       val process = builder.start()
       new RedirectThread(process.getInputStream, printStream, "redirect R packaging").start()
       process.waitFor() == 0
