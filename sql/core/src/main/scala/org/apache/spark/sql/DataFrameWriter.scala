@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.io.compress.CompressionCodec
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -29,6 +31,8 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingA
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
+
+
 
 /**
  * :: Experimental ::
@@ -151,6 +155,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+<<<<<<< b72611f20a03c790b6fd341b6ffdb3b5437609ee
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
@@ -175,6 +180,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   @scala.annotation.varargs
   def sortBy(colName: String, colNames: String*): DataFrameWriter = {
     this.sortColumnNames = Option(colName +: colNames)
+    this
+  }
+  /*
+   * Specify the compression codec when saving it on hdfs
+   *
+   * @since 1.7.0
+   */
+  def compress(codec: Class[_ <: CompressionCodec]): DataFrameWriter = {
+    this.extraOptions += ("compression.codec" -> codec.getCanonicalName)
     this
   }
 

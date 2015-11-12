@@ -24,6 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory}
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
@@ -289,11 +290,18 @@ object ResolvedDataSource extends Logging {
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
+
+        val codec = options.get("compression.codec").flatMap(e =>
+          Some(new CompressionCodecFactory(sqlContext.sparkContext.hadoopConfiguration)
+            .getCodecClassByName(e).asInstanceOf[Class[CompressionCodec]])
+        )
+
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
             data.logicalPlan,
-            mode)).toRdd
+            mode,
+            codec)).toRdd
         r
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
