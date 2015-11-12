@@ -22,14 +22,15 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{Identifiable, DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LinearRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   private val seed: Int = 42
   @transient var datasetWithDenseFeature: DataFrame = _
@@ -854,4 +855,15 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
   }
+  
+  ignore("read/write") { // SPARK-11672
+  // Set some Params to make sure set Params are serialized.
+  val linearRegression = new LinearRegression()
+      .setElasticNetParam(0.1)
+      .setMaxIter(2)
+      .fit(datasetWithDenseFeature)
+    val linearRegression2 = testDefaultReadWrite(linearRegression)
+    assert(linearRegression.intercept === linearRegression2.intercept)
+    assert(linearRegression.coefficients.toArray === linearRegression2.coefficients.toArray)
+  }  
 }
