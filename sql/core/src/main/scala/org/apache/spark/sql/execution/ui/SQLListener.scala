@@ -41,20 +41,10 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
-private[sql] class SQLEventRegister extends SparkListenerEventRegister {
+private[sql] class SQLListenerRegister extends SparkListenerRegister {
 
-  override def getEventClasses(): List[Class[_]] = {
-    List(
-      classOf[SparkListenerSQLExecutionStart],
-      classOf[SparkListenerSQLExecutionEnd])
-  }
-
-  override def getListener(): SparkListener = {
-    new SQLHistoryListener(new SparkConf())
-  }
-
-  override def attachUITab(listener: SparkListener, sparkUI: SparkUI): Unit = {
-    new SQLTab(listener.asInstanceOf[SQLListener], sparkUI)
+  override def getListener(conf: SparkConf, sparkUI: SparkUI): SparkListener = {
+    new SQLHistoryListener(conf, sparkUI)
   }
 }
 
@@ -224,42 +214,39 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
     }
   }
 
-  override def onOtherEvent(event: SparkListenerEvent): Unit = {
-    event match {
-      case executionStart: SparkListenerSQLExecutionStart =>
-        val physicalPlanGraph = SparkPlanGraph(executionStart.sparkPlanInfo)
-        val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
-          node.metrics.map(metric => metric.accumulatorId -> metric)
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case executionStart: SparkListenerSQLExecutionStart =>
+      val physicalPlanGraph = SparkPlanGraph(executionStart.sparkPlanInfo)
+      val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
+        node.metrics.map(metric => metric.accumulatorId -> metric)
+      }
+      val executionUIData = new SQLExecutionUIData(
+        executionStart.executionId,
+        executionStart.description,
+        executionStart.details,
+        executionStart.physicalPlanDescription,
+        physicalPlanGraph,
+        sqlPlanMetrics.toMap,
+        executionStart.time)
+      synchronized {
+        activeExecutions(executionStart.executionId) = executionUIData
+        _executionIdToData(executionStart.executionId) = executionUIData
+      }
+    case executionEnd: SparkListenerSQLExecutionEnd => synchronized {
+      _executionIdToData.get(executionEnd.executionId).foreach { executionUIData =>
+        executionUIData.completionTime = Some(executionEnd.time)
+        if (!executionUIData.hasRunningJobs) {
+          // onExecutionEnd happens after all "onJobEnd"s
+          // So we should update the execution lists.
+          markExecutionFinished(executionEnd.executionId)
+        } else {
+          // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
+          // Then we don't if the execution is successful, so let the last onJobEnd updates the
+          // execution lists.
         }
-        val executionUIData = new SQLExecutionUIData(
-          executionStart.executionId,
-          executionStart.description,
-          executionStart.details,
-          executionStart.physicalPlanDescription,
-          physicalPlanGraph,
-          sqlPlanMetrics.toMap,
-          executionStart.time)
-        synchronized {
-          activeExecutions(executionStart.executionId) = executionUIData
-          _executionIdToData(executionStart.executionId) = executionUIData
-        }
-      case executionEnd: SparkListenerSQLExecutionEnd =>
-        synchronized {
-          _executionIdToData.get(executionEnd.executionId).foreach { executionUIData =>
-            executionUIData.completionTime = Some(executionEnd.time)
-            if (!executionUIData.hasRunningJobs) {
-              // onExecutionEnd happens after all "onJobEnd"s
-              // So we should update the execution lists.
-              markExecutionFinished(executionEnd.executionId)
-            } else {
-              // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
-              // Then we don't if the execution is successful, so let the last onJobEnd updates the
-              // execution lists.
-            }
-          }
-        }
-      case _ => // Ignore
+      }
     }
+    case _ => // Ignore
   }
 
   private def markExecutionFinished(executionId: Long): Unit = {
@@ -324,11 +311,16 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 
 }
 
-private[spark] class SQLHistoryListener(conf: SparkConf) extends SQLListener(conf) {
+private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
+  extends SQLListener(conf) {
+
+  var sqlTabAttached = false
+
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
     // Do nothing
   }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     updateTaskAccumulatorValues(
       taskEnd.taskInfo.taskId,
@@ -338,6 +330,16 @@ private[spark] class SQLHistoryListener(conf: SparkConf) extends SQLListener(con
         (acc.id, new LongSQLMetricValue(acc.update.getOrElse("0").toLong))
       }.toMap,
       finishTask = true)
+  }
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case executionStart: SparkListenerSQLExecutionStart =>
+      if (!sqlTabAttached) {
+        new SQLTab(this, sparkUI)
+        sqlTabAttached = true
+      }
+      super.onOtherEvent(event)
+    case _ => super.onOtherEvent(event)
   }
 }
 

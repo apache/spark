@@ -31,8 +31,7 @@ class SparkPlanInfo(
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
     val metrics: Seq[SQLMetricInfo]
-) {
-}
+)
 
 private[sql] object SparkPlanInfo {
 

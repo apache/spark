@@ -19,10 +19,12 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+
 import scala.collection.Map
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, TaskEndReason}
+import org.apache.spark.{Logging, SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -31,6 +33,7 @@ import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
 trait SparkListenerEvent
 
 @DeveloperApi
@@ -132,23 +135,14 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
- * Interface for registering events defined in other modules like SQL.
+ * Interface for registering listeners defined in other modules like SQL, which are used to
+ * rebuild the history UI.
  */
-trait SparkListenerEventRegister {
-  /**
-   * Get the class of events to register.
-   */
-  def getEventClasses(): List[Class[_]]
-
+trait SparkListenerRegister {
   /**
    * Get a listener used when rebuilding the history UI.
    */
-  def getListener(): SparkListener
-
-  /**
-   * Attach a UI Tab to the spark UI if necessary.
-   */
-  def attachUITab(listener: SparkListener, sparkUI: SparkUI)
+  def getListener(conf: SparkConf, sparkUI: SparkUI): SparkListener
 }
 
 /**

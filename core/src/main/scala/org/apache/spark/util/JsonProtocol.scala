@@ -17,24 +17,24 @@
 
 package org.apache.spark.util
 
-import java.util.{ServiceLoader, Properties, UUID}
+import java.util.{Properties, UUID}
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-import scala.collection.mutable.ListBuffer
 
-import org.json4s.{ShortTypeHints, DefaultFormats}
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
-import org.json4s.jackson.Serialization.{read, write}
 
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
 
 /**
@@ -55,22 +55,9 @@ import org.apache.spark.storage._
 private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
-  // Events defined in other modules are allowed to be registered through implementing the
-  // SparkListenerEventRegister trait. These events are written to Json using Jackson.
-  val eventRegisters: Iterable[SparkListenerEventRegister] = {
-    val loader = Utils.getContextOrSparkClassLoader
-    ServiceLoader.load(classOf[SparkListenerEventRegister], loader).asScala
-  }
+  private implicit val format = DefaultFormats
 
-  var eventClasses = new ListBuffer[Class[_]]()
-  eventRegisters.foreach { eventRegister =>
-    eventClasses ++= eventRegister.getEventClasses()
-  }
-
-  private implicit val format = new DefaultFormats {
-    override val typeHintFieldName = "Event"
-    override val typeHints = ShortTypeHints(eventClasses.toList)
-  }
+  val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
@@ -114,7 +101,7 @@ private[spark] object JsonProtocol {
         executorMetricsUpdateToJson(metricsUpdate)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
-      case _ => parse(write(event))
+      case _ => parse(mapper.writeValueAsString(event))
     }
   }
 
@@ -523,7 +510,8 @@ private[spark] object JsonProtocol {
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
-      case other => read[SparkListenerEvent](compact(render(json)))
+      case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
+        .asInstanceOf[SparkListenerEvent]
     }
   }
 

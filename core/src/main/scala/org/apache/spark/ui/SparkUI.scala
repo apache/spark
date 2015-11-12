@@ -17,11 +17,13 @@
 
 package org.apache.spark.ui
 
-import java.util.Date
+import java.util.{Date, ServiceLoader}
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}
-import org.apache.spark.util.JsonProtocol
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -128,6 +130,11 @@ private[spark] object SparkUI {
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
 
+  val listenerRegisters: Iterable[SparkListenerRegister] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    ServiceLoader.load(classOf[SparkListenerRegister], loader).asScala
+  }
+
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
@@ -153,10 +160,9 @@ private[spark] object SparkUI {
       startTime: Long): SparkUI = {
     val sparkUI = create(
       None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
-    JsonProtocol.eventRegisters.foreach { eventRegister =>
-      val listener = eventRegister.getListener()
+    listenerRegisters.foreach { listenRegister =>
+      val listener = listenRegister.getListener(conf, sparkUI)
       listenerBus.addListener(listener)
-      eventRegister.attachUITab(listener, sparkUI)
     }
     sparkUI
   }
