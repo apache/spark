@@ -137,7 +137,8 @@ private[flume] class PollingFlumeTestUtils {
   /**
    * A Python-friendly method to assert the output
    */
-  def assertOutput(outputHeaders: JList[JMap[String, String]], outputBodies: JList[String]): Unit = {
+  def assertOutput(
+      outputHeaders: JList[JMap[String, String]], outputBodies: JList[String]): Unit = {
     require(outputHeaders.size == outputBodies.size)
     val eventSize = outputHeaders.size
     if (eventSize != totalEventsPerChannel * channels.size) {
