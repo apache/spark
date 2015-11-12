@@ -19,15 +19,19 @@ package org.apache.spark.ml
 
 import java.{util => ju}
 
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
+
+import scala.reflect.ClassTag
 
 /**
  * :: DeveloperApi ::
@@ -67,6 +71,63 @@ abstract class PipelineStage extends Params with Logging {
   }
 
   override def copy(extra: ParamMap): PipelineStage
+}
+
+/** Writable interface for pipeline stage that only using metadata */
+@Experimental
+private[ml] trait DefaultPipelineWritable extends Writable {
+  self: PipelineStage =>
+
+  override def write: Writer = new DefaultPipelineWriter(this)
+}
+
+@Experimental
+private[ml] class DefaultPipelineWriter[M <: PipelineStage](instance: M)
+  extends Writer with Logging {
+
+  override protected def saveImpl(path: String): Unit = {
+    // Save metadata and Params
+    DefaultParamsWriter.saveMetadata(instance, path, sc)
+  }
+}
+
+@Experimental
+private[ml] abstract class DefaultPipelineReader[M <: PipelineStage : ClassTag]
+  extends Reader[M] {
+
+  /** Checked against metadata when loading model */
+  private val className = implicitly[ClassTag[M]].runtimeClass.getCanonicalName
+
+  def fromMetadata(metadata: Metadata): M
+
+  override def load(path: String): M = {
+    val metadata: Metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+    fromMetadata(metadata)
+  }
+}
+
+/** Readable interface for pipeline stage that only using metadata */
+@Experimental
+private[ml] abstract class DefaultPipelineReadable[M <: PipelineStage : ClassTag]
+  extends Readable[M] {
+
+  /**
+   * Create a [[M]] instance using uid
+   */
+  def newInstance(uid: String): M
+
+  /**
+    * Returns a [[Reader]] instance for this class.
+    */
+  override def read: Reader[M] = {
+    new DefaultPipelineReader[M] {
+      override def fromMetadata(metadata: Metadata): M = {
+        val model = newInstance(metadata.uid)
+        DefaultParamsReader.getAndSetParams(model, metadata)
+        model
+      }
+    }
+  }
 }
 
 /**
