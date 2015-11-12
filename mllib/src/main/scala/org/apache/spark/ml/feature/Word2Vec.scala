@@ -146,7 +146,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
 @Experimental
 class Word2VecModel private[ml] (
     override val uid: String,
-    @transient wordVectors: feature.Word2VecModel)
+    @transient private val wordVectors: feature.Word2VecModel)
   extends Model[Word2VecModel] with Word2VecBase {
 
   /**
