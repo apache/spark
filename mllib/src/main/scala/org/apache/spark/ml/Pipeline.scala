@@ -177,49 +177,11 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with W
   override def write: Writer = new PipelineWriter(this)
 }
 
-private[ml] object PipelineSharedWriter {
+object Pipeline extends Readable[Pipeline] {
 
-  import org.json4s.JsonDSL._
+  override def read: Reader[Pipeline] = new PipelineReader
 
-  /** Check that all stages are Writable */
-  def validateStages(stages: Array[PipelineStage]): Unit = {
-    stages.foreach {
-      case stage: Writable => // good
-      case stage =>
-        throw new UnsupportedOperationException("Pipeline write will fail on this Pipeline" +
-          s" because it contains a stage which does not implement Writable. Non-Writable stage:" +
-          s" ${stage.uid}")
-    }
-  }
-
-  def saveImpl(
-      instance: Params,
-      stages: Array[PipelineStage],
-      sc: SparkContext,
-      path: String): Unit = {
-    // Copied and edited from DefaultParamsWriter.saveMetadata
-    // TODO: modify DefaultParamsWriter.saveMetadata to avoid duplication
-    val uid = instance.uid
-    val cls = instance.getClass.getName
-    val stageUids = stages.map(_.uid)
-    val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
-    val metadata = ("class" -> cls) ~
-      ("timestamp" -> System.currentTimeMillis()) ~
-      ("sparkVersion" -> sc.version) ~
-      ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
-    val metadataPath = new Path(path, "metadata").toString
-    val metadataJson = compact(render(metadata))
-    sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
-
-    // Save stages
-    val stagesDir = new Path(path, "stages").toString
-    stages.foreach {
-      case stage: Writable =>
-        val stagePath = new Path(stagesDir, stage.uid).toString
-        stage.write.save(stagePath)
-    }
-  }
+  override def load(path: String): Pipeline = read.load(path)
 }
 
 private[ml] class PipelineWriter(instance: Pipeline) extends Writer {
@@ -230,13 +192,6 @@ private[ml] class PipelineWriter(instance: Pipeline) extends Writer {
     PipelineSharedWriter.saveImpl(instance, instance.getStages, sc, path)
 }
 
-object Pipeline extends Readable[Pipeline] {
-
-  override def read: Reader[Pipeline] = new PipelineReader
-
-  override def load(path: String): Pipeline = read.load(path)
-}
-
 private[ml] class PipelineReader extends Reader[Pipeline] {
 
   /** Checked against metadata when loading model */
@@ -245,42 +200,6 @@ private[ml] class PipelineReader extends Reader[Pipeline] {
   override def load(path: String): Pipeline = {
     val (uid: String, stages: Array[PipelineStage]) = PipelineSharedReader.load(className, sc, path)
     new Pipeline(uid).setStages(stages)
-  }
-}
-
-private[ml] object PipelineSharedReader {
-
-  def load(className: String, sc: SparkContext, path: String): (String, Array[PipelineStage]) = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-    implicit val format = DefaultFormats
-    val stagesDir = new Path(path, "stages").toString
-    val stageUids: Array[String] = metadata.params match {
-      case JObject(pairs) =>
-        if (pairs.length != 1) {
-          // Should not happen unless file is corrupted or we have a bug.
-          throw new RuntimeException(
-            s"Pipeline read expected 1 Param (stageUids), but found ${pairs.length}.")
-        }
-        pairs.head match {
-          case ("stageUids", jsonValue) =>
-            parse(compact(render(jsonValue))).extract[Seq[String]].toArray
-          case (paramName, jsonValue) =>
-            // Should not happen unless file is corrupted or we have a bug.
-            throw new RuntimeException(s"Pipeline read encountered unexpected Param $paramName" +
-              s" in metadata: ${metadata.metadataStr}")
-        }
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
-    }
-    val stages: Array[PipelineStage] = stageUids.map { stageUid =>
-      val stagePath = new Path(stagesDir, stageUid).toString
-      val stageMetadata = DefaultParamsReader.loadMetadata(stagePath, sc)
-      val cls = Utils.classForName(stageMetadata.className)
-      cls.getMethod("read").invoke(cls).asInstanceOf[Reader[PipelineStage]].load(stagePath)
-    }
-    (metadata.uid, stages)
   }
 }
 
@@ -349,5 +268,88 @@ private[ml] class PipelineModelReader extends Reader[PipelineModel] {
         s" was not a Transformer.  Bad stage: ${stage.uid}")
     }
     new PipelineModel(uid, transformers)
+  }
+}
+
+/** Methods for [[Writer]] shared between [[Pipeline]] and [[PipelineModel]] */
+private[ml] object PipelineSharedWriter {
+
+  import org.json4s.JsonDSL._
+
+  /** Check that all stages are Writable */
+  def validateStages(stages: Array[PipelineStage]): Unit = {
+    stages.foreach {
+      case stage: Writable => // good
+      case stage =>
+        throw new UnsupportedOperationException("Pipeline write will fail on this Pipeline" +
+          s" because it contains a stage which does not implement Writable. Non-Writable stage:" +
+          s" ${stage.uid}")
+    }
+  }
+
+  def saveImpl(
+      instance: Params,
+      stages: Array[PipelineStage],
+      sc: SparkContext,
+      path: String): Unit = {
+    // Copied and edited from DefaultParamsWriter.saveMetadata
+    // TODO: modify DefaultParamsWriter.saveMetadata to avoid duplication
+    val uid = instance.uid
+    val cls = instance.getClass.getName
+    val stageUids = stages.map(_.uid)
+    val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
+    val metadata = ("class" -> cls) ~
+      ("timestamp" -> System.currentTimeMillis()) ~
+      ("sparkVersion" -> sc.version) ~
+      ("uid" -> uid) ~
+      ("paramMap" -> jsonParams)
+    val metadataPath = new Path(path, "metadata").toString
+    val metadataJson = compact(render(metadata))
+    sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+
+    // Save stages
+    val stagesDir = new Path(path, "stages").toString
+    stages.foreach {
+      case stage: Writable =>
+        val stagePath = new Path(stagesDir, stage.uid).toString
+        stage.write.save(stagePath)
+    }
+  }
+}
+
+/** Methods for [[Reader]] shared between [[Pipeline]] and [[PipelineModel]] */
+private[ml] object PipelineSharedReader {
+
+  def load(className: String, sc: SparkContext, path: String): (String, Array[PipelineStage]) = {
+    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+    implicit val format = DefaultFormats
+    val stagesDir = new Path(path, "stages").toString
+    val stageUids: Array[String] = metadata.params match {
+      case JObject(pairs) =>
+        if (pairs.length != 1) {
+          // Should not happen unless file is corrupted or we have a bug.
+          throw new RuntimeException(
+            s"Pipeline read expected 1 Param (stageUids), but found ${pairs.length}.")
+        }
+        pairs.head match {
+          case ("stageUids", jsonValue) =>
+            parse(compact(render(jsonValue))).extract[Seq[String]].toArray
+          case (paramName, jsonValue) =>
+            // Should not happen unless file is corrupted or we have a bug.
+            throw new RuntimeException(s"Pipeline read encountered unexpected Param $paramName" +
+              s" in metadata: ${metadata.metadataStr}")
+        }
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
+    }
+    val stages: Array[PipelineStage] = stageUids.map { stageUid =>
+      val stagePath = new Path(stagesDir, stageUid).toString
+      val stageMetadata = DefaultParamsReader.loadMetadata(stagePath, sc)
+      val cls = Utils.classForName(stageMetadata.className)
+      cls.getMethod("read").invoke(cls).asInstanceOf[Reader[PipelineStage]].load(stagePath)
+    }
+    (metadata.uid, stages)
   }
 }
