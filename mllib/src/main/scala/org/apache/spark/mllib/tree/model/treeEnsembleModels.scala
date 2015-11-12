@@ -370,7 +370,7 @@ private[tree] sealed class TreeEnsembleModel(
     val header = toString + "\n"
     header + trees.zipWithIndex.map { case (tree, treeIndex) =>
       s"  Tree $treeIndex:\n" + tree.topNode.subtreeToString(4)
-    }.fold("")(_ + _)
+    }.foldLeft("")(_ + _)
   }
 
   /**

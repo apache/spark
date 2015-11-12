@@ -141,7 +141,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     unsafeRow.setInt(0, 2)
     assert(emptyRow.getInt(0) === 1)
 
-    val longString = UTF8String.fromString((1 to 100).map(_ => "abc").reduce(_ + _))
+    val longString = UTF8String.fromString((1 to 100).map(_ => "abc").reduceLeft(_ + _))
     val row2 = InternalRow(3, longString)
     val unsafeRow2 = converter.apply(row2)
 

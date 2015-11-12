@@ -148,17 +148,17 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
             "Are you sure your key class hashes consistently?")
         }
         // Reduce the new values
-        newValues.reduce(reduceF) // return
+        newValues.reduceLeft(reduceF) // return
       } else {
         // Get the previous window's reduced value
         var tempValue = arrayOfValues(0).head
         // If old values exists, then inverse reduce then from previous value
         if (!oldValues.isEmpty) {
-          tempValue = invReduceF(tempValue, oldValues.reduce(reduceF))
+          tempValue = invReduceF(tempValue, oldValues.reduceLeft(reduceF))
         }
         // If new values exists, then reduce them with previous value
         if (!newValues.isEmpty) {
-          tempValue = reduceF(tempValue, newValues.reduce(reduceF))
+          tempValue = reduceF(tempValue, newValues.reduceLeft(reduceF))
         }
         tempValue // return
       }

@@ -547,7 +547,7 @@ private[sql] object ParquetRelation extends Logging {
         // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
         // is used here.
         .flatMap(ParquetFilters.createFilter(dataSchema, _))
-        .reduceOption(FilterApi.and)
+        .reduceLeftOption(FilterApi.and)
         .foreach(ParquetInputFormat.setFilterPredicate(conf, _))
     }
 
@@ -634,7 +634,7 @@ private[sql] object ParquetRelation extends Logging {
       }
     }
 
-    finalSchemas.reduceOption { (left, right) =>
+    finalSchemas.reduceLeftOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
         throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
       }
@@ -768,10 +768,10 @@ private[sql] object ParquetRelation extends Logging {
 
           footers.map { footer =>
             ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceOption(_ merge _).iterator
+          }.reduceLeftOption(_ merge _).iterator
         }.collect()
 
-    partiallyMergedSchemas.reduceOption(_ merge _)
+    partiallyMergedSchemas.reduceLeftOption(_ merge _)
   }
 
   /**

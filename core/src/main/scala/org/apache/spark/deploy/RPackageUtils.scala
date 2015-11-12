@@ -198,7 +198,8 @@ private[deploy] object RPackageUtils extends Logging {
       if (dir.isDirectory) {
         val subDir = dir.listFiles(new FilenameFilter {
           override def accept(dir: File, name: String): Boolean = {
-            !excludePatterns.map(name.contains).reduce(_ || _) // exclude files with given pattern
+            // exclude files with given pattern
+            !excludePatterns.map(name.contains).reduceLeft(_ || _)
           }
         })
         subDir.flatMap(listFilesRecursively(_, excludePatterns)).toSet

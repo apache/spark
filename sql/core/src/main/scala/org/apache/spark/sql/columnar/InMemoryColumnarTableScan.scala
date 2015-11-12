@@ -76,7 +76,7 @@ private[sql] case class InMemoryRelation(
   private def computeSizeInBytes = {
     val sizeOfRow: Expression =
       BindReferences.bindReference(
-        output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
+        output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduceLeft(Add),
         partitionStatistics.schema)
 
     batchStats.value.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
@@ -225,7 +225,7 @@ private[sql] case class InMemoryColumnarTableScan(
   @transient val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
-      (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)
+      (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduceLeft(_ && _)
 
     case Or(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
@@ -294,7 +294,7 @@ private[sql] case class InMemoryColumnarTableScan(
 
     buffers.mapPartitions { cachedBatchIterator =>
       val partitionFilter = newPredicate(
-        partitionFilters.reduceOption(And).getOrElse(Literal(true)),
+        partitionFilters.reduceLeftOption(And).getOrElse(Literal(true)),
         schema)
 
       // Find the ordinals and data types of the requested columns.
