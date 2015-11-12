@@ -273,7 +273,7 @@ private[streaming] object FileBasedWriteAheadLog {
       source: Seq[I],
       handler: I => Iterator[O]): Iterator[O] = {
     val taskSupport = new ThreadPoolTaskSupport(tpool)
-    val groupSize = math.max(math.max(tpool.getCorePoolSize, tpool.getPoolSize), 8)
+    val groupSize = tpool.getMaximumPoolSize.max(8)
     source.grouped(groupSize).flatMap { group =>
       val parallelCollection = group.par
       parallelCollection.tasksupport = taskSupport

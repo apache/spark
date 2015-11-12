@@ -20,7 +20,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.{TimeUnit, CountDownLatch, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -219,17 +219,36 @@ class FileBasedWriteAheadLogSuite
       def getMax(): Int = synchronized { max }
     }
     try {
-      val testSeq = 1 to 64
+      // If Jenkins is slow, we may not have a chance to run many threads simultaneously. Having
+      // a latch will make sure that all the threads can be launched altogether.
+      val latch = new CountDownLatch(1)
+      val testSeq = 1 to 1000
       val counter = new GetMaxCounter()
       def handle(value: Int): Iterator[Int] = {
         new CompletionIterator[Int, Iterator[Int]](Iterator(value)) {
           counter.increment()
+          // block so that other threads also launch
+          latch.await(10, TimeUnit.SECONDS)
           override def completion() { counter.decrement() }
         }
       }
-      val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
-      assert(iterator.toSeq === testSeq)
-      assert(counter.getMax() > 1) // make sure we are doing a parallel computation!
+      @volatile var collected: Seq[Int] = Nil
+      val t = new Thread() {
+        override def run() {
+          // run the calculation on a separate thread so that we can release the latch
+          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
+          collected = iterator.toSeq
+        }
+      }
+      t.start()
+      eventually(Eventually.timeout(10.seconds)) {
+        // make sure we are doing a parallel computation!
+        assert(counter.getMax() > 1)
+      }
+      latch.countDown()
+      t.join(10000)
+      assert(collected === testSeq)
+      // make sure we didn't open too many Iterators
       assert(counter.getMax() <= numThreads)
     } finally {
       tpool.shutdownNow()
@@ -295,6 +314,22 @@ class FileBasedWriteAheadLogSuite
 
     // Verify all the data except the last can be read
     assert(readDataUsingReader(testFile) === (dataToWrite.dropRight(1)))
+  }
+
+  test("FileBasedWriteAheadLogReader - handles errors when file doesn't exist") {
+    // Write data manually for testing the sequential reader
+    val dataToWrite = generateRandomData()
+    writeDataUsingWriter(testFile, dataToWrite)
+    val tFile = new File(testFile)
+    assert(tFile.exists())
+    // Verify the data can be read and is same as the one correctly written
+    assert(readDataUsingReader(testFile) === dataToWrite)
+
+    tFile.delete()
+    assert(!tFile.exists())
+
+    // Verify that no exception is thrown if file doesn't exist
+    assert(readDataUsingReader(testFile) === Nil)
   }
 
   test("FileBasedWriteAheadLogRandomReader - reading data using random reader") {
@@ -619,10 +654,7 @@ object WriteAheadLogSuite {
       closeFileAfterWrite: Boolean,
       allowBatching: Boolean): Seq[String] = {
     val wal = createWriteAheadLog(logDirectory, closeFileAfterWrite, allowBatching)
-    val data = wal.readAll().asScala.map(byteBufferToString).toSeq
-    // The thread pool for parallel recovery gets killed with wal.close(). Therefore we need to
-    // eagerly compute data, otherwise the lazy computation will fail.
-    data.length
+    val data = wal.readAll().asScala.map(byteBufferToString).toArray
     wal.close()
     data
   }
