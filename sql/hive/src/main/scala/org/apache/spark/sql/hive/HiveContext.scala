@@ -57,9 +57,11 @@ import org.apache.spark.util.Utils
 /**
  * This is the HiveQL Dialect, this dialect is strongly bind with HiveContext
  */
-private[hive] class HiveQLDialect extends ParserDialect {
+private[hive] class HiveQLDialect(sqlContext: HiveContext) extends ParserDialect {
   override def parse(sqlText: String): LogicalPlan = {
-    HiveQl.parseSql(sqlText)
+    sqlContext.executionHive.withHiveState {
+      HiveQl.parseSql(sqlText)
+    }
   }
 }
 
@@ -410,7 +412,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry(FunctionRegistry.builtin)
+    new HiveFunctionRegistry(FunctionRegistry.builtin, this)
 
   /* An analyzer that uses the Hive metastore. */
   @transient
@@ -517,10 +519,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) with Logging {
     }
   }
 
-  override protected[sql] def dialectClassName = if (conf.dialect == "hiveql") {
-    classOf[HiveQLDialect].getCanonicalName
-  } else {
-    super.dialectClassName
+  protected[sql] override def getSQLDialect(): ParserDialect = {
+    if (conf.dialect == "hiveql") {
+      new HiveQLDialect(this)
+    } else {
+      super.getSQLDialect()
+    }
   }
 
   @transient
