@@ -30,11 +30,8 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
-import scala.concurrent.Await
 import org.apache.spark.deploy.DeployMessages.MasterStateResponse
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
-import java.util.concurrent.TimeUnit
 
 /**
  * End-to-end tests for dynamic allocation in standalone mode.
