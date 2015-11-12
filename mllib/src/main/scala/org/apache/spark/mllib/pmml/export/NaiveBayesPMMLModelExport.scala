@@ -53,18 +53,19 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     val labelIndices = model.pi.indices
     val featureIndices = model.theta.head.indices
 
-
+    // add Bayes input
     if (model.modelType == NaiveBayes.Multinomial) {
-      // add Bayes input
       for (i <- featureIndices) {
         fields(i) = FieldName.create("field_" + i)
         dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
-        miningSchema.withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
+        miningSchema
+          .withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
 
         val stats = labelIndices.map { label =>
           new TargetValueStat().withValue(label.toDouble.toString)
             .withContinuousDistribution(
-              new GaussianDistribution().withMean(math.exp(model.theta(label)(i))).withVariance(1.0))
+              new GaussianDistribution()
+                .withMean(math.exp(model.theta(label)(i))).withVariance(1.0))
         }
 
         val targetValueStats = new TargetValueStats().withTargetValueStats(stats: _*)
@@ -74,15 +75,16 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
         bayesInputs.withBayesInputs(bayesInput)
       }
     } else if (model.modelType == NaiveBayes.Bernoulli) {
-      // add Bayes input
       for (i <- featureIndices) {
         fields(i) = FieldName.create("field_" + i)
         dataDictionary.withDataFields(new DataField(fields(i), OpType.CATEGORICAL, DataType.DOUBLE)
           .withValues(SArray(new Value().withValue(i.toDouble.toString)): _*))
-        miningSchema.withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
+        miningSchema
+          .withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
 
         val pairsExist = labelIndices.map { label =>
-          new TargetValueCount().withValue(label.toDouble.toString).withCount(math.exp(model.theta(label)(i)))
+          new TargetValueCount()
+            .withValue(label.toDouble.toString).withCount(math.exp(model.theta(label)(i)))
         }
 
         val pairCountsExist = new PairCounts()
@@ -90,13 +92,13 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
           .withValue("1.0")
 
         val pairsAbsent = labelIndices.map { label =>
-          new TargetValueCount().withValue(label.toDouble.toString).withCount(1.0 - math.exp(model.theta(label)(i)))
+          new TargetValueCount()
+            .withValue(label.toDouble.toString).withCount(1.0 - math.exp(model.theta(label)(i)))
         }
 
         val pairCountsAbsent = new PairCounts()
           .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairsAbsent: _*))
           .withValue("0.0")
-
 
         val bayesInput = new BayesInput()
 
@@ -111,7 +113,8 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     val targetField = FieldName.create("class")
     dataDictionary.withDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.DOUBLE)
       .withValues(labelIndices.map { x => new Value().withValue(x.toDouble.toString)}: _*))
-    miningSchema.withMiningFields(new MiningField(targetField).withUsageType(FieldUsageType.PREDICTED))
+    miningSchema
+      .withMiningFields(new MiningField(targetField).withUsageType(FieldUsageType.PREDICTED))
 
     // add Bayes output
     val targetValueCounts = model.pi.zipWithIndex.map { case (x, i) =>
@@ -119,7 +122,6 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     bayesOutput
       .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(targetValueCounts: _*))
       .withFieldName(targetField)
-
 
     nbModel.setMiningSchema(miningSchema)
     nbModel.setBayesInputs(bayesInputs)
