@@ -28,11 +28,17 @@ import org.apache.spark.{HashPartitioner, SparkConf, SparkContext, SparkFunSuite
 
 class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
-  private var sc = new SparkContext(
-    new SparkConf().setMaster("local").setAppName("TrackStateRDDSuite"))
+  private var sc: SparkContext = null
+
+  override def beforeAll(): Unit = {
+    sc = new SparkContext(
+      new SparkConf().setMaster("local").setAppName("TrackStateRDDSuite"))
+  }
 
   override def afterAll(): Unit = {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+    }
   }
 
   test("creation from pair RDD") {
