@@ -62,6 +62,27 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(
       data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    // Fuzzier models
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 3.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL,
+      seed = Utils.random.nextLong(), m = 3.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
   }
 
   test("no distinct points") {
@@ -76,6 +97,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     // Make sure code runs.
     var model = KMeans.train(data, k = 2, maxIterations = 1)
     assert(model.clusterCenters.size === 2)
+
+    // Fuzzier models
+    model = KMeans.train(
+      data, k = 2, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.size === 2)
   }
 
   test("more clusters than points") {
@@ -87,6 +114,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     // Make sure code runs.
     var model = KMeans.train(data, k = 3, maxIterations = 1)
+    assert(model.clusterCenters.size === 3)
+
+    // Fuzzier models
+    model = KMeans.train(
+      data, k = 3, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
     assert(model.clusterCenters.size === 3)
   }
 
@@ -146,6 +179,23 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
       initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    // Fuzzier models
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 10, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 15, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
   }
 
   test("single cluster with sparse data") {
@@ -191,6 +241,18 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(data, k = 1, maxIterations = 1, runs = 1,
       initializationMode = K_MEANS_PARALLEL)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    // Fuzzier models
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
+    model = KMeans.train(
+      data, k = 1, maxIterations = 1, runs = 1, initializationMode = RANDOM,
+      seed = Utils.random.nextLong(), m = 3.0)
+    assert(model.clusterCenters.head ~== center absTol 1E-5)
+
 
     data.unpersist()
   }
@@ -295,7 +357,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setMaxIterations(0)
       .setInitialModel(initialModel)
       .run(rdd)
-   // comparing the returned model and the initial model
+    // comparing the returned model and the initial model
     assert(returnModel.clusterCenters(0) === initialModel.clusterCenters(0))
     assert(returnModel.clusterCenters(1) === initialModel.clusterCenters(1))
   }

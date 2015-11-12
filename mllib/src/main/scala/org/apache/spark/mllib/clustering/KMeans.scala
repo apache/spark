@@ -82,6 +82,9 @@ class KMeans private(
     */
   @Since("1.6.0")
   def setM(m: Double): this.type = {
+    if (m <= 1) {
+      throw new IllegalArgumentException("Fuzzifier must be greater than 1!")
+    }
     this.m = m
     this
   }
@@ -550,6 +553,35 @@ object KMeans {
   val RANDOM = "random"
   @Since("0.8.0")
   val K_MEANS_PARALLEL = "k-means||"
+
+  /**
+    * Trains a k-means model using the given set of parameters.
+    *
+    * @param data training points stored as `RDD[Vector]`
+    * @param k number of clusters
+    * @param maxIterations max number of iterations
+    * @param runs number of parallel runs, defaults to 1. The best model is returned.
+    * @param initializationMode initialization model, either "random" or "k-means||" (default).
+    * @param seed random seed value for cluster initialization
+    * @param m fuzzifier, between 1 and infinity, default is 1, which leads to hard clustering
+    */
+  @Since("1.6.0")
+  def train(
+             data: RDD[Vector],
+             k: Int,
+             maxIterations: Int,
+             runs: Int,
+             initializationMode: String,
+             seed: Long,
+             m: Double): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      .setSeed(seed)
+      .setM(m)
+      .run(data)
+  }
 
   /**
     * Trains a k-means model using the given set of parameters.
