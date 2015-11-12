@@ -78,7 +78,8 @@ varies across cluster managers:
 In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
 
 In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
-slave nodes with `spark.shuffle.service.enabled` set to `true`.
+slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
+through Marathon.
 
 In YARN mode, start the shuffle service on each `NodeManager` as follows:
 
