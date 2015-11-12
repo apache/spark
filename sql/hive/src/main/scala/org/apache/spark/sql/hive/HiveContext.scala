@@ -454,7 +454,7 @@ class HiveContext private[hive](
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy()) {
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), this) {
       override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
         // Hive Registry need current database to lookup function
         // TODO: the current database of executionHive should be consistent with metadataHive
