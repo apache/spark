@@ -99,7 +99,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required int32 c(DATE);
         |  required int32 d(DECIMAL(1,0));
         |  required int64 e(DECIMAL(10,0));
-        |} +      """.stripMargin)
+        |}
+      """.stripMargin)
 
     withTempPath { location =>
       val extraMetadata = Map.empty[String, String].asJava
