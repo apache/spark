@@ -297,8 +297,10 @@ object HiveTypeCoercion {
 
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case StddevPop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        StddevPop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
+      case StddevSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
+        StddevSamp(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
       case VariancePop(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>
         VariancePop(Cast(e, DoubleType), mutableAggBufferOffset, inputAggBufferOffset)
       case VarianceSamp(e @ StringType(), mutableAggBufferOffset, inputAggBufferOffset) =>

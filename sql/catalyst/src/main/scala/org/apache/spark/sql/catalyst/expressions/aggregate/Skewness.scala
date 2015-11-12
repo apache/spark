@@ -41,9 +41,11 @@ case class Skewness(child: Expression,
       s"$prettyName requires ${momentOrder + 1} central moments, received: ${moments.length}")
     val m2 = moments(2)
     val m3 = moments(3)
+
     if (n == 0.0 || m2 == 0.0) {
       Double.NaN
-    } else {
+    }
+    else {
       math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
     }
   }
