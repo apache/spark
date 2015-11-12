@@ -212,7 +212,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required binary a(JSON);
         |  required binary b(BSON);
         |}
-        """.stripMargin)
+      """.stripMargin)
 
     withTempPath { location =>
       val extraMetadata = Map.empty[String, String].asJava
