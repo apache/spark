@@ -453,9 +453,9 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *         }
    *       };
    *
-   *    JavaTrackStateDStream[Integer, Integer, Integer, String] trackStateDStream =
-   *        keyValueDStream.trackStateByKey[Int, String](
-   *            StateSpec.function(trackingFunction).numPartitions(10));
+   *    JavaTrackStateDStream<Integer, Integer, Integer, String> trackStateDStream =
+   *        keyValueDStream.<Integer, String>trackStateByKey(
+   *                 StateSpec.function(trackStateFunc).numPartitions(10));
    * }}}
    *
    * @param spec          Specification of this transformation

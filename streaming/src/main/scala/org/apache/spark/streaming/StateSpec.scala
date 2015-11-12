@@ -48,12 +48,12 @@ import org.apache.spark.{HashPartitioner, Partitioner}
  *
  * Example in Java:
  * {{{
- *    StateSpec[KeyType, ValueType, StateType, EmittedDataType] spec =
- *      StateSpec.function[KeyType, ValueType, StateType, EmittedDataType](trackingFunction)
+ *    StateSpec<KeyType, ValueType, StateType, EmittedDataType> spec =
+ *      StateSpec.<KeyType, ValueType, StateType, EmittedDataType>function(trackingFunction)
  *                    .numPartition(10);
  *
- *    JavaTrackStateDStream[KeyType, ValueType, StateType, EmittedType] emittedRecordDStream =
- *      javaPairDStream.trackStateByKey[StateType, EmittedDataType](spec);
+ *    JavaTrackStateDStream<KeyType, ValueType, StateType, EmittedType> emittedRecordDStream =
+ *      javaPairDStream.<StateType, EmittedDataType>trackStateByKey(spec);
  * }}}
  */
 @Experimental
@@ -109,12 +109,12 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, EmittedType] exte
  *
  * Example in Java:
  * {{{
- *    StateSpec[KeyType, ValueType, StateType, EmittedDataType] spec =
- *      StateSpec.function[KeyType, ValueType, StateType, EmittedDataType](trackingFunction)
+ *    StateSpec<KeyType, ValueType, StateType, EmittedDataType> spec =
+ *      StateSpec.<KeyType, ValueType, StateType, EmittedDataType>function(trackingFunction)
  *                    .numPartition(10);
  *
- *    JavaTrackStateDStream[KeyType, ValueType, StateType, EmittedType] emittedRecordDStream =
- *      javaPairDStream.trackStateByKey[StateType, EmittedDataType](spec);
+ *    JavaTrackStateDStream<KeyType, ValueType, StateType, EmittedType> emittedRecordDStream =
+ *      javaPairDStream.<StateType, EmittedDataType>trackStateByKey(spec);
  * }}}
  */
 @Experimental

@@ -53,11 +53,11 @@ import org.apache.spark.annotation.Experimental
  * Java example of using `State`:
  * {{{
  *    // A tracking function that maintains an integer state and return a String
- *   Function2<Optional<Integer>, JavaState<Integer>, Optional<String>> trackStateFunc =
- *       new Function2<Optional<Integer>, JavaState<Integer>, Optional<String>>() {
+ *   Function2<Optional<Integer>, State<Integer>, Optional<String>> trackStateFunc =
+ *       new Function2<Optional<Integer>, State<Integer>, Optional<String>>() {
  *
  *         @Override
- *         public Optional<String> call(Optional<Integer> one, JavaState<Integer> state) {
+ *         public Optional<String> call(Optional<Integer> one, State<Integer> state) {
  *           if (state.exists()) {
  *             int existingState = state.get(); // Get the existing state
  *             boolean shouldRemove = ...; // Decide whether to remove the state
