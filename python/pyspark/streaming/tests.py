@@ -618,6 +618,11 @@ class CheckpointTests(unittest.TestCase):
         if jSparkContextOption.nonEmpty():
             jSparkContextOption.get().stop()
 
+    def __init__(self):
+        self.ssc = None
+        self.sc = None
+        self.cpd = None
+
     def tearDown(self):
         if self.ssc is not None:
             self.ssc.stop(True)
