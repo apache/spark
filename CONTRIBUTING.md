@@ -116,7 +116,7 @@ Once your unit test environment is setup, you should be able to simply run
 For example, in order to just execute the "core" unit tests, run the following: 
 
 ```
-./run_unit_tests.sh tests.core:CoreTests
+./run_unit_tests.sh tests.core:CoreTest
 ```
 
 or a single test method: 

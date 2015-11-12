@@ -21,3 +21,5 @@ secrets.py
 sftp-config.json
 unittests.cfg
 error.log
+.idea
+
