@@ -309,11 +309,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      *               if necessary.
      */
     def getSortOperator(sortExprs: Seq[SortOrder], global: Boolean, child: SparkPlan): SparkPlan = {
-      if (TungstenSort.supportsSchema(child.schema)) {
-        execution.TungstenSort(sortExprs, global, child)
-      } else {
-        execution.Sort(sortExprs, global, child)
-      }
+      execution.TungstenSort(sortExprs, global, child)
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -347,13 +343,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Sort(sortExprs, global, child) =>
         getSortOperator(sortExprs, global, planLater(child)):: Nil
       case logical.Project(projectList, child) =>
-        // If unsafe mode is enabled and we support these data types in Unsafe, use the
-        // Tungsten project. Otherwise, use the normal project.
-        if (UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
-          execution.TungstenProject(projectList, planLater(child)) :: Nil
-        } else {
-          execution.Project(projectList, planLater(child)) :: Nil
-        }
+        execution.TungstenProject(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
