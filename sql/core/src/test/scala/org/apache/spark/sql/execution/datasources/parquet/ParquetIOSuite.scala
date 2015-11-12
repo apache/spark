@@ -214,7 +214,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val fileMetadata = new FileMetaData(parquetSchema, Map.empty[String, String].asJava ,"Spark")
+      val extraMetadata = Map.empty[String, String].asJava
+      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
       val footer = List(
         new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))
