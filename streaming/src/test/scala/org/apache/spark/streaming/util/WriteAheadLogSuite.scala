@@ -328,6 +328,10 @@ class FileBasedWriteAheadLogSuite
     tFile.delete()
     assert(!tFile.exists())
 
+    val reader = new FileBasedWriteAheadLogReader(testFile, hadoopConf)
+    assert(!reader.hasNext)
+    reader.close()
+
     // Verify that no exception is thrown if file doesn't exist
     assert(readDataUsingReader(testFile) === Nil)
   }

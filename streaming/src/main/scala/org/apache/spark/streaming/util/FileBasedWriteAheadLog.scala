@@ -59,7 +59,7 @@ private[streaming] class FileBasedWriteAheadLog(
   private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
 
   private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
-  private val threadpool = ThreadUtils.newDaemonCachedThreadPool(threadpoolName)
+  private val threadpool = ThreadUtils.newDaemonCachedThreadPool(threadpoolName, 8)
   private val executionContext = ExecutionContext.fromExecutorService(threadpool)
   override protected val logName = s"WriteAheadLogManager $callerNameTag"
 
@@ -161,6 +161,7 @@ private[streaming] class FileBasedWriteAheadLog(
     }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
+
     def deleteFile(walInfo: LogInfo): Unit = {
       try {
         val path = new Path(walInfo.path)
