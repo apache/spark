@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.encoders
+package org.apache.spark.sql
+
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 import scala.reflect.ClassTag
-
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
-import org.apache.spark.sql.catalyst.expressions._
 
 /**
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
@@ -38,9 +39,7 @@ trait Encoder[T] extends Serializable {
   def clsTag: ClassTag[T]
 }
 
-object Encoder {
-  import scala.reflect.runtime.universe._
-
+object Encoders {
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
   def SHORT: Encoder[java.lang.Short] = ExpressionEncoder(flat = true)
@@ -128,55 +127,5 @@ object Encoder {
       extractExpressions,
       constructExpression,
       ClassTag.apply(cls))
-  }
-
-  def typeTagOfTuple2[T1 : TypeTag, T2 : TypeTag]: TypeTag[(T1, T2)] = typeTag[(T1, T2)]
-
-  private def getTypeTag[T](c: Class[T]): TypeTag[T] = {
-    import scala.reflect.api
-
-    // val mirror = runtimeMirror(c.getClassLoader)
-    val mirror = rootMirror
-    val sym = mirror.staticClass(c.getName)
-    val tpe = sym.selfType
-    TypeTag(mirror, new api.TypeCreator {
-      def apply[U <: api.Universe with Singleton](m: api.Mirror[U]) =
-        if (m eq mirror) tpe.asInstanceOf[U # Type]
-        else throw new IllegalArgumentException(
-          s"Type tag defined in $mirror cannot be migrated to other mirrors.")
-    })
-  }
-
-  def forTuple[T1, T2](c1: Class[T1], c2: Class[T2]): Encoder[(T1, T2)] = {
-    implicit val typeTag1 = getTypeTag(c1)
-    implicit val typeTag2 = getTypeTag(c2)
-    ExpressionEncoder[(T1, T2)]()
-  }
-
-  def forTuple[T1, T2, T3](c1: Class[T1], c2: Class[T2], c3: Class[T3]): Encoder[(T1, T2, T3)] = {
-    implicit val typeTag1 = getTypeTag(c1)
-    implicit val typeTag2 = getTypeTag(c2)
-    implicit val typeTag3 = getTypeTag(c3)
-    ExpressionEncoder[(T1, T2, T3)]()
-  }
-
-  def forTuple[T1, T2, T3, T4](
-      c1: Class[T1], c2: Class[T2], c3: Class[T3], c4: Class[T4]): Encoder[(T1, T2, T3, T4)] = {
-    implicit val typeTag1 = getTypeTag(c1)
-    implicit val typeTag2 = getTypeTag(c2)
-    implicit val typeTag3 = getTypeTag(c3)
-    implicit val typeTag4 = getTypeTag(c4)
-    ExpressionEncoder[(T1, T2, T3, T4)]()
-  }
-
-  def forTuple[T1, T2, T3, T4, T5](
-      c1: Class[T1], c2: Class[T2], c3: Class[T3], c4: Class[T4], c5: Class[T5])
-    : Encoder[(T1, T2, T3, T4, T5)] = {
-    implicit val typeTag1 = getTypeTag(c1)
-    implicit val typeTag2 = getTypeTag(c2)
-    implicit val typeTag3 = getTypeTag(c3)
-    implicit val typeTag4 = getTypeTag(c4)
-    implicit val typeTag5 = getTypeTag(c5)
-    ExpressionEncoder[(T1, T2, T3, T4, T5)]()
   }
 }
