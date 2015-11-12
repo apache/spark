@@ -519,7 +519,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   /**
-   * Base paths of this relation.  For partitioned relations, it should be either root directories
+   * Base paths of this relation.  For partitioned relations, it should be root directories
    * of all partition directories.
    *
    * @since 1.4.0
@@ -554,12 +554,19 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   private def discoverPartitions(): PartitionSpec = {
+    val rootDirs = paths.map { path =>
+      new Path(path)
+    }.toSet
+
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
     userDefinedPartitionColumns match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
-          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference = false)
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = false,
+          rootPaths = rootDirs)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
         // we need to cast into the data type that user specified.
@@ -577,8 +584,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
       case _ =>
         // user did not provide a partitioning schema
-        PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled())
+        PartitioningUtils.parsePartitions(
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+          rootPaths = rootDirs)
     }
   }
 

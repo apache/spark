@@ -75,10 +75,11 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String,
-      typeInference: Boolean): PartitionSpec = {
+      typeInference: Boolean,
+      rootPaths: Set[Path]): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optBasePaths) = paths.map { path =>
-      parsePartition(path, defaultPartitionName, typeInference)
+      parsePartition(path, defaultPartitionName, typeInference, rootPaths)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -152,11 +153,14 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartition(
       path: Path,
       defaultPartitionName: String,
-      typeInference: Boolean): (Option[PartitionValues], Option[Path]) = {
+      typeInference: Boolean,
+      rootPaths: Set[Path]): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
+    // chopped path is the current path that we will use to parse partition column value.
     var chopped = path
+    // base path will be the child of chopped in the loop below.
     var basePath = path
 
     while (!finished) {
@@ -166,11 +170,37 @@ private[sql] object PartitioningUtils {
         return (None, None)
       }
 
+      // Let's say chopped is a path of /table/a=1/, chopped.getName will give us a=1.
+      // Once we get the string, we try to parse it and find the partition column and value.
       val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
-      maybeColumn.foreach(columns += _)
+
+      // Now, basePath will be /table/a=1/
       basePath = chopped
+      // chopped will be /table/
       chopped = chopped.getParent
-      finished = (maybeColumn.isEmpty && !columns.isEmpty) || chopped.getParent == null
+
+      // Now, we determine if we should continue.
+      // When we hit any of the following three cases, we will not continue:
+      //  - In this iteration, we could not parse the value of partition column and value,
+      //    i.e. maybeColumn is None, and columns is not empty. At here we check if columns is
+      //    empty to handle cases like /table/a=1/_temporary/something (we need to find a=1 in
+      //    this case).
+      //  - After we get the new chopped, this new chopped represent the path of "/table", i.e.
+      //    chopped.getParent == null.
+      //  - The chopped we used to parse partition column and value (right now, it is basePath),
+      //    is already the root path of a table. For the example of /table/a=1/, /table/ is the
+      //    root path.
+      finished =
+        (maybeColumn.isEmpty && !columns.isEmpty) ||
+          chopped.getParent == null ||
+          rootPaths.contains(basePath)
+
+      if (maybeColumn.isDefined && !rootPaths.contains(basePath)) {
+        // If we can parse the partition column and its value, and the path
+        // we used for parsing is not the root path, we should append the parsed
+        // result to columns.
+        maybeColumn.foreach(columns += _)
+      }
     }
 
     if (columns.isEmpty) {
