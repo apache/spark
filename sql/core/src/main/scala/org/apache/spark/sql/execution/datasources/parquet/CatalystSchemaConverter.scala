@@ -163,9 +163,10 @@ private[parquet] class CatalystSchemaConverter(
 
       case BINARY =>
         originalType match {
-          case UTF8 | ENUM => StringType
+          case UTF8 | ENUM | JSON => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
+          case BSON => BinaryType
           case DECIMAL => makeDecimalType()
           case _ => illegalType()
         }
