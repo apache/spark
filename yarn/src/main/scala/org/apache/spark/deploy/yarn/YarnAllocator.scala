@@ -502,8 +502,6 @@ private[yarn] class YarnAllocator(
           s"Container $containerId exited from explicit termination request.")
       }
 
-      logInfo(s">>>>>> executor exited: $exitReason")
-
       for {
         host <- hostOpt
         containerSet <- allocatedHostToContainersMap.get(host)
