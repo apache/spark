@@ -206,6 +206,30 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-10113 Support for unsigned Parquet logical types") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 c(UINT_32);
+        |}
+      """.stripMargin)
+
+    withTempPath { location =>
+      val extraMetadata = Map.empty[String, String].asJava
+      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val path = new Path(location.getCanonicalPath)
+      val footer = List(
+        new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))
+      ).asJava
+
+      ParquetFileWriter.writeMetadataFile(sparkContext.hadoopConfiguration, path, footer)
+
+      val errorMessage = intercept[Throwable] {
+        sqlContext.read.parquet(path.toString).printSchema()
+      }.toString
+      assert(errorMessage.contains("Parquet type not supported"))
+    }
+  }
+
   test("SPARK-11692 Support for Parquet logical types, JSON and BSON (embedded types)") {
     val parquetSchema = MessageTypeParser.parseMessageType(
       """message root {
@@ -223,6 +247,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       ).asJava
 
       ParquetFileWriter.writeMetadataFile(sparkContext.hadoopConfiguration, path, footer)
+
       val jsonDataType = sqlContext.read.parquet(path.toString).schema(0).dataType
       assert(jsonDataType == StringType)
       val bsonDataType = sqlContext.read.parquet(path.toString).schema(1).dataType

@@ -96,7 +96,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
-      throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
+      val activeContext = SparkContext.activeContext.get()
+      val activeCreationSite =
+        if (activeContext == null) {
+          "(No active SparkContext.)"
+        } else {
+          activeContext.creationSite.longForm
+        }
+      throw new IllegalStateException(
+        s"""Cannot call methods on a stopped SparkContext.
+           |This stopped SparkContext was created at:
+           |
+           |${creationSite.longForm}
+           |
+           |The currently active SparkContext was created at:
+           |
+           |$activeCreationSite
+         """.stripMargin)
     }
   }
 
@@ -863,10 +879,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new WholeTextFileRDD(
       this,
       classOf[WholeTextFileInputFormat],
-      classOf[String],
-      classOf[String],
+      classOf[Text],
+      classOf[Text],
       updateConf,
-      minPartitions).setName(path)
+      minPartitions).setName(path).map(record => (record._1.toString, record._2.toString))
   }
 
   /**

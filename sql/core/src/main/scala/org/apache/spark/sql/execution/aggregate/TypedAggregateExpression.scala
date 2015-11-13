@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.aggregate
 import scala.language.existentials
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -136,7 +137,7 @@ case class TypedAggregateExpression(
 
   override def eval(buffer: InternalRow): Any = {
     val b = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
-    val result = cEncoder.toRow(aggregator.present(b))
+    val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
       case _: StructType => result
       case _ => result.get(0, dataType)
