@@ -791,10 +791,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("SPARK-5367: resolve star expression in udf") {
-    assert(sql("select concat(*) from src limit 5").collect().size == 5)
-    assert(sql("select array(*) from src limit 5").collect().size == 5)
-    assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
-    assert(sql("select array(key, *) from src limit 5").collect().size == 5)
+    assert(sql("select concat(*) from src limit 5").collect().length == 5)
+    assert(sql("select array(*) from src limit 5").collect().length == 5)
+    assert(sql("select concat(key, *) from src limit 5").collect().length == 5)
+    assert(sql("select array(key, *) from src limit 5").collect().length == 5)
+  }
+
+  test("SPARK-11637: resolve star expression with alias in udf") {
+    assert(sql("select concat(*) as x from src limit 5").collect().length == 5)
+    assert(sql("select array(*) as y from src limit 5").collect().length == 5)
+    assert(sql("select concat(key, *) as m from src limit 5").collect().length == 5)
+    assert(sql("select array(key, *) as n from src limit 5").collect().length == 5)
   }
 
   test("Query Hive native command execution result") {
