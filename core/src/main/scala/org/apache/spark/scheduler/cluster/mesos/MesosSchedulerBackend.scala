@@ -340,6 +340,8 @@ private[spark] class MesosSchedulerBackend(
             mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
               .add(mesosTask)
             slaveIdToResources(slaveId) = remainingResources
+
+            totalCoresAcquired += getResource(mesosTask.getResourcesList, "cpus")
           }
         }
 
