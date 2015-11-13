@@ -482,7 +482,10 @@ class StandaloneDynamicAllocationSuite
     sc.killExecutors(getExecutorIds(sc).take(n))
   }
 
-  private def killExecutorWithForce(sc: SparkContext, executorId: String, force: Boolean = true): Boolean = {
+  private def killExecutorWithForce(
+      sc: SparkContext,
+      executorId: String,
+      force: Boolean = true): Boolean = {
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(Seq(executorId), replace = false, force)
