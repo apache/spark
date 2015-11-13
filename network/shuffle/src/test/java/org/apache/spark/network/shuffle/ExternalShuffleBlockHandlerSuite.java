@@ -45,14 +45,14 @@ public class ExternalShuffleBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
 
   OneForOneStreamManager streamManager;
-  ExternalShuffleBlockManager blockManager;
+  ExternalShuffleBlockResolver blockResolver;
   RpcHandler handler;
 
   @Before
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
-    blockManager = mock(ExternalShuffleBlockManager.class);
-    handler = new ExternalShuffleBlockHandler(streamManager, blockManager);
+    blockResolver = mock(ExternalShuffleBlockResolver.class);
+    handler = new ExternalShuffleBlockHandler(streamManager, blockResolver);
   }
 
   @Test
@@ -62,7 +62,7 @@ public class ExternalShuffleBlockHandlerSuite {
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
     byte[] registerMessage = new RegisterExecutor("app0", "exec1", config).toByteArray();
     handler.receive(client, registerMessage, callback);
-    verify(blockManager, times(1)).registerExecutor("app0", "exec1", config);
+    verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
 
     verify(callback, times(1)).onSuccess((byte[]) any());
     verify(callback, never()).onFailure((Throwable) any());
@@ -75,12 +75,12 @@ public class ExternalShuffleBlockHandlerSuite {
 
     ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-    when(blockManager.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
-    when(blockManager.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
+    when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
+    when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
     byte[] openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" }).toByteArray();
     handler.receive(client, openBlocks, callback);
-    verify(blockManager, times(1)).getBlockData("app0", "exec1", "b0");
-    verify(blockManager, times(1)).getBlockData("app0", "exec1", "b1");
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
     ArgumentCaptor<byte[]> response = ArgumentCaptor.forClass(byte[].class);
     verify(callback, times(1)).onSuccess(response.capture());
@@ -90,9 +90,11 @@ public class ExternalShuffleBlockHandlerSuite {
       (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response.getValue());
     assertEquals(2, handle.numChunks);
 
-    ArgumentCaptor<Iterator> stream = ArgumentCaptor.forClass(Iterator.class);
-    verify(streamManager, times(1)).registerStream(stream.capture());
-    Iterator<ManagedBuffer> buffers = (Iterator<ManagedBuffer>) stream.getValue();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
+        (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
+    verify(streamManager, times(1)).registerStream(anyString(), stream.capture());
+    Iterator<ManagedBuffer> buffers = stream.getValue();
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
     assertFalse(buffers.hasNext());

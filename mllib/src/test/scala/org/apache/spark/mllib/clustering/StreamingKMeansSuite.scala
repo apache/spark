@@ -17,17 +17,25 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.random.XORShiftRandom
 
-class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
+class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
 
-  override def maxWaitTimeMillis = 30000
+  override def maxWaitTimeMillis: Int = 30000
+
+  var ssc: StreamingContext = _
+
+  override def afterFunction() {
+    super.afterFunction()
+    if (ssc != null) {
+      ssc.stop()
+    }
+  }
 
   test("accuracy for single center and equivalence to grand average") {
     // set parameters
@@ -47,7 +55,7 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       model.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -59,7 +67,7 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     // estimated center from streaming should exactly match the arithmetic mean of all data points
     // because the decay factor is set to 1.0
     val grandMean =
-      input.flatten.map(x => x.toBreeze).reduce(_+_) / (numBatches * numPoints).toDouble
+      input.flatten.map(x => x.toBreeze).reduce(_ + _) / (numBatches * numPoints).toDouble
     assert(model.latestModel().clusterCenters(0) ~== Vectors.dense(grandMean.toArray) absTol 1E-5)
   }
 
@@ -83,16 +91,23 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })
     runStreams(ssc, numBatches, numBatches)
 
     // check that estimated centers are close to true centers
-    // NOTE exact assignment depends on the initialization!
-    assert(centers(0) ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
-    assert(centers(1) ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
+    // cluster ordering is arbitrary, so choose closest cluster
+    val d0 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(0))
+    val d1 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(1))
+    val (c0, c1) = if (d0 < d1) {
+      (centers(0), centers(1))
+    } else {
+      (centers(1), centers(0))
+    }
+    assert(c0 ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
+    assert(c1 ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
   }
 
   test("detecting dying clusters") {
@@ -115,7 +130,7 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
       StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42, Array(Vectors.dense(0.0)))
 
     // setup and run the model training
-    val ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
+    ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {
       kMeans.trainOn(inputDStream)
       inputDStream.count()
     })
@@ -131,6 +146,13 @@ class StreamingKMeansSuite extends FunSuite with TestSuiteBase {
     // 0.8 is the mean of half-normal distribution
     assert(math.abs(c0) ~== 0.8 absTol 0.6)
     assert(math.abs(c1) ~== 0.8 absTol 0.6)
+  }
+
+  test("SPARK-7946 setDecayFactor") {
+    val kMeans = new StreamingKMeans()
+    assert(kMeans.decayFactor === 1.0)
+    kMeans.setDecayFactor(2.0)
+    assert(kMeans.decayFactor === 2.0)
   }
 
   def StreamingKMeansDataGenerator(

@@ -150,7 +150,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   }
 
   override def isCompleted: Boolean = jobWaiter.jobFinished
-  
+
   override def isCancelled: Boolean = _cancelled
 
   override def value: Option[Try[T]] = {
@@ -168,7 +168,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
     }
   }
 
-  def jobIds = Seq(jobWaiter.jobId)
+  def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 }
 
 
@@ -276,7 +276,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
 
   override def value: Option[Try[T]] = p.future.value
 
-  def jobIds = jobs
+  def jobIds: Seq[Int] = jobs
 
 }
 

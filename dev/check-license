@@ -24,29 +24,27 @@ acquire_rat_jar () {
 
   JAR="$rat_jar"
 
-  if [[ ! -f "$rat_jar" ]]; then
-    # Download rat launch jar if it hasn't been downloaded yet
-    if [ ! -f "$JAR" ]; then
-      # Download
-      printf "Attempting to fetch rat\n"
-      JAR_DL="${JAR}.part"
-      if [ $(command -v curl) ]; then
-        curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
-      elif [ $(command -v wget) ]; then
-        wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
-      else
-        printf "You do not have curl or wget installed, please install rat manually.\n"
-        exit -1
-      fi
-    fi
-
-    unzip -tq $JAR &> /dev/null
-    if [ $? -ne 0 ]; then
-      # We failed to download
-      printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+  # Download rat launch jar if it hasn't been downloaded yet
+  if [ ! -f "$JAR" ]; then
+    # Download
+    printf "Attempting to fetch rat\n"
+    JAR_DL="${JAR}.part"
+    if [ $(command -v curl) ]; then
+      curl -L --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
+    elif [ $(command -v wget) ]; then
+      wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
+    else
+      printf "You do not have curl or wget installed, please install rat manually.\n"
       exit -1
     fi
-    printf "Launching rat from ${JAR}\n"
+  fi
+
+  unzip -tq "$JAR" &> /dev/null
+  if [ $? -ne 0 ]; then 
+    # We failed to download
+    rm "$JAR"
+    printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
+    exit -1
   fi
 }
 
@@ -70,6 +68,11 @@ mkdir -p "$FWDIR"/lib
 }
 
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
+
+if [ $? -ne 0 ]; then
+   echo "RAT exited abnormally"
+   exit 1
+fi
 
 ERRORS="$(cat rat-results.txt | grep -e "??")"
 

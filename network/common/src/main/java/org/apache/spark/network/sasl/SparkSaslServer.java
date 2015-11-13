@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * initial state to the "authenticated" state. (It is not a server in the sense of accepting
  * connections on some socket.)
  */
-public class SparkSaslServer {
+public class SparkSaslServer implements SaslEncryptionBackend {
   private final Logger logger = LoggerFactory.getLogger(SparkSaslServer.class);
 
   /**
@@ -60,26 +60,37 @@ public class SparkSaslServer {
   static final String DIGEST = "DIGEST-MD5";
 
   /**
-   * The quality of protection is just "auth". This means that we are doing
-   * authentication only, we are not supporting integrity or privacy protection of the
-   * communication channel after authentication. This could be changed to be configurable
-   * in the future.
+   * Quality of protection value that includes encryption.
    */
-  static final Map<String, String> SASL_PROPS = ImmutableMap.<String, String>builder()
-    .put(Sasl.QOP, "auth")
-    .put(Sasl.SERVER_AUTH, "true")
-    .build();
+  static final String QOP_AUTH_CONF = "auth-conf";
+
+  /**
+   * Quality of protection value that does not include encryption.
+   */
+  static final String QOP_AUTH = "auth";
 
   /** Identifier for a certain secret key within the secretKeyHolder. */
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
   private SaslServer saslServer;
 
-  public SparkSaslServer(String secretKeyId, SecretKeyHolder secretKeyHolder) {
+  public SparkSaslServer(
+      String secretKeyId,
+      SecretKeyHolder secretKeyHolder,
+      boolean alwaysEncrypt) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
+
+    // Sasl.QOP is a comma-separated list of supported values. The value that allows encryption
+    // is listed first since it's preferred over the non-encrypted one (if the client also
+    // lists both in the request).
+    String qop = alwaysEncrypt ? QOP_AUTH_CONF : String.format("%s,%s", QOP_AUTH_CONF, QOP_AUTH);
+    Map<String, String> saslProps = ImmutableMap.<String, String>builder()
+      .put(Sasl.SERVER_AUTH, "true")
+      .put(Sasl.QOP, qop)
+      .build();
     try {
-      this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, SASL_PROPS,
+      this.saslServer = Sasl.createSaslServer(DIGEST, null, DEFAULT_REALM, saslProps,
         new DigestCallbackHandler());
     } catch (SaslException e) {
       throw Throwables.propagate(e);
@@ -91,6 +102,11 @@ public class SparkSaslServer {
    */
   public synchronized boolean isComplete() {
     return saslServer != null && saslServer.isComplete();
+  }
+
+  /** Returns the value of a negotiated property. */
+  public Object getNegotiatedProperty(String name) {
+    return saslServer.getNegotiatedProperty(name);
   }
 
   /**
@@ -110,6 +126,7 @@ public class SparkSaslServer {
    * Disposes of any system resources or security-sensitive information the
    * SaslServer might be using.
    */
+  @Override
   public synchronized void dispose() {
     if (saslServer != null) {
       try {
@@ -120,6 +137,16 @@ public class SparkSaslServer {
         saslServer = null;
       }
     }
+  }
+
+  @Override
+  public byte[] wrap(byte[] data, int offset, int len) throws SaslException {
+    return saslServer.wrap(data, offset, len);
+  }
+
+  @Override
+  public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
+    return saslServer.unwrap(data, offset, len);
   }
 
   /**

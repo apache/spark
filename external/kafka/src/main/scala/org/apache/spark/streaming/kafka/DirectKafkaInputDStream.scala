@@ -17,20 +17,20 @@
 
 package org.apache.spark.streaming.kafka
 
-
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
+import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
 
 /**
  *  A stream of {@link org.apache.spark.streaming.kafka.KafkaRDD} where
@@ -58,25 +58,54 @@ class DirectKafkaInputDStream[
   U <: Decoder[K]: ClassTag,
   T <: Decoder[V]: ClassTag,
   R: ClassTag](
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
-) extends InputDStream[R](ssc_) with Logging {
+  ) extends InputDStream[R](ssc_) with Logging {
   val maxRetries = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
+
+  // Keep this consistent with how other streams are named (e.g. "Flume polling stream [2]")
+  private[streaming] override def name: String = s"Kafka direct stream [$id]"
 
   protected[streaming] override val checkpointData =
     new DirectKafkaInputDStreamCheckpointData
 
+
+  /**
+   * Asynchronously maintains & sends new rate limits to the receiver through the receiver tracker.
+   */
+  override protected[streaming] val rateController: Option[RateController] = {
+    if (RateController.isBackPressureEnabled(ssc.conf)) {
+      Some(new DirectKafkaRateController(id,
+        RateEstimator.create(ssc.conf, context.graph.batchDuration)))
+    } else {
+      None
+    }
+  }
+
   protected val kc = new KafkaCluster(kafkaParams)
 
-  protected val maxMessagesPerPartition: Option[Long] = {
-    val ratePerSec = context.sparkContext.getConf.getInt(
+  private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
       "spark.streaming.kafka.maxRatePerPartition", 0)
-    if (ratePerSec > 0) {
+  protected def maxMessagesPerPartition: Option[Long] = {
+    val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
+    val numPartitions = currentOffsets.keys.size
+
+    val effectiveRateLimitPerPartition = estimatedRateLimit
+      .filter(_ > 0)
+      .map { limit =>
+        if (maxRateLimitPerPartition > 0) {
+          Math.min(maxRateLimitPerPartition, (limit / numPartitions))
+        } else {
+          limit / numPartitions
+        }
+      }.getOrElse(maxRateLimitPerPartition)
+
+    if (effectiveRateLimitPerPartition > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
-      Some((secsPerBatch * ratePerSec).toLong)
+      Some((secsPerBatch * effectiveRateLimitPerPartition).toLong)
     } else {
       None
     }
@@ -117,6 +146,25 @@ class DirectKafkaInputDStream[
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
+    // Report the record number and metadata of this batch interval to InputInfoTracker.
+    val offsetRanges = currentOffsets.map { case (tp, fo) =>
+      val uo = untilOffsets(tp)
+      OffsetRange(tp.topic, tp.partition, fo, uo.offset)
+    }
+    val description = offsetRanges.filter { offsetRange =>
+      // Don't display empty ranges.
+      offsetRange.fromOffset != offsetRange.untilOffset
+    }.map { offsetRange =>
+      s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+        s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+    }.mkString("\n")
+    // Copy offsetRanges to immutable.List to prevent from being modified by the user
+    val metadata = Map(
+      "offsets" -> offsetRanges.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)
   }
@@ -129,8 +177,9 @@ class DirectKafkaInputDStream[
 
   private[streaming]
   class DirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
-    def batchForTime = data.asInstanceOf[mutable.HashMap[
-      Time, Array[OffsetRange.OffsetRangeTuple]]]
+    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {
+      data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
+    }
 
     override def update(time: Time) {
       batchForTime.clear()
@@ -145,17 +194,21 @@ class DirectKafkaInputDStream[
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
       val topics = fromOffsets.keySet
-      val leaders = kc.findLeaders(topics).fold(
-        errs => throw new SparkException(errs.mkString("\n")),
-        ok => ok
-      )
+      val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-          generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
-            context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
+         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+         generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
+           context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
       }
     }
   }
 
+  /**
+   * A RateController to retrieve the rate from RateEstimator.
+   */
+  private[streaming] class DirectKafkaRateController(id: Int, estimator: RateEstimator)
+    extends RateController(id, estimator) {
+    override def publish(rate: Long): Unit = ()
+  }
 }

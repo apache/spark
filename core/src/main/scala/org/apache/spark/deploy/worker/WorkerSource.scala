@@ -21,7 +21,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
 
-private[spark] class WorkerSource(val worker: Worker) extends Source {
+private[worker] class WorkerSource(val worker: Worker) extends Source {
   override val sourceName = "worker"
   override val metricRegistry = new MetricRegistry()
 

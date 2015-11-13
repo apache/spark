@@ -24,7 +24,7 @@ the master's web UI, which is [http://localhost:8080](http://localhost:8080) by 
 
 Similarly, you can start one or more workers and connect them to the master via:
 
-    ./bin/spark-class org.apache.spark.deploy.worker.Worker spark://IP:PORT
+    ./sbin/start-slave.sh <master-spark-URL>
 
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
@@ -77,10 +77,11 @@ Note, the master machine accesses each of the worker machines via ssh. By defaul
 If you do not have a password-less setup, you can set the environment variable SPARK_SSH_FOREGROUND and serially provide a password for each worker.
 
 
-Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
+Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
 - `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
+- `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
 - `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
@@ -151,7 +152,7 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_MEMORY</code></td>
-    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 512m).</td>
+    <td>Memory to allocate to the Spark master and worker daemons themselves (default: 1g).</td>
   </tr>
   <tr>
     <td><code>SPARK_DAEMON_JAVA_OPTS</code></td>

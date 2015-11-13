@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -94,3 +95,4 @@ object SparkTachyonHdfsLR {
     sc.stop()
   }
 }
+// scalastyle:on println

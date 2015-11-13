@@ -22,7 +22,7 @@ import java.lang.Boolean
 /**
  * An abstract response sent from the server in the REST application submission protocol.
  */
-private[spark] abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
+private[rest] abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
   var serverSparkVersion: String = null
   var success: Boolean = null
   var unknownFields: Array[String] = null
@@ -74,7 +74,7 @@ private[spark] class SubmissionStatusResponse extends SubmitRestProtocolResponse
 /**
  * An error response message used in the REST application submission protocol.
  */
-private[spark] class ErrorResponse extends SubmitRestProtocolResponse {
+private[rest] class ErrorResponse extends SubmitRestProtocolResponse {
   // The highest protocol version that the server knows about
   // This is set when the client specifies an unknown version
   var highestProtocolVersion: String = null

@@ -20,7 +20,8 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.Map
+import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.TaskMetrics
@@ -39,6 +40,9 @@ private[spark]
 class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
     var metrics: TaskMetrics)
   extends TaskResult[T] with Externalizable {
+
+  private var valueObjectDeserialized = false
+  private var valueObject: T = _
 
   def this() = this(null.asInstanceOf[ByteBuffer], null, null)
 
@@ -66,16 +70,33 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
     if (numUpdates == 0) {
       accumUpdates = null
     } else {
-      accumUpdates = Map()
+      val _accumUpdates = mutable.Map[Long, Any]()
       for (i <- 0 until numUpdates) {
-        accumUpdates(in.readLong()) = in.readObject()
+        _accumUpdates(in.readLong()) = in.readObject()
       }
+      accumUpdates = _accumUpdates
     }
     metrics = in.readObject().asInstanceOf[TaskMetrics]
+    valueObjectDeserialized = false
   }
 
+  /**
+   * When `value()` is called at the first time, it needs to deserialize `valueObject` from
+   * `valueBytes`. It may cost dozens of seconds for a large instance. So when calling `value` at
+   * the first time, the caller should avoid to block other threads.
+   *
+   * After the first time, `value()` is trivial and just returns the deserialized `valueObject`.
+   */
   def value(): T = {
-    val resultSer = SparkEnv.get.serializer.newInstance()
-    resultSer.deserialize(valueBytes)
+    if (valueObjectDeserialized) {
+      valueObject
+    } else {
+      // This should not run when holding a lock because it may cost dozens of seconds for a large
+      // value.
+      val resultSer = SparkEnv.get.serializer.newInstance()
+      valueObject = resultSer.deserialize(valueBytes)
+      valueObjectDeserialized = true
+      valueObject
+    }
   }
 }

@@ -20,9 +20,9 @@ package org.apache.spark.mllib.regression
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
@@ -53,19 +53,25 @@ import org.apache.spark.streaming.dstream.DStream
  * It is also ok to call trainOn on different streams; this will update
  * the model using each of the different sources, in sequence.
  *
+ *
  */
+@Since("1.1.0")
 @DeveloperApi
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {
 
   /** The model to be updated and used for prediction. */
-  protected var model: Option[M] = None
+  protected var model: Option[M]
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
 
-  /** Return the latest model. */
+  /**
+   * Return the latest model.
+   *
+   */
+  @Since("1.1.0")
   def latestModel(): M = {
     model.get
   }
@@ -78,30 +84,28 @@ abstract class StreamingLinearAlgorithm[
    *
    * @param data DStream containing labeled data
    */
+  @Since("1.1.0")
   def trainOn(data: DStream[LabeledPoint]): Unit = {
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting training.")
     }
     data.foreachRDD { (rdd, time) =>
-      val initialWeights =
-        model match {
-          case Some(m) =>
-            m.weights
-          case None =>
-            val numFeatures = rdd.first().features.size
-            Vectors.dense(numFeatures)
+      if (!rdd.isEmpty) {
+        model = Some(algorithm.run(rdd, model.get.weights))
+        logInfo(s"Model updated at time ${time.toString}")
+        val display = model.get.weights.size match {
+          case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
+          case _ => model.get.weights.toArray.mkString("[", ",", "]")
         }
-      model = Some(algorithm.run(rdd, initialWeights))
-      logInfo("Model updated at time %s".format(time.toString))
-      val display = model.get.weights.size match {
-        case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
-        case _ => model.get.weights.toArray.mkString("[", ",", "]")
+        logInfo(s"Current model: weights, ${display}")
       }
-      logInfo("Current model: weights, %s".format (display))
     }
   }
 
-  /** Java-friendly version of `trainOn`. */
+  /**
+   * Java-friendly version of `trainOn`.
+   */
+  @Since("1.3.0")
   def trainOn(data: JavaDStream[LabeledPoint]): Unit = trainOn(data.dstream)
 
   /**
@@ -109,15 +113,21 @@ abstract class StreamingLinearAlgorithm[
    *
    * @param data DStream containing feature vectors
    * @return DStream containing predictions
+   *
    */
+  @Since("1.1.0")
   def predictOn(data: DStream[Vector]): DStream[Double] = {
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction.")
     }
-    data.map(model.get.predict)
+    data.map{x => model.get.predict(x)}
   }
 
-  /** Java-friendly version of `predictOn`. */
+  /**
+   * Java-friendly version of `predictOn`.
+   *
+   */
+  @Since("1.3.0")
   def predictOn(data: JavaDStream[Vector]): JavaDStream[java.lang.Double] = {
     JavaDStream.fromDStream(predictOn(data.dstream).asInstanceOf[DStream[java.lang.Double]])
   }
@@ -127,16 +137,22 @@ abstract class StreamingLinearAlgorithm[
    * @param data DStream containing feature vectors
    * @tparam K key type
    * @return DStream containing the input keys and the predictions as values
+   *
    */
+  @Since("1.1.0")
   def predictOnValues[K: ClassTag](data: DStream[(K, Vector)]): DStream[(K, Double)] = {
     if (model.isEmpty) {
       throw new IllegalArgumentException("Model must be initialized before starting prediction")
     }
-    data.mapValues(model.get.predict)
+    data.mapValues{x => model.get.predict(x)}
   }
 
 
-  /** Java-friendly version of `predictOnValues`. */
+  /**
+   * Java-friendly version of `predictOnValues`.
+   *
+   */
+  @Since("1.3.0")
   def predictOnValues[K](data: JavaPairDStream[K, Vector]): JavaPairDStream[K, java.lang.Double] = {
     implicit val tag = fakeClassTag[K]
     JavaPairDStream.fromPairDStream(

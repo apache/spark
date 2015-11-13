@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
@@ -25,10 +26,10 @@ import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.StorageLevel
-import java.nio.ByteBuffer
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -143,19 +144,19 @@ private[streaming] class ActorReceiver[T: ClassTag](
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val supervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  protected lazy val actorSupervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {
 
     override val supervisorStrategy = receiverSupervisorStrategy
-    val worker = context.actorOf(props, name)
+    private val worker = context.actorOf(props, name)
     logInfo("Started receiver worker at:" + worker.path)
 
-    val n: AtomicInteger = new AtomicInteger(0)
-    val hiccups: AtomicInteger = new AtomicInteger(0)
+    private val n: AtomicInteger = new AtomicInteger(0)
+    private val hiccups: AtomicInteger = new AtomicInteger(0)
 
-    def receive = {
+    override def receive: PartialFunction[Any, Unit] = {
 
       case IteratorData(iterator) =>
         logDebug("received iterator")
@@ -189,13 +190,12 @@ private[streaming] class ActorReceiver[T: ClassTag](
     }
   }
 
-  def onStart() = {
-    supervisor
-    logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
-
+  def onStart(): Unit = {
+    actorSupervisor
+    logInfo("Supervision tree for receivers initialized at:" + actorSupervisor.path)
   }
 
-  def onStop() = {
-    supervisor ! PoisonPill
+  def onStop(): Unit = {
+    actorSupervisor ! PoisonPill
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
-  override val index = idx
+  override val index: Int = idx
   override def hashCode(): Int = idx
 }
 
@@ -39,7 +39,7 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  */
 // TODO: Make this return RDD[Product2[K, C]] or have some way to configure mutable pairs
 @DeveloperApi
-class ShuffledRDD[K, V, C](
+class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient var prev: RDD[_ <: Product2[K, V]],
     part: Partitioner)
   extends RDD[(K, C)](prev.context, Nil) {
@@ -84,6 +84,12 @@ class ShuffledRDD[K, V, C](
 
   override def getPartitions: Array[Partition] = {
     Array.tabulate[Partition](part.numPartitions)(i => new ShuffledRDDPartition(i))
+  }
+
+  override def getPreferredLocations(partition: Partition): Seq[String] = {
+    val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
+    tracker.getPreferredLocationsForShuffle(dep, partition.index)
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
@@ -37,9 +38,9 @@ object LocalLR {
 
   case class DataPoint(x: Vector[Double], y: Double)
 
-  def generateData = {
-    def generatePoint(i: Int) = {
-      val y = if(i % 2 == 0) -1 else 1
+  def generateData: Array[DataPoint] = {
+    def generatePoint(i: Int): DataPoint = {
+      val y = if (i % 2 == 0) -1 else 1
       val x = DenseVector.fill(D){rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
@@ -77,3 +78,4 @@ object LocalLR {
     println("Final w: " + w)
   }
 }
+// scalastyle:on println

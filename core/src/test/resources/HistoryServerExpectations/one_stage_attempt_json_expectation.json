@@ -1,0 +1,270 @@
+{
+  "status" : "COMPLETE",
+  "stageId" : 1,
+  "attemptId" : 0,
+  "numActiveTasks" : 0,
+  "numCompleteTasks" : 8,
+  "numFailedTasks" : 0,
+  "executorRunTime" : 3476,
+  "inputBytes" : 28000128,
+  "inputRecords" : 0,
+  "outputBytes" : 0,
+  "outputRecords" : 0,
+  "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
+  "shuffleWriteBytes" : 13180,
+  "shuffleWriteRecords" : 0,
+  "memoryBytesSpilled" : 0,
+  "diskBytesSpilled" : 0,
+  "name" : "map at <console>:14",
+  "details" : "org.apache.spark.rdd.RDD.map(RDD.scala:271)\n$line10.$read$$iwC$$iwC$$iwC$$iwC.<init>(<console>:14)\n$line10.$read$$iwC$$iwC$$iwC.<init>(<console>:19)\n$line10.$read$$iwC$$iwC.<init>(<console>:21)\n$line10.$read$$iwC.<init>(<console>:23)\n$line10.$read.<init>(<console>:25)\n$line10.$read$.<init>(<console>:29)\n$line10.$read$.<clinit>(<console>)\n$line10.$eval$.<init>(<console>:7)\n$line10.$eval$.<clinit>(<console>)\n$line10.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:57)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\njava.lang.reflect.Method.invoke(Method.java:606)\norg.apache.spark.repl.SparkIMain$ReadEvalPrint.call(SparkIMain.scala:852)\norg.apache.spark.repl.SparkIMain$Request.loadAndRun(SparkIMain.scala:1125)\norg.apache.spark.repl.SparkIMain.loadAndRunReq$1(SparkIMain.scala:674)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:705)\norg.apache.spark.repl.SparkIMain.interpret(SparkIMain.scala:669)",
+  "schedulingPool" : "default",
+  "accumulatorUpdates" : [ ],
+  "tasks" : {
+    "8" : {
+      "taskId" : 8,
+      "index" : 0,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.829GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 1,
+        "executorRunTime" : 435,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 2,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 94000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "11" : {
+      "taskId" : 11,
+      "index" : 3,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.830GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 2,
+        "executorRunTime" : 434,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1647,
+          "writeTime" : 83000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "14" : {
+      "taskId" : 14,
+      "index" : 6,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.832GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 2,
+        "executorRunTime" : 434,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 88000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "13" : {
+      "taskId" : 13,
+      "index" : 5,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.831GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 2,
+        "executorRunTime" : 434,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 2,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 73000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "10" : {
+      "taskId" : 10,
+      "index" : 2,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.830GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 2,
+        "executorRunTime" : 434,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 76000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "9" : {
+      "taskId" : 9,
+      "index" : 1,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.830GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 1,
+        "executorRunTime" : 436,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 98000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "12" : {
+      "taskId" : 12,
+      "index" : 4,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.831GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 2,
+        "executorRunTime" : 434,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1645,
+          "writeTime" : 101000,
+          "recordsWritten" : 0
+        }
+      }
+    },
+    "15" : {
+      "taskId" : 15,
+      "index" : 7,
+      "attempt" : 0,
+      "launchTime" : "2015-02-03T16:43:05.833GMT",
+      "executorId" : "<driver>",
+      "host" : "localhost",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 1,
+        "executorRunTime" : 435,
+        "resultSize" : 1902,
+        "jvmGcTime" : 19,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 3500016,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 1648,
+          "writeTime" : 79000,
+          "recordsWritten" : 0
+        }
+      }
+    }
+  },
+  "executorSummary" : {
+    "<driver>" : {
+      "taskTime" : 3624,
+      "failedTasks" : 0,
+      "succeededTasks" : 8,
+      "inputBytes" : 28000128,
+      "outputBytes" : 0,
+      "shuffleRead" : 0,
+      "shuffleWrite" : 13180,
+      "memoryBytesSpilled" : 0,
+      "diskBytesSpilled" : 0
+    }
+  }
+}

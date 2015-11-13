@@ -19,7 +19,9 @@ package org.apache.spark.deploy.client
 
 private[spark] object TestExecutor {
   def main(args: Array[String]) {
+    // scalastyle:off println
     println("Hello world!")
+    // scalastyle:on println
     while (true) {
       Thread.sleep(1000)
     }

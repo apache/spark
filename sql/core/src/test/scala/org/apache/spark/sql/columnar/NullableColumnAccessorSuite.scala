@@ -19,36 +19,38 @@ package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
+import org.apache.spark.sql.types._
 
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.DataType
-
-class TestNullableColumnAccessor[T <: DataType, JvmType](
+class TestNullableColumnAccessor[JvmType](
     buffer: ByteBuffer,
-    columnType: ColumnType[T, JvmType])
+    columnType: ColumnType[JvmType])
   extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
 
 object TestNullableColumnAccessor {
-  def apply[T <: DataType, JvmType](buffer: ByteBuffer, columnType: ColumnType[T, JvmType]) = {
-    // Skips the column type ID
-    buffer.getInt()
+  def apply[JvmType](buffer: ByteBuffer, columnType: ColumnType[JvmType])
+    : TestNullableColumnAccessor[JvmType] = {
     new TestNullableColumnAccessor(buffer, columnType)
   }
 }
 
-class NullableColumnAccessorSuite extends FunSuite {
-  import ColumnarTestUtils._
+class NullableColumnAccessorSuite extends SparkFunSuite {
+  import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
   Seq(
-    INT, LONG, SHORT, BOOLEAN, BYTE, STRING, DOUBLE, FLOAT, BINARY, GENERIC, DATE, TIMESTAMP
-  ).foreach {
+    NULL, BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,
+    STRING, BINARY, COMPACT_DECIMAL(15, 10), LARGE_DECIMAL(20, 10),
+    STRUCT(StructType(StructField("a", StringType) :: Nil)),
+    ARRAY(ArrayType(IntegerType)), MAP(MapType(IntegerType, StringType)))
+    .foreach {
     testNullableColumnAccessor(_)
   }
 
-  def testNullableColumnAccessor[T <: DataType, JvmType](
-      columnType: ColumnType[T, JvmType]): Unit = {
+  def testNullableColumnAccessor[JvmType](
+      columnType: ColumnType[JvmType]): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
     val nullRow = makeNullRow(1)
@@ -62,19 +64,22 @@ class NullableColumnAccessorSuite extends FunSuite {
     test(s"Nullable $typeName column accessor: access null values") {
       val builder = TestNullableColumnBuilder(columnType)
       val randomRow = makeRandomRow(columnType)
+      val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
 
       (0 until 4).foreach { _ =>
-        builder.appendFrom(randomRow, 0)
-        builder.appendFrom(nullRow, 0)
+        builder.appendFrom(proj(randomRow), 0)
+        builder.appendFrom(proj(nullRow), 0)
       }
 
       val accessor = TestNullableColumnAccessor(builder.build(), columnType)
       val row = new GenericMutableRow(1)
+      val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
 
       (0 until 4).foreach { _ =>
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)
-        assert(row(0) === randomRow(0))
+        assert(converter(row.get(0, columnType.dataType))
+          === converter(randomRow.get(0, columnType.dataType)))
 
         assert(accessor.hasNext)
         accessor.extractTo(row, 0)

@@ -23,7 +23,7 @@ import java.io.IOException
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -72,7 +72,7 @@ private[spark] class PipedRDD[T: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[String] = {
-    val pb = new ProcessBuilder(command)
+    val pb = new ProcessBuilder(command.asJava)
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
@@ -81,7 +81,7 @@ private[spark] class PipedRDD[T: ClassTag](
     // so the user code can access the input filename
     if (split.isInstanceOf[HadoopPartition]) {
       val hadoopSplit = split.asInstanceOf[HadoopPartition]
-      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars().asJava)
     }
 
     // When spark.worker.separated.working.directory option is turned on, each
@@ -123,7 +123,9 @@ private[spark] class PipedRDD[T: ClassTag](
     new Thread("stderr reader for " + command) {
       override def run() {
         for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+          // scalastyle:off println
           System.err.println(line)
+          // scalastyle:on println
         }
       }
     }.start()
@@ -131,8 +133,10 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
+        TaskContext.setTaskContext(context)
         val out = new PrintWriter(proc.getOutputStream)
 
+        // scalastyle:off println
         // input the pipe context firstly
         if (printPipeContext != null) {
           printPipeContext(out.println(_))
@@ -144,15 +148,16 @@ private[spark] class PipedRDD[T: ClassTag](
             out.println(elem)
           }
         }
+        // scalastyle:on println
         out.close()
       }
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream).getLines
+    val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
-      def next() = lines.next()
-      def hasNext = {
+      def next(): String = lines.next()
+      def hasNext: Boolean = {
         if (lines.hasNext) {
           true
         } else {
@@ -162,7 +167,7 @@ private[spark] class PipedRDD[T: ClassTag](
           }
 
           // cleanup task working directory if used
-          if (workInTaskDirectory == true) {
+          if (workInTaskDirectory) {
             scala.util.control.Exception.ignoring(classOf[IOException]) {
               Utils.deleteRecursively(new File(taskDirectory))
             }

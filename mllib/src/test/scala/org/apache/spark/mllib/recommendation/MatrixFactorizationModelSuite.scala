@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext {
+class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val rank = 2
   var userFeatures: RDD[(Int, Array[Double])] = _
@@ -71,5 +70,25 @@ class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext 
     } finally {
       Utils.deleteRecursively(tempDir)
     }
+  }
+
+  test("batch predict API recommendProductsForUsers") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendProductsForUsers(topK).collectAsMap()
+
+    assert(recommendations(0)(0).rating ~== 17.0 relTol 1e-14)
+    assert(recommendations(1)(0).rating ~== 39.0 relTol 1e-14)
+  }
+
+  test("batch predict API recommendUsersForProducts") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+    val topK = 10
+    val recommendations = model.recommendUsersForProducts(topK).collectAsMap()
+
+    assert(recommendations(2)(0).user == 1)
+    assert(recommendations(2)(0).rating ~== 39.0 relTol 1e-14)
+    assert(recommendations(2)(1).user == 0)
+    assert(recommendations(2)(1).rating ~== 17.0 relTol 1e-14)
   }
 }

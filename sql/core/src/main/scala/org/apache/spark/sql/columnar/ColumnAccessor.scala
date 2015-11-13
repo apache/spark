@@ -19,9 +19,9 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.expressions.MutableRow
+import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
-import org.apache.spark.sql.types.{BinaryType, DataType, NativeType}
+import org.apache.spark.sql.types._
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -41,16 +41,16 @@ private[sql] trait ColumnAccessor {
   protected def underlyingBuffer: ByteBuffer
 }
 
-private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
+private[sql] abstract class BasicColumnAccessor[JvmType](
     protected val buffer: ByteBuffer,
-    protected val columnType: ColumnType[T, JvmType])
+    protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
 
   protected def initialize() {}
 
-  def hasNext = buffer.hasRemaining
+  override def hasNext: Boolean = buffer.hasRemaining
 
-  def extractTo(row: MutableRow, ordinal: Int): Unit = {
+  override def extractTo(row: MutableRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 
@@ -61,7 +61,11 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
   protected def underlyingBuffer = buffer
 }
 
-private[sql] abstract class NativeColumnAccessor[T <: NativeType](
+private[sql] class NullColumnAccessor(buffer: ByteBuffer)
+  extends BasicColumnAccessor[Any](buffer, NULL)
+  with NullableColumnAccessor
+
+private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)
@@ -71,60 +75,74 @@ private[sql] abstract class NativeColumnAccessor[T <: NativeType](
 private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BOOLEAN)
 
-private[sql] class IntColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, INT)
+private[sql] class ByteColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, BYTE)
 
 private[sql] class ShortColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, SHORT)
 
+private[sql] class IntColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, INT)
+
 private[sql] class LongColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, LONG)
-
-private[sql] class ByteColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, BYTE)
-
-private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, DOUBLE)
 
 private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, FLOAT)
 
+private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, DOUBLE)
+
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
-private[sql] class DateColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, DATE)
-
-private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
-  extends NativeColumnAccessor(buffer, TIMESTAMP)
-
 private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[BinaryType.type, Array[Byte]](buffer, BINARY)
+  extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[sql] class GenericColumnAccessor(buffer: ByteBuffer)
-  extends BasicColumnAccessor[DataType, Array[Byte]](buffer, GENERIC)
+private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
+
+private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+  extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
+  with NullableColumnAccessor
+
+private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
+  extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
+  with NullableColumnAccessor
+
+private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
+  extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
+  with NullableColumnAccessor
+
+private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
+  extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
 private[sql] object ColumnAccessor {
-  def apply(buffer: ByteBuffer): ColumnAccessor = {
-    val dup = buffer.duplicate().order(ByteOrder.nativeOrder)
-    // The first 4 bytes in the buffer indicate the column type.
-    val columnTypeId = dup.getInt()
+  def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
+    val buf = buffer.order(ByteOrder.nativeOrder)
 
-    columnTypeId match {
-      case INT.typeId       => new IntColumnAccessor(dup)
-      case LONG.typeId      => new LongColumnAccessor(dup)
-      case FLOAT.typeId     => new FloatColumnAccessor(dup)
-      case DOUBLE.typeId    => new DoubleColumnAccessor(dup)
-      case BOOLEAN.typeId   => new BooleanColumnAccessor(dup)
-      case BYTE.typeId      => new ByteColumnAccessor(dup)
-      case SHORT.typeId     => new ShortColumnAccessor(dup)
-      case STRING.typeId    => new StringColumnAccessor(dup)
-      case DATE.typeId      => new DateColumnAccessor(dup)
-      case TIMESTAMP.typeId => new TimestampColumnAccessor(dup)
-      case BINARY.typeId    => new BinaryColumnAccessor(dup)
-      case GENERIC.typeId   => new GenericColumnAccessor(dup)
+    dataType match {
+      case NullType => new NullColumnAccessor(buf)
+      case BooleanType => new BooleanColumnAccessor(buf)
+      case ByteType => new ByteColumnAccessor(buf)
+      case ShortType => new ShortColumnAccessor(buf)
+      case IntegerType | DateType => new IntColumnAccessor(buf)
+      case LongType | TimestampType => new LongColumnAccessor(buf)
+      case FloatType => new FloatColumnAccessor(buf)
+      case DoubleType => new DoubleColumnAccessor(buf)
+      case StringType => new StringColumnAccessor(buf)
+      case BinaryType => new BinaryColumnAccessor(buf)
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        new CompactDecimalColumnAccessor(buf, dt)
+      case dt: DecimalType => new DecimalColumnAccessor(buf, dt)
+      case struct: StructType => new StructColumnAccessor(buf, struct)
+      case array: ArrayType => new ArrayColumnAccessor(buf, array)
+      case map: MapType => new MapColumnAccessor(buf, map)
+      case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
+      case other =>
+        throw new Exception(s"not support type: $other")
     }
   }
 }

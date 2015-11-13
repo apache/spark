@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
@@ -30,5 +29,5 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  * of itself with globally unique expression ids.
  */
 trait MultiInstanceRelation {
-  def newInstance(): this.type
+  def newInstance(): LogicalPlan
 }

@@ -20,14 +20,13 @@ package org.apache.spark.streaming.api.python
 import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
-import scala.collection.JavaConversions._
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import py4j.GatewayServer
 
 import org.apache.spark.api.java._
-import org.apache.spark.api.python._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Interval, Duration, Time}
@@ -109,7 +108,7 @@ private[python] object PythonTransformFunctionSerializer {
   }
 
   def serialize(func: PythonTransformFunction): Array[Byte] = {
-    assert(serializer != null, "Serializer has not been registered!")
+    require(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
     val f = h.getClass().getDeclaredField("id")
@@ -119,7 +118,7 @@ private[python] object PythonTransformFunctionSerializer {
   }
 
   def deserialize(bytes: Array[Byte]): PythonTransformFunction = {
-    assert(serializer != null, "Serializer has not been registered!")
+    require(serializer != null, "Serializer has not been registered!")
     serializer.loads(bytes)
   }
 }
@@ -161,7 +160,7 @@ private[python] object PythonDStream {
    */
   def toRDDQueue(rdds: JArrayList[JavaRDD[Array[Byte]]]): java.util.Queue[JavaRDD[Array[Byte]]] = {
     val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
-    rdds.forall(queue.add(_))
+    rdds.asScala.foreach(queue.add)
     queue
   }
 }
@@ -171,16 +170,16 @@ private[python] object PythonDStream {
  */
 private[python] abstract class PythonDStream(
     parent: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   val func = new TransformFunction(pfunc)
 
-  override def dependencies = List(parent)
+  override def dependencies: List[DStream[_]] = List(parent)
 
   override def slideDuration: Duration = parent.slideDuration
 
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  val asJavaDStream: JavaDStream[Array[Byte]] = JavaDStream.fromDStream(this)
 }
 
 /**
@@ -188,7 +187,7 @@ private[python] abstract class PythonDStream(
  */
 private[python] class PythonTransformedDStream (
     parent: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends PythonDStream(parent, pfunc) {
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {
@@ -207,12 +206,12 @@ private[python] class PythonTransformedDStream (
 private[python] class PythonTransformed2DStream(
     parent: DStream[_],
     parent2: DStream[_],
-    @transient pfunc: PythonTransformFunction)
+    pfunc: PythonTransformFunction)
   extends DStream[Array[Byte]] (parent.ssc) {
 
   val func = new TransformFunction(pfunc)
 
-  override def dependencies = List(parent, parent2)
+  override def dependencies: List[DStream[_]] = List(parent, parent2)
 
   override def slideDuration: Duration = parent.slideDuration
 
@@ -223,7 +222,7 @@ private[python] class PythonTransformed2DStream(
     func(Some(rdd1), Some(rdd2), validTime)
   }
 
-  val asJavaDStream  = JavaDStream.fromDStream(this)
+  val asJavaDStream: JavaDStream[Array[Byte]] = JavaDStream.fromDStream(this)
 }
 
 /**
@@ -231,7 +230,7 @@ private[python] class PythonTransformed2DStream(
  */
 private[python] class PythonStateDStream(
     parent: DStream[Array[Byte]],
-    @transient reduceFunc: PythonTransformFunction)
+    reduceFunc: PythonTransformFunction)
   extends PythonDStream(parent, reduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
@@ -253,19 +252,22 @@ private[python] class PythonStateDStream(
  */
 private[python] class PythonReducedWindowedDStream(
     parent: DStream[Array[Byte]],
-    @transient preduceFunc: PythonTransformFunction,
-    @transient pinvReduceFunc: PythonTransformFunction,
+    preduceFunc: PythonTransformFunction,
+    @transient private val pinvReduceFunc: PythonTransformFunction,
     _windowDuration: Duration,
     _slideDuration: Duration)
   extends PythonDStream(parent, preduceFunc) {
 
   super.persist(StorageLevel.MEMORY_ONLY)
-  override val mustCheckpoint = true
 
-  val invReduceFunc = new TransformFunction(pinvReduceFunc)
+  override val mustCheckpoint: Boolean = true
+
+  val invReduceFunc: TransformFunction = new TransformFunction(pinvReduceFunc)
 
   def windowDuration: Duration = _windowDuration
+
   override def slideDuration: Duration = _slideDuration
+
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
   override def compute(validTime: Time): Option[RDD[Array[Byte]]] = {

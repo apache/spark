@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo}
-import org.apache.spark.sql.execution.Project
+import org.apache.spark.sql.execution.TungstenProject
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -35,13 +35,17 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
 
   val nullVal = "null"
   baseTypes.init.foreach { i =>
-    createQueryTest(s"case when then $i else $nullVal end ", s"SELECT case when true then $i else $nullVal end FROM src limit 1")
-    createQueryTest(s"case when then $nullVal else $i end ", s"SELECT case when true then $nullVal else $i end FROM src limit 1")
+    createQueryTest(s"case when then $i else $nullVal end ",
+      s"SELECT case when true then $i else $nullVal end FROM src limit 1")
+    createQueryTest(s"case when then $nullVal else $i end ",
+      s"SELECT case when true then $nullVal else $i end FROM src limit 1")
   }
 
   test("[SPARK-2210] boolean cast on boolean value should be removed") {
     val q = "select cast(cast(key=0 as boolean) as boolean) from src"
-    val project = TestHive.sql(q).queryExecution.executedPlan.collect { case e: Project => e }.head
+    val project = TestHive.sql(q).queryExecution.executedPlan.collect {
+      case e: TungstenProject => e
+    }.head
 
     // No cast expression introduced
     project.transformAllExpressions { case c: Cast =>
@@ -56,11 +60,5 @@ class HiveTypeCoercionSuite extends HiveComparisonTest {
       e
     }
     assert(numEquals === 1)
-  }
-
-  test("COALESCE with different types") {
-    intercept[RuntimeException] {
-      TestHive.sql("""SELECT COALESCE(1, true, "abc") FROM src limit 1""").collect()
-    }
   }
 }

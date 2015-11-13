@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -110,3 +111,4 @@ object CrossValidatorExample {
     sc.stop()
   }
 }
+// scalastyle:on println

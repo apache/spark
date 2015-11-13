@@ -27,6 +27,8 @@ class CombiningLimitsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
+      Batch("Filter Pushdown", FixedPoint(100),
+        ColumnPruning) ::
       Batch("Combine Limit", FixedPoint(10),
         CombineLimits) ::
       Batch("Constant Folding", FixedPoint(10),
@@ -44,7 +46,7 @@ class CombiningLimitsSuite extends PlanTest {
         .limit(10)
         .limit(5)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)
@@ -61,7 +63,24 @@ class CombiningLimitsSuite extends PlanTest {
         .limit(7)
         .limit(5)
 
-    val optimized = Optimize(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .limit(2).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("limits: combines two limits after ColumnPruning") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .limit(2)
+        .select('a)
+        .limit(5)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
         .select('a)

@@ -20,12 +20,11 @@ package org.apache.spark.mllib.linalg
 import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException, SparkFunSuite}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class VectorsSuite extends FunSuite {
+class VectorsSuite extends SparkFunSuite with Logging {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
   val n = 4
@@ -58,14 +57,68 @@ class VectorsSuite extends FunSuite {
     assert(vec.values === values)
   }
 
+  test("sparse vector construction with mismatched indices/values array") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(4, Array(1, 2, 3), Array(3.0, 5.0, 7.0, 9.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(4, Array(1, 2, 3), Array(3.0, 5.0))
+    }
+  }
+
+  test("sparse vector construction with too many indices vs size") {
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(3, Array(1, 2, 3, 4), Array(3.0, 5.0, 7.0, 9.0))
+    }
+  }
+
   test("dense to array") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
     assert(vec.toArray.eq(arr))
   }
 
+  test("dense argmax") {
+    val vec = Vectors.dense(Array.empty[Double]).asInstanceOf[DenseVector]
+    assert(vec.argmax === -1)
+
+    val vec2 = Vectors.dense(arr).asInstanceOf[DenseVector]
+    assert(vec2.argmax === 3)
+
+    val vec3 = Vectors.dense(Array(-1.0, 0.0, -2.0, 1.0)).asInstanceOf[DenseVector]
+    assert(vec3.argmax === 3)
+  }
+
   test("sparse to array") {
     val vec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
     assert(vec.toArray === arr)
+  }
+
+  test("sparse argmax") {
+    val vec = Vectors.sparse(0, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec.argmax === -1)
+
+    val vec2 = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
+    assert(vec2.argmax === 3)
+
+    val vec3 = Vectors.sparse(5, Array(2, 3, 4), Array(1.0, 0.0, -.7))
+    assert(vec3.argmax === 2)
+
+    // check for case that sparse vector is created with
+    // only negative values {0.0, 0.0,-1.0, -0.7, 0.0}
+    val vec4 = Vectors.sparse(5, Array(2, 3), Array(-1.0, -.7))
+    assert(vec4.argmax === 0)
+
+    val vec5 = Vectors.sparse(11, Array(0, 3, 10), Array(-1.0, -.7, 0.0))
+    assert(vec5.argmax === 1)
+
+    val vec6 = Vectors.sparse(11, Array(0, 1, 2), Array(-1.0, -.7, 0.0))
+    assert(vec6.argmax === 2)
+
+    val vec7 = Vectors.sparse(5, Array(0, 1, 3), Array(-1.0, 0.0, -.7))
+    assert(vec7.argmax === 1)
+
+    val vec8 = Vectors.sparse(5, Array(1, 2), Array(0.0, -1.0))
+    assert(vec8.argmax === 0)
   }
 
   test("vector equals") {
@@ -143,7 +196,7 @@ class VectorsSuite extends FunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         Vectors.parse(s)
-        println(s"Didn't detect malformatted string $s.")
+        logInfo(s"Didn't detect malformatted string $s.")
       }
     }
   }
@@ -187,6 +240,8 @@ class VectorsSuite extends FunSuite {
     for (v <- Seq(dv0, dv1, sv0, sv1)) {
       assert(v === udt.deserialize(udt.serialize(v)))
     }
+    assert(udt.typeName == "vector")
+    assert(udt.simpleString == "vector")
   }
 
   test("fromBreeze") {
@@ -213,13 +268,13 @@ class VectorsSuite extends FunSuite {
 
       val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
 
-      // SparseVector vs. SparseVector 
-      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8) 
+      // SparseVector vs. SparseVector
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. SparseVector
       assert(Vectors.sqdist(denseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. DenseVector
       assert(Vectors.sqdist(denseVector1, denseVector2) ~== squaredDist relTol 1E-8)
-    }    
+    }
   }
 
   test("foreachActive") {
@@ -267,5 +322,56 @@ class VectorsSuite extends FunSuite {
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
     assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
+  }
+
+  test("Vector numActive and numNonzeros") {
+    val dv = Vectors.dense(0.0, 2.0, 3.0, 0.0)
+    assert(dv.numActives === 4)
+    assert(dv.numNonzeros === 2)
+
+    val sv = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
+    assert(sv.numActives === 3)
+    assert(sv.numNonzeros === 2)
+  }
+
+  test("Vector toSparse and toDense") {
+    val dv0 = Vectors.dense(0.0, 2.0, 3.0, 0.0)
+    assert(dv0.toDense === dv0)
+    val dv0s = dv0.toSparse
+    assert(dv0s.numActives === 2)
+    assert(dv0s === dv0)
+
+    val sv0 = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
+    assert(sv0.toDense === sv0)
+    val sv0s = sv0.toSparse
+    assert(sv0s.numActives === 2)
+    assert(sv0s === sv0)
+  }
+
+  test("Vector.compressed") {
+    val dv0 = Vectors.dense(1.0, 2.0, 3.0, 0.0)
+    val dv0c = dv0.compressed.asInstanceOf[DenseVector]
+    assert(dv0c === dv0)
+
+    val dv1 = Vectors.dense(0.0, 2.0, 0.0, 0.0)
+    val dv1c = dv1.compressed.asInstanceOf[SparseVector]
+    assert(dv1 === dv1c)
+    assert(dv1c.numActives === 1)
+
+    val sv0 = Vectors.sparse(4, Array(1, 2), Array(2.0, 0.0))
+    val sv0c = sv0.compressed.asInstanceOf[SparseVector]
+    assert(sv0 === sv0c)
+    assert(sv0c.numActives === 1)
+
+    val sv1 = Vectors.sparse(4, Array(0, 1, 2), Array(1.0, 2.0, 3.0))
+    val sv1c = sv1.compressed.asInstanceOf[DenseVector]
+    assert(sv1 === sv1c)
+  }
+
+  test("SparseVector.slice") {
+    val v = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
+    assert(v.slice(Array(0, 2)) === new SparseVector(2, Array(1), Array(2.2)))
+    assert(v.slice(Array(2, 0)) === new SparseVector(2, Array(0), Array(2.2)))
+    assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
   }
 }

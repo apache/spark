@@ -74,14 +74,17 @@ public class CommandBuilderUtilsSuite {
     assertEquals("\"a b c\"", quoteForBatchScript("a b c"));
     assertEquals("\"a \"\"b\"\" c\"", quoteForBatchScript("a \"b\" c"));
     assertEquals("\"a\"\"b\"\"c\"", quoteForBatchScript("a\"b\"c"));
-    assertEquals("\"ab^=\"\"cd\"\"\"", quoteForBatchScript("ab=\"cd\""));
+    assertEquals("\"ab=\"\"cd\"\"\"", quoteForBatchScript("ab=\"cd\""));
+    assertEquals("\"a,b,c\"", quoteForBatchScript("a,b,c"));
+    assertEquals("\"a;b;c\"", quoteForBatchScript("a;b;c"));
+    assertEquals("\"a,b,c\\\\\"", quoteForBatchScript("a,b,c\\"));
   }
 
   @Test
   public void testPythonArgQuoting() {
-    assertEquals("\"abc\"", quoteForPython("abc"));
-    assertEquals("\"a b c\"", quoteForPython("a b c"));
-    assertEquals("\"a \\\"b\\\" c\"", quoteForPython("a \"b\" c"));
+    assertEquals("\"abc\"", quoteForCommandString("abc"));
+    assertEquals("\"a b c\"", quoteForCommandString("a b c"));
+    assertEquals("\"a \\\"b\\\" c\"", quoteForCommandString("a \"b\" c"));
   }
 
   private void testOpt(String opts, List<String> expected) {

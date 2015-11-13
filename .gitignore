@@ -63,6 +63,10 @@ ec2/lib/
 rat-results.txt
 scalastyle.txt
 scalastyle-output.xml
+R-unit-tests.log
+R/unit-tests.out
+python/lib/pyspark.zip
+lint-r-report.log
 
 # For Hive
 metastore_db/
@@ -70,3 +74,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# For R session data
+.RHistory
+.RData

@@ -15,9 +15,9 @@ my_enum_structlist_map	map<string,array<struct<my_string:string,my_enum:string,o
 my_stringlist       	array<string>       	from deserializer   
 my_structlist       	array<struct<my_string:string,my_enum:string,optionals:struct<>>>	from deserializer   
 my_enumlist         	array<string>       	from deserializer   
-my_stringset        	struct<>            	from deserializer   
-my_enumset          	struct<>            	from deserializer   
-my_structset        	struct<>            	from deserializer   
+my_stringset        	array<string>       	from deserializer   
+my_enumset          	array<string>       	from deserializer   
+my_structset        	array<struct<my_string:string,my_enum:string,optionals:struct<>>>	from deserializer   
 optionals           	struct<>            	from deserializer   
 b                   	string              	                    
 	 	 

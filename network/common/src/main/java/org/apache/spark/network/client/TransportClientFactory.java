@@ -158,6 +158,16 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
+  /**
+   * Create a completely new {@link TransportClient} to the given remote host / port
+   * But this connection is not pooled.
+   */
+  public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
+      throws IOException {
+    final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    return createClient(address);
+  }
+
   /** Create a completely new {@link TransportClient} to the remote address. */
   private TransportClient createClient(InetSocketAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
@@ -172,12 +182,14 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
+    final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       public void initChannel(SocketChannel ch) {
         TransportChannelHandler clientHandler = context.initializePipeline(ch);
         clientRef.set(clientHandler.getClient());
+        channelRef.set(ch);
       }
     });
 
@@ -192,6 +204,7 @@ public class TransportClientFactory implements Closeable {
     }
 
     TransportClient client = clientRef.get();
+    Channel channel = channelRef.get();
     assert client != null : "Channel future completed successfully with null client";
 
     // Execute any client bootstraps synchronously before marking the Client as successful.
@@ -199,7 +212,7 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Connection to {} successful, running bootstraps...", address);
     try {
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
-        clientBootstrap.doBootstrap(client);
+        clientBootstrap.doBootstrap(client, channel);
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
