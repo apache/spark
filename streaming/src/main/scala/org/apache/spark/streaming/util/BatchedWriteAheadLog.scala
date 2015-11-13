@@ -188,7 +188,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
 }
 
 /** Static methods for aggregating and de-aggregating records. */
-private[util] object BatchedWriteAheadLog {
+private[streaming] object BatchedWriteAheadLog {
 
   /**
    * Wrapper class for representing the records that we will write to the WriteAheadLog. Coupled
