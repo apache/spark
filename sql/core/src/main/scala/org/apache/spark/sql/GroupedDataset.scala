@@ -89,7 +89,7 @@ class GroupedDataset[K, T] private[sql](
   }
 
   /**
-   * Applies the given function to each group of data.  For each unique group, the function  will
+   * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
    * as a new [[Dataset]].
@@ -162,7 +162,7 @@ class GroupedDataset[K, T] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
-        _.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes).named)
+        _.withInputType(resolvedTEncoder, dataAttributes).named)
     val aggregate = Aggregate(groupingAttributes, groupingAttributes ++ namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)
 
