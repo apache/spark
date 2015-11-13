@@ -63,6 +63,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
   require(rdds.forall(_.partitioner.isDefined))
   require(rdds.flatMap(_.partitioner).toSet.size == 1,
     "Parent RDDs have different partitioners: " + rdds.flatMap(_.partitioner))
+  require(rdds.map(_.partitioner.get.numPartitions).toSet.size == 1,
+    "Parent RDDs have different number of partitions: " +
+      rdds.map(_.partitioner.get.numPartitions))
 
   override val partitioner = rdds.head.partitioner
 

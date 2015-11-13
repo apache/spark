@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{CheckpointingIterator, SerializableConfiguration}
 
 /**
  * An implementation of checkpointing that writes the RDD data to reliable storage.
@@ -31,12 +31,26 @@ import org.apache.spark.util.SerializableConfiguration
 private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private val rdd: RDD[T])
   extends RDDCheckpointData[T](rdd) with Logging {
 
+  import CheckpointState._
+
   // The directory to which the associated RDD has been checkpointed to
   // This is assumed to be a non-local path that points to some reliable storage
-  private val cpDir: String =
-    ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
+  private val cpDir: String = {
+    val _cpDir = ReliableRDDCheckpointData.checkpointPath(rdd.context, rdd.id)
       .map(_.toString)
-      .getOrElse { throw new SparkException("Checkpoint dir must be specified.") }
+      .getOrElse {
+        throw new SparkException("Checkpoint dir must be specified.")
+      }
+    val path = new Path(_cpDir)
+    val fs = new Path(_cpDir).getFileSystem(rdd.context.hadoopConfiguration)
+    if (!fs.mkdirs(path)) {
+      throw new SparkException("Failed to create checkpoint path " + path)
+    }
+    _cpDir
+  }
+
+  private val broadcastedConf = rdd.context.broadcast(
+    new SerializableConfiguration(rdd.context.hadoopConfiguration))
 
   /**
    * Return the directory to which this RDD was checkpointed.
@@ -47,6 +61,30 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
       Some(cpDir.toString)
     } else {
       None
+    }
+  }
+
+  /**
+   * Return an Iterator that will checkpoint the data when consuming the original Iterator if
+   * this RDD has not yet been checkpointed. Otherwise, just return the original Iterator.
+   *
+   * Note: this is called in executor.
+   */
+  def getCheckpointIterator(
+      rdd: RDD[T],
+      values: Iterator[T],
+      context: TaskContext,
+      partitionIndex: Int): Iterator[T] = {
+    if (cpState == Initialized) {
+      CheckpointingIterator[T](
+        rdd,
+        values,
+        cpDir,
+        broadcastedConf,
+        partitionIndex,
+        context)
+    } else {
+      values
     }
   }
 
@@ -63,11 +101,19 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
       throw new SparkException(s"Failed to create checkpoint path $cpDir")
     }
 
-    // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(
-      new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    // TODO: This is expensive because it computes the RDD again unnecessarily (SPARK-8582)
-    rdd.context.runJob(rdd, ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _)
+    val checkpointedPartitionFiles = fs.listStatus(path).map(_.getPath.getName).toSet
+    // Not all actions compute all partitions of the RDD (e.g. take). For correctness, we
+    // must checkpoint any missing partitions.
+    val missingPartitionIndices = rdd.partitions.map(_.index).filter { i =>
+      !checkpointedPartitionFiles(ReliableCheckpointRDD.checkpointFileName(i))
+    }
+    if (missingPartitionIndices.nonEmpty) {
+      rdd.context.runJob(
+        rdd,
+        ReliableCheckpointRDD.writeCheckpointFile[T](cpDir, broadcastedConf) _,
+        missingPartitionIndices)
+    }
+
     val newRDD = new ReliableCheckpointRDD[T](rdd.context, cpDir)
     if (newRDD.partitions.length != rdd.partitions.length) {
       throw new SparkException(

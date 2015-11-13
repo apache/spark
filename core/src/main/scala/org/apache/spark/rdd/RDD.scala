@@ -258,11 +258,14 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
-    if (storageLevel != StorageLevel.NONE) {
+    val iter = if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
     } else {
       computeOrReadCheckpoint(split, context)
     }
+    checkpointData.collect { case data: ReliableRDDCheckpointData[T] =>
+      data.getCheckpointIterator(this, iter, context, split.index)
+    }.getOrElse(iter)
   }
 
   /**

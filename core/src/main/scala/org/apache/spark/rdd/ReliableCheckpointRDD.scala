@@ -96,7 +96,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   /**
    * Return the checkpoint file name for the given partition.
    */
-  private def checkpointFileName(partitionIndex: Int): String = {
+  def checkpointFileName(partitionIndex: Int): String = {
     "part-%05d".format(partitionIndex)
   }
 
