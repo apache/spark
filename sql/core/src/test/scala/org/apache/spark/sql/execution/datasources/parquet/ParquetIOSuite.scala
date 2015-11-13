@@ -104,8 +104,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |}
       """.stripMargin)
 
-    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0), DecimalType(10, 0),
-      StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
