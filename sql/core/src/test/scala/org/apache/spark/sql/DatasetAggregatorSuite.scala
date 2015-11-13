@@ -67,6 +67,28 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
   override def finish(reduction: (Long, Long)): (Long, Long) = reduction
 }
 
+case class AggData(a: Int, b: String)
+object ClassInputAgg extends Aggregator[AggData, Int, Int] with Serializable {
+  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
+  override def zero: Int = 0
+
+  /**
+   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * return it instead of constructing new object for b.
+   */
+  override def reduce(b: Int, a: AggData): Int = b + a.a
+
+  /**
+   * Transform the output of the reduction.
+   */
+  override def finish(reduction: Int): Int = reduction
+
+  /**
+   * Merge two intermediate values
+   */
+  override def merge(b1: Int, b2: Int): Int = b1 + b2
+}
+
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
@@ -122,5 +144,25 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.select(sum((i: Int) => i), sum((i: Int) => i * 2)),
       11 -> 22)
+  }
+
+  test("typed aggregation: class input") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+
+    checkAnswer(
+      ds.select(ClassInputAgg.toColumn),
+      3)
+  }
+
+  test("typed aggregation: class input with reordering") {
+    val ds = sql("SELECT 'one' AS b, 1 as a").as[AggData]
+
+    checkAnswer(
+      ds.select(ClassInputAgg.toColumn),
+      1)
+
+    checkAnswer(
+      ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
+      ("one", 1))
   }
 }
