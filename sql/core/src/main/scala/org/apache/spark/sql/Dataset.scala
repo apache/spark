@@ -299,7 +299,7 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = queryExecution.analyzed
-    val withGroupingKey = AppendColumn(func, resolvedTEncoder, inputPlan)
+    val withGroupingKey = AppendColumns(func, resolvedTEncoder, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
@@ -364,13 +364,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    // We use an unbound encoder since the expression will make up its own schema.
-    // TODO: This probably doesn't work if we are relying on reordering of the input class fields.
     new Dataset[U1](
       sqlContext,
       Project(
         c1.withInputType(
-          resolvedTEncoder.bind(queryExecution.analyzed.output),
+          resolvedTEncoder,
           queryExecution.analyzed.output).named :: Nil,
         logicalPlan))
   }
@@ -382,10 +380,8 @@ class Dataset[T] private[sql](
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
-    // We use an unbound encoder since the expression will make up its own schema.
-    // TODO: This probably doesn't work if we are relying on reordering of the input class fields.
     val namedColumns =
-      columns.map(_.withInputType(unresolvedTEncoder, queryExecution.analyzed.output).named)
+      columns.map(_.withInputType(resolvedTEncoder, queryExecution.analyzed.output).named)
     val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
