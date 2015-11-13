@@ -4,7 +4,7 @@ from setuptools.command.test import test as TestCommand
 import sys
 
 # Kept manually in sync with airflow.__version__
-version = '1.5.2'
+version = '1.6.0'
 
 class Tox(TestCommand):
     user_options = [('tox-args=', None, "Arguments to pass to tox")]
@@ -21,6 +21,11 @@ class Tox(TestCommand):
         errno = tox.cmdline(args=self.tox_args.split())
         sys.exit(errno)
 
+async = [
+    'greenlet>=0.4.9',
+    'eventlet>= 0.9.7',
+    'gevent>=0.13'
+]
 celery = [
     'celery>=3.1.17',
     'flower>=0.7.3'
@@ -46,7 +51,10 @@ mysql = ['mysqlclient>=1.3.6']
 optional = ['librabbitmq>=1.6.1']
 oracle = ['cx_Oracle>=5.1.2']
 postgres = ['psycopg2>=2.6']
-s3 = ['boto>=2.36.0']
+s3 = [
+    'boto>=2.36.0',
+    'filechunkio>=1.6',
+]
 samba = ['pysmbclient>=0.1.3']
 slack = ['slackclient>=0.15']
 statsd = ['statsd>=3.0.1, <4.0']
@@ -92,6 +100,7 @@ setup(
     extras_require={
         'all': devel + optional,
         'all_dbs': all_dbs,
+        'async': async,
         'celery': celery,
         'crypto': crypto,
         'devel': devel,

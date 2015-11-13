@@ -4,16 +4,16 @@ from builtins import str
 from builtins import object
 from cgi import escape
 from io import BytesIO as IO
-import gzip
 import functools
+import gzip
+import json
 
-from flask import after_this_request, request
-from flask_login import current_user
+from flask import after_this_request, request, Response
+from flask.ext.login import current_user
 import wtforms
 from wtforms.compat import text_type
 
-from airflow import configuration
-from airflow import login, models, settings
+from airflow import configuration, models, settings, utils
 AUTHENTICATE = configuration.getboolean('webserver', 'AUTHENTICATE')
 
 
@@ -78,8 +78,8 @@ def action_logging(f):
     def wrapper(*args, **kwargs):
         session = settings.Session()
 
-        if login and hasattr(login.current_user, 'username'):
-            user = login.current_user.username
+        if current_user and hasattr(current_user, 'username'):
+            user = current_user.username
         else:
             user = 'anonymous'
 
@@ -94,6 +94,15 @@ def action_logging(f):
     return wrapper
 
 
+def json_response(obj):
+    """
+    returns a json response from a json serializable python object
+    """
+    return Response(
+        response=json.dumps(
+            obj, indent=4, cls=utils.AirflowJsonEncoder),
+        status=200,
+        mimetype="application/json")
 
 def gzipped(f):
     '''

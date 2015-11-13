@@ -221,6 +221,7 @@ function update(source) {
       .attr("data-toggle", "tooltip")
       .attr("rx", function(d) {return (d.run_id != undefined)? "5": "0"})
       .attr("ry", function(d) {return (d.run_id != undefined)? "5": "0"})
+      .style("shape-rendering", function(d) {return (d.run_id != undefined)? "auto": "crispEdges"})
       .style("stroke-width", function(d) {return (d.run_id != undefined)? "2": "1"})
       .style("stroke-opacity", function(d) {return d.external_trigger ? "0": "1"})
       .attr("title", function(d){

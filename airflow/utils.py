@@ -153,6 +153,7 @@ def merge_conn(conn, session=None):
 
 def initdb():
     session = settings.Session()
+
     from airflow import models
     upgradedb()
 
@@ -334,7 +335,7 @@ def date_range(
     if isinstance(delta, six.string_types):
         delta_iscron = True
         cron = croniter(delta, start_date)
-    else:
+    elif isinstance(delta, timedelta):
         delta = abs(delta)
     l = []
     if end_date:
