@@ -42,9 +42,9 @@ object BuildCommons {
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
+  val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
-    Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
+    Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
@@ -72,7 +72,6 @@ object SparkBuild extends PomBuild {
   // Provides compatibility for older versions of the Spark build
   def backwardCompatibility = {
     import scala.collection.mutable
-    var isAlphaYarn = false
     var profiles: mutable.Seq[String] = mutable.Seq("sbt")
     // scalastyle:off println
     if (Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined) {
@@ -85,7 +84,6 @@ object SparkBuild extends PomBuild {
     }
     Properties.envOrNone("SPARK_HADOOP_VERSION") match {
       case Some(v) =>
-        if (v.matches("0.23.*")) isAlphaYarn = true
         println("NOTE: SPARK_HADOOP_VERSION is deprecated, please use -Dhadoop.version=" + v)
         System.setProperty("hadoop.version", v)
       case None =>

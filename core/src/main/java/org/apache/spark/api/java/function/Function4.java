@@ -15,22 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.api.java.function;
 
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import java.io.Serializable;
 
-package object encoders {
-  /**
-   * Returns an internal encoder object that can be used to serialize / deserialize JVM objects
-   * into Spark SQL rows.  The implicit encoder should always be unresolved (i.e. have no attribute
-   * references from a specific schema.)  This requirement allows us to preserve whether a given
-   * object type is being bound by name or by ordinal when doing resolution.
-   */
-  private[sql] def encoderFor[A : Encoder]: ExpressionEncoder[A] = implicitly[Encoder[A]] match {
-    case e: ExpressionEncoder[A] =>
-      e.assertUnresolved()
-      e
-    case _ => sys.error(s"Only expression encoders are supported today")
-  }
+/**
+ * A four-argument function that takes arguments of type T1, T2, T3 and T4 and returns an R.
+ */
+public interface Function4<T1, T2, T3, T4, R> extends Serializable {
+  public R call(T1 v1, T2 v2, T3 v3, T4 v4) throws Exception;
 }

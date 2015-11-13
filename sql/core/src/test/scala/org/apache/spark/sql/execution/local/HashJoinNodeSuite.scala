@@ -42,15 +42,7 @@ class HashJoinNodeSuite extends LocalNodeTest {
       buildKeys: Seq[Expression],
       buildNode: LocalNode): HashedRelation = {
 
-    val isUnsafeMode = UnsafeProjection.canSupport(buildKeys)
-
-    val buildSideKeyGenerator =
-      if (isUnsafeMode) {
-        UnsafeProjection.create(buildKeys, buildNode.output)
-      } else {
-        new InterpretedMutableProjection(buildKeys, buildNode.output)
-      }
-
+    val buildSideKeyGenerator = UnsafeProjection.create(buildKeys, buildNode.output)
     buildNode.prepare()
     buildNode.open()
     val hashedRelation = HashedRelation(buildNode, buildSideKeyGenerator)

@@ -113,6 +113,7 @@ private[streaming] class TrackStateRDDPartition(
  *                           in the `prevStateRDD` to create `this` RDD
  * @param trackingFunction The function that will be used to update state and return new data
  * @param batchTime        The time of the batch to which this RDD belongs to. Use to update
+ * @param timeoutThresholdTime The time to indicate which keys are timeout
  */
 private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
     private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, E]],
