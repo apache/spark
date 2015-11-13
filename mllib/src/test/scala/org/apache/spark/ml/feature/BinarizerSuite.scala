@@ -68,7 +68,7 @@ class BinarizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     }
   }
 
-  ignore("read/write") { // SPARK-11672
+  test("read/write") {
     val binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
