@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -1137,11 +1137,9 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * :: Experimental ::
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
-  @Experimental
   def countApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = withScope {
@@ -1170,10 +1168,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Approximate version of countByValue().
    */
-  @Experimental
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] = withScope {
@@ -1192,7 +1188,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
@@ -1208,7 +1203,6 @@ abstract class RDD[T: ClassTag](
    * @param sp The precision value for the sparse set, between 0 and 32.
    *           If `sp` equals 0, the sparse representation is skipped.
    */
-  @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = withScope {
     require(p >= 4, s"p ($p) must be >= 4")
     require(sp <= 32, s"sp ($sp) must be <= 32")

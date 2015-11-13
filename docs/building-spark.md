@@ -38,7 +38,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
     
 For more information on usage, run `./make-distribution.sh --help`
 
@@ -189,6 +189,10 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 Running only Java 8 tests and nothing else.
 
     mvn install -DskipTests -Pjava8-tests
+
+or
+
+    sbt -Pjava8-tests java8-tests/test
 
 Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
 For these tests to run your system must have a JDK 8 installation.

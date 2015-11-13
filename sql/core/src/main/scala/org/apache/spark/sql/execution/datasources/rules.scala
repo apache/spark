@@ -140,7 +140,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(r.schema, part.keySet.toArray)
+        PartitioningUtils.validatePartitionColumnDataTypes(
+          r.schema, part.keySet.toArray, catalog.conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
@@ -190,7 +191,8 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(query.schema, partitionColumns)
+        PartitioningUtils.validatePartitionColumnDataTypes(
+          query.schema, partitionColumns, catalog.conf.caseSensitiveAnalysis)
 
       case _ => // OK
     }

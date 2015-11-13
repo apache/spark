@@ -39,7 +39,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
-    case dt: OpenHashSetUDT => false  // it's not a standard UDT
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
     case _ => false
   }
@@ -139,9 +138,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         s"""
           ${input.code}
           if (${input.isNull}) {
-            $setNull
+            ${setNull.trim}
           } else {
-            $writeField
+            ${writeField.trim}
           }
         """
     }
@@ -149,7 +148,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     s"""
       $rowWriter.initialize($bufferHolder, ${inputs.length});
       ${ctx.splitExpressions(row, writeFields)}
-    """
+    """.trim
   }
 
   // TODO: if the nullability of array element is correct, we can use it to save null check.
@@ -275,8 +274,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
-  def createCode(ctx: CodeGenContext, expressions: Seq[Expression]): GeneratedExpressionCode = {
-    val exprEvals = expressions.map(e => e.gen(ctx))
+  def createCode(
+      ctx: CodeGenContext,
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean = false): GeneratedExpressionCode = {
+    val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 
     val result = ctx.freshName("result")
@@ -285,10 +287,15 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
+    // Reset the isLoaded flag for each row.
+    val subexprReset = ctx.subExprIsLoadedVariables.map { v => s"${v} = false;" }.mkString("\n")
+
     val code =
       s"""
         $bufferHolder.reset();
+        $subexprReset
         ${writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, bufferHolder)}
+
         $result.pointTo($bufferHolder.buffer, ${expressions.length}, $bufferHolder.totalSize());
       """
     GeneratedExpressionCode(code, "false", result)
@@ -300,10 +307,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
     in.map(BindReferences.bindReference(_, inputSchema))
 
-  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
-    val ctx = newCodeGenContext()
+  def generate(
+      expressions: Seq[Expression],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    create(canonicalize(expressions), subexpressionEliminationEnabled)
+  }
 
-    val eval = createCode(ctx, expressions)
+  protected def create(expressions: Seq[Expression]): UnsafeProjection = {
+    create(expressions, subexpressionEliminationEnabled = false)
+  }
+
+  private def create(
+      expressions: Seq[Expression],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    val ctx = newCodeGenContext()
+    val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
       public Object generate($exprType[] exprs) {
@@ -315,6 +333,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         private $exprType[] expressions;
 
         ${declareMutableStates(ctx)}
+
         ${declareAddedFunctions(ctx)}
 
         public SpecificUnsafeProjection($exprType[] expressions) {
@@ -328,7 +347,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
-          ${eval.code}
+          ${eval.code.trim}
           return ${eval.value};
         }
       }

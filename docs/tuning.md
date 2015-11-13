@@ -61,8 +61,8 @@ The [Kryo documentation](https://github.com/EsotericSoftware/kryo) describes mor
 registration options, such as adding custom serialization code.
 
 If your objects are large, you may also need to increase the `spark.kryoserializer.buffer`
-config property. The default is 2, but this value needs to be large enough to hold the *largest*
-object you will serialize.
+[config](configuration.html#compression-and-serialization). This value needs to be large enough
+to hold the *largest* object you will serialize.
 
 Finally, if you don't register your custom classes, Kryo will still work, but it will have to store
 the full class name with each object, which is wasteful.

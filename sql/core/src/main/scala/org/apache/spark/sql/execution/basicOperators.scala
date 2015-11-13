@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -30,32 +30,6 @@ import org.apache.spark.util.random.PoissonSampler
 import org.apache.spark.{HashPartitioner, SparkEnv}
 
 
-case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-
-  override private[sql] lazy val metrics = Map(
-    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-
-  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val numRows = longMetric("numRows")
-    child.execute().mapPartitionsInternal { iter =>
-      val reusableProjection = buildProjection()
-      iter.map { row =>
-        numRows += 1
-        reusableProjection(row)
-      }
-    }
-  }
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-}
-
-
-/**
- * A variant of [[Project]] that returns [[UnsafeRow]]s.
- */
 case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
   override private[sql] lazy val metrics = Map(
@@ -67,16 +41,11 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  /** Rewrite the project list to use unsafe expressions as needed. */
-  protected val unsafeProjectList = projectList.map(_ transform {
-    case CreateStruct(children) => CreateStructUnsafe(children)
-    case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-  })
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
     child.execute().mapPartitionsInternal { iter =>
-      val project = UnsafeProjection.create(unsafeProjectList, child.output)
+      val project = UnsafeProjection.create(projectList, child.output,
+        subexpressionEliminationEnabled)
       iter.map { row =>
         numRows += 1
         project(row)
@@ -319,8 +288,8 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
  */
 case class MapPartitions[T, U](
     func: Iterator[T] => Iterator[U],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
@@ -337,10 +306,14 @@ case class MapPartitions[T, U](
  */
 case class AppendColumns[T, U](
     func: T => U,
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
+
+  // We are using an unsafe combiner.
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
 
   override def output: Seq[Attribute] = child.output ++ newColumns
 
@@ -362,10 +335,10 @@ case class AppendColumns[T, U](
  * being output.
  */
 case class MapGroups[K, T, U](
-    func: (K, Iterator[T]) => Iterator[U],
-    kEncoder: Encoder[K],
-    tEncoder: Encoder[T],
-    uEncoder: Encoder[U],
+    func: (K, Iterator[T]) => TraversableOnce[U],
+    kEncoder: ExpressionEncoder[K],
+    tEncoder: ExpressionEncoder[T],
+    uEncoder: ExpressionEncoder[U],
     groupingAttributes: Seq[Attribute],
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
@@ -380,12 +353,54 @@ case class MapGroups[K, T, U](
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
       val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+      val groupDataEncoder = tEncoder.bind(child.output)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
           groupKeyEncoder.fromRow(key),
-          rowIter.map(tEncoder.fromRow))
+          rowIter.map(groupDataEncoder.fromRow))
         result.map(uEncoder.toRow)
+      }
+    }
+  }
+}
+
+/**
+ * Co-groups the data from left and right children, and calls the function with each group and 2
+ * iterators containing all elements in the group from left and right side.
+ * The result of this function is encoded and flattened before being output.
+ */
+case class CoGroup[K, Left, Right, R](
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
+    kEncoder: ExpressionEncoder[K],
+    leftEnc: ExpressionEncoder[Left],
+    rightEnc: ExpressionEncoder[Right],
+    rEncoder: ExpressionEncoder[R],
+    output: Seq[Attribute],
+    leftGroup: Seq[Attribute],
+    rightGroup: Seq[Attribute],
+    left: SparkPlan,
+    right: SparkPlan) extends BinaryNode {
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
+      val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
+      val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
+      val groupKeyEncoder = kEncoder.bind(leftGroup)
+
+      new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
+        case (key, leftResult, rightResult) =>
+          val result = func(
+            groupKeyEncoder.fromRow(key),
+            leftResult.map(leftEnc.fromRow),
+            rightResult.map(rightEnc.fromRow))
+          result.map(rEncoder.toRow)
       }
     }
   }
