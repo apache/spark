@@ -21,6 +21,7 @@ package org.apache.spark.examples.mllib;
 import java.util.Arrays;
 
 import scala.Tuple2;
+import scala.Tuple3;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
