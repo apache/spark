@@ -760,7 +760,7 @@ class DataFrame(object):
         |summary|               age| name|
         +-------+------------------+-----+
         |  count|                 2|    2|
-        |   mean|               3.5| null|
+        |   mean|               3.5|  NaN|
         | stddev|2.1213203435596424|  NaN|
         |    min|                 2|Alice|
         |    max|                 5|  Bob|

@@ -166,7 +166,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |  SUM(key)
           |FROM emptyTable
         """.stripMargin),
-      Row(null, 0, 0, 0, null, null, null, null, null) :: Nil)
+      Row(Double.NaN, 0, 0, 0, null, null, null, null, null) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -219,7 +219,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |  MIN(null),
           |  SUM(null)
         """.stripMargin),
-      Row(null, 0, null, null, null, null, null) :: Nil)
+      Row(Double.NaN, 0, null, null, null, null, null) :: Nil)
   }
 
   test("only do grouping") {
@@ -276,7 +276,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY Key - 100
         """.stripMargin),
-      Row(20.0, -99) :: Row(-0.5, -98) :: Row(null, -97) :: Row(10.0, null) :: Nil)
+      Row(20.0, -99) :: Row(-0.5, -98) :: Row(Double.NaN, -97) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -310,7 +310,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
-      Row(-0.5) :: Row(20.0) :: Row(null) :: Row(10.0) :: Nil)
+      Row(-0.5) :: Row(20.0) :: Row(Double.NaN) :: Row(10.0) :: Nil)
   }
 
   test("test average") {
@@ -321,7 +321,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
-      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, Double.NaN) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -330,7 +330,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
-      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, null) :: Row(null, 10.0) :: Nil)
+      Row(1, 20.0) :: Row(2, -0.5) :: Row(3, Double.NaN) :: Row(null, 10.0) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -339,7 +339,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY key
         """.stripMargin),
-      Row(20.0, 1) :: Row(-0.5, 2) :: Row(null, 3) :: Row(10.0, null) :: Nil)
+      Row(20.0, 1) :: Row(-0.5, 2) :: Row(Double.NaN, 3) :: Row(10.0, null) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -348,7 +348,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |FROM agg1
           |GROUP BY key + 10
         """.stripMargin),
-      Row(21.5, 11) :: Row(1.0, 12) :: Row(null, 13) :: Row(11.5, null) :: Nil)
+      Row(21.5, 11) :: Row(1.0, 12) :: Row(Double.NaN, 13) :: Row(11.5, null) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -412,8 +412,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(1, 64.5, 120.0, 19.0, 55.5, 20.0) ::
         Row(2, 5.0, 99.5, -2.5, -7.0, -0.5) ::
-        Row(3, null, null, null, null, null) ::
-        Row(null, null, 110.0, null, null, 10.0) :: Nil)
+        Row(3, null, null, Double.NaN, null, Double.NaN) ::
+        Row(null, null, 110.0, Double.NaN, null, 10.0) :: Nil)
   }
 
   test("interpreted aggregate function") {
@@ -451,7 +451,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(60.0, 1, 20.0) ::
         Row(-1.0, 2, -0.5) ::
-        Row(null, 3, null) ::
+        Row(null, 3, Double.NaN) ::
         Row(30.0, null, 10.0) :: Nil)
 
     checkAnswer(
@@ -468,8 +468,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(64.5, 19.0, 1, 55.5, 20.0) ::
         Row(5.0, -2.5, 2, -7.0, -0.5) ::
-        Row(null, null, 3, null, null) ::
-        Row(null, null, null, null, 10.0) :: Nil)
+        Row(null, Double.NaN, 3, null, Double.NaN) ::
+        Row(null, Double.NaN, null, null, 10.0) :: Nil)
   }
 
   test("single distinct column set") {
@@ -508,7 +508,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
             """.stripMargin),
           Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
             Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
-            Row(null, null, 3.0, 3, null, null, null) ::
+            Row(null, Double.NaN, 3.0, 3, null, null, Double.NaN) ::
             Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
         checkAnswer(

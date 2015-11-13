@@ -78,8 +78,10 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)
-      Cast(Cast(sum, dt) / Cast(count, dt), resultType)
+      val avgExpr = Cast(Cast(sum, dt) / Cast(count, dt), resultType)
+      If(EqualTo(count, Cast(Literal(0), LongType)), Literal(null), avgExpr)
     case _ =>
-      Cast(sum, resultType) / Cast(count, resultType)
+      val avgExpr = Cast(sum, resultType) / Cast(count, resultType)
+      If(EqualTo(count, Cast(Literal(0), LongType)), Literal(Double.NaN), avgExpr)
   }
 }

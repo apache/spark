@@ -125,7 +125,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
       emptyTableData.agg(avg('a)),
-      Row(null))
+      Row(Double.NaN))
 
     checkAnswer(
       emptyTableData.agg(avg('a), sumDistinct('b)), // non-partial
