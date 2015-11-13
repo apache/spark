@@ -397,7 +397,7 @@ object functions extends LegacyFunctions {
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs

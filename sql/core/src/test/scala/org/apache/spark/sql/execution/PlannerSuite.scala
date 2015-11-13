@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
+import org.apache.spark.sql.execution.joins.{SortMergeJoin, BroadcastHashJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -97,10 +97,10 @@ class PlannerSuite extends SharedSQLContext {
           """.stripMargin).queryExecution.executedPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
       }
     }
 
@@ -150,10 +150,10 @@ class PlannerSuite extends SharedSQLContext {
         val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
 
         val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
 
         sqlContext.clearCache()
       }
