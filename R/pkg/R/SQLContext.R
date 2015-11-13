@@ -144,7 +144,6 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   }
 
   stopifnot(class(schema) == "structType")
-  # schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
@@ -160,22 +159,21 @@ as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(sqlContext, data, schema, samplingRatio)
 }
 
-# toDF
-#
-# Converts an RDD to a DataFrame by infer the types.
-#
-# @param x An RDD
-#
-# @rdname DataFrame
-# @export
-# @examples
-#\dontrun{
-# sc <- sparkR.init()
-# sqlContext <- sparkRSQL.init(sc)
-# rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-# df <- toDF(rdd)
-# }
-
+#' toDF
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param x An RDD
+#'
+#' @rdname DataFrame
+#' @noRd
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- toDF(rdd)
+#'}
 setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
 setMethod("toDF", signature(x = "RDD"),
@@ -217,23 +215,23 @@ jsonFile <- function(sqlContext, path) {
 }
 
 
-# JSON RDD
-#
-# Loads an RDD storing one JSON object per string as a DataFrame.
-#
-# @param sqlContext SQLContext to use
-# @param rdd An RDD of JSON string
-# @param schema A StructType object to use as schema
-# @param samplingRatio The ratio of simpling used to infer the schema
-# @return A DataFrame
-# @export
-# @examples
-#\dontrun{
-# sc <- sparkR.init()
-# sqlContext <- sparkRSQL.init(sc)
-# rdd <- texFile(sc, "path/to/json")
-# df <- jsonRDD(sqlContext, rdd)
-# }
+#' JSON RDD
+#'
+#' Loads an RDD storing one JSON object per string as a DataFrame.
+#'
+#' @param sqlContext SQLContext to use
+#' @param rdd An RDD of JSON string
+#' @param schema A StructType object to use as schema
+#' @param samplingRatio The ratio of simpling used to infer the schema
+#' @return A DataFrame
+#' @noRd
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' rdd <- texFile(sc, "path/to/json")
+#' df <- jsonRDD(sqlContext, rdd)
+#'}
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
