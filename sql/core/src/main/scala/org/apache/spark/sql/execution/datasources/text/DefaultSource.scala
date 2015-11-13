@@ -71,9 +71,10 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    override val paths: Array[String] = Array.empty[String])
+    override val paths: Array[String] = Array.empty[String],
+    parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec) {
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
   /** Data schema is always a single column, named "text". */
   override def dataSchema: StructType = new StructType().add("value", StringType)

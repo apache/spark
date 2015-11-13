@@ -20,7 +20,6 @@ package org.apache.spark.examples.ml
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
-import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -39,10 +38,9 @@ object TrainValidationSplitExample {
     val conf = new SparkConf().setAppName("TrainValidationSplitExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     // Prepare training and test data.
-    val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
     val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
     val lr = new LinearRegression()

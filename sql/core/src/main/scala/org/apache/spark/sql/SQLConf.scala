@@ -252,20 +252,9 @@ private[spark] object SQLConf {
         "not be provided to ExchangeCoordinator.",
       isPublic = false)
 
-  val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
+  val SUBEXPRESSION_ELIMINATION_ENABLED = booleanConf("spark.sql.subexpressionElimination.enabled",
     defaultValue = Some(true),
-    doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
-          "manages memory and dynamically generates bytecode for expression evaluation.")
-
-  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
-      " a specific query.",
-    isPublic = false)
-
-  val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, use the new optimized Tungsten physical execution backend.",
+    doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
   val DIALECT = stringConf(
@@ -364,12 +353,6 @@ private[spark] object SQLConf {
     defaultValue = Some(5 * 60),
     doc = "Timeout in seconds for the broadcast wait time in broadcast joins.")
 
-  // Options that control which operators can be chosen by the query planner.  These should be
-  // considered hints and may be ignored by future versions of Spark SQL.
-  val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(true),
-    doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
-
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
     doc = "Set a Fair Scheduler pool for a JDBC client session")
@@ -448,6 +431,13 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
+  val DATAFRAME_PIVOT_MAX_VALUES = intConf(
+    "spark.sql.pivotMaxValues",
+    defaultValue = Some(10000),
+    doc = "When doing a pivot without specifying values for the pivot column this is the maximum " +
+      "number of (distinct) values that will be collected without error."
+  )
+
   val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
     defaultValue = Some(true),
     isPublic = false,
@@ -469,6 +459,11 @@ private[spark] object SQLConf {
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
+    val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
+    val CODEGEN_ENABLED = "spark.sql.codegen"
+    val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
+    val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
   }
 }
 
@@ -533,13 +528,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
-  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
-
-  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, getConf(TUNGSTEN_ENABLED))
-
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
+  private[spark] def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
