@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class DiskBlockObjectWriter(
     val blockId: BlockId,
-    file: File,
+    val file: File,
     serializerInstance: SerializerInstance,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
