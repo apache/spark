@@ -121,12 +121,11 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
- * is compressed.
+ * plus a bitmap for tracking which blocks are empty(isSparse)/non-empty(!isSparse).
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
- * @param markedBlocks a bitmap tracking which blocks are empty
+ * @param markedBlocks a bitmap tracking which blocks are empty(isSparse)/non-empty(!isSparse)
  * @param avgSize average size of the non-empty blocks
  */
 private[spark] class HighlyCompressedMapStatus private (
@@ -176,9 +175,7 @@ private[spark] object HighlyCompressedMapStatus {
     var i = 0
     var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
-    // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
-    // blocks. From a performance standpoint, we benefit from tracking empty blocks because
-    // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
+
     val emptyBlocks = new RoaringBitmap()
     val nonEmptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
@@ -199,8 +196,12 @@ private[spark] object HighlyCompressedMapStatus {
       0
     }
     if (numNonEmptyBlocks < totalNumBlocks / 2) {
+      // If non-empty blocks are sparse, we track non-empty blocks and set `isSparse` to true.
+      nonEmptyBlocks.runOptimize()
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize, isSparse = true)
     } else {
+      // If non-empty blocks are dense, we track empty blocks and set `isSparse` to false.
+      emptyBlocks.runOptimize()
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize, isSparse = false)
     }
 

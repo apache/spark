@@ -176,7 +176,6 @@
     <dependency>
       <groupId>org.roaringbitmap</groupId>
       <artifactId>RoaringBitmap</artifactId>
-      <version>0.4.5</version>
     </dependency>
     <dependency>
       <groupId>commons-net</groupId>
