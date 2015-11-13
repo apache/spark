@@ -75,7 +75,7 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  private def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /**
    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping

@@ -110,7 +110,7 @@ object DateTimeUtils {
   }
 
   def stringToTime(s: String): java.util.Date = {
-    var indexOfGMT = s.indexOf("GMT");
+    val indexOfGMT = s.indexOf("GMT")
     if (indexOfGMT != -1) {
       // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
       val s0 = s.substring(0, indexOfGMT)
