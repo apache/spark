@@ -50,11 +50,7 @@ case class BinaryHashJoinNode(
   private def buildSideKeyGenerator: Projection = {
     // We are expecting the data types of buildKeys and streamedKeys are the same.
     assert(buildKeys.map(_.dataType) == streamedKeys.map(_.dataType))
-    if (isUnsafeMode) {
-      UnsafeProjection.create(buildKeys, buildNode.output)
-    } else {
-      newMutableProjection(buildKeys, buildNode.output)()
-    }
+    UnsafeProjection.create(buildKeys, buildNode.output)
   }
 
   protected override def doOpen(): Unit = {

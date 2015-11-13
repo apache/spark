@@ -145,12 +145,3 @@ case class TungstenSort(
   }
 
 }
-
-object TungstenSort {
-  /**
-   * Return true if UnsafeExternalSort can sort rows with the given schema, false otherwise.
-   */
-  def supportsSchema(schema: StructType): Boolean = {
-    UnsafeExternalRowSorter.supportsSchema(schema)
-  }
-}

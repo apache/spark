@@ -75,10 +75,11 @@ private[sql] object PartitioningUtils {
   private[sql] def parsePartitions(
       paths: Seq[Path],
       defaultPartitionName: String,
-      typeInference: Boolean): PartitionSpec = {
+      typeInference: Boolean,
+      basePaths: Set[Path]): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
-    val (partitionValues, optBasePaths) = paths.map { path =>
-      parsePartition(path, defaultPartitionName, typeInference)
+    val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
+      parsePartition(path, defaultPartitionName, typeInference, basePaths)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -101,11 +102,15 @@ private[sql] object PartitioningUtils {
       // It will be recognised as conflicting directory structure:
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
-      val basePaths = optBasePaths.flatMap(x => x)
+      val disvoeredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
       assert(
-        basePaths.distinct.size == 1,
+        disvoeredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
-          basePaths.distinct.mkString("\n\t", "\n\t", "\n\n"))
+          disvoeredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+          "If provided paths are partition directories, please set " +
+          "\"basePath\" in the options of the data source to specify the " +
+          "root directory of the table. If there are multiple root directories, " +
+          "please load them separately and then union them.")
 
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 
@@ -131,7 +136,7 @@ private[sql] object PartitioningUtils {
 
   /**
    * Parses a single partition, returns column names and values of each partition column, also
-   * the base path.  For example, given:
+   * the path when we stop partition discovery.  For example, given:
    * {{{
    *   path = hdfs://<host>:<port>/path/to/partition/a=42/b=hello/c=3.14
    * }}}
@@ -144,40 +149,63 @@ private[sql] object PartitioningUtils {
    *       Literal.create("hello", StringType),
    *       Literal.create(3.14, FloatType)))
    * }}}
-   * and the base path:
+   * and the path when we stop the discovery is:
    * {{{
-   *   /path/to/partition
+   *   hdfs://<host>:<port>/path/to/partition
    * }}}
    */
   private[sql] def parsePartition(
       path: Path,
       defaultPartitionName: String,
-      typeInference: Boolean): (Option[PartitionValues], Option[Path]) = {
+      typeInference: Boolean,
+      basePaths: Set[Path]): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, Literal)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
-    var chopped = path
-    var basePath = path
+    // currentPath is the current path that we will use to parse partition column value.
+    var currentPath: Path = path
 
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
-      // uncleaned.  Here we simply ignore them.
-      if (chopped.getName.toLowerCase == "_temporary") {
+      // uncleaned. Here we simply ignore them.
+      if (currentPath.getName.toLowerCase == "_temporary") {
         return (None, None)
       }
 
-      val maybeColumn = parsePartitionColumn(chopped.getName, defaultPartitionName, typeInference)
-      maybeColumn.foreach(columns += _)
-      basePath = chopped
-      chopped = chopped.getParent
-      finished = (maybeColumn.isEmpty && !columns.isEmpty) || chopped.getParent == null
+      if (basePaths.contains(currentPath)) {
+        // If the currentPath is one of base paths. We should stop.
+        finished = true
+      } else {
+        // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
+        // Once we get the string, we try to parse it and find the partition column and value.
+        val maybeColumn =
+          parsePartitionColumn(currentPath.getName, defaultPartitionName, typeInference)
+        maybeColumn.foreach(columns += _)
+
+        // Now, we determine if we should stop.
+        // When we hit any of the following cases, we will stop:
+        //  - In this iteration, we could not parse the value of partition column and value,
+        //    i.e. maybeColumn is None, and columns is not empty. At here we check if columns is
+        //    empty to handle cases like /table/a=1/_temporary/something (we need to find a=1 in
+        //    this case).
+        //  - After we get the new currentPath, this new currentPath represent the top level dir
+        //    i.e. currentPath.getParent == null. For the example of "/table/a=1/",
+        //    the top level dir is "/table".
+        finished =
+          (maybeColumn.isEmpty && !columns.isEmpty) || currentPath.getParent == null
+
+        if (!finished) {
+          // For the above example, currentPath will be "/table/".
+          currentPath = currentPath.getParent
+        }
+      }
     }
 
     if (columns.isEmpty) {
       (None, Some(path))
     } else {
       val (columnNames, values) = columns.reverse.unzip
-      (Some(PartitionValues(columnNames, values)), Some(basePath))
+      (Some(PartitionValues(columnNames, values)), Some(currentPath))
     }
   }
 

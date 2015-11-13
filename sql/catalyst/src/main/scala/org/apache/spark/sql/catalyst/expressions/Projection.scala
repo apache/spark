@@ -102,16 +102,6 @@ abstract class UnsafeProjection extends Projection {
 
 object UnsafeProjection {
 
-  /*
-   * Returns whether UnsafeProjection can support given StructType, Array[DataType] or
-   * Seq[Expression].
-   */
-  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
-  def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
-  private def canSupport(types: Array[DataType]): Boolean = {
-    types.forall(GenerateUnsafeProjection.canSupport)
-  }
-
   /**
    * Returns an UnsafeProjection for given StructType.
    */
@@ -143,6 +133,22 @@ object UnsafeProjection {
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
+
+  /**
+    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
+    * TODO: refactor the plumbing and clean this up.
+    */
+  def create(
+      exprs: Seq[Expression],
+      inputSchema: Seq[Attribute],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+    val e = exprs.map(BindReferences.bindReference(_, inputSchema))
+      .map(_ transform {
+        case CreateStruct(children) => CreateStructUnsafe(children)
+        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    })
+    GenerateUnsafeProjection.generate(e, subexpressionEliminationEnabled)
   }
 }
 
