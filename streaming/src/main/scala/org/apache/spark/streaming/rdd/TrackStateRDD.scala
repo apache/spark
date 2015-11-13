@@ -32,8 +32,51 @@ import org.apache.spark._
  * Record storing the keyed-state [[TrackStateRDD]]. Each record contains a [[StateMap]] and a
  * sequence of records returned by the tracking function of `trackStateByKey`.
  */
-private[streaming] case class TrackStateRDDRecord[K, S, T](
-    var stateMap: StateMap[K, S], var emittedRecords: Seq[T])
+private[streaming] case class TrackStateRDDRecord[K, S, E](
+    var stateMap: StateMap[K, S], var emittedRecords: Seq[E])
+
+private[streaming] object TrackStateRDDRecord {
+  def updateRecordWithData[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
+    prevRecord: Option[TrackStateRDDRecord[K, S, E]],
+    dataIterator: Iterator[(K, V)],
+    updateFunction: (Time, K, Option[V], State[S]) => Option[E],
+    batchTime: Time,
+    timeoutThresholdTime: Option[Long],
+    removeTimedoutData: Boolean
+  ): TrackStateRDDRecord[K, S, E] = {
+    // Create a new state map by cloning the previous one (if it exists) or by creating an empty one
+    val newStateMap = prevRecord.map { _.stateMap.copy() }. getOrElse { new EmptyStateMap[K, S]() }
+
+    val emittedRecords = new ArrayBuffer[E]
+    val wrappedState = new StateImpl[S]()
+
+    // Call the tracking function on each record in the data iterator, and accordingly
+    // update the states touched, and collect the data returned by the tracking function
+    dataIterator.foreach { case (key, value) =>
+      wrappedState.wrap(newStateMap.get(key))
+      val emittedRecord = updateFunction(batchTime, key, Some(value), wrappedState)
+      if (wrappedState.isRemoved) {
+        newStateMap.remove(key)
+      } else if (wrappedState.isUpdated || timeoutThresholdTime.isDefined) {
+        newStateMap.put(key, wrappedState.get(), batchTime.milliseconds)
+      }
+      emittedRecords ++= emittedRecord
+    }
+
+    // Get the timed out state records, call the tracking function on each and collect the
+    // data returned
+    if (removeTimedoutData && timeoutThresholdTime.isDefined) {
+      newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
+        wrappedState.wrapTiminoutState(state)
+        val emittedRecord = updateFunction(batchTime, key, None, wrappedState)
+        emittedRecords ++= emittedRecord
+        newStateMap.remove(key)
+      }
+    }
+
+    TrackStateRDDRecord(newStateMap, emittedRecords)
+  }
+}
 
 /**
  * Partition of the [[TrackStateRDD]], which depends on corresponding partitions of prev state
@@ -72,16 +115,16 @@ private[streaming] class TrackStateRDDPartition(
  * @param batchTime        The time of the batch to which this RDD belongs to. Use to update
  * @param timeoutThresholdTime The time to indicate which keys are timeout
  */
-private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
-    private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, T]],
+private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
+    private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, E]],
     private var partitionedDataRDD: RDD[(K, V)],
-    trackingFunction: (Time, K, Option[V], State[S]) => Option[T],
+    trackingFunction: (Time, K, Option[V], State[S]) => Option[E],
     batchTime: Time,
     timeoutThresholdTime: Option[Long]
-  ) extends RDD[TrackStateRDDRecord[K, S, T]](
+  ) extends RDD[TrackStateRDDRecord[K, S, E]](
     partitionedDataRDD.sparkContext,
     List(
-      new OneToOneDependency[TrackStateRDDRecord[K, S, T]](prevStateRDD),
+      new OneToOneDependency[TrackStateRDDRecord[K, S, E]](prevStateRDD),
       new OneToOneDependency(partitionedDataRDD))
   ) {
 
@@ -98,7 +141,7 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
   }
 
   override def compute(
-      partition: Partition, context: TaskContext): Iterator[TrackStateRDDRecord[K, S, T]] = {
+      partition: Partition, context: TaskContext): Iterator[TrackStateRDDRecord[K, S, E]] = {
 
     val stateRDDPartition = partition.asInstanceOf[TrackStateRDDPartition]
     val prevStateRDDIterator = prevStateRDD.iterator(
@@ -106,42 +149,16 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T:
     val dataIterator = partitionedDataRDD.iterator(
       stateRDDPartition.partitionedDataRDDPartition, context)
 
-    // Create a new state map by cloning the previous one (if it exists) or by creating an empty one
-    val newStateMap = if (prevStateRDDIterator.hasNext) {
-      prevStateRDDIterator.next().stateMap.copy()
-    } else {
-      new EmptyStateMap[K, S]()
-    }
-
-    val emittedRecords = new ArrayBuffer[T]
-    val wrappedState = new StateImpl[S]()
-
-    // Call the tracking function on each record in the data RDD partition, and accordingly
-    // update the states touched, and the data returned by the tracking function.
-    dataIterator.foreach { case (key, value) =>
-      wrappedState.wrap(newStateMap.get(key))
-      val emittedRecord = trackingFunction(batchTime, key, Some(value), wrappedState)
-      if (wrappedState.isRemoved) {
-        newStateMap.remove(key)
-      } else if (wrappedState.isUpdated) {
-        newStateMap.put(key, wrappedState.get(), batchTime.milliseconds)
-      }
-      emittedRecords ++= emittedRecord
-    }
-
-    // If the RDD is expected to be doing a full scan of all the data in the StateMap,
-    // then use this opportunity to filter out those keys that have timed out.
-    // For each of them call the tracking function.
-    if (doFullScan && timeoutThresholdTime.isDefined) {
-      newStateMap.getByTime(timeoutThresholdTime.get).foreach { case (key, state, _) =>
-        wrappedState.wrapTiminoutState(state)
-        val emittedRecord = trackingFunction(batchTime, key, None, wrappedState)
-        emittedRecords ++= emittedRecord
-        newStateMap.remove(key)
-      }
-    }
-
-    Iterator(TrackStateRDDRecord(newStateMap, emittedRecords))
+    val prevRecord = if (prevStateRDDIterator.hasNext) Some(prevStateRDDIterator.next()) else None
+    val newRecord = TrackStateRDDRecord.updateRecordWithData(
+      prevRecord,
+      dataIterator,
+      trackingFunction,
+      batchTime,
+      timeoutThresholdTime,
+      removeTimedoutData = doFullScan // remove timedout data only when full scan is enabled
+    )
+    Iterator(newRecord)
   }
 
   override protected def getPartitions: Array[Partition] = {
