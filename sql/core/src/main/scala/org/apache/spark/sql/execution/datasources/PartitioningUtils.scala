@@ -78,7 +78,7 @@ private[sql] object PartitioningUtils {
       typeInference: Boolean,
       basePaths: Set[Path]): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
-    val (partitionValues, optBasePaths) = paths.map { path =>
+    val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, defaultPartitionName, typeInference, basePaths)
     }.unzip
 
@@ -102,11 +102,11 @@ private[sql] object PartitioningUtils {
       // It will be recognised as conflicting directory structure:
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
-      val basePaths = optBasePaths.flatMap(x => x)
+      val disvoeredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
       assert(
-        basePaths.distinct.size == 1,
+        disvoeredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
-          basePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+          disvoeredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
           "If provided paths are partition directories, please set " +
           "\"basePath\" in the options of the data source to specify the " +
           "root directory of the table. If there are multiple root directories, " +
@@ -151,7 +151,7 @@ private[sql] object PartitioningUtils {
    * }}}
    * and the path when we stop the discovery is:
    * {{{
-   *   /path/to/partition
+   *   hdfs://<host>:<port>/path/to/partition
    * }}}
    */
   private[sql] def parsePartition(
@@ -163,9 +163,7 @@ private[sql] object PartitioningUtils {
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
     // currentPath is the current path that we will use to parse partition column value.
-    var currentPath = path
-    // childPath will be the child of currentPath in the loop below.
-    var childPath = path
+    var currentPath: Path = path
 
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
@@ -197,8 +195,6 @@ private[sql] object PartitioningUtils {
           (maybeColumn.isEmpty && !columns.isEmpty) || currentPath.getParent == null
 
         if (!finished) {
-          // Now, for the above example, childPath will be "/table/a=1/".
-          childPath = currentPath
           // For the above example, currentPath will be "/table/".
           currentPath = currentPath.getParent
         }

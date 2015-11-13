@@ -550,6 +550,10 @@ abstract class HadoopFsRelation private[sql](
       // If the user does not provide basePath, we will just use paths.
       val pathSet = paths.toSet
       pathSet.map(p => new Path(p))
+    }.map { hdfsPath =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     }
   }
 
