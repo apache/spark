@@ -19,7 +19,7 @@ package org.apache.spark.launcher;
 
 /**
  * A handle to a running Spark application.
- * <p/>
+ * <p>
  * Provides runtime information about the underlying Spark application, and actions to control it.
  *
  * @since 1.6.0
@@ -89,6 +89,9 @@ public interface SparkAppHandle {
    * Tries to kill the underlying application. Implies {@link #disconnect()}. This will not send
    * a {@link #stop()} message to the application, so it's recommended that users first try to
    * stop the application cleanly and only resort to this method if that fails.
+   * <p>
+   * Note that if the application is running as a child process, this method fail to kill the
+   * process when using Java 7. This may happen if, for example, the application is deadlocked.
    */
   void kill();
 
@@ -110,7 +113,7 @@ public interface SparkAppHandle {
      * Callback for changes in the handle's state.
      *
      * @param handle The updated handle.
-     * @see {@link SparkAppHandle#getState()}
+     * @see SparkAppHandle#getState()
      */
     void stateChanged(SparkAppHandle handle);
 

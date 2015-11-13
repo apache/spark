@@ -22,19 +22,23 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * A factory for constructing encoders that convert external row to/from the Spark SQL
+ * internal binary representation.
+ */
 object RowEncoder {
-
-  def apply(schema: StructType): ClassEncoder[Row] = {
+  def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val extractExpressions = extractorsFor(inputObject, schema)
     val constructExpression = constructorFor(schema)
-    new ClassEncoder[Row](
+    new ExpressionEncoder[Row](
       schema,
+      flat = false,
       extractExpressions.asInstanceOf[CreateStruct].children,
       constructExpression,
       ClassTag(cls))
@@ -115,9 +119,17 @@ object RowEncoder {
       CreateStruct(convertedFields)
   }
 
-  private def externalDataTypeFor(dt: DataType): DataType = dt match {
+  /**
+   * Returns true if the value of this data type is same between internal and external.
+   */
+  def isNativeType(dt: DataType): Boolean = dt match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => dt
+         FloatType | DoubleType | BinaryType => true
+    case _ => false
+  }
+
+  private def externalDataTypeFor(dt: DataType): DataType = dt match {
+    case _ if isNativeType(dt) => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -133,13 +145,13 @@ object RowEncoder {
       If(
         IsNull(field),
         Literal.create(null, externalDataTypeFor(f.dataType)),
-        constructorFor(BoundReference(i, f.dataType, f.nullable), f.dataType)
+        constructorFor(BoundReference(i, f.dataType, f.nullable))
       )
     }
-    CreateRow(fields)
+    CreateExternalRow(fields)
   }
 
-  private def constructorFor(input: Expression, dataType: DataType): Expression = dataType match {
+  private def constructorFor(input: Expression): Expression = input.dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
 
@@ -166,7 +178,7 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(constructorFor(_, et), input, et),
+          MapObjects(constructorFor, input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
@@ -177,10 +189,10 @@ object RowEncoder {
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
-      val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType), keyArrayType)
+      val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType))
 
       val valueArrayType = ArrayType(vt, valueNullable)
-      val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType), valueArrayType)
+      val valueData = constructorFor(Invoke(input, "valueArray", valueArrayType))
 
       StaticInvoke(
         ArrayBasedMapData,
@@ -193,42 +205,8 @@ object RowEncoder {
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, externalDataTypeFor(f.dataType)),
-          constructorFor(getField(input, i, f.dataType), f.dataType))
+          constructorFor(GetInternalRowField(input, i, f.dataType)))
       }
-      CreateRow(convertedFields)
-  }
-
-  private def getField(
-     row: Expression,
-     ordinal: Int,
-     dataType: DataType): Expression = dataType match {
-    case BooleanType =>
-      Invoke(row, "getBoolean", dataType, Literal(ordinal) :: Nil)
-    case ByteType =>
-      Invoke(row, "getByte", dataType, Literal(ordinal) :: Nil)
-    case ShortType =>
-      Invoke(row, "getShort", dataType, Literal(ordinal) :: Nil)
-    case IntegerType | DateType =>
-      Invoke(row, "getInt", dataType, Literal(ordinal) :: Nil)
-    case LongType | TimestampType =>
-      Invoke(row, "getLong", dataType, Literal(ordinal) :: Nil)
-    case FloatType =>
-      Invoke(row, "getFloat", dataType, Literal(ordinal) :: Nil)
-    case DoubleType =>
-      Invoke(row, "getDouble", dataType, Literal(ordinal) :: Nil)
-    case t: DecimalType =>
-      Invoke(row, "getDecimal", dataType, Seq(ordinal, t.precision, t.scale).map(Literal(_)))
-    case StringType =>
-      Invoke(row, "getUTF8String", dataType, Literal(ordinal) :: Nil)
-    case BinaryType =>
-      Invoke(row, "getBinary", dataType, Literal(ordinal) :: Nil)
-    case CalendarIntervalType =>
-      Invoke(row, "getInterval", dataType, Literal(ordinal) :: Nil)
-    case t: StructType =>
-      Invoke(row, "getStruct", dataType, Literal(ordinal) :: Literal(t.size) :: Nil)
-    case _: ArrayType =>
-      Invoke(row, "getArray", dataType, Literal(ordinal) :: Nil)
-    case _: MapType =>
-      Invoke(row, "getMap", dataType, Literal(ordinal) :: Nil)
+      CreateExternalRow(convertedFields)
   }
 }

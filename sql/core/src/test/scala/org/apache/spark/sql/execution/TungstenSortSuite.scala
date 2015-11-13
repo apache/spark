@@ -31,19 +31,6 @@ import org.apache.spark.sql.types._
 class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext.conf.setConf(SQLConf.CODEGEN_ENABLED, true)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      sqlContext.conf.unsetConf(SQLConf.CODEGEN_ENABLED)
-    } finally {
-      super.afterAll()
-    }
-  }
-
   test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
@@ -87,7 +74,6 @@ class TungstenSortSuite extends SparkPlanTest with SharedSQLContext {
         sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
-      assert(TungstenSort.supportsSchema(inputDf.schema))
       checkThatPlansAgree(
         inputDf,
         plan => ConvertToSafe(
