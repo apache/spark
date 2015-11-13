@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
-import scala.collection.mutable.{HashMap, HashSet, Stack}
+import scala.collection.mutable.{HashMap, HashSet, Set, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -283,9 +283,7 @@ class DAGScheduler(
       case None =>
         // We are going to register ancestor shuffle dependencies
         getAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
-          if (!shuffleToMapStage.contains(dep.shuffleId)) {
-            shuffleToMapStage(dep.shuffleId) = newOrUsedShuffleStage(dep, firstJobId)
-          }
+          shuffleToMapStage(dep.shuffleId) = newOrUsedShuffleStage(dep, firstJobId)
         }
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, firstJobId)
@@ -403,8 +401,8 @@ class DAGScheduler(
   }
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): Set[ShuffleDependency[_, _, _]] = {
+    val parents = new HashSet[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
@@ -416,7 +414,7 @@ class DAGScheduler(
           dep match {
             case shufDep: ShuffleDependency[_, _, _] =>
               if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
-                parents.push(shufDep)
+                parents += shufDep
               }
             case _ =>
           }
