@@ -16,40 +16,43 @@
 #
 
 # $example on$
-from pyspark import SparkContext
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from pyspark.mllib.evaluation import RegressionMetrics
 from pyspark.mllib.linalg import DenseVector
 # $example off$
 
+from pyspark import SparkContext
+
 if __name__ == "__main__":
     sc = SparkContext(appName="Regression Metrics")
+    # $example on$
+    # Load and parse the data
+    def parsePoint(line):
+        values = line.split()
+        return LabeledPoint(float(values[0]),DenseVector([float(x.split(':')[1]) for x in values[1:]]))
 
-def parsePoint(line):
-    values = line.split()
-    return LabeledPoint(float(values[0]), DenseVector([float(x.split(':')[1]) for x in values[1:]]))
+    data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
+    parsedData = data.map(parsePoint)
 
-data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
-parsedData = data.map(parsePoint)
+    # Build the model
+    model = LinearRegressionWithSGD.train(parsedData)
 
-# Build the model
-model = LinearRegressionWithSGD.train(parsedData)
+    # Get predictions
+    valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.label))
 
-# Get predictions
-valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.label))
+    # Instantiate metrics object
+    metrics = RegressionMetrics(valuesAndPreds)
 
-# Instantiate metrics object
-metrics = RegressionMetrics(valuesAndPreds)
+    # Squared Error
+    print("MSE = %s" % metrics.meanSquaredError)
+    print("RMSE = %s" % metrics.rootMeanSquaredError)
 
-# Squared Error
-print("MSE = %s" % metrics.meanSquaredError)
-print("RMSE = %s" % metrics.rootMeanSquaredError)
+    # R-squared
+    print("R-squared = %s" % metrics.r2)
 
-# R-squared
-print("R-squared = %s" % metrics.r2)
+    # Mean absolute error
+    print("MAE = %s" % metrics.meanAbsoluteError)
 
-# Mean absolute error
-print("MAE = %s" % metrics.meanAbsoluteError)
-
-# Explained variance
-print("Explained variance = %s" % metrics.explainedVariance)
+    # Explained variance
+    print("Explained variance = %s" % metrics.explainedVariance)
+    # $example off$

@@ -19,7 +19,6 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
-
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -32,7 +31,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
-// $example off$
+
 
 public class JavaBinaryClassification {
     public static void main(String[] args) {
@@ -111,3 +110,4 @@ public class JavaBinaryClassification {
         LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
     }
 }
+// $example off$

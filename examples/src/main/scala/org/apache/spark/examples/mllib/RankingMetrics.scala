@@ -20,8 +20,10 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
+// $example off$
 object RankingMetrics {
 
   def main(args: Array[String]) {
@@ -30,6 +32,7 @@ object RankingMetrics {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
+    // $example on$
     // Read in the ratings data
     val ratings = sc.textFile("data/mllib/sample_movielens_data.txt").map { line =>
       val fields = line.split("::")
@@ -98,5 +101,6 @@ object RankingMetrics {
 
     // R-squared
     println(s"R-squared = ${regressionMetrics.r2}")
+    // $example off$
   }
 }

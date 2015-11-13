@@ -20,9 +20,10 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
-
+// $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.rdd.RDD;
+// $example off$
 object MultiLabelMetrics {
 
   def main(args: Array[String]) {
@@ -65,5 +66,6 @@ object MultiLabelMetrics {
 
     // Subset accuracy
     println(s"Subset accuracy = ${metrics.subsetAccuracy}")
+    // $example off$
   }
 }

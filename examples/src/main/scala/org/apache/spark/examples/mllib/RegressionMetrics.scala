@@ -17,13 +17,14 @@
 
 // scalastyle:off println
 package org.apache.spark.examples.mllib
-
+// $example on$
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
+// $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -34,6 +35,7 @@ object RegressionMetrics {
     val conf = new SparkConf().setAppName("RegressionMetrics")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
+    // $example on$
     // Load the data
     val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_linear_regression_data.txt").cache()
 
@@ -62,5 +64,6 @@ object RegressionMetrics {
 
     // Explained variance
     println(s"Explained variance = ${metrics.explainedVariance}")
+    // $example off$
   }
 }

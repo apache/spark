@@ -247,7 +247,7 @@ Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.sp
 <div data-lang="java" markdown="1">
 Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaMulticlassMetrics.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaMulticlassClassification.java %}
 
 </div>
 

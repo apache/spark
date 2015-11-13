@@ -19,6 +19,7 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
+import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
@@ -28,7 +29,7 @@ import org.apache.spark.mllib.regression.LinearRegressionModel;
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
 import org.apache.spark.mllib.evaluation.RegressionMetrics;
 import org.apache.spark.SparkConf;
-// $example off$
+
 
 // Read in the ratings data
 public class JavaLinearRegression {
@@ -88,3 +89,4 @@ public class JavaLinearRegression {
         LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "myModelPath");
     }
 }
+// $example off$

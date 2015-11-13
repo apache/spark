@@ -18,6 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+// $example on$
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -90,3 +91,4 @@ public class JavaMulticlassClassification {
         LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
     }
 }
+// $example off$

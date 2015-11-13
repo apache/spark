@@ -23,8 +23,9 @@ from __future__ import print_function
 
 import sys
 
+
+from pyspark import SparkContext, SQLContext
 # $example on$
-from pyspark import SparkContext,SQLContext
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
 from pyspark.mllib.regression import LabeledPoint
@@ -35,29 +36,28 @@ if __name__ == "__main__":
     sc = SparkContext(appName="BinaryClassificationMetrics")
     sqlContext = SQLContext(sc)
 
-# Several of the methods available in scala are currently missing from pyspark
+    # Several of the methods available in scala are currently missing from pyspark
 
-# $example on$
-# Load training data in LIBSVM format
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
+    # $example on$
+    # Load training data in LIBSVM format
+    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
 
-# Split data into training (60%) and test (40%)
-training, test = data.randomSplit([0.6, 0.4], seed = 11L)
-training.cache()
+    # Split data into training (60%) and test (40%)
+    training, test = data.randomSplit([0.6, 0.4], seed=11L)
+    training.cache()
 
-# Run training algorithm to build the model
-model = LogisticRegressionWithLBFGS.train(training)
+    # Run training algorithm to build the model
+    model = LogisticRegressionWithLBFGS.train(training)
 
-# Compute raw scores on the test set
-predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp.label))
+    # Compute raw scores on the test set
+    predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp.label))
 
-# Instantiate metrics object
-metrics = BinaryClassificationMetrics(predictionAndLabels)
+    # Instantiate metrics object
+    metrics = BinaryClassificationMetrics(predictionAndLabels)
 
-# Area under precision-recall curve
-print("Area under PR = %s" % metrics.areaUnderPR)
+    # Area under precision-recall curve
+    print("Area under PR = %s" % metrics.areaUnderPR)
 
-# Area under ROC curve
-print("Area under ROC = %s" % metrics.areaUnderROC)
-# $example off$
-
+    # Area under ROC curve
+    print("Area under ROC = %s" % metrics.areaUnderROC)
+    # $example off$

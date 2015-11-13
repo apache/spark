@@ -25,12 +25,12 @@ import org.apache.spark.api.java.*;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
 import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 import java.util.Arrays;
 import java.util.List;
 // $example off$
-
-public class MultilabelClassification {
+import org.apache.spark.SparkContext;
+// $example on$
+public class JavaMultiLabelClassification {
     public static void main(String[] args) {
         SparkConf conf = new SparkConf().setAppName("Multilabel Classification Metrics");
         JavaSparkContext sc = new JavaSparkContext(conf);
@@ -75,3 +75,4 @@ public class MultilabelClassification {
 
     }
 }
+// $example off$

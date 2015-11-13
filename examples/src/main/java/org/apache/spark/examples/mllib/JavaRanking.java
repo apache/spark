@@ -31,7 +31,7 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics;
 import org.apache.spark.mllib.evaluation.RankingMetrics;
 import org.apache.spark.mllib.recommendation.ALS;
 import org.apache.spark.mllib.recommendation.Rating;
-// $example off$
+
 
 // Read in the ratings data
 public class JavaRanking {
@@ -173,3 +173,4 @@ public class JavaRanking {
         System.out.format("R-squared = %f\n", regressionMetrics.r2());
     }
 }
+// $example off$
