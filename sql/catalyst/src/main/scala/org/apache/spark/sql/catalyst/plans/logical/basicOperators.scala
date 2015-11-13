@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Utils
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashSet
+import scala.collection.mutable.ArrayBuffer
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -260,12 +260,12 @@ case class Expand(
    * @return the attributes of non selected specified via bitmask (with the bit set to 1)
    */
   private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
-  : OpenHashSet[Expression] = {
-    val set = new OpenHashSet[Expression](2)
+  : ArrayBuffer[Expression] = {
+    val set = new ArrayBuffer[Expression](2)
 
     var bit = exprs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
       bit -= 1
     }
 
@@ -278,14 +278,14 @@ case class Expand(
    * are not set for this grouping set (according to the bit mask).
    */
   private[this] def expand(): Seq[Seq[Expression]] = {
-    val result = new scala.collection.mutable.ArrayBuffer[Seq[Expression]]
+    val result = new ArrayBuffer[Seq[Expression]]
 
     bitmasks.foreach { bitmask =>
       // get the non selected grouping attributes according to the bit mask
       val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, groupByExprs)
 
       val substitution = (child.output :+ gid).map(expr => expr transformDown {
-        case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+        case x: Expression if nonSelectedGroupExprSet.exists(_.semanticEquals(x)) =>
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
           Literal.create(null, expr.dataType)
