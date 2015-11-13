@@ -73,7 +73,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
-  private val consolidateShuffleFiles =
+  val consolidateShuffleFiles =
     conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
