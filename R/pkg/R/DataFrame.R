@@ -317,7 +317,7 @@ setMethod("colnames<-",
 #' @param x (DataFrame)
 #' @return value (character) A character vector with the column types of the given DataFrame
 #' @rdname coltypes
-#' @family dataframe_funcs
+#' @family DataFrame functions
 #' @export
 #' @examples
 #'\dontrun{
