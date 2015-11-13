@@ -543,7 +543,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
       } finally {
 
-        // Manually clear the hadoop configuration for other tests.git
+        // Manually clear the hadoop configuration for other tests.
         hadoopConfiguration.clear()
         clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       }
