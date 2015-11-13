@@ -70,12 +70,14 @@ private[streaming] class TrackStateRDDPartition(
  *                           in the `prevStateRDD` to create `this` RDD
  * @param trackingFunction The function that will be used to update state and return new data
  * @param batchTime        The time of the batch to which this RDD belongs to. Use to update
+ * @param timeoutThresholdTime The time to indicate which keys are timeout
  */
 private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
     private var prevStateRDD: RDD[TrackStateRDDRecord[K, S, T]],
     private var partitionedDataRDD: RDD[(K, V)],
     trackingFunction: (Time, K, Option[V], State[S]) => Option[T],
-    batchTime: Time, timeoutThresholdTime: Option[Long]
+    batchTime: Time,
+    timeoutThresholdTime: Option[Long]
   ) extends RDD[TrackStateRDDRecord[K, S, T]](
     partitionedDataRDD.sparkContext,
     List(

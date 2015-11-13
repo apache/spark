@@ -49,7 +49,7 @@ object StatefulNetworkWordCount {
     val ssc = new StreamingContext(sparkConf, Seconds(1))
     ssc.checkpoint(".")
 
-    // Initial RDD input to updateStateByKey
+    // Initial RDD input to trackStateByKey
     val initialRDD = ssc.sparkContext.parallelize(List(("hello", 1), ("world", 1)))
 
     // Create a ReceiverInputDStream on target ip:port and count the
