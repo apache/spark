@@ -364,19 +364,25 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         import testImplicits._
-
         val path = dir.getCanonicalPath
-        val data = (0 to 10).map { i =>
-          val maybeInt = if (i == 10) None else Some(i)
-          Tuple1(maybeInt)
+
+        // For field "a", the first column has odds integers. This is to check the filtered count
+        // when `isNull` is performed.
+        // For Field "b", `isNotNull` of ORC file filters rows only when all the values are
+        // null (maybe this works differently when the data or query is complicated).
+        // So, simply here a column only having `null` is added.
+        val data = (0 until 10).map { i =>
+          val maybeInt = if (i % 2 == 0) None else Some(i)
+          val nullValue: Option[String] = None
+          (maybeInt, nullValue)
         }
-        createDataFrame(data).toDF("id").write.orc(path)
+        createDataFrame(data).toDF("a", "b").write.orc(path)
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Any]): Unit = {
           val sourceDf = extractSourceRDDToDataFrame(df.where(pred))
-          val expectedData = answer.map(Row(_)).toSet
           val data = sourceDf.collect().toSet
+          val expectedData = answer.map(Row(_, null)).toSet
 
           // The result should be single row. When a filter is pushed to ORC, ORC can apply it to
           // every row. So, we can check the number of rows returned from the ORC to make sure
@@ -387,17 +393,19 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(isOrcFiltered)
         }
 
-        checkPredicate('id === 5, Seq(5))
-        checkPredicate('id <=> 5, Seq(5))
-        checkPredicate('id < 5, 0 to 4)
-        checkPredicate('id <= 5, 0 to 5)
-        checkPredicate('id > 5, 6 to 9)
-        checkPredicate('id >= 5, 5 to 9)
-        checkPredicate('id.isNull, Seq(null))
-        checkPredicate('id > 0 && 'id < 3, 0 to 2)
-        checkPredicate('id < 1 || 'id > 8, Seq(0, 9))
-        checkPredicate(!('id > 3), 0 to 3)
-        checkPredicate(!('id > 0 && 'id < 3), Seq(0) ++ (3 to 9))
+        checkPredicate('a === 5, Seq(5))
+        checkPredicate('a <=> 5, Seq(5))
+        checkPredicate('a < 5, Seq(1, 3))
+        checkPredicate('a <= 5, Seq(1, 3, 5))
+        checkPredicate('a > 5, Seq(7, 9))
+        checkPredicate('a >= 5, Seq(5, 7, 9))
+        checkPredicate('a.isNull, Seq(null))
+        checkPredicate('b.isNotNull, Seq())
+        checkPredicate('a.isin(3, 5, 7), Seq(3, 5, 7))
+        checkPredicate('a > 0 && 'a < 3, Seq(1))
+        checkPredicate('a < 1 || 'a > 8, Seq(9))
+        checkPredicate(!('a > 3), Seq(1, 3))
+        checkPredicate(!('a > 0 && 'a < 3), Seq(3, 5, 7, 9))
       }
     }
   }
