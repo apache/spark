@@ -872,7 +872,7 @@ class LogisticRegressionSuite
     assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
   }
 
-  ignore("read/write") { // SPARK-11672
+  test("read/write") {
     // Set some Params to make sure set Params are serialized.
     val lr = new LogisticRegression()
       .setElasticNetParam(0.1)
