@@ -842,8 +842,6 @@ setMethod("first",
 #'
 #' @param x A Spark DataFrame
 #'
-#' @family DataFrame functions
-#' @rdname DataFrame
 #' @noRd
 #' @examples
 #'\dontrun{
