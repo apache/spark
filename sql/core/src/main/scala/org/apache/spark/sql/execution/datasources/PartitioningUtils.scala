@@ -106,7 +106,11 @@ private[sql] object PartitioningUtils {
       assert(
         basePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
-          basePaths.distinct.mkString("\n\t", "\n\t", "\n\n"))
+          basePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
+          "If provided paths are partition directories, please set " +
+          "\"basePath\" in the options of the data source to specify the " +
+          "root directory of the table. If there are multiple root directories, " +
+          "please load them separately and then union them.")
 
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues)
 

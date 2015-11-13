@@ -674,6 +674,36 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
   }
 
+  test("use basePath to specify the root dir of a partitioned table.") {
+    withTempPath { dir =>
+      val tablePath = new File(dir, "table")
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(tablePath.getCanonicalPath)
+
+      val twoPartitionsDF =
+        sqlContext
+          .read
+          .option("basePath", tablePath.getCanonicalPath)
+          .parquet(
+            s"${tablePath.getCanonicalPath}/b=1",
+            s"${tablePath.getCanonicalPath}/b=2")
+
+      checkAnswer(twoPartitionsDF, df.filter("b != 3"))
+
+      intercept[AssertionError] {
+        sqlContext
+          .read
+          .parquet(
+            s"${tablePath.getCanonicalPath}/b=1",
+            s"${tablePath.getCanonicalPath}/b=2")
+      }
+    }
+  }
+
   test("listConflictingPartitionColumns") {
     def makeExpectedMessage(colNameLists: Seq[String], paths: Seq[String]): String = {
       val conflictingColNameLists = colNameLists.zipWithIndex.map { case (list, index) =>
