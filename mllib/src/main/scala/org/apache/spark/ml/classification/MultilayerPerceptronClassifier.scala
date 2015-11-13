@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
 import org.apache.spark.ml.param.{IntParam, ParamValidators, IntArrayParam, ParamMap}
@@ -105,9 +105,9 @@ private object LabelConverter {
  * Number of inputs has to be equal to the size of feature vectors.
  * Number of outputs has to be equal to the total number of labels.
  */
-@Experimental
 @Since("1.5.0")
-class MultilayerPerceptronClassifier(
+@Experimental
+class MultilayerPerceptronClassifier @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams {
@@ -181,15 +181,16 @@ class MultilayerPerceptronClassifier(
  * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model
  */
-@Experimental
 @Since("1.5.0")
+@Experimental
 class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    val layers: Array[Int],
-    val weights: Vector)
+    @Since("1.5.0") val layers: Array[Int],
+    @Since("1.5.0") val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
+  @Since("1.6.0")
   override val numFeatures: Int = layers.head
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)

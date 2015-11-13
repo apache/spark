@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, RandomForestParams, TreeClassifierParams, TreeEnsembleModel}
@@ -38,9 +38,9 @@ import org.apache.spark.sql.functions._
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@Experimental
 @Since("1.4.0")
-final class RandomForestClassifier(
+@Experimental
+final class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestParams with TreeClassifierParams {
@@ -118,13 +118,15 @@ final class RandomForestClassifier(
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
 
-@Experimental
 @Since("1.4.0")
+@Experimental
 object RandomForestClassifier {
   /** Accessor for supported impurity settings: entropy, gini */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
+  @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
     RandomForestParams.supportedFeatureSubsetStrategies
 }
@@ -137,8 +139,8 @@ object RandomForestClassifier {
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
  */
-@Experimental
 @Since("1.4.0")
+@Experimental
 final class RandomForestClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],

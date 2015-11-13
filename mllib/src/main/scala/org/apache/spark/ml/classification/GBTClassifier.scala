@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -44,9 +44,9 @@ import org.apache.spark.sql.types.DoubleType
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
  */
-@Experimental
 @Since("1.4.0")
-final class GBTClassifier(
+@Experimental
+final class GBTClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTClassifier, GBTClassificationModel]
   with GBTParams with TreeClassifierParams with Logging {
@@ -117,6 +117,7 @@ final class GBTClassifier(
    * (default = logistic)
    * @group param
    */
+  @Since("1.4.0")
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTClassifier.supportedLossTypes.mkString(", ")}",
@@ -166,12 +167,12 @@ final class GBTClassifier(
   override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
 
-
-@Experimental
 @Since("1.4.0")
+@Experimental
 object GBTClassifier {
   // The losses below should be lowercase.
   /** Accessor for supported loss settings: logistic */
+  @Since("1.4.0")
   final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
 }
 
@@ -184,13 +185,13 @@ object GBTClassifier {
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
-@Experimental
 @Since("1.6.0")
+@Experimental
 final class GBTClassificationModel private[ml](
     @Since("1.6.0") override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],
-    override val numFeatures: Int)
+    @Since("1.6.0") override val numFeatures: Int)
   extends PredictionModel[Vector, GBTClassificationModel]
   with TreeEnsembleModel with Serializable {
 

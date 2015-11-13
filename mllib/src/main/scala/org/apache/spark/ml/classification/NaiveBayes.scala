@@ -72,9 +72,9 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
  * The input feature values must be nonnegative.
  */
-@Experimental
 @Since("1.5.0")
-class NaiveBayes(
+@Experimental
+class NaiveBayes @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
   with NaiveBayesParams with DefaultParamsWritable {
@@ -125,12 +125,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
  */
-@Experimental
 @Since("1.5.0")
+@Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    val pi: Vector,
-    val theta: Matrix)
+    @Since("1.5.0") val pi: Vector,
+    @Since("1.5.0") val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
@@ -155,8 +155,10 @@ class NaiveBayesModel private[ml] (
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
+  @Since("1.6.0")
   override val numFeatures: Int = theta.numCols
 
+  @Since("1.5.0")
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {

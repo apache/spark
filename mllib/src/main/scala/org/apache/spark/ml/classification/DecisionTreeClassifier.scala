@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeClassifierParams}
 import org.apache.spark.ml.tree.impl.RandomForest
@@ -36,9 +36,9 @@ import org.apache.spark.sql.DataFrame
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@Experimental
 @Since("1.4.0")
-final class DecisionTreeClassifier (
+@Experimental
+final class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeParams with TreeClassifierParams {
@@ -73,6 +73,7 @@ final class DecisionTreeClassifier (
   @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
 
+  @Since("1.6.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
   override protected def train(dataset: DataFrame): DecisionTreeClassificationModel = {
@@ -104,10 +105,11 @@ final class DecisionTreeClassifier (
   override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
-@Experimental
 @Since("1.4.0")
+@Experimental
 object DecisionTreeClassifier {
   /** Accessor for supported impurities: entropy, gini */
+  @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 }
 
@@ -117,11 +119,11 @@ object DecisionTreeClassifier {
  * It supports both binary and multiclass labels, as well as both continuous and categorical
  * features.
  */
-@Experimental
 @Since("1.4.0")
+@Experimental
 final class DecisionTreeClassificationModel private[ml] (
-    @Since("1.5.0")override val uid: String,
-    @Since("1.5.0")override val rootNode: Node,
+    @Since("1.4.0")override val uid: String,
+    @Since("1.4.0")override val rootNode: Node,
     @Since("1.6.0")override val numFeatures: Int,
     @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]

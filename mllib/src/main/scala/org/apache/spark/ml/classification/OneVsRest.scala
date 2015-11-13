@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.language.existentials
 
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -70,12 +70,12 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  *               The i-th model is produced by testing the i-th class (taking label 1) vs the rest
  *               (taking label 0).
  */
-@Experimental
 @Since("1.4.0")
+@Experimental
 final class OneVsRestModel private[ml] (
     @Since("1.4.0")  override val uid: String,
-    labelMetadata: Metadata,
-    val models: Array[_ <: ClassificationModel[_, _]])
+    @Since("1.4.0") labelMetadata: Metadata,
+    @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
   @Since("1.4.0")
@@ -154,9 +154,9 @@ final class OneVsRestModel private[ml] (
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  */
-@Experimental
 @Since("1.4.0")
-final class OneVsRest(
+@Experimental
+final class OneVsRest @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams {
 

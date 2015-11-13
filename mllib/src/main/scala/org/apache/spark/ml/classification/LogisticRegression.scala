@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -154,9 +154,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
  * Currently, this class only supports binary classification.  It will support multiclass
  * in the future.
  */
+@Since("1.2.0")
 @Experimental
-@Since("1.4.0")
-class LogisticRegression(
+class LogisticRegression @Since("1.2.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with DefaultParamsWritable with Logging {
@@ -169,7 +169,7 @@ class LogisticRegression(
    * Default is 0.0.
    * @group setParam
    */
-  @Since("1.4.0")
+  @Since("1.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
   setDefault(regParam -> 0.0)
 
@@ -237,6 +237,7 @@ class LogisticRegression(
    * Default is empty, so all instances have weight one.
    * @group setParam
    */
+  @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
   setDefault(weightCol -> "")
 
@@ -401,8 +402,10 @@ class LogisticRegression(
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
+@Since("1.6.0")
 object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
 
+  @Since("1.6.0")
   override def load(path: String): LogisticRegression = super.load(path)
 }
 
@@ -410,12 +413,12 @@ object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
  * :: Experimental ::
  * Model produced by [[LogisticRegression]].
  */
-@Experimental
 @Since("1.4.0")
+@Experimental
 class LogisticRegressionModel private[ml] (
     @Since("1.4.0") override val uid: String,
-    val coefficients: Vector,
-    val intercept: Double)
+    @Since("1.6.0") val coefficients: Vector,
+    @Since("1.3.0") val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
@@ -445,8 +448,10 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
+  @Since("1.6.0")
   override val numFeatures: Int = coefficients.size
 
+  @Since("1.3.0")
   override val numClasses: Int = 2
 
   private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
@@ -734,11 +739,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionTrainingSummary private[classification] (
-    predictions: DataFrame,
-    probabilityCol: String,
-    labelCol: String,
-    featuresCol: String,
-    val objectiveHistory: Array[Double])
+    @Since("1.5.0") predictions: DataFrame,
+    @Since("1.5.0") probabilityCol: String,
+    @Since("1.5.0") labelCol: String,
+    @Since("1.6.0") featuresCol: String,
+    @Since("1.5.0") val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {
 
@@ -756,7 +761,7 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionSummary private[classification] (
-    @transient override val predictions: DataFrame,
+    @Since("1.5.0") @transient override val predictions: DataFrame,
     @Since("1.5.0") override val probabilityCol: String,
     @Since("1.5.0") override val labelCol: String,
     @Since("1.6.0") override val featuresCol: String) extends LogisticRegressionSummary {
@@ -785,6 +790,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    *       This will change in later Spark versions.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
+  @Since("1.5.0")
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
@@ -793,6 +799,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
    *       This will change in later Spark versions.
    */
+  @Since("1.5.0")
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
@@ -802,6 +809,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
    *       This will change in later Spark versions.
    */
+  @Since("1.5.0")
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
@@ -810,6 +818,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
    *       This will change in later Spark versions.
    */
+  @Since("1.5.0")
   @transient lazy val fMeasureByThreshold: DataFrame = {
     binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
   }
@@ -822,6 +831,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
    *       This will change in later Spark versions.
    */
+  @Since("1.5.0")
   @transient lazy val precisionByThreshold: DataFrame = {
     binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
   }
@@ -834,6 +844,7 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
    *       This will change in later Spark versions.
    */
+  @Since("1.5.0")
   @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
   }
