@@ -181,7 +181,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
-
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
       val uri = new URI(primaryResource)
@@ -255,7 +254,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+    if (master.startsWith("yarn") || master.startsWith("local")) {
       SparkSubmit.printErrorAndExit(
         "Killing submissions is only supported in standalone or Mesos mode!")
     }
@@ -265,7 +264,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://") && !master.startsWith("mesos://")) {
+    if (master.startsWith("yarn") || master.startsWith("local")) {
       SparkSubmit.printErrorAndExit(
         "Requesting submission statuses is only supported in standalone or Mesos mode!")
     }

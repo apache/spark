@@ -22,6 +22,8 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import org.apache.spark.scheduler.SchedulerFactory
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.commons.lang3.StringUtils
@@ -67,7 +69,8 @@ object SparkSubmit {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
+  private val CUSTOM = 16
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | CUSTOM
 
   // Deploy modes
   private val CLIENT = 1
@@ -230,7 +233,13 @@ object SparkSubmit {
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, or local"); -1
+      case m @ SchedulerFactory(name) if SchedulerFactory.getSchedulerFactoryClassName(
+          args.sparkProperties, name).isDefined =>
+        childMainClass =
+            SchedulerFactory.getSchedulerClientClassName(args.sparkProperties, name).getOrElse("")
+        CUSTOM
+      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, local or " +
+          "with a name defined at spark.scheduler.factory.<name> in configuration"); -1
     }
 
     // Set the deploy mode; default is client mode
@@ -470,22 +479,22 @@ object SparkSubmit {
       OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
 
       // Other options
-      OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorCores, STANDALONE | CUSTOM | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
-      OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
+      OptionAssigner(args.executorMemory, STANDALONE | CUSTOM | MESOS | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.memory"),
-      OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.totalExecutorCores, STANDALONE | CUSTOM | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.files, LOCAL | STANDALONE | CUSTOM | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.files"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.jars, STANDALONE | CUSTOM | MESOS, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | CUSTOM | MESOS, CLUSTER,
         sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | CUSTOM | MESOS, CLUSTER,
         sysProp = "spark.driver.cores"),
-      OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.supervise.toString, STANDALONE | CUSTOM | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
+      OptionAssigner(args.ivyRepoPath, STANDALONE | CUSTOM, CLUSTER, sysProp = "spark.jars.ivy")
     )
 
     // In client mode, launch the application main class directly
@@ -602,6 +611,22 @@ object SparkSubmit {
       } else {
         childArgs += (args.primaryResource, args.mainClass)
       }
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
+      }
+    }
+
+    if (clusterManager == CUSTOM && deployMode == CLUSTER) {
+      if (childMainClass == "") throw new IllegalArgumentException(
+        "A custom scheduler is chosen but there is no client class defined for it. " +
+            "Try defining a client class at spark.scheduler.client.<name> in your configuration.")
+      Option(args.driverMemory).foreach { m => sysProps += "spark.driver.memory" -> m }
+      Option(args.driverCores).foreach { c => sysProps += "spark.driver.cores" -> c }
+      sysProps += "spark.driver.supervise" -> args.supervise.toString
+      sysProps += "spark.master" -> args.master
+      childArgs += "launch"
+      childArgs += args.primaryResource
+      childArgs += args.mainClass
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
