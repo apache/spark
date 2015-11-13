@@ -518,22 +518,24 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-        pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
-          // Notify application of executor loss reasons so it can decide whether it should abort
-          pendingRequests.foreach(_.reply(exitReason))
+        pendingLossReasonRequests.remove(eid) match {
+          case Some(pendingRequests) =>
+            // Notify application of executor loss reasons so it can decide whether it should abort
+            pendingRequests.foreach(_.reply(exitReason))
+
+          case None =>
+            // We cannot find executor for pending reasons. This is because completed container
+            // process is before than querying pending result. We should store it for later query.
+            // This is usually happened when explicitly killing a container, the result will be
+            // returned in one AM-RM communication. So query RPC will be later than this completed
+            // container process.
+            releasedExecutorLossReasons.put(eid, exitReason)
         }
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
           driverRef.send(RemoveExecutor(eid, exitReason))
-        } else {
-          // The executor exit is explicit termination request. The reason why we have to store the
-          // exit reason is that killing request may return completed containers in one AM-RM
-          // round-trip communication. So if we do not store such information, query again in
-          // another RPC call from driver to AM cannot get this information.
-          releasedExecutorLossReasons.put(eid, exitReason)
-
         }
       }
     }
