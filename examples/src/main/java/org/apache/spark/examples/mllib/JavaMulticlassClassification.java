@@ -19,6 +19,7 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
+
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -33,62 +34,61 @@ import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 
-
 public class JavaMulticlassClassification {
-    public static void main(String[] args) {
-        SparkConf conf = new SparkConf().setAppName("Multi class Classification Metrics");
-        SparkContext sc = new SparkContext(conf);
-        String path = "data/mllib/sample_multiclass_classification_data.txt";
-        JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("Multi class Classification Metrics");
+    SparkContext sc = new SparkContext(conf);
+    String path = "data/mllib/sample_multiclass_classification_data.txt";
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
 
-        // Split initial RDD into two... [60% training data, 40% testing data].
-        JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[] {0.6, 0.4}, 11L);
-        JavaRDD<LabeledPoint> training = splits[0].cache();
-        JavaRDD<LabeledPoint> test = splits[1];
+    // Split initial RDD into two... [60% training data, 40% testing data].
+    JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.6, 0.4}, 11L);
+    JavaRDD<LabeledPoint> training = splits[0].cache();
+    JavaRDD<LabeledPoint> test = splits[1];
 
-        // Run training algorithm to build the model.
-        final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-                .setNumClasses(3)
-                .run(training.rdd());
+    // Run training algorithm to build the model.
+    final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
+            .setNumClasses(3)
+            .run(training.rdd());
 
-        // Compute raw scores on the test set.
-        JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
-                new Function<LabeledPoint, Tuple2<Object, Object>>() {
-                    public Tuple2<Object, Object> call(LabeledPoint p) {
-                        Double prediction = model.predict(p.features());
-                        return new Tuple2<Object, Object>(prediction, p.label());
-                    }
-                }
-        );
+    // Compute raw scores on the test set.
+    JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
+            new Function<LabeledPoint, Tuple2<Object, Object>>() {
+              public Tuple2<Object, Object> call(LabeledPoint p) {
+                Double prediction = model.predict(p.features());
+                return new Tuple2<Object, Object>(prediction, p.label());
+              }
+            }
+    );
 
-        // Get evaluation metrics.
-        MulticlassMetrics metrics = new MulticlassMetrics(predictionAndLabels.rdd());
+    // Get evaluation metrics.
+    MulticlassMetrics metrics = new MulticlassMetrics(predictionAndLabels.rdd());
 
-        // Confusion matrix
-        Matrix confusion = metrics.confusionMatrix();
-        System.out.println("Confusion matrix: \n" + confusion);
+    // Confusion matrix
+    Matrix confusion = metrics.confusionMatrix();
+    System.out.println("Confusion matrix: \n" + confusion);
 
-        // Overall statistics
-        System.out.println("Precision = " + metrics.precision());
-        System.out.println("Recall = " + metrics.recall());
-        System.out.println("F1 Score = " + metrics.fMeasure());
+    // Overall statistics
+    System.out.println("Precision = " + metrics.precision());
+    System.out.println("Recall = " + metrics.recall());
+    System.out.println("F1 Score = " + metrics.fMeasure());
 
-        // Stats by labels
-        for (int i = 0; i < metrics.labels().length; i++) {
-            System.out.format("Class %f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-            System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-            System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
-        }
-
-        //Weighted stats
-        System.out.format("Weighted precision = %f\n", metrics.weightedPrecision());
-        System.out.format("Weighted recall = %f\n", metrics.weightedRecall());
-        System.out.format("Weighted F1 score = %f\n", metrics.weightedFMeasure());
-        System.out.format("Weighted false positive rate = %f\n", metrics.weightedFalsePositiveRate());
-
-        // Save and load model
-        model.save(sc, "myModelPath");
-        LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
+    // Stats by labels
+    for (int i = 0; i < metrics.labels().length; i++) {
+      System.out.format("Class %f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
+      System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
+      System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
     }
+
+    //Weighted stats
+    System.out.format("Weighted precision = %f\n", metrics.weightedPrecision());
+    System.out.format("Weighted recall = %f\n", metrics.weightedRecall());
+    System.out.format("Weighted F1 score = %f\n", metrics.weightedFMeasure());
+    System.out.format("Weighted false positive rate = %f\n", metrics.weightedFalsePositiveRate());
+
+    // Save and load model
+    model.save(sc, "myModelPath");
+    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
+  }
 }
 // $example off$

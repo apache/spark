@@ -27,9 +27,11 @@ if __name__ == "__main__":
     sc = SparkContext(appName="Regression Metrics")
     # $example on$
     # Load and parse the data
+
     def parsePoint(line):
         values = line.split()
-        return LabeledPoint(float(values[0]),DenseVector([float(x.split(':')[1]) for x in values[1:]]))
+        return LabeledPoint(float(values[0]),
+                            DenseVector([float(x.split(':')[1]) for x in values[1:]]))
 
     data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
     parsedData = data.map(parsePoint)

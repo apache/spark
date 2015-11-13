@@ -20,6 +20,7 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
+
 // $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.rdd.RDD;

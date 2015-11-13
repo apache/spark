@@ -36,7 +36,9 @@ if __name__ == "__main__":
     sc = SparkContext(appName="BinaryClassificationMetrics")
     sqlContext = SQLContext(sc)
 
+    # $example on$
     # Several of the methods available in scala are currently missing from pyspark
+    # $example off$
 
     # $example on$
     # Load training data in LIBSVM format
