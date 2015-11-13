@@ -153,18 +153,18 @@ trait ScalaReflection {
    */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
-  protected def constructorFor(
+  private def constructorFor(
       tpe: `Type`,
       path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
 
     /** Returns the current path with a sub-field extracted. */
-    def addToPath(part: String) =
+    def addToPath(part: String): Expression =
       path
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
 
     /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(ordinal: Int, dataType: DataType) =
+    def addToPathOrdinal(ordinal: Int, dataType: DataType): Expression =
       path
         .map(p => GetStructField(p, StructField(s"_$ordinal", dataType), ordinal))
         .getOrElse(BoundReference(ordinal, dataType, false))
