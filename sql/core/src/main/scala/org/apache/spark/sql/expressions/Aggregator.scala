@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2}
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
 
@@ -58,9 +59,14 @@ abstract class Aggregator[-A, B, C] {
   def reduce(b: B, a: A): B
 
   /**
+   * Merge two intermediate values
+   */
+  def merge(b1: B, b2: B): B
+
+  /**
    * Transform the output of the reduction.
    */
-  def present(reduction: B): C
+  def finish(reduction: B): C
 
   /**
    * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] or [[DataFrame]]
@@ -70,7 +76,7 @@ abstract class Aggregator[-A, B, C] {
       implicit bEncoder: Encoder[B],
       cEncoder: Encoder[C]): TypedColumn[A, C] = {
     val expr =
-      new AggregateExpression2(
+      new AggregateExpression(
         TypedAggregateExpression(this),
         Complete,
         false)
@@ -78,4 +84,3 @@ abstract class Aggregator[-A, B, C] {
     new TypedColumn[A, C](expr, encoderFor[C])
   }
 }
-

@@ -33,31 +33,15 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
-  protected[this] def supportUnsafe: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled
-      && UnsafeProjection.canSupport(leftKeys)
-      && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(left.schema)
-      && UnsafeProjection.canSupport(right.schema))
-  }
-
-  override def outputsUnsafeRows: Boolean = supportUnsafe
-  override def canProcessUnsafeRows: Boolean = supportUnsafe
-  override def canProcessSafeRows: Boolean = !supportUnsafe
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
 
   protected def leftKeyGenerator: Projection =
-    if (supportUnsafe) {
-      UnsafeProjection.create(leftKeys, left.output)
-    } else {
-      newMutableProjection(leftKeys, left.output)()
-    }
+    UnsafeProjection.create(leftKeys, left.output)
 
   protected def rightKeyGenerator: Projection =
-    if (supportUnsafe) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newMutableProjection(rightKeys, right.output)()
-    }
+    UnsafeProjection.create(rightKeys, right.output)
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)

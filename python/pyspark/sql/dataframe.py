@@ -761,7 +761,7 @@ class DataFrame(object):
         +-------+------------------+-----+
         |  count|                 2|    2|
         |   mean|               3.5| null|
-        | stddev|2.1213203435596424| null|
+        | stddev|2.1213203435596424|  NaN|
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
@@ -866,7 +866,7 @@ class DataFrame(object):
         This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row((age * 2)=4, 'abs(age)=2), Row((age * 2)=10, 'abs(age)=5)]
+        [Row((age * 2)=4, abs(age)=2), Row((age * 2)=10, abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]

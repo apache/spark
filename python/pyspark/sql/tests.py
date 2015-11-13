@@ -1017,7 +1017,7 @@ class SQLTests(ReusedPySparkTestCase):
         row = Row(a="length string", b=75)
         df = self.sqlCtx.createDataFrame([row])
         result = df.select(functions.expr("length(a)")).collect()[0].asDict()
-        self.assertEqual(13, result["'length(a)"])
+        self.assertEqual(13, result["length(a)"])
 
     def test_replace(self):
         schema = StructType([
