@@ -445,9 +445,15 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         for info in batchInfosSubmitted:
             self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
             self.assertGreaterEqual(info.submissionTime(), 0)
-            self.assertTrue(info.streamIdToInputInfo().isEmpty())
-            self.assertFalse(info.outputOperationInfos().isEmpty())
-            self.assertIsNotNone(info.outputOperationInfos()[0])
+
+            for streamId in info.streamIdToInputInfo():
+                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
+                # access fields of streamInputInfo
+
+            for outputOpId in info.outputOperationInfos():
+                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
+                # access fields of outputOperationInfo
+
             self.assertEqual(info.schedulingDelay(), -1)
             self.assertEqual(info.processingDelay(), -1)
             self.assertEqual(info.totalDelay(), -1)
@@ -457,9 +463,15 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         for info in batchInfosStarted:
             self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
             self.assertGreaterEqual(info.submissionTime(), 0)
-            self.assertTrue(info.streamIdToInputInfo().isEmpty())
-            self.assertFalse(info.outputOperationInfos().isEmpty())
-            self.assertIsNotNone(info.outputOperationInfos()[0])
+
+            for streamId in info.streamIdToInputInfo():
+                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
+                # access fields of streamInputInfo
+
+            for outputOpId in info.outputOperationInfos():
+                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
+                # access fields of outputOperationInfo
+
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertEqual(info.processingDelay(), -1)
             self.assertEqual(info.totalDelay(), -1)
@@ -469,9 +481,15 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         for info in batchInfosCompleted:
             self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
             self.assertGreaterEqual(info.submissionTime(), 0)
-            self.assertTrue(info.streamIdToInputInfo().isEmpty())
-            self.assertFalse(info.outputOperationInfos().isEmpty())
-            self.assertIsNotNone(info.outputOperationInfos()[0])
+
+            for streamId in info.streamIdToInputInfo():
+                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
+                # access fields of streamInputInfo
+
+            for outputOpId in info.outputOperationInfos():
+                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
+                # access fields of outputOperationInfo
+
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertGreaterEqual(info.processingDelay(), 0)
             self.assertGreaterEqual(info.totalDelay(), 0)
