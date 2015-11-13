@@ -56,13 +56,14 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
     val primitivesAsString = parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
 
     new JSONRelation(
-      None,
-      samplingRatio,
-      primitivesAsString,
-      dataSchema,
-      None,
-      partitionColumns,
-      paths)(sqlContext)
+      inputRDD = None,
+      samplingRatio = samplingRatio,
+      primitivesAsString = primitivesAsString,
+      maybeDataSchema = dataSchema,
+      maybePartitionSpec = None,
+      userDefinedPartitionColumns = partitionColumns,
+      paths = paths,
+      parameters = parameters)(sqlContext)
   }
 }
 
@@ -73,8 +74,10 @@ private[sql] class JSONRelation(
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    override val paths: Array[String] = Array.empty[String])(@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec) {
+    override val paths: Array[String] = Array.empty[String],
+    parameters: Map[String, String] = Map.empty[String, String])
+    (@transient val sqlContext: SQLContext)
+  extends HadoopFsRelation(maybePartitionSpec, parameters) {
 
   /** Constraints to be imposed on schema to be stored. */
   private def checkConstraints(schema: StructType): Unit = {

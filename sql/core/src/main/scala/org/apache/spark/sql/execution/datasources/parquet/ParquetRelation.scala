@@ -109,7 +109,7 @@ private[sql] class ParquetRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(
