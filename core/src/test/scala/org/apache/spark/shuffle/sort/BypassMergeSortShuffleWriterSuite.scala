@@ -32,9 +32,9 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
-import org.apache.spark.executor.{TaskMetrics, ShuffleWriteMetrics}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleOutputCoordinator}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -49,6 +49,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private var taskMetrics: TaskMetrics = _
   private var tempDir: File = _
   private var outputFile: File = _
+  private var indexFile: File = _
+  private var mapStatusFile: File = _
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
   private val temporaryFilesCreated: mutable.Buffer[File] = new ArrayBuffer[File]()
   private val blockIdToFileMap: mutable.Map[BlockId, File] = new mutable.HashMap[BlockId, File]
@@ -57,6 +59,12 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   override def beforeEach(): Unit = {
     tempDir = Utils.createTempDir()
     outputFile = File.createTempFile("shuffle", null, tempDir)
+    indexFile = File.createTempFile("shuffle", ".index", tempDir)
+    mapStatusFile = File.createTempFile("shuffle", ".mapstatus", tempDir)
+    // ShuffleOutputCoordinator requires these files to not exist yet
+    outputFile.delete()
+    indexFile.delete()
+    mapStatusFile.delete()
     taskMetrics = new TaskMetrics
     MockitoAnnotations.initMocks(this)
     shuffleHandle = new BypassMergeSortShuffleHandle[Int, Int](
@@ -68,6 +76,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(dependency.serializer).thenReturn(Some(new JavaSerializer(conf)))
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
     when(blockResolver.getDataFile(0, 0)).thenReturn(outputFile)
+    when(blockResolver.getIndexFile(0, 0)).thenReturn(indexFile)
+    // the index file will be empty, but that is fine for these tests
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(blockManager.getDiskWriter(
       any[BlockId],
@@ -88,11 +98,14 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
         )
       }
     })
+    when(blockManager.shuffleServerId).thenReturn(BlockManagerId.apply("1", "a.b.c", 1))
+
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(
       new Answer[(TempShuffleBlockId, File)] {
         override def answer(invocation: InvocationOnMock): (TempShuffleBlockId, File) = {
           val blockId = new TempShuffleBlockId(UUID.randomUUID)
           val file = File.createTempFile(blockId.toString, null, tempDir)
+          file.delete()
           blockIdToFileMap.put(blockId, file)
           temporaryFilesCreated.append(file)
           (blockId, file)
@@ -121,8 +134,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       taskContext,
       conf
     )
-    writer.write(Iterator.empty)
-    writer.stop( /* success = */ true)
+    val files = writer.write(Iterator.empty)
+    val mapStatus = writer.stop( /* success = */ true).get
+    val ser = new JavaSerializer(conf).newInstance()
+    assert(ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile, ser)._1)
     assert(writer.getPartitionLengths.sum === 0)
     assert(outputFile.exists())
     assert(outputFile.length() === 0)
@@ -145,8 +160,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       taskContext,
       conf
     )
-    writer.write(records)
-    writer.stop( /* success = */ true)
+    val files = writer.write(records)
+    val mapStatus = writer.stop( /* success = */ true).get
+    val ser = new JavaSerializer(conf).newInstance()
+    ShuffleOutputCoordinator.commitOutputs(0, 0, files, mapStatus, mapStatusFile, ser)
     assert(temporaryFilesCreated.nonEmpty)
     assert(writer.getPartitionLengths.sum === outputFile.length())
     assert(temporaryFilesCreated.count(_.exists()) === 0) // check that temporary files were deleted

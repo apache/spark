@@ -20,11 +20,13 @@ package org.apache.spark.shuffle.sort;
 import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
+import java.util.Arrays;
 import java.util.Iterator;
 
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
+import scala.collection.Seq;
 import scala.collection.immutable.Map;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
@@ -42,6 +44,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZFCompressionCodec;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -49,11 +52,11 @@ import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.TmpDestShuffleFile;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.memory.TaskMemoryManager;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -149,12 +152,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * This convenience method should only be called in test code.
    */
   @VisibleForTesting
-  public void write(Iterator<Product2<K, V>> records) throws IOException {
-    write(JavaConverters.asScalaIteratorConverter(records).asScala());
+  public Seq<TmpDestShuffleFile> write(Iterator<Product2<K, V>> records) throws IOException {
+    return write(JavaConverters.asScalaIteratorConverter(records).asScala());
   }
 
   @Override
-  public void write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
+  public Seq<TmpDestShuffleFile> write(scala.collection.Iterator<Product2<K, V>> records) throws IOException {
     // Keep track of success so we know if we encountered an exception
     // We do this rather than a standard try/catch/re-throw to handle
     // generic throwables.
@@ -163,8 +166,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       while (records.hasNext()) {
         insertRecordIntoSorter(records.next());
       }
-      closeAndWriteOutput();
+      final Seq<TmpDestShuffleFile> result = closeAndWriteOutput();
       success = true;
+      return result;
     } finally {
       if (sorter != null) {
         try {
@@ -198,7 +202,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   @VisibleForTesting
-  void closeAndWriteOutput() throws IOException {
+  Seq<TmpDestShuffleFile> closeAndWriteOutput() throws IOException {
     assert(sorter != null);
     updatePeakMemoryUsed();
     serBuffer = null;
@@ -206,8 +210,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
+    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
+    final File tmpDataFile = tmpShuffleFile(dataFile);
+    final File tmpIndexFile = tmpShuffleFile(indexFile);
     try {
-      partitionLengths = mergeSpills(spills);
+      partitionLengths = mergeSpills(spills, tmpDataFile);
     } finally {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && ! spill.file.delete()) {
@@ -215,8 +223,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, tmpIndexFile);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+
+    return JavaConverters.asScalaBufferConverter(Arrays.asList(
+      new TmpDestShuffleFile(tmpIndexFile, indexFile),
+      new TmpDestShuffleFile(tmpDataFile, dataFile)
+    )).asScala();
   }
 
   @VisibleForTesting
@@ -248,8 +261,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpills(SpillInfo[] spills) throws IOException {
-    final File outputFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+  private long[] mergeSpills(SpillInfo[] spills, File outputFile) throws IOException {
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -475,4 +487,5 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
   }
+
 }

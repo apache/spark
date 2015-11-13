@@ -60,6 +60,16 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends Blo
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
+/**
+ * Used to get the canonical filename for the [[org.apache.spark.shuffle.ShuffleOutputCoordinator]]
+ * to store the MapStatus between attempts.  See ShuffleOutputCoordinator for more details.  Note
+ * that this "block" is never shared between executors, its just used between tasks on one executor.
+ * Its just a convenient way to get a canonical file to store this data.
+ */
+case class ShuffleMapStatusBlockId(shuffleId: Int, mapId: Int) extends BlockId {
+  override def name: String = "shuffle_" + shuffleId + "_" + mapId + ".mapstatus"
+}
+
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
@@ -106,6 +116,7 @@ object BlockId {
   val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
+  val SHUFFLE_MAPSTATUS = "shuffle_([0-9]+)_([0-9]+).mapstatus".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
@@ -121,6 +132,8 @@ object BlockId {
       ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
       ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+    case SHUFFLE_MAPSTATUS(shuffleId, mapId) =>
+      ShuffleMapStatusBlockId(shuffleId.toInt, mapId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>

@@ -17,14 +17,23 @@
 
 package org.apache.spark
 
+import java.io.File
+import java.util.concurrent.{Callable, CyclicBarrier, ExecutorService, Executors}
+
+import scala.collection.JavaConverters._
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.storage.{ShuffleDataBlockId, ShuffleBlockId}
-import org.apache.spark.util.MutablePair
+import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.serializer.{KryoSerializer, Serializer}
+import org.apache.spark.shuffle.{ShuffleOutputCoordinator, ShuffleWriter}
+import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleMapStatusBlockId}
+import org.apache.spark.util.{MutablePair, Utils}
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -88,33 +97,16 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   }
 
   test("zero sized blocks") {
-    // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
-
-    // 201 partitions (greater than "spark.shuffle.sort.bypassMergeThreshold") from 4 keys
-    val NUM_BLOCKS = 201
-    val a = sc.parallelize(1 to 4, NUM_BLOCKS)
-    val b = a.map(x => (x, x*2))
-
     // NOTE: The default Java serializer doesn't create zero-sized blocks.
     //       So, use Kryo
-    val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
-      .setSerializer(new KryoSerializer(conf))
-
-    val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-    assert(c.count === 4)
-
-    val blockSizes = (0 until NUM_BLOCKS).flatMap { id =>
-      val statuses = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(shuffleId, id)
-      statuses.flatMap(_._2.map(_._2))
-    }
-    val nonEmptyBlocks = blockSizes.filter(x => x > 0)
-
-    // We should have at most 4 non-zero sized partitions
-    assert(nonEmptyBlocks.size <= 4)
+    testZeroSizedBlocks(Some(new KryoSerializer(conf)))
   }
 
   test("zero sized blocks without kryo") {
+    testZeroSizedBlocks(None)
+  }
+
+  def testZeroSizedBlocks(serOpt: Option[Serializer]): Unit = {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 
@@ -123,8 +115,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val a = sc.parallelize(1 to 4, NUM_BLOCKS)
     val b = a.map(x => (x, x*2))
 
-    // NOTE: The default Java serializer should create zero-sized blocks
     val c = new ShuffledRDD[Int, Int, Int](b, new HashPartitioner(NUM_BLOCKS))
+    serOpt.foreach(c.setSerializer(_))
 
     val shuffleId = c.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
     assert(c.count === 4)
@@ -316,6 +308,156 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     assert(metrics.recordsWritten === numRecords)
     assert(metrics.bytesWritten === metrics.byresRead)
     assert(metrics.bytesWritten > 0)
+  }
+
+  /**
+   * ShuffleOutputCoordinator requires that a given shuffle always generate the same set of files on
+   * all attempts, even if the data is non-deterministic.  We test the extreme case where the data
+   * is completely missing in one case
+   */
+  test("same set of shuffle files regardless of data") {
+
+    def shuffleAndGetShuffleFiles(data: Seq[Int]): Map[String, Long] = {
+      var tempDir: File = null
+      try {
+        tempDir = Utils.createTempDir()
+        conf.set("spark.local.dir", tempDir.getAbsolutePath)
+        sc = new SparkContext("local", "test", conf)
+        val rdd = sc.parallelize(data, 10).map(x => (x, x))
+        val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
+        shuffledRdd.count()
+        val shuffleFiles =
+          FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE)
+        sc.stop()
+        shuffleFiles.asScala.map { file: File =>
+          file.getName -> file.length()
+        }.toMap
+      } finally {
+        conf.remove("spark.local.dir")
+        Utils.deleteRecursively(tempDir)
+      }
+    }
+
+    val shuffleFilesWithData = shuffleAndGetShuffleFiles(0 until 100)
+    val shuffleFilesNoData = shuffleAndGetShuffleFiles(Seq[Int]())
+    assert(shuffleFilesNoData.keySet === shuffleFilesWithData.keySet)
+    // make sure our test is doing what it is supposed to -- at least some of the
+    // "no data" files are empty
+    assert(shuffleFilesNoData.filter{ case (name, size) =>
+      size == 0L && shuffleFilesWithData(name) != 0L
+    }.nonEmpty)
+  }
+
+  test("multiple simultaneous attempts for one task (SPARK-8029)") {
+    sc = new SparkContext("local", "test", conf)
+    val mapStatusFile = sc.env.blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(0, 0))
+    val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val manager = sc.env.shuffleManager
+
+    val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
+    val metricsSystem = sc.env.metricsSystem
+    val shuffleMapRdd = new MyRDD(sc, 1, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+
+    // first attempt -- its successful
+    val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 0L, 0, taskMemoryManager, metricsSystem,
+        InternalAccumulator.create(sc)))
+    val data1 = (1 to 10).map { x => x -> x}
+
+    // second attempt -- also successful.  We'll write out different data,
+    // just to simulate the fact that the records may get written differently
+    // depending on what gets spilled, what gets combined, etc.
+    val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
+      new TaskContextImpl(0, 0, 1L, 0, taskMemoryManager, metricsSystem,
+        InternalAccumulator.create(sc)))
+    val data2 = (11 to 20).map { x => x -> x}
+
+    // interleave writes of both attempts -- we want to test that both attempts can occur
+    // simultaneously, and everything is still OK
+
+    def writeAndClose(
+        writer: ShuffleWriter[Int, Int])(
+        iter: Iterator[(Int, Int)]): Option[(Boolean, MapStatus)] = {
+      val files = writer.write(iter)
+      val output = writer.stop(true)
+      output.map(ShuffleOutputCoordinator.commitOutputs(0, 0, files, _, SparkEnv.get))
+    }
+    val interleaver = new InterleaveIterators(
+      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+
+    val (mapOutput1, mapOutput2) = interleaver.run()
+
+
+    // check that we can read the map output and it has the right data (can be either from
+    // either task, but must be consistent)
+    assert(mapOutput1.isDefined)
+    assert(mapOutput2.isDefined)
+    // exactly one succeeded
+    assert(mapOutput1.get._1 ^ mapOutput2.get._1)
+    // The mapstatuses should be equivalent, but not the same object, since they will be
+    // deserialized independently.  Unfortunately we can't check that they are the same since
+    // MapStatus doesn't override equals()
+
+    // register one of the map outputs -- doesn't matter which one
+    mapOutput1.foreach { case (_, mapStatus) =>
+      mapTrackerMaster.registerMapOutputs(0, Array(mapStatus))
+    }
+
+    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, metricsSystem,
+        InternalAccumulator.create(sc)))
+    val readData = reader.read().toIndexedSeq
+    assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
+
+    assert(mapStatusFile.exists())
+    manager.unregisterShuffle(0)
+    assert(!mapStatusFile.exists(), s"$mapStatusFile did not get deleted")
+  }
+
+}
+
+/**
+ * Utility to help tests make sure that we can process two different iterators simultaneously
+ * in different threads.  This makes sure that in your test, you don't completely process data1 with
+ * f1 before processing data2 with f2 (or vice versa).  It adds a barrier so that the functions only
+ * process one element, before pausing to wait for the other function to "catch up".
+ */
+class InterleaveIterators[T, R](
+    data1: Seq[T],
+    f1: Iterator[T] => R,
+    data2: Seq[T],
+    f2: Iterator[T] => R) {
+
+  require(data1.size == data2.size)
+
+  val barrier = new CyclicBarrier(2)
+  class BarrierIterator[E](id: Int, sub: Iterator[E]) extends Iterator[E] {
+    def hasNext: Boolean = sub.hasNext
+
+    def next: E = {
+      barrier.await()
+      sub.next()
+    }
+  }
+
+  val c1 = new Callable[R] {
+    override def call(): R = f1(new BarrierIterator(1, data1.iterator))
+  }
+  val c2 = new Callable[R] {
+    override def call(): R = f2(new BarrierIterator(2, data2.iterator))
+  }
+
+  val e: ExecutorService = Executors.newFixedThreadPool(2)
+
+  def run(): (R, R) = {
+    val future1 = e.submit(c1)
+    val future2 = e.submit(c2)
+    val r1 = future1.get()
+    val r2 = future2.get()
+    e.shutdown()
+    (r1, r2)
   }
 }
 

@@ -26,8 +26,8 @@ import org.apache.commons.io.filefilter.TrueFileFilter
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.util.Utils
 
 class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
@@ -83,8 +83,8 @@ class SortShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
     shuffledRdd.count()
     // Ensure that the shuffle actually created files that will need to be cleaned up
     val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-    filesCreatedByShuffle.map(_.getName) should be
-    Set("shuffle_0_0_0.data", "shuffle_0_0_0.index")
+    filesCreatedByShuffle.map(_.getName) should be (Set(
+      "shuffle_0_0_0.data", "shuffle_0_0_0.index", "shuffle_0_0.mapstatus"))
     // Check that the cleanup actually removes the files
     sc.env.blockManager.master.removeShuffle(0, blocking = true)
     for (file <- filesCreatedByShuffle) {

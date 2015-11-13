@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.sort
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter, BaseShuffleHandle}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter, TmpDestShuffleFile}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -48,7 +48,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
 
   /** Write a bunch of records to this task's output */
-  override def write(records: Iterator[Product2[K, V]]): Unit = {
+  override def write(records: Iterator[Product2[K, V]]): Seq[TmpDestShuffleFile] = {
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
@@ -65,12 +65,19 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val outputFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val dataFile = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val indexFile = shuffleBlockResolver.getIndexFile(dep.shuffleId, mapId)
+    val tmpDataFile = tmpShuffleFile(dataFile)
+    val tmpIndexFile = tmpShuffleFile(indexFile)
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
-    val partitionLengths = sorter.writePartitionedFile(blockId, outputFile)
-    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths)
+    val partitionLengths = sorter.writePartitionedFile(blockId, tmpDataFile)
+    shuffleBlockResolver.writeIndexFile(dep.shuffleId, mapId, partitionLengths, tmpIndexFile)
 
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+    Seq(
+      TmpDestShuffleFile(tmpDataFile, dataFile),
+      TmpDestShuffleFile(tmpIndexFile, indexFile)
+    )
   }
 
   /** Close this writer, passing along whether the map completed */
@@ -98,6 +105,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
     }
   }
+
 }
 
 private[spark] object SortShuffleWriter {

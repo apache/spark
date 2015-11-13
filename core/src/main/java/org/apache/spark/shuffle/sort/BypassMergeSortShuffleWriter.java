@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -28,19 +29,19 @@ import scala.Option;
 import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
+import scala.collection.JavaConverters;
+import scala.collection.Seq;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.Partitioner;
-import org.apache.spark.ShuffleDependency;
-import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
+import org.apache.spark.*;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
+import org.apache.spark.shuffle.TmpDestShuffleFile;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
@@ -121,13 +122,26 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   @Override
-  public void write(Iterator<Product2<K, V>> records) throws IOException {
+  public Seq<TmpDestShuffleFile> write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
+    final File indexFile = shuffleBlockResolver.getIndexFile(shuffleId, mapId);
+    final File dataFile = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final File tmpIndexFile = tmpShuffleFile(indexFile);
+    final File tmpDataFile = tmpShuffleFile(dataFile);
     if (!records.hasNext()) {
       partitionLengths = new long[numPartitions];
-      shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
       mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
-      return;
+      // create empty data file so we always commit same set of shuffle output files, even if
+      // data is non-deterministic
+      if (!tmpDataFile.createNewFile()) {
+        // only possible if the file already exists, from a race in createTempShuffleBlock, which
+        // should be super-rare
+        throw new IOException("could not create shuffle data file: " + tmpDataFile);
+      }
+      return JavaConverters.asScalaBufferConverter(Arrays.asList(
+        new TmpDestShuffleFile(tmpIndexFile, indexFile),
+        new TmpDestShuffleFile(tmpDataFile, dataFile)
+      )).asScala();
     }
     final SerializerInstance serInstance = serializer.newInstance();
     final long openStartTime = System.nanoTime();
@@ -155,10 +169,14 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       writer.commitAndClose();
     }
 
-    partitionLengths =
-      writePartitionedFile(shuffleBlockResolver.getDataFile(shuffleId, mapId));
-    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths);
+    partitionLengths = writePartitionedFile(tmpDataFile);
+    shuffleBlockResolver.writeIndexFile(shuffleId, mapId, partitionLengths, tmpIndexFile);
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    return JavaConverters.asScalaBufferConverter(Arrays.asList(
+      new TmpDestShuffleFile(tmpIndexFile, indexFile),
+      new TmpDestShuffleFile(tmpDataFile, dataFile)
+    )).asScala();
+
   }
 
   @VisibleForTesting

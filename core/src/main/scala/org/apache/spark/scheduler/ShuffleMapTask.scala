@@ -24,7 +24,7 @@ import scala.language.existentials
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.shuffle.ShuffleWriter
+import org.apache.spark.shuffle.{ShuffleOutputCoordinator, ShuffleWriter}
 
 /**
  * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
@@ -70,8 +70,12 @@ private[spark] class ShuffleMapTask(
     try {
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
-      writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
-      writer.stop(success = true).get
+      val tmpToDestFiles = writer.write(
+        rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
+      val mapStatus = writer.stop(success = true).get
+      // SPARK-8029 make sure only one task on this executor writes the final shuffle files
+      ShuffleOutputCoordinator.commitOutputs(dep.shuffleId, partitionId, tmpToDestFiles, mapStatus,
+        SparkEnv.get)._2
     } catch {
       case e: Exception =>
         try {

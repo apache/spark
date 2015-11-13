@@ -615,6 +615,7 @@ private[spark] class TaskSetManager(
     val index = info.index
     info.markSuccessful()
     removeRunningTask(tid)
+    val task = tasks(index)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
     // "deserialize" the value when holding a lock to avoid blocking other threads. So we call
@@ -622,11 +623,14 @@ private[spark] class TaskSetManager(
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(
-      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
+      task, Success, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
-        info.id, taskSet.id, info.taskId, info.duration, info.host, tasksSuccessful, numTasks))
+      // include the partition here b/c on a stage retry, the partition is *not* necessarily
+      // the same as info.id
+      logInfo(s"Finished task ${info.id} in stage ${taskSet.id} (TID ${info.taskId}}, " +
+        s"partition ${task.partitionId}) in ${info.duration} ms on executor ${info.executorId} " +
+        s"(${info.host}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       if (tasksSuccessful == numTasks) {

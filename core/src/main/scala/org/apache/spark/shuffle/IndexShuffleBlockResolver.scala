@@ -51,7 +51,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
+  private[shuffle] def getIndexFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
   }
 
@@ -72,16 +72,20 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
         logWarning(s"Error deleting index ${file.getPath()}")
       }
     }
+
+    file = blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(shuffleId, mapId))
+    if (file.exists() && !file.delete()) {
+      logWarning(s"Error deleting MapStatus file ${file.getPath()}")
+    }
   }
 
   /**
    * Write an index file with the offsets of each block, plus a final offset at the end for the
    * end of the output file. This will be used by getBlockData to figure out where each block
-   * begins and ends.
-   * */
-  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long]): Unit = {
-    val indexFile = getIndexFile(shuffleId, mapId)
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexFile)))
+   * begins and ends.  Writes to a temp file, and returns that file.
+   */
+  def writeIndexFile(shuffleId: Int, mapId: Int, lengths: Array[Long], tmpIndexFile: File): Unit = {
+    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(tmpIndexFile)))
     Utils.tryWithSafeFinally {
       // We take in lengths of each block, need to convert it to offsets.
       var offset = 0L

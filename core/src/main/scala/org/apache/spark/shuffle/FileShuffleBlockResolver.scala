@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle
 
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
@@ -31,7 +32,7 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
 
 /** A group of writers for a ShuffleMapTask, one writer per reducer. */
 private[spark] trait ShuffleWriterGroup {
-  val writers: Array[DiskBlockObjectWriter]
+  val writers: Array[(DiskBlockObjectWriter, File)]
 
   /** @param success Indicates all writes were successful. If false, no blocks will be recorded. */
   def releaseWriters(success: Boolean)
@@ -80,10 +81,11 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
-      val writers: Array[DiskBlockObjectWriter] = {
-        Array.tabulate[DiskBlockObjectWriter](numReducers) { bucketId =>
+      val writers: Array[(DiskBlockObjectWriter, File)] = {
+        Array.tabulate[(DiskBlockObjectWriter, File)](numReducers) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
+          val tmpBlockFile = ShuffleWriter.tmpShuffleFile(blockFile)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
           if (blockFile.exists) {
@@ -93,8 +95,8 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
               logWarning(s"Failed to remove existing shuffle file $blockFile")
             }
           }
-          blockManager.getDiskWriter(blockId, blockFile, serializerInstance, bufferSize,
-            writeMetrics)
+          blockManager.getDiskWriter(blockId, tmpBlockFile, serializerInstance, bufferSize,
+            writeMetrics) -> blockFile
         }
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
@@ -130,6 +132,13 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
           val file = blockManager.diskBlockManager.getFile(blockId)
           if (!file.delete()) {
             logWarning(s"Error deleting ${file.getPath()}")
+          }
+        }
+        for (mapId <- state.completedMapTasks.asScala) {
+          val mapStatusFile =
+            blockManager.diskBlockManager.getFile(ShuffleMapStatusBlockId(shuffleId, mapId))
+          if (mapStatusFile.exists() && !mapStatusFile.delete()) {
+            logWarning(s"Error deleting MapStatus file ${mapStatusFile.getPath()}")
           }
         }
         logInfo("Deleted all files for shuffle " + shuffleId)

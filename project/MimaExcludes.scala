@@ -110,6 +110,9 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_="),
+        // SPARK-8029 -- this is a private[spark] method but that has to be public in java
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.shuffle.unsafe.UnsafeShuffleWriter.write"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
