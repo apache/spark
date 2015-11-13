@@ -499,6 +499,7 @@ class SchedulerJob(BaseJob):
             else:
                 d[ti.pool].append(ti)
 
+        overloaded_dags = set()
         for pool, tis in list(d.items()):
             if not pool:
                 # Arbitrary:
@@ -538,11 +539,13 @@ class SchedulerJob(BaseJob):
                 if self.do_pickle and self.executor.__class__ not in (
                         executors.LocalExecutor,
                         executors.SequentialExecutor):
+                    logging.info("Pickling DAG {}".format(dag))
                     pickle_id = dag.pickle(session).id
 
-                if (
-                        not task.dag.concurrency_reached and
-                        ti.are_dependencies_met()):
+                if dag.dag_id in overloaded_dags or dag.concurrency_reached:
+                    overloaded_dags.append(dag.dag_id)
+                    continue
+                if ti.are_dependencies_met():
                     executor.queue_task_instance(
                         ti, force=True, pickle_id=pickle_id)
                     open_slots -= 1

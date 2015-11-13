@@ -384,6 +384,8 @@ class WebUiTests(unittest.TestCase):
             '/admin/airflow/code?dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
         response = self.app.get(
+            '/admin/airflow/blocked')
+        response = self.app.get(
             '/admin/configurationview/')
         assert "Airflow Configuration" in response.data.decode('utf-8')
         response = self.app.get(
