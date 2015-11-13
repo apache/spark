@@ -78,7 +78,7 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
       for (i <- featureIndices) {
         fields(i) = FieldName.create("field_" + i)
         dataDictionary.withDataFields(new DataField(fields(i), OpType.CATEGORICAL, DataType.DOUBLE)
-          .withValues(SArray(new Value().withValue(i.toDouble.toString)): _*))
+          .withValues(new Value("0.0"), new Value("1.0")))
         miningSchema
           .withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
 
@@ -123,9 +123,25 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
       .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(targetValueCounts: _*))
       .withFieldName(targetField)
 
+    // add output
+    val output = new Output()
+    output.withOutputFields(
+      new OutputField()
+        .withName(FieldName.create("Predicted_class"))
+        .withFeature(ResultFeatureType.PREDICTED_VALUE))
+    output.withOutputFields(labelIndices.map { label =>
+      new OutputField()
+        .withName(FieldName.create(s"Probability_${label.toDouble}"))
+        .withOpType(OpType.CONTINUOUS)
+        .withDataType(DataType.DOUBLE)
+        .withFeature(ResultFeatureType.PROBABILITY)
+        .withValue(s"${label.toDouble}")
+      }: _*)
+
     nbModel.setMiningSchema(miningSchema)
     nbModel.setBayesInputs(bayesInputs)
     nbModel.setBayesOutput(bayesOutput)
+    nbModel.setOutput(output)
 
     dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
 
