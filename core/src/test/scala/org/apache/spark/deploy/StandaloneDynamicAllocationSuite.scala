@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
@@ -29,6 +30,7 @@ import org.apache.spark.deploy.master.ApplicationInfo
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 
@@ -38,7 +40,8 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterE
 class StandaloneDynamicAllocationSuite
   extends SparkFunSuite
   with LocalSparkContext
-  with BeforeAndAfterAll {
+  with BeforeAndAfterAll
+  with PrivateMethodTester {
 
   private val numWorkers = 2
   private val conf = new SparkConf()
@@ -405,7 +408,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("disable force kill for busy executors (SPARK-9552)") {
-    sc = new SparkContext(appConf.set("spark.dynamicAllocation.testing", "true"))
+    sc = new SparkContext(appConf)
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -417,17 +420,21 @@ class StandaloneDynamicAllocationSuite
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
     syncExecutors(sc)
-    var executors = getExecutorIds(sc)
+    val executors = getExecutorIds(sc)
     assert(executors.size === 2)
     // force kill busy executor
-    assert(killExecutorWithForce(sc, executors.head))
+    assert(killExecutor(sc, executors.head, force = true))
     var apps = getApplications()
     // kill executor successfully
     assert(apps.head.executors.size === 1)
-    // try to kill busy executor but it should be failed
-    assert(killExecutorWithForce(sc, executors.head, false) === false)
+    // simulate running a task on the executor
+    val getMap = PrivateMethod[mutable.HashMap[String, Int]]('executorIdToTaskCount)
+    val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
+    val executorIdToTaskCount = taskScheduler invokePrivate getMap()
+    executorIdToTaskCount(executors.head) = 1
+    // kill the busy executor without force; this should fail
+    assert(killExecutor(sc, executors.head, force = false))
     apps = getApplications()
-    // won't kill busy executor
     assert(apps.head.executors.size === 1)
   }
 
@@ -482,16 +489,13 @@ class StandaloneDynamicAllocationSuite
     sc.killExecutors(getExecutorIds(sc).take(n))
   }
 
-  private def killExecutorWithForce(
-      sc: SparkContext,
-      executorId: String,
-      force: Boolean = true): Boolean = {
+  /** Kill the given executor, specifying whether to force kill it. */
+  private def killExecutor(sc: SparkContext, executorId: String, force: Boolean): Boolean = {
+    syncExecutors(sc)
     sc.schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(Seq(executorId), replace = false, force)
-      case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
-        false
+      case _ => fail("expected coarse grained scheduler")
     }
   }
 
