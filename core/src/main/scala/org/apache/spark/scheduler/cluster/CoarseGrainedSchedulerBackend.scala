@@ -451,7 +451,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       numPendingExecutors += knownExecutors.size
     }
 
-    doKillExecutors(executorsToKill)
+    (force || !executorsToKill.isEmpty) && doKillExecutors(executorsToKill)
   }
 
   /**

@@ -418,13 +418,18 @@ class StandaloneDynamicAllocationSuite
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
     syncExecutors(sc)
-    val executors = getExecutorIds(sc)
+    var executors = getExecutorIds(sc)
     assert(executors.size === 2)
-    // try to kill busy executor
-    assert(sc.killAndReplaceExecutor(executors.head))
+    // force kill busy executor
+    assert(killExecutorWithForce(sc, executors.head))
     var apps = getApplications()
+    // kill executor successfully
+    assert(apps.head.executors.size === 1)
+    // try to kill busy executor but it should be failed
+    assert(killExecutorWithForce(sc, executors.head, false) === false)
+    apps = getApplications()
     // won't kill busy executor
-    assert(apps.head.executors.size === 2)
+    assert(apps.head.executors.size === 1)
   }
 
   // ===============================
@@ -476,6 +481,16 @@ class StandaloneDynamicAllocationSuite
   private def killNExecutors(sc: SparkContext, n: Int): Boolean = {
     syncExecutors(sc)
     sc.killExecutors(getExecutorIds(sc).take(n))
+  }
+
+  private def killExecutorWithForce(sc: SparkContext, executorId: String, force: Boolean = true): Boolean = {
+    sc.schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.killExecutors(Seq(executorId), replace = false, force)
+      case _ =>
+        logWarning("Killing executors is only supported in coarse-grained mode")
+        false
+    }
   }
 
   /**
