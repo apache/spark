@@ -46,6 +46,7 @@ class HashShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     // an object is written. So if the codepaths assume writeObject is end of data, this should
     // flush those bugs out. This was common bug in ExternalAppendOnlyMap, etc.
     conf.set("spark.serializer.objectStreamReset", "1")
+    conf.set("spark.shuffle.consolidateFiles", "true")
     conf.set("spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.hash.HashShuffleManager")
 
