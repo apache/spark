@@ -66,23 +66,52 @@ class MapStatusSuite extends SparkFunSuite {
     }
   }
 
-  test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
+  test("large tasks with dense non-empty blocks should use" +
+    classOf[MapStatusTrackingEmptyBlocks].getName) {
     val sizes = Array.fill[Long](2001)(150L)
     val status = MapStatus(null, sizes)
-    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status.isInstanceOf[MapStatusTrackingEmptyBlocks])
     assert(status.getSizeForBlock(10) === 150L)
     assert(status.getSizeForBlock(50) === 150L)
     assert(status.getSizeForBlock(99) === 150L)
     assert(status.getSizeForBlock(2000) === 150L)
   }
 
-  test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
+  test("large tasks with sparse non-empty blocks should use " +
+    classOf[MapStatusTrackingEmptyBlocks].getName) {
+    val sizes = Array.fill[Long](2001)(0L)
+    sizes(0) = 1L
+    val status = MapStatus(null, sizes)
+    assert(status.isInstanceOf[MapStatusTrackingEmptyBlocks])
+    assert(status.getSizeForBlock(0) === 1L)
+    assert(status.getSizeForBlock(50) === 0L)
+    assert(status.getSizeForBlock(99) === 0L)
+    assert(status.getSizeForBlock(2000) === 0L)
+  }
+
+  test("large tasks with not dense or sparse non-empty blocks should use " +
+    classOf[HighlyCompressedMapStatus].getName) {
+    val sizes = Array.fill[Long](2001)(0L)
+    for(i <- 0 to sizes.length - 1){
+      if (i % 2 == 1) {
+        sizes(i) = 1L
+      }
+    }
+    val status = MapStatus(null, sizes)
+    assert(status.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status.getSizeForBlock(0) === 0L)
+    assert(status.getSizeForBlock(1) === 1L)
+    assert(status.getSizeForBlock(1999) === 1L)
+    assert(status.getSizeForBlock(2000) === 0L)
+  }
+
+  test("MapStatusTrackingEmptyBlocks: estimated size should be the average non-empty block size") {
     val sizes = Array.tabulate[Long](3000) { i => i.toLong }
     val avg = sizes.sum / sizes.filter(_ != 0).length
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
     val status1 = compressAndDecompressMapStatus(status)
-    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
+    assert(status1.isInstanceOf[MapStatusTrackingEmptyBlocks])
     assert(status1.location == loc)
     for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
