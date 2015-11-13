@@ -89,7 +89,7 @@ than the "raw" data inside their fields. This is due to several reasons:
 * Collections of primitive types often store them as "boxed" objects such as `java.lang.Integer`.
 
 This section will start with an overview of memory management in Spark, then discuss specific
-strategies the user can take to make more efficient use of memory in her application. In
+strategies the user can take to make more efficient use of memory in his/her application. In
 particular, we will describe how to determine the memory usage of your objects, and how to
 improve it -- either by changing your data structures, or by storing data in a serialized
 format. We will then cover tuning Spark's cache size and the Java garbage collector.
@@ -114,13 +114,11 @@ Although there are two relevant configurations, the typical user should not need
 as the default values are applicable to most workloads:
 
 * `spark.memory.fraction` expresses the size of `M` as a fraction of the total JVM heap space
-(default 0.75). This sets aside memory for internal metadata, user data structures, and
-imprecise size estimation in the case of sparse, unusually large records.
+(default 0.75). The rest of the space (25%) is reserved for user data structures, internal
+metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
+large records.
 * `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
 This is the amount of storage memory immune to being evicted by execution.
-
-For a more detailed description of the model, see the design doc attached to the associated
-[JIRA](http://issues.apache.org/jira/browse/SPARK-10000).
 
 
 ## Determining Memory Consumption
