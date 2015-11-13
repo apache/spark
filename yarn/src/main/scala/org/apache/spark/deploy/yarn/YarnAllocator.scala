@@ -96,6 +96,11 @@ private[yarn] class YarnAllocator(
   // was lost.
   private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
+  // Executor loss reason for explicitly released executors, it will be added when executor loss
+  // reason is got from AM-RM call, and be removed after query this loss reason.
+  private val releasedExecutorLossReasons =
+    new ConcurrentHashMap[String, ExecutorLossReason]
+
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
   private[yarn] val executorIdToContainer = new HashMap[String, Container]
@@ -202,8 +207,7 @@ private[yarn] class YarnAllocator(
    */
   def killExecutor(executorId: String): Unit = synchronized {
     if (executorIdToContainer.contains(executorId)) {
-      val container = executorIdToContainer.remove(executorId).get
-      containerIdToExecutorId.remove(container.getId)
+      val container = executorIdToContainer.get(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
     } else {
@@ -498,6 +502,8 @@ private[yarn] class YarnAllocator(
           s"Container $containerId exited from explicit termination request.")
       }
 
+      logInfo(s">>>>>> executor exited: $exitReason")
+
       for {
         host <- hostOpt
         containerSet <- allocatedHostToContainersMap.get(host)
@@ -523,6 +529,13 @@ private[yarn] class YarnAllocator(
           // Notify backend about the failure of the executor
           numUnexpectedContainerRelease += 1
           driverRef.send(RemoveExecutor(eid, exitReason))
+        } else {
+          // The executor exit is explicit termination request. The reason why we have to store the
+          // exit reason is that killing request may return completed containers in one AM-RM
+          // round-trip communication. So if we do not store such information, query again in
+          // another RPC call from driver to AM cannot get this information.
+          releasedExecutorLossReasons.put(eid, exitReason)
+
         }
       }
     }
@@ -538,6 +551,11 @@ private[yarn] class YarnAllocator(
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    } else if (releasedExecutorLossReasons.get(eid) != null) {
+      // Executor is already released explicitly before getting the loss reason, so directly send
+      // the pre-stored lost reason
+      context.reply(releasedExecutorLossReasons.get(eid))
+      releasedExecutorLossReasons.remove(eid)
     } else {
       logWarning(s"Tried to get the loss reason for non-existent executor $eid")
     }
