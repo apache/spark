@@ -162,6 +162,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       1)
 
     checkAnswer(
+      ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn),
+      (1.0, 1))
+
+    checkAnswer(
       ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
       ("one", 1))
   }
