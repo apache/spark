@@ -19,7 +19,7 @@
 
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
 dirs <- strsplit(rLibDir, ",")[[1]]
-script <- paste(dirs[[1]], "SparkR/worker/worker.R", sep = "/")
+script <- file.path(dirs[[1]], "SparkR", "worker", "worker.R")
 
 # preload SparkR package, speedup worker
 .libPaths(c(dirs, .libPaths()))

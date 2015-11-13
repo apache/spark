@@ -40,9 +40,9 @@ private[spark] object RUtils {
 
   /**
    * Get the list of paths for R packages in various deployment modes, of which the first
-   * path is for the SparkR package itself and the second if exists is for R packages
-   * built from R source code contained in the spark packages specified with "--packages"
-   * or "--jars" command line option.
+   * path is for the SparkR package itself. The second path is for R packages built as
+   * part of Spark Packages, if any exist. Spark Packages can be provided through the
+   *  "--packages" or "--jars" command line options.
    *
    * This assumes that Spark properties `spark.master` and `spark.submit.deployMode`
    * and environment variable `SPARK_HOME` are set.
