@@ -527,6 +527,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         // Write a Parquet file with writer version 2
         hadoopConfiguration.set(ParquetOutputFormat.WRITER_VERSION,
           ParquetProperties.WriterVersion.PARQUET_2_0.toString)
+
+        // By default, dictionary encoding is enabled from Parquet 1.2.0 but
+        // it is enabled just in case.
         hadoopConfiguration.setBoolean(ParquetOutputFormat.ENABLE_DICTIONARY, true)
         val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
         sqlContext.range(1 << 16).selectExpr("(id % 4) AS i")
@@ -540,7 +543,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
       } finally {
 
-        // Manually clear the hadoop configuration for other tests.
+        // Manually clear the hadoop configuration for other tests.git
         hadoopConfiguration.clear()
         clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       }
