@@ -48,8 +48,11 @@ private[util] sealed trait BaseReadWrite {
   /**
    * Returns the user-specified SQL context or the default.
    */
-  protected final def sqlContext: SQLContext = optionSQLContext.getOrElse {
-    SQLContext.getOrCreate(SparkContext.getOrCreate())
+  protected final def sqlContext: SQLContext = {
+    if (optionSQLContext.isEmpty) {
+      optionSQLContext = Some(SQLContext.getOrCreate(SparkContext.getOrCreate()))
+    }
+    optionSQLContext.get
   }
 
   /** Returns the [[SparkContext]] underlying [[sqlContext]] */
