@@ -153,14 +153,10 @@ class GroupedDataset[K, T] private[sql](
   def agg(expr: Column, exprs: Column*): DataFrame =
     groupedData.agg(withEncoder(expr), exprs.map(withEncoder): _*)
 
-  private def withEncoder(c: Column): Column = {
-    val e = c.expr transform {
-      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(
-          aEncoder = Some(tEnc.asInstanceOf[ExpressionEncoder[Any]]),
-          children = dataAttributes)
-    }
-    Column(e)
+  private def withEncoder(c: Column): Column = c match {
+    case tc: TypedColumn[_, _] =>
+      tc.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes)
+    case _ => c
   }
 
   /**
