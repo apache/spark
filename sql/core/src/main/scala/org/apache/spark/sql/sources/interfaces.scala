@@ -416,12 +416,19 @@ abstract class OutputWriter {
  * @since 1.4.0
  */
 @Experimental
-abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[PartitionSpec])
+abstract class HadoopFsRelation private[sql](
+    maybePartitionSpec: Option[PartitionSpec],
+    parameters: Map[String, String])
   extends BaseRelation with FileRelation with Logging {
 
   override def toString: String = getClass.getSimpleName + paths.mkString("[", ",", "]")
 
-  def this() = this(None)
+  def this() = this(None, Map.empty[String, String])
+
+  def this(parameters: Map[String, String]) = this(None, parameters)
+
+  private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
+    this(maybePartitionSpec, Map.empty[String, String])
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
@@ -519,12 +526,36 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
   }
 
   /**
-   * Base paths of this relation.  For partitioned relations, it should be either root directories
+   * Paths of this relation.  For partitioned relations, it should be root directories
    * of all partition directories.
    *
    * @since 1.4.0
    */
   def paths: Array[String]
+
+  /**
+   * Contains a set of paths that are considered as the base dirs of the input datasets.
+   * The partitioning discovery logic will make sure it will stop when it reaches any
+   * base path. By default, the paths of the dataset provided by users will be base paths.
+   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
+   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. If users want to override the basePath. They can set `basePath` in the options
+   * to pass the new base path to the data source.
+   * For the above example, if the user-provided base path is `/path/`, the returned
+   * DataFrame will have the column of `something`.
+   */
+  private def basePaths: Set[Path] = {
+    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
+    userDefinedBasePath.getOrElse {
+      // If the user does not provide basePath, we will just use paths.
+      val pathSet = paths.toSet
+      pathSet.map(p => new Path(p))
+    }.map { hdfsPath =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
+  }
 
   override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
@@ -559,7 +590,10 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     userDefinedPartitionColumns match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
-          leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME, typeInference = false)
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = false,
+          basePaths = basePaths)
 
         // Without auto inference, all of value in the `row` should be null or in StringType,
         // we need to cast into the data type that user specified.
@@ -577,8 +611,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
       case _ =>
         // user did not provide a partitioning schema
-        PartitioningUtils.parsePartitions(leafDirs, PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled())
+        PartitioningUtils.parsePartitions(
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+          basePaths = basePaths)
     }
   }
 
