@@ -1229,7 +1229,7 @@ class SQLContext private[sql](
   // construction of the instance.
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      SQLContext.clearInstantiatedContext(self)
+      SQLContext.clearInstantiatedContext()
     }
   })
 
@@ -1284,8 +1284,8 @@ object SQLContext {
     }
   }
 
-  private[sql] def clearInstantiatedContext(sqlContext: SQLContext): Unit = {
-    instantiatedContext.compareAndSet(sqlContext, null)
+  private[sql] def clearInstantiatedContext(): Unit = {
+    instantiatedContext.set(null)
   }
 
   private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
