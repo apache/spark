@@ -538,11 +538,11 @@ abstract class HadoopFsRelation private[sql](
    * The partitioning discovery logic will make sure it will stop when it reaches any
    * base path. By default, the paths of the dataset provided by users will be base paths.
    * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
-   * will be `/path/something=true/`. The returned DataFrame will not contain a column of
-   * `something`. Users do not a option to override the basePath. They can use `basePath` to path
-   * the new base path to the data source. For the above example, if the user-provided base path
-   * is `/path/` instead of `/path/something=true`, the returned DataFrame will have the column
-   * of `something`.
+   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. If users want to override the basePath. They can set `basePath` in the options
+   * to pass the new base path to the data source.
+   * For the above example, if the user-provided base path is `/path/`, the returned
+   * DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
     val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
