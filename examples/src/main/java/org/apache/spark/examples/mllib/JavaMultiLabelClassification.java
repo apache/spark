@@ -18,17 +18,16 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib;
 
+// $example off$
+import java.util.Arrays;
+import java.util.List;
 // $example on$
-
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
-
-import java.util.Arrays;
-import java.util.List;
 // $example off$
 import org.apache.spark.SparkContext;
 
