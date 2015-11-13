@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.filter2.predicate.Operators._
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
-import org.apache.spark.sql.sources.BaseRelation
 
 import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row, SQLConf}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -55,20 +54,16 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         .select(output.map(e => Column(e)): _*)
         .where(Column(predicate))
 
-      var maybeRelation: Option[BaseRelation] = None
+      var maybeRelation: Option[ParquetRelation] = None
       val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
         case PhysicalOperation(_, filters, LogicalRelation(parquetRelation: ParquetRelation, _)) =>
           maybeRelation = Some(parquetRelation)
           filters
       }.flatten.reduceLeftOption(_ && _)
+      assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-      assert(maybeRelation.exists(_.isInstanceOf[ParquetRelation]), "Datasource is not Parquet")
-
-      assert(maybeAnalyzedPredicate.isDefined, "No filter is given to the query")
-
-      val relation = maybeRelation.get
       val (_, selectedFilters) =
-        DataSourceStrategy.selectFilters(relation, maybeAnalyzedPredicate.toSeq)
+        DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
       assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
       selectedFilters.foreach { pred =>
@@ -129,14 +124,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - boolean") {
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b))))
-      { implicit df =>
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
+      withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) {
+        implicit df =>
+          checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+          checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
 
-        checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
-        checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
-        checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
+          checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
+          checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
+          checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
       }
     }
   }
