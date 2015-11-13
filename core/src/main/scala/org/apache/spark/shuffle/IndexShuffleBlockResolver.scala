@@ -45,11 +45,7 @@ private[spark] class IndexShuffleBlockResolver(
   extends ShuffleBlockResolver
   with Logging {
 
-  private lazy val blockManager = if (_blockManager == null) {
-    SparkEnv.get.blockManager
-  } else {
-    _blockManager
-  }
+  private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
@@ -81,47 +77,45 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   /**
-   * Check whether there are index file and data file also they are matched with each other, returns
-   * the lengths of each block in data file, if there are matched, or return null.
+   * Check whether the given index and data files match each other.
+   * If so, return the partition lengths in the data file. Otherwise return null.
    */
   private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
+    // the index file should have `block + 1` longs as offset.
+    if (index.length() != (blocks + 1) * 8) {
+      return null
+    }
     val lengths = new Array[Long](blocks)
-    if (index.length() == (blocks + 1) * 8) {
-      // Read the lengths of blocks
-      val f = try {
-        new FileInputStream(index)
-      } catch {
-        case e: IOException =>
-          return null
+    // Read the lengths of blocks
+    val in = try {
+      new DataInputStream(new BufferedInputStream(new FileInputStream(index)))
+    } catch {
+      case e: IOException =>
+        return null
+    }
+    try {
+      // Convert the offsets into lengths of each block
+      var offset = in.readLong()
+      if (offset != 0L) {
+        return null
       }
-      val in = new DataInputStream(new BufferedInputStream(f))
-      try {
-        // Convert the offsets into lengths of each block
-        var offset = in.readLong()
-        if (offset != 0L) {
-          return null
-        }
-        var i = 0
-        while (i < blocks) {
-          val off = in.readLong()
-          lengths(i) = off - offset
-          offset = off
-          i += 1
-        }
-      } catch {
-        case e: IOException =>
-          return null
-      } finally {
-        in.close()
+      var i = 0
+      while (i < blocks) {
+        val off = in.readLong()
+        lengths(i) = off - offset
+        offset = off
+        i += 1
       }
+    } catch {
+      case e: IOException =>
+        return null
+    } finally {
+      in.close()
+    }
 
-      val size = lengths.reduce(_ + _)
-      // `length` returns 0 if it not exists.
-      if (data.length() == size) {
-        lengths
-      } else {
-        null
-      }
+    // the size of data file should match with index file
+    if (data.length() == lengths.sum) {
+      lengths
     } else {
       null
     }
@@ -132,8 +126,10 @@ private[spark] class IndexShuffleBlockResolver(
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
    *
-   * It will commit the data and index file as an atomic operation, use the existed ones (lengths of
-   * blocks will be refreshed), or replace them with new ones.
+   * It will commit the data and index file as an atomic operation, use the existing ones, or
+   * replace them with new ones.
+   *
+   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
    * */
   def writeIndexFileAndCommit(
       shuffleId: Int,
@@ -156,15 +152,21 @@ private[spark] class IndexShuffleBlockResolver(
     }
 
     val dataFile = getDataFile(shuffleId, mapId)
-    // Note: there is only one IndexShuffleBlockResolver per executor
+    // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
+    // the following check and rename are atomic.
     synchronized {
-      val existedLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-      if (existedLengths != null) {
-        // Use the lengths of existed output for MapStatus
-        System.arraycopy(existedLengths, 0, lengths, 0, lengths.length)
-        dataTmp.delete()
+      val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
+      if (existingLengths != null) {
+        // Another attempt for the same task has already written our map outputs successfully,
+        // so just use the existing partition lengths and delete our temporary map outputs.
+        System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
+        if (dataTmp != null && dataTmp.exists()) {
+          dataTmp.delete()
+        }
         indexTmp.delete()
       } else {
+        // This is the first successful attempt in writing the map outputs for this task,
+        // so override any existing index and data files with the ones we wrote.
         if (indexFile.exists()) {
           indexFile.delete()
         }
@@ -172,10 +174,10 @@ private[spark] class IndexShuffleBlockResolver(
           dataFile.delete()
         }
         if (!indexTmp.renameTo(indexFile)) {
-          throw new IOException("fail to rename data file " + indexTmp + " to " + indexFile)
+          throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
         }
         if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
-          throw new IOException("fail to rename data file " + dataTmp + " to " + dataFile)
+          throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
         }
       }
     }

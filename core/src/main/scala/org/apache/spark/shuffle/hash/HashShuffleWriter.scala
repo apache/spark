@@ -115,10 +115,11 @@ private[spark] class HashShuffleWriter[K, V](
         val output = blockManager.diskBlockManager.getFile(writer.blockId)
         if (sizes(i) > 0) {
           if (output.exists()) {
-            // update the size of output for MapStatus
+            // Use length of existing file and delete our own temporary one
             sizes(i) = output.length()
             writer.file.delete()
           } else {
+            // Commit by renaming our temporary file to something the fetcher expects
             if (!writer.file.renameTo(output)) {
               throw new IOException(s"fail to rename ${writer.file} to $output")
             }
