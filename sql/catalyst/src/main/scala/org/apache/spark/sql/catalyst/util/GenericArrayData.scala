@@ -23,7 +23,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
-  def this(seq: scala.collection.GenIterable[Any]) = this(seq.toArray)
+  def this(seq: Seq[Any]) = this(seq.toArray)
 
   // TODO: This is boxing.  We should specialize.
   def this(primitiveArray: Array[Int]) = this(primitiveArray.toSeq)
