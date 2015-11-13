@@ -70,7 +70,7 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # Load the data stored in LIBSVM format as a DataFrame.
-    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    df = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Map labels into an indexed column of labels in [0, numLabels)
     stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")
