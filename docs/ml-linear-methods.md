@@ -95,7 +95,7 @@ public class LogisticRegressionWithElasticNetExample {
     String path = "data/mllib/sample_libsvm_data.txt";
 
     // Load training data
-    DataFrame training = sqlContext.read.format("libsvm").load(path);
+    DataFrame training = sqlContext.read().format("libsvm").load(path);
 
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
@@ -292,7 +292,7 @@ public class LinearRegressionWithElasticNetExample {
     String path = "data/mllib/sample_libsvm_data.txt";
 
     // Load training data
-    DataFrame training = sqlContext.read.format("libsvm").load(path);
+    DataFrame training = sqlContext.read().format("libsvm").load(path);
 
     LinearRegression lr = new LinearRegression()
       .setMaxIter(10)

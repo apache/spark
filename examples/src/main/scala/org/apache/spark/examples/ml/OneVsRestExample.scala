@@ -27,9 +27,8 @@ import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -111,24 +110,24 @@ object OneVsRestExample {
   private def run(params: Params) {
     val conf = new SparkConf().setAppName(s"OneVsRestExample with $params")
     val sc = new SparkContext(conf)
-    val inputData = MLUtils.loadLibSVMFile(sc, params.input)
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
+    val inputData = sqlContext.read.format("libsvm").load(params.input)
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
       case Some(t) => {
         // compute the number of features in the training set.
-        val numFeatures = inputData.first().features.size
-        val testData = MLUtils.loadLibSVMFile(sc, t, numFeatures)
-        Array[RDD[LabeledPoint]](inputData, testData)
+        val numFeatures = inputData.first().getAs[Vector](1).size
+        val testData = sqlContext.read.option("numFeatures", numFeatures.toString)
+          .format("libsvm").load(t)
+        Array[DataFrame](inputData, testData)
       }
       case None => {
         val f = params.fracTest
         inputData.randomSplit(Array(1 - f, f), seed = 12345)
       }
     }
-    val Array(train, test) = data.map(_.toDF().cache())
+    val Array(train, test) = data.map(_.cache())
 
     // instantiate the base classifier
     val classifier = new LogisticRegression()
