@@ -261,7 +261,7 @@ setMethod("column",
           })
 #' corr
 #'
-#' Computes the Pearson Correlation Coefficient for Column x and y.
+#' Computes the Pearson Correlation Coefficient for two Columns.
 #'
 #' @rdname corr
 #' @name corr
