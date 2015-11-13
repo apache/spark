@@ -175,7 +175,6 @@ private[spark] object HighlyCompressedMapStatus {
     var i = 0
     var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
-
     val emptyBlocks = new RoaringBitmap()
     val nonEmptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
@@ -196,14 +195,15 @@ private[spark] object HighlyCompressedMapStatus {
       0
     }
     if (numNonEmptyBlocks < totalNumBlocks / 2) {
-      // If non-empty blocks are sparse, we track non-empty blocks and set `isSparse` to true.
+      // If non-empty blocks are sparse, we track non-empty blocks and set `isSparse` true.
       nonEmptyBlocks.runOptimize()
+      nonEmptyBlocks.trim()
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, nonEmptyBlocks, avgSize, isSparse = true)
     } else {
-      // If non-empty blocks are dense, we track empty blocks and set `isSparse` to false.
+      // If non-empty blocks are dense, we track empty blocks and set `isSparse` false.
       emptyBlocks.runOptimize()
+      emptyBlocks.trim()
       new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize, isSparse = false)
     }
-
   }
 }
