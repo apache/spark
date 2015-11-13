@@ -57,6 +57,20 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     tempFile
   }
 
+  def extractSourceRDDToDataFrame(df: DataFrame): DataFrame = {
+
+    // This is the source RDD without Spark-side filtering.
+    val schema = df.schema
+    val childRDD = df
+      .queryExecution
+      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+      .child
+      .execute()
+      .map(row => Row.fromSeq(row.toSeq(schema)))
+
+    sqlContext.createDataFrame(childRDD, schema)
+  }
+
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
@@ -352,26 +366,38 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         import testImplicits._
 
         val path = dir.getCanonicalPath
-        sqlContext.range(10).coalesce(1).write.orc(path)
+        val data = (0 to 10).map { i =>
+          val maybeInt = if (i == 10) None else Some(i)
+          Tuple1(maybeInt)
+        }
+        createDataFrame(data).toDF("id").write.orc(path)
         val df = sqlContext.read.orc(path)
 
-        def checkPredicate(pred: Column, answer: Seq[Long]): Unit = {
-          checkAnswer(df.where(pred), answer.map(Row(_)))
+        def checkPredicate(pred: Column, answer: Seq[Any]): Unit = {
+          val sourceDf = extractSourceRDDToDataFrame(df.where(pred))
+          val expectedData = answer.map(Row(_)).toSet
+          val data = sourceDf.collect().toSet
+
+          // The result should be single row. When a filter is pushed to ORC, ORC can apply it to
+          // every row. So, we can check the number of rows returned from the ORC to make sure
+          // our filter pushdown work. A tricky part is, ORC does not process filter fully but
+          // return some possible results. So, the number is checked if it is less than
+          // the original count, and then checks if it contains the expected value.
+          val isOrcFiltered = sourceDf.count < 10 && expectedData.subsetOf(data)
+          assert(isOrcFiltered)
         }
 
-        checkPredicate('id === 5, Seq(5L))
-        checkPredicate('id <=> 5, Seq(5L))
-        checkPredicate('id < 5, 0L to 4L)
-        checkPredicate('id <= 5, 0L to 5L)
-        checkPredicate('id > 5, 6L to 9L)
-        checkPredicate('id >= 5, 5L to 9L)
-        checkPredicate('id.isNull, Seq.empty[Long])
-        checkPredicate('id.isNotNull, 0L to 9L)
-        checkPredicate('id.isin(1L, 3L, 5L), Seq(1L, 3L, 5L))
-        checkPredicate('id > 0 && 'id < 3, 1L to 2L)
-        checkPredicate('id < 1 || 'id > 8, Seq(0L, 9L))
-        checkPredicate(!('id > 3), 0L to 3L)
-        checkPredicate(!('id > 0 && 'id < 3), Seq(0L) ++ (3L to 9L))
+        checkPredicate('id === 5, Seq(5))
+        checkPredicate('id <=> 5, Seq(5))
+        checkPredicate('id < 5, 0 to 4)
+        checkPredicate('id <= 5, 0 to 5)
+        checkPredicate('id > 5, 6 to 9)
+        checkPredicate('id >= 5, 5 to 9)
+        checkPredicate('id.isNull, Seq(null))
+        checkPredicate('id > 0 && 'id < 3, 0 to 2)
+        checkPredicate('id < 1 || 'id > 8, Seq(0, 9))
+        checkPredicate(!('id > 3), 0 to 3)
+        checkPredicate(!('id > 0 && 'id < 3), Seq(0) ++ (3 to 9))
       }
     }
   }
