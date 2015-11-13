@@ -332,7 +332,7 @@ class ReceivedBlockTrackerSuite
       file => new FileBasedWriteAheadLogReader(file, hadoopConf).toSeq
     }.flatMap { byteBuffer =>
       val validBuffer = if (WriteAheadLogUtils.isBatchingEnabled(conf, isDriver = true)) {
-        BatchedWriteAheadLog.deaggregate(byteBuffer)
+        Utils.deserialize[Array[Array[Byte]]](byteBuffer.array()).map(ByteBuffer.wrap)
       } else {
         Array(byteBuffer)
       }
