@@ -297,6 +297,27 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     model = KMeans.train(rdd, k = 5, maxIterations = 10, runs = 5)
     assert(model.clusterCenters.sortBy(VectorWithCompare(_))
       .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
+
+    // Fuzzier models
+    model = KMeans.train(
+      rdd, k = 5, maxIterations = 1, runs = 1, initializationMode = K_MEANS_PARALLEL,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.sortBy(VectorWithCompare(_))
+      .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
+
+    // Iterations of Lloyd's should not change the answer either
+    model = KMeans.train(
+      rdd, k = 5, maxIterations = 10, runs = 1, initializationMode = K_MEANS_PARALLEL,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.sortBy(VectorWithCompare(_))
+      .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
+
+    // Neither should more runs
+    model = KMeans.train(
+      rdd, k = 5, maxIterations = 10, runs = 5, initializationMode = K_MEANS_PARALLEL,
+      seed = Utils.random.nextLong(), m = 2.0)
+    assert(model.clusterCenters.sortBy(VectorWithCompare(_))
+      .zip(points.sortBy(VectorWithCompare(_))).forall(x => x._1 ~== (x._2) absTol 1E-5))
   }
 
   test("two clusters") {
@@ -313,14 +334,23 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
       // Two iterations are sufficient no matter where the initial centers are.
       val model = KMeans.train(rdd, k = 2, maxIterations = 2, runs = 10, initMode)
+      val fuzzyModel = KMeans.train(rdd, k = 2, maxIterations = 2, runs = 10, initMode,
+        seed = Utils.random.nextLong(), m = 2.0)
 
       val predicts = model.predict(rdd).collect()
+      val fuzzyPredicts = model.predict(rdd).collect()
 
       assert(predicts(0) === predicts(1))
       assert(predicts(0) === predicts(2))
       assert(predicts(3) === predicts(4))
       assert(predicts(3) === predicts(5))
       assert(predicts(0) != predicts(3))
+
+      assert(fuzzyPredicts(0) === fuzzyPredicts(1))
+      assert(fuzzyPredicts(0) === fuzzyPredicts(2))
+      assert(fuzzyPredicts(3) === fuzzyPredicts(4))
+      assert(fuzzyPredicts(3) === fuzzyPredicts(5))
+      assert(fuzzyPredicts(0) != fuzzyPredicts(3))
     }
   }
 
