@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.Collections
-
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -31,7 +29,7 @@ import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -99,22 +97,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         |  required int32 c(DATE);
         |  required int32 d(DECIMAL(1,0));
         |  required int64 e(DECIMAL(10,0));
+        |  required binary f(UTF8);
+        |  required binary g(ENUM);
+        |  required binary h(DECIMAL(32,0));
+        |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
         |}
       """.stripMargin)
 
+    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0), DecimalType(10, 0),
+      StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+
     withTempPath { location =>
-      val extraMetadata = Map.empty[String, String].asJava
-      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
-      val footer = List(
-        new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))
-      ).asJava
-
-      ParquetFileWriter.writeMetadataFile(sparkContext.hadoopConfiguration, path, footer)
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf)
       val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
-
-      assert(sparkTypes ==
-        Seq(ByteType, ShortType, DateType, DecimalType(1, 0), DecimalType(10, 0)))
+      assert(sparkTypes === expectedSparkTypes)
     }
   }
 
@@ -377,16 +375,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Collections.singletonMap(
-        CatalystReadSupport.SPARK_METADATA_KEY, sparkSchema.toString)
-      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
-
-      ParquetFileWriter.writeMetadataFile(
-        sparkContext.hadoopConfiguration,
-        path,
-        Collections.singletonList(
-          new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf, extraMetadata)
 
       assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
