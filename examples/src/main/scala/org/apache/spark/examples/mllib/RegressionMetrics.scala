@@ -67,3 +67,5 @@ object RegressionMetrics {
     // $example off$
   }
 }
+// scalastyle:on println
+

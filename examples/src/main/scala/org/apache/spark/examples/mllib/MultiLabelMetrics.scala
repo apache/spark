@@ -18,17 +18,16 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
-
 // $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.rdd.RDD;
 // $example off$
+
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkContext, SparkConf}
+
 object MultiLabelMetrics {
-
   def main(args: Array[String]) {
-
     val conf = new SparkConf().setAppName("MultiLabelMetrics")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
@@ -53,7 +52,8 @@ object MultiLabelMetrics {
     println(s"Accuracy = ${metrics.accuracy}")
 
     // Individual label stats
-    metrics.labels.foreach(label => println(s"Class $label precision = ${metrics.precision(label)}"))
+    metrics.labels.foreach(label =>
+      println(s"Class $label precision = ${metrics.precision(label)}"))
     metrics.labels.foreach(label => println(s"Class $label recall = ${metrics.recall(label)}"))
     metrics.labels.foreach(label => println(s"Class $label F1-score = ${metrics.f1Measure(label)}"))
 
@@ -70,3 +70,4 @@ object MultiLabelMetrics {
     // $example off$
   }
 }
+// scalastyle:on println

@@ -18,8 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
 
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -27,6 +25,9 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
+
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.sql.SQLContext
 
 object BinaryClassificationMetrics {
 

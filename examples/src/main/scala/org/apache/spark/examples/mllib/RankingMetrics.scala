@@ -20,9 +20,12 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
+
 // $example on$
+
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
+
 // $example off$
 object RankingMetrics {
 
@@ -40,7 +43,8 @@ object RankingMetrics {
     }.cache()
 
     // Map ratings to 1 or 0, 1 indicating a movie that should be recommended
-    val binarizedRatings = ratings.map(r => Rating(r.user, r.product, if (r.rating > 0) 1.0 else 0.0)).cache()
+    val binarizedRatings = ratings.map(r => Rating(r.user, r.product,
+      if (r.rating > 0) 1.0 else 0.0)).cache()
 
     // Summarize ratings
     val numRatings = ratings.count()
@@ -68,7 +72,8 @@ object RankingMetrics {
     // Assume that any movie a user rated 3 or higher (which maps to a 1) is a relevant document
     // Compare with top ten most relevant documents
     val userMovies = binarizedRatings.groupBy(_.user)
-    val relevantDocuments = userMovies.join(userRecommended).map { case (user, (actual, predictions)) =>
+    val relevantDocuments = userMovies.join(userRecommended).map { case (user, (actual,
+    predictions)) =>
       (predictions.map(_.product), actual.filter(_.rating > 0.0).map(_.product).toArray)
     }
 
@@ -89,9 +94,11 @@ object RankingMetrics {
     }
 
     // Get predictions for each data point
-    val allPredictions = model.predict(ratings.map(r => (r.user, r.product))).map(r => ((r.user, r.product), r.rating))
+    val allPredictions = model.predict(ratings.map(r => (r.user, r.product))).map(r => ((r.user,
+      r.product), r.rating))
     val allRatings = ratings.map(r => ((r.user, r.product), r.rating))
-    val predictionsAndLabels = allPredictions.join(allRatings).map { case ((user, product), (predicted, actual)) =>
+    val predictionsAndLabels = allPredictions.join(allRatings).map { case ((user, product),
+    (predicted, actual)) =>
       (predicted, actual)
     }
 
@@ -104,3 +111,5 @@ object RankingMetrics {
     // $example off$
   }
 }
+// scalastyle:on println
+

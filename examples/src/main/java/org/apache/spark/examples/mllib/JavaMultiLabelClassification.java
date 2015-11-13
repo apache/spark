@@ -23,8 +23,8 @@ package org.apache.spark.examples.mllib;
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.mllib.evaluation.MultilabelMetrics;
+import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 
 import java.util.Arrays;
