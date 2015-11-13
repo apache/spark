@@ -84,7 +84,7 @@ object Encoders {
   private def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
     assert(encoders.length > 1)
     // make sure all encoders are resolved, i.e. `Attribute` has been resolved to `BoundReference`.
-    assert(encoders.forall(_.constructExpression.find(_.isInstanceOf[Attribute]).isEmpty))
+    assert(encoders.forall(_.fromRowExpression.find(_.isInstanceOf[Attribute]).isEmpty))
 
     val schema = StructType(encoders.zipWithIndex.map {
       case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)
@@ -93,8 +93,8 @@ object Encoders {
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
 
     val extractExpressions = encoders.map {
-      case e if e.flat => e.extractExpressions.head
-      case other => CreateStruct(other.extractExpressions)
+      case e if e.flat => e.toRowExpressions.head
+      case other => CreateStruct(other.toRowExpressions)
     }.zipWithIndex.map { case (expr, index) =>
       expr.transformUp {
         case BoundReference(0, t: ObjectType, _) =>
@@ -107,11 +107,11 @@ object Encoders {
 
     val constructExpressions = encoders.zipWithIndex.map { case (enc, index) =>
       if (enc.flat) {
-        enc.constructExpression.transform {
+        enc.fromRowExpression.transform {
           case b: BoundReference => b.copy(ordinal = index)
         }
       } else {
-        enc.constructExpression.transformUp {
+        enc.fromRowExpression.transformUp {
           case BoundReference(ordinal, dt, _) =>
             GetInternalRowField(BoundReference(index, enc.schema, nullable = true), ordinal, dt)
         }
