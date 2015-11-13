@@ -120,7 +120,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
           case (key, value) => (key.toString, value.toString)
         }).map(_.asJava)
         val bodies = flattenOutputBuffer.map(e => new String(e.event.getBody.array(), UTF_8))
-        utils.assertOutput(headers, bodies)
+        utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
       ssc.stop()
