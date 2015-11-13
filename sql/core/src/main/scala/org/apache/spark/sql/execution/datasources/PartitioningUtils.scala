@@ -73,10 +73,10 @@ private[sql] object PartitioningUtils {
    * }}}
    */
   private[sql] def parsePartitions(
-                                    paths: Seq[Path],
-                                    defaultPartitionName: String,
-                                    typeInference: Boolean,
-                                    basePaths: Set[Path]): PartitionSpec = {
+      paths: Seq[Path],
+      defaultPartitionName: String,
+      typeInference: Boolean,
+      basePaths: Set[Path]): PartitionSpec = {
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optBasePaths) = paths.map { path =>
       parsePartition(path, defaultPartitionName, typeInference, basePaths)
