@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -63,15 +62,20 @@ import org.apache.spark.sql.types.StructType
 class Dataset[T] private[sql](
     @transient val sqlContext: SQLContext,
     @transient val queryExecution: QueryExecution,
-    unresolvedEncoder: Encoder[T]) extends Queryable with Serializable {
+    tEncoder: Encoder[T]) extends Queryable with Serializable {
+
+  /**
+   * An unresolved version of the internal encoder for the type of this dataset.  This one is marked
+   * implicit so that we can use it when constructing new [[Dataset]] objects that have the same
+   * object type (that will be possibly resolved to a different schema).
+   */
+  private implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
-  private[sql] implicit val encoder: ExpressionEncoder[T] = unresolvedEncoder match {
-    case e: ExpressionEncoder[T] => e.resolve(queryExecution.analyzed.output)
-    case _ => throw new IllegalArgumentException("Only expression encoders are currently supported")
-  }
+  private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
+    unresolvedTEncoder.resolve(queryExecution.analyzed.output)
 
-  private implicit def classTag = encoder.clsTag
+  private implicit def classTag = resolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -81,7 +85,7 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def schema: StructType = encoder.schema
+  def schema: StructType = resolvedTEncoder.schema
 
   /* ************* *
    *  Conversions  *
@@ -134,7 +138,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
-    val tEnc = encoderFor[T]
+    val tEnc = resolvedTEncoder
     val input = queryExecution.analyzed.output
     queryExecution.toRdd.mapPartitions { iter =>
       val bound = tEnc.bind(input)
@@ -195,7 +199,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    new Dataset(
+    new Dataset[U](
       sqlContext,
       MapPartitions[T, U](
         func,
@@ -295,12 +299,12 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = queryExecution.analyzed
-    val withGroupingKey = AppendColumn(func, inputPlan)
+    val withGroupingKey = AppendColumn(func, resolvedTEncoder, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
-      encoderFor[K].resolve(withGroupingKey.newColumns),
-      encoderFor[T].bind(inputPlan.output),
+      encoderFor[K],
+      encoderFor[T],
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
@@ -360,7 +364,15 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def select[U1: Encoder](c1: TypedColumn[T, U1]): Dataset[U1] = {
-    new Dataset[U1](sqlContext, Project(Alias(withEncoder(c1).expr, "_1")() :: Nil, logicalPlan))
+    // We use an unbound encoder since the expression will make up its own schema.
+    // TODO: This probably doesn't work if we are relying on reordering of the input class fields.
+    new Dataset[U1](
+      sqlContext,
+      Project(
+        c1.withInputType(
+          resolvedTEncoder.bind(queryExecution.analyzed.output),
+          queryExecution.analyzed.output).named :: Nil,
+        logicalPlan))
   }
 
   /**
@@ -369,28 +381,14 @@ class Dataset[T] private[sql](
    * that cast appropriately for the user facing interface.
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val withEncoders = columns.map(withEncoder)
-    val aliases = withEncoders.zipWithIndex.map { case (c, i) => Alias(c.expr, s"_${i + 1}")() }
-    val unresolvedPlan = Project(aliases, logicalPlan)
-    val execution = new QueryExecution(sqlContext, unresolvedPlan)
-    // Rebind the encoders to the nested schema that will be produced by the select.
-    val encoders = withEncoders.map(_.encoder.asInstanceOf[ExpressionEncoder[_]]).zip(aliases).map {
-      case (e: ExpressionEncoder[_], a) if !e.flat =>
-        e.nested(a.toAttribute).resolve(execution.analyzed.output)
-      case (e, a) =>
-        e.unbind(a.toAttribute :: Nil).resolve(execution.analyzed.output)
-    }
-    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
-  }
+    val encoders = columns.map(_.encoder)
+    // We use an unbound encoder since the expression will make up its own schema.
+    // TODO: This probably doesn't work if we are relying on reordering of the input class fields.
+    val namedColumns =
+      columns.map(_.withInputType(unresolvedTEncoder, queryExecution.analyzed.output).named)
+    val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
-  private def withEncoder(c: TypedColumn[_, _]): TypedColumn[_, _] = {
-    val e = c.expr transform {
-      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(
-          aEncoder = Some(encoder.asInstanceOf[ExpressionEncoder[Any]]),
-          children = queryExecution.analyzed.output)
-    }
-    new TypedColumn(e, c.encoder)
+    new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
   }
 
   /**
@@ -497,23 +495,18 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
-    val leftData = this.encoder match {
+    val leftData = this.unresolvedTEncoder match {
       case e if e.flat => Alias(left.output.head, "_1")()
       case _ => Alias(CreateStruct(left.output), "_1")()
     }
-    val rightData = other.encoder match {
+    val rightData = other.unresolvedTEncoder match {
       case e if e.flat => Alias(right.output.head, "_2")()
       case _ => Alias(CreateStruct(right.output), "_2")()
     }
-    val leftEncoder =
-      if (encoder.flat) encoder else encoder.nested(leftData.toAttribute)
-    val rightEncoder =
-      if (other.encoder.flat) other.encoder else other.encoder.nested(rightData.toAttribute)
-    implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(
-        leftEncoder,
-        rightEncoder.rebind(right.output, left.output ++ right.output))
 
+
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
     withPlan[(T, U)](other) { (left, right) =>
       Project(
         leftData :: rightData :: Nil,
@@ -580,7 +573,7 @@ class Dataset[T] private[sql](
   private[sql] def logicalPlan = queryExecution.analyzed
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
-    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), encoder)
+    new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), tEncoder)
 
   private[sql] def withPlan[R : Encoder](
       other: Dataset[_])(

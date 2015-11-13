@@ -311,6 +311,10 @@ case class AppendColumns[T, U](
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
+  // We are using an unsafe combiner.
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+
   override def output: Seq[Attribute] = child.output ++ newColumns
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -349,11 +353,12 @@ case class MapGroups[K, T, U](
     child.execute().mapPartitions { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
       val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+      val groupDataEncoder = tEncoder.bind(child.output)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
           groupKeyEncoder.fromRow(key),
-          rowIter.map(tEncoder.fromRow))
+          rowIter.map(groupDataEncoder.fromRow))
         result.map(uEncoder.toRow)
       }
     }
