@@ -1292,7 +1292,7 @@ class Airflow(BaseView):
         return self.render(
             'airflow/chart.html',
             dag=dag,
-            data=all_data,
+            data=json.dumps(all_data),
             chart_options={'yAxis': {'title': {'text': 'hours'}}},
             height="700px",
             demo_mode=configuration.getboolean('webserver', 'demo_mode'),
@@ -1335,7 +1335,7 @@ class Airflow(BaseView):
         return self.render(
             'airflow/chart.html',
             dag=dag,
-            data=all_data,
+            data=json.dumps(all_data),
             height="700px",
             chart_options={'yAxis': {'title': {'text': 'hours after 00:00'}}},
             demo_mode=configuration.getboolean('webserver', 'demo_mode'),
