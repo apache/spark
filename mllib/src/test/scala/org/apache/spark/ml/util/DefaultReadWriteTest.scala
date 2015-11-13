@@ -105,7 +105,7 @@ object MyParams extends Readable[MyParams] {
 class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
-  ignore("default read/write") { // SPARK-11672
+  test("default read/write") {
     val myParams = new MyParams("my_params")
     testDefaultReadWrite(myParams)
   }

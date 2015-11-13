@@ -32,11 +32,13 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
       .setMaster("local[2]")
       .setAppName("MLlibUnitTest")
     sc = new SparkContext(conf)
+    SQLContext.clearActive()
     sqlContext = new SQLContext(sc)
   }
 
   override def afterAll() {
     sqlContext = null
+    SQLContext.clearActive()
     if (sc != null) {
       sc.stop()
     }

@@ -23,7 +23,7 @@ import java.io.IOException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
+import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
@@ -50,7 +50,7 @@ public class JavaDefaultReadWriteSuite {
     Utils.deleteRecursively(tempDir);
   }
 
-  @Ignore // SPARK-11672
+  @Test
   public void testDefaultReadWrite() throws IOException {
     String uid = "my_params";
     MyParams instance = new MyParams(uid);
