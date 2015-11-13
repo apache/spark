@@ -386,6 +386,20 @@ case class Rollup(
     this.copy(aggregations = aggs)
 }
 
+case class Pivot(
+    groupByExprs: Seq[NamedExpression],
+    pivotColumn: Expression,
+    pivotValues: Seq[Literal],
+    aggregates: Seq[Expression],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
+    case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
+    case _ => pivotValues.flatMap{ value =>
+      aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
+    }
+  }
+}
+
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
@@ -469,9 +483,12 @@ case class MapPartitions[T, U](
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumn {
-  def apply[T : Encoder, U : Encoder](func: T => U, child: LogicalPlan): AppendColumn[T, U] = {
+  def apply[T, U : Encoder](
+      func: T => U,
+      tEncoder: ExpressionEncoder[T],
+      child: LogicalPlan): AppendColumn[T, U] = {
     val attrs = encoderFor[U].schema.toAttributes
-    new AppendColumn[T, U](func, encoderFor[T], encoderFor[U], attrs, child)
+    new AppendColumn[T, U](func, tEncoder, encoderFor[U], attrs, child)
   }
 }
 
@@ -492,14 +509,16 @@ case class AppendColumn[T, U](
 
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
-  def apply[K : Encoder, T : Encoder, U : Encoder](
+  def apply[K, T, U : Encoder](
       func: (K, Iterator[T]) => TraversableOnce[U],
+      kEncoder: ExpressionEncoder[K],
+      tEncoder: ExpressionEncoder[T],
       groupingAttributes: Seq[Attribute],
       child: LogicalPlan): MapGroups[K, T, U] = {
     new MapGroups(
       func,
-      encoderFor[K],
-      encoderFor[T],
+      kEncoder,
+      tEncoder,
       encoderFor[U],
       groupingAttributes,
       encoderFor[U].schema.toAttributes,

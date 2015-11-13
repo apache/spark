@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming
 
-import scala.reflect.ClassTag
-
+import com.google.common.base.Optional
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
+import org.apache.spark.api.java.function.{Function2 => JFunction2, Function4 => JFunction4}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.{HashPartitioner, Partitioner}
-
 
 /**
  * :: Experimental ::
@@ -49,12 +48,12 @@ import org.apache.spark.{HashPartitioner, Partitioner}
  *
  * Example in Java:
  * {{{
- *    StateStateSpec[KeyType, ValueType, StateType, EmittedDataType] spec =
- *      StateStateSpec.function[KeyType, ValueType, StateType, EmittedDataType](trackingFunction)
+ *    StateSpec<KeyType, ValueType, StateType, EmittedDataType> spec =
+ *      StateSpec.<KeyType, ValueType, StateType, EmittedDataType>function(trackingFunction)
  *                    .numPartition(10);
  *
- *    JavaDStream[EmittedDataType] emittedRecordDStream =
- *      javaPairDStream.trackStateByKey[StateType, EmittedDataType](spec);
+ *    JavaTrackStateDStream<KeyType, ValueType, StateType, EmittedType> emittedRecordDStream =
+ *      javaPairDStream.<StateType, EmittedDataType>trackStateByKey(spec);
  * }}}
  */
 @Experimental
@@ -92,6 +91,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, EmittedType] exte
 /**
  * :: Experimental ::
  * Builder object for creating instances of [[org.apache.spark.streaming.StateSpec StateSpec]]
+ * that is used for specifying the parameters of the DStream transformation `trackStateByKey`
  * that is used for specifying the parameters of the DStream transformation
  * `trackStateByKey` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
@@ -103,28 +103,27 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, EmittedType] exte
  *      ...
  *    }
  *
- *    val spec = StateSpec.function(trackingFunction).numPartitions(10)
- *
- *    val emittedRecordDStream = keyValueDStream.trackStateByKey[StateType, EmittedDataType](spec)
+ *    val emittedRecordDStream = keyValueDStream.trackStateByKey[StateType, EmittedDataType](
+ *        StateSpec.function(trackingFunction).numPartitions(10))
  * }}}
  *
  * Example in Java:
  * {{{
- *    StateStateSpec[KeyType, ValueType, StateType, EmittedDataType] spec =
- *      StateStateSpec.function[KeyType, ValueType, StateType, EmittedDataType](trackingFunction)
+ *    StateSpec<KeyType, ValueType, StateType, EmittedDataType> spec =
+ *      StateSpec.<KeyType, ValueType, StateType, EmittedDataType>function(trackingFunction)
  *                    .numPartition(10);
  *
- *    JavaDStream[EmittedDataType] emittedRecordDStream =
- *      javaPairDStream.trackStateByKey[StateType, EmittedDataType](spec);
+ *    JavaTrackStateDStream<KeyType, ValueType, StateType, EmittedType> emittedRecordDStream =
+ *      javaPairDStream.<StateType, EmittedDataType>trackStateByKey(spec);
  * }}}
  */
 @Experimental
 object StateSpec {
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
-   * `trackStateByKey` operation on a
-   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
-   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+   * of the `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
+   *
    * @param trackingFunction The function applied on every data item to manage the associated state
    *                         and generate the emitted data
    * @tparam KeyType      Class of the keys
@@ -141,9 +140,9 @@ object StateSpec {
 
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
-   * `trackStateByKey` operation on a
-   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
-   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+   * of the `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]].
+   *
    * @param trackingFunction The function applied on every data item to manage the associated state
    *                         and generate the emitted data
    * @tparam ValueType    Class of the values
@@ -159,6 +158,48 @@ object StateSpec {
         Some(trackingFunction(value, state))
       }
     new StateSpecImpl(wrappedFunction)
+  }
+
+  /**
+   * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all
+   * the specifications of the `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]].
+   *
+   * @param javaTrackingFunction The function applied on every data item to manage the associated
+   *                             state and generate the emitted data
+   * @tparam KeyType      Class of the keys
+   * @tparam ValueType    Class of the values
+   * @tparam StateType    Class of the states data
+   * @tparam EmittedType  Class of the emitted data
+   */
+  def function[KeyType, ValueType, StateType, EmittedType](javaTrackingFunction:
+      JFunction4[Time, KeyType, Optional[ValueType], State[StateType], Optional[EmittedType]]):
+    StateSpec[KeyType, ValueType, StateType, EmittedType] = {
+    val trackingFunc = (time: Time, k: KeyType, v: Option[ValueType], s: State[StateType]) => {
+      val t = javaTrackingFunction.call(time, k, JavaUtils.optionToOptional(v), s)
+      Option(t.orNull)
+    }
+    StateSpec.function(trackingFunc)
+  }
+
+  /**
+   * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
+   * of the `trackStateByKey` operation on a
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]].
+   *
+   * @param javaTrackingFunction The function applied on every data item to manage the associated
+   *                             state and generate the emitted data
+   * @tparam ValueType    Class of the values
+   * @tparam StateType    Class of the states data
+   * @tparam EmittedType  Class of the emitted data
+   */
+  def function[KeyType, ValueType, StateType, EmittedType](
+      javaTrackingFunction: JFunction2[Optional[ValueType], State[StateType], EmittedType]):
+    StateSpec[KeyType, ValueType, StateType, EmittedType] = {
+    val trackingFunc = (v: Option[ValueType], s: State[StateType]) => {
+      javaTrackingFunction.call(Optional.fromNullable(v.get), s)
+    }
+    StateSpec.function(trackingFunc)
   }
 }
 
@@ -183,7 +224,6 @@ case class StateSpecImpl[K, V, S, T](
     this.initialStateRDD = javaPairRDD.rdd
     this
   }
-
 
   override def numPartitions(numPartitions: Int): this.type = {
     this.partitioner(new HashPartitioner(numPartitions))
