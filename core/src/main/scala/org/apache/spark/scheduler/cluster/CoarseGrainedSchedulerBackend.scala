@@ -438,7 +438,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       .filter { id => !executorsPendingToRemove.contains(id) }
       .filter { id => force || !scheduler.isExecutorBusy(id) }
       // for test only
-      .filter { id => force || !scheduler.sc.getConf.getBoolean("spark.dynamicAllocation.testing", false)}
+      .filter { id => force ||
+        !scheduler.sc.getConf.getBoolean("spark.dynamicAllocation.testing", false)}
     executorsPendingToRemove ++= executorsToKill
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
