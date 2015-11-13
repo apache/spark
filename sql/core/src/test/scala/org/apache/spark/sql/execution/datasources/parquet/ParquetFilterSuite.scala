@@ -294,7 +294,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(path).filter("part = 1"),
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -311,7 +311,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(path).filter("a > 0 and (part = 0 or a > 1)"),
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 0 and (part = 0 or a > 1)"),
           (2 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
