@@ -61,6 +61,7 @@ statsd = ['statsd>=3.0.1, <4.0']
 vertica = ['vertica-python>=0.5.1']
 ldap = ['ldap3>=0.9.9.1']
 devel = ['lxml>=3.3.4']
+kerberos = ['pykerberos>=1.1.8']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica
 devel = all_dbs + doc + samba + s3 + ['nose'] + slack + crypto + oracle
@@ -119,6 +120,7 @@ setup(
         'vertica': vertica,
         'ldap': ldap,
         'webhdfs': webhdfs,
+        'kerberos': kerberos,
     },
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
