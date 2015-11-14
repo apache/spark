@@ -59,5 +59,7 @@ public class JavaLinearRegressionWithElasticNetExample {
     System.out.println("RMSE: " + trainingSummary.rootMeanSquaredError());
     System.out.println("r2: " + trainingSummary.r2());
     // $example off$
+
+    jsc.stop();
   }
 }

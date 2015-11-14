@@ -49,5 +49,7 @@ public class JavaLogisticRegressionWithElasticNetExample {
     System.out.println("Coefficients: "
       + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
     // $example off$
+
+    jsc.stop();
   }
 }

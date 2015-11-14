@@ -78,5 +78,7 @@ public class JavaLogisticRegressionSummaryExample {
       .select("threshold").head().getDouble(0);
     lrModel.setThreshold(bestThreshold);
     // $example off$
+
+    jsc.stop();
   }
 }
