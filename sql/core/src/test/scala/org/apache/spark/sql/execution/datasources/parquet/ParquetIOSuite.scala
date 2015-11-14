@@ -91,6 +91,33 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-11694 Parquet logical types are not being tested properly") {
+    val parquetSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int32 a(INT_8);
+        |  required int32 b(INT_16);
+        |  required int32 c(DATE);
+        |  required int32 d(DECIMAL(1,0));
+        |  required int64 e(DECIMAL(10,0));
+        |  required binary f(UTF8);
+        |  required binary g(ENUM);
+        |  required binary h(DECIMAL(32,0));
+        |  required fixed_len_byte_array(32) i(DECIMAL(32,0));
+        |}
+      """.stripMargin)
+
+    val expectedSparkTypes = Seq(ByteType, ShortType, DateType, DecimalType(1, 0),
+      DecimalType(10, 0), StringType, StringType, DecimalType(32, 0), DecimalType(32, 0))
+
+    withTempPath { location =>
+      val path = new Path(location.getCanonicalPath)
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf)
+      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
+      assert(sparkTypes === expectedSparkTypes)
+    }
+  }
+
   test("string") {
     val data = (1 to 4).map(i => Tuple1(i.toString))
     // Property spark.sql.parquet.binaryAsString shouldn't affect Parquet files written by Spark SQL
@@ -374,16 +401,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Collections.singletonMap(
-        CatalystReadSupport.SPARK_METADATA_KEY, sparkSchema.toString)
-      val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
+      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
-
-      ParquetFileWriter.writeMetadataFile(
-        sparkContext.hadoopConfiguration,
-        path,
-        Collections.singletonList(
-          new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))
+      val conf = sparkContext.hadoopConfiguration
+      writeMetadata(parquetSchema, path, conf, extraMetadata)
 
       assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
