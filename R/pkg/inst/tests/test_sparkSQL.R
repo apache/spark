@@ -1539,7 +1539,7 @@ test_that("Method str()", {
   expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4 ...")
   expect_equal(out[6], " $ Species     : chr setosa setosa setosa setosa setosa setosa ...")
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE ...")
-  
+
   # A random dataset with many columns. This test is to check str limits
   # the number of columns. Therefore, it will suffice to check for the
   # number of returned rows
