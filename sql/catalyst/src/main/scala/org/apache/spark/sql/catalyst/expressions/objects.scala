@@ -113,7 +113,7 @@ case class Invoke(
     arguments: Seq[Expression] = Nil) extends Expression {
 
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = targetObject :: Nil
+  override def children: Seq[Expression] = arguments.+:(targetObject)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -343,33 +343,50 @@ case class MapObjects(
   private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
   private lazy val completeFunction = function(loopAttribute)
 
+  private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case IntegerType => (i: String) => s".getInt($i)"
+    case LongType => (i: String) => s".getLong($i)"
+    case FloatType => (i: String) => s".getFloat($i)"
+    case DoubleType => (i: String) => s".getDouble($i)"
+    case ByteType => (i: String) => s".getByte($i)"
+    case ShortType => (i: String) => s".getShort($i)"
+    case BooleanType => (i: String) => s".getBoolean($i)"
+    case StringType => (i: String) => s".getUTF8String($i)"
+    case s: StructType => (i: String) => s".getStruct($i, ${s.size})"
+    case a: ArrayType => (i: String) => s".getArray($i)"
+    case _: MapType => (i: String) => s".getMap($i)"
+    case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
+  }
+
   private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
       (".length", (i: String) => s"[$i]", false)
     case ArrayType(s: StructType, _) =>
-      (".numElements()", (i: String) => s".getStruct($i, ${s.size})", false)
+      (".numElements()", itemAccessorMethod(s), false)
     case ArrayType(a: ArrayType, _) =>
-      (".numElements()", (i: String) => s".getArray($i)", true)
+      (".numElements()", itemAccessorMethod(a), true)
     case ArrayType(IntegerType, _) =>
-      (".numElements()", (i: String) => s".getInt($i)", true)
+      (".numElements()", itemAccessorMethod(IntegerType), true)
     case ArrayType(LongType, _) =>
-      (".numElements()", (i: String) => s".getLong($i)", true)
+      (".numElements()", itemAccessorMethod(LongType), true)
     case ArrayType(FloatType, _) =>
-      (".numElements()", (i: String) => s".getFloat($i)", true)
+      (".numElements()", itemAccessorMethod(FloatType), true)
     case ArrayType(DoubleType, _) =>
-      (".numElements()", (i: String) => s".getDouble($i)", true)
+      (".numElements()", itemAccessorMethod(DoubleType), true)
     case ArrayType(ByteType, _) =>
-      (".numElements()", (i: String) => s".getByte($i)", true)
+      (".numElements()", itemAccessorMethod(ByteType), true)
     case ArrayType(ShortType, _) =>
-      (".numElements()", (i: String) => s".getShort($i)", true)
+      (".numElements()", itemAccessorMethod(ShortType), true)
     case ArrayType(BooleanType, _) =>
-      (".numElements()", (i: String) => s".getBoolean($i)", true)
+      (".numElements()", itemAccessorMethod(BooleanType), true)
     case ArrayType(StringType, _) =>
-      (".numElements()", (i: String) => s".getUTF8String($i)", false)
-    case ArrayType(_: MapType, _) =>
-      (".numElements()", (i: String) => s".getMap($i)", false)
+      (".numElements()", itemAccessorMethod(StringType), false)
+    case ArrayType(m: MapType, _) =>
+      (".numElements()", itemAccessorMethod(m), false)
+    case ArrayType(udt: UserDefinedType[_], _) =>
+      (".numElements()", itemAccessorMethod(udt.sqlType), false)
   }
 
   override def nullable: Boolean = true
