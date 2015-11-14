@@ -760,6 +760,9 @@ test_that("subsetting", {
   df6 <- subset(df, df$age %in% c(30), c(1,2))
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
+
+  # Test base::subset is working
+  expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -1096,7 +1099,7 @@ test_that("group by, agg functions", {
   gd3_local <- collect(agg(gd3, var(df8$age)))
   expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
 
-  # make sure base:: or stats::sd, var are working
+  # Test stats::sd, stats::var are working
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
   expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
 
@@ -1148,6 +1151,9 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered5), 1)
   filtered6 <- where(df, df$age %in% c(19, 30))
   expect_equal(count(filtered6), 2)
+
+  # Test stats::filter is working
+  expect_true(is.ts(filter(1:100, rep(1, 3))))
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1467,6 +1473,9 @@ test_that("dropna() and na.omit() on a DataFrame", {
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
+
+  # Test stats::na.omit is working
+  expect_equal(nrow(na.omit(data.frame(x = c(0, 10, NA)))), 2)
 })
 
 test_that("fillna() on a DataFrame", {
