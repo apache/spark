@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
+import org.apache.parquet.schema.MessageType
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -112,6 +114,21 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
     val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
+    val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
+    val footer = new Footer(path, parquetMetadata)
+    ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
+  }
+
+  /**
+   * This is an overloaded version of `writeMetadata` above to allow writing customized
+   * Parquet schema.
+   */
+  protected def writeMetadata(
+      parquetSchema: MessageType, path: Path, configuration: Configuration,
+      extraMetadata: Map[String, String] = Map.empty[String, String]): Unit = {
+    val extraMetadataAsJava = extraMetadata.asJava
+    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val fileMetadata = new FileMetaData(parquetSchema, extraMetadataAsJava, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
     val footer = new Footer(path, parquetMetadata)
     ParquetFileWriter.writeMetadataFile(configuration, path, Seq(footer).asJava)
