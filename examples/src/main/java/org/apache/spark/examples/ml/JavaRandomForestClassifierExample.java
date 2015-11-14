@@ -99,5 +99,7 @@ public class JavaRandomForestClassifierExample {
     RandomForestClassificationModel rfModel = (RandomForestClassificationModel)(model.stages()[2]);
     System.out.println("Learned classification forest model:\n" + rfModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }

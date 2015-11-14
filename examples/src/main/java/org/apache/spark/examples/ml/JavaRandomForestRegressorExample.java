@@ -88,5 +88,7 @@ public class JavaRandomForestRegressorExample {
     RandomForestRegressionModel rfModel = (RandomForestRegressionModel)(model.stages()[1]);
     System.out.println("Learned regression forest model:\n" + rfModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }

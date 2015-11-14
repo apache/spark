@@ -91,7 +91,9 @@ object RandomForestClassifierExample {
 
     val rfModel = model.stages(2).asInstanceOf[RandomForestClassificationModel]
     println("Learned classification forest model:\n" + rfModel.toDebugString)
-   // $example off$
+    // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

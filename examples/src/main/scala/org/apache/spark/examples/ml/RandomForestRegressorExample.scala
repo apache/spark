@@ -79,6 +79,8 @@ object RandomForestRegressorExample {
     val rfModel = model.stages(1).asInstanceOf[RandomForestRegressionModel]
     println("Learned regression forest model:\n" + rfModel.toDebugString)
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

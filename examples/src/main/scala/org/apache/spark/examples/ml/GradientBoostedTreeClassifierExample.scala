@@ -92,6 +92,8 @@ object GradientBoostedTreeClassifierExample {
     val gbtModel = model.stages(2).asInstanceOf[GBTClassificationModel]
     println("Learned classification GBT model:\n" + gbtModel.toDebugString)
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

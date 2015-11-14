@@ -100,5 +100,7 @@ public class JavaGradientBoostedTreeClassifierExample {
     GBTClassificationModel gbtModel = (GBTClassificationModel)(model.stages()[2]);
     System.out.println("Learned classification GBT model:\n" + gbtModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }

@@ -80,6 +80,8 @@ object GradientBoostedTreeRegressorExample {
     val gbtModel = model.stages(1).asInstanceOf[GBTRegressionModel]
     println("Learned regression GBT model:\n" + gbtModel.toDebugString)
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

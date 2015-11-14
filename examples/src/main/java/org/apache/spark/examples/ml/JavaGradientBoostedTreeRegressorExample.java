@@ -88,5 +88,7 @@ public class JavaGradientBoostedTreeRegressorExample {
     GBTRegressionModel gbtModel = (GBTRegressionModel)(model.stages()[1]);
     System.out.println("Learned regression GBT model:\n" + gbtModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }
