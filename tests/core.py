@@ -3,6 +3,7 @@ import doctest
 import os
 from time import sleep
 import unittest
+import re
 
 from airflow import configuration
 configuration.test_mode()
@@ -370,13 +371,20 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/tree?num_runs=25&dag_id=example_bash_operator')
         assert "runme_0" in response.data.decode('utf-8')
+        chartkick_regexp = 'new Chartkick.LineChart\(document.getElementById\(\"chart-\d+\"\),\s+\[["\w\:\s,\{\}\[\]]*\],\s+\{["\w\:\s,\{\}]+\)\;'
         response = self.app.get(
             '/admin/airflow/duration?days=30&dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
+        chartkick_matched = re.search(chartkick_regexp,
+                                      response.data.decode('utf-8'))
+        assert chartkick_matched is not None
         response = self.app.get(
             '/admin/airflow/landing_times?'
             'days=30&dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
+        chartkick_matched = re.search(chartkick_regexp,
+                                      response.data.decode('utf-8'))
+        assert chartkick_matched is not None
         response = self.app.get(
             '/admin/airflow/gantt?dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
