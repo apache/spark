@@ -526,8 +526,9 @@ object SparkSubmit {
           throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
         } else {
           // Add keytab and principal configurations in sysProps to make them available
-          // for later use (e.g. by spark sql). These Configurations will be set as
-          // Java system properties and then loaded by SparkConf
+          // for later use; e.g. in spark sql, the isolated class loader used to talk
+          // to HiveMetastore will use these settings. They will be set as Java system
+          // properties and then loaded by SparkConf
           sysProps.put("spark.yarn.keytab", args.keytab)
           sysProps.put("spark.yarn.principal", args.principal)
 

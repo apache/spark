@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
@@ -34,6 +32,7 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, Logging}
@@ -154,9 +153,10 @@ private[hive] class ClientWrapper(
 
     // Set up kerberos credentials for UserGroupInformation.loginUser within
     // current class loader
-    // Instead of using the spark conf of the current spark context, a new instance of
-    // SparkConf is needed for the original value of spark.yarn.keytab specified by user,
-    // as yarn.Client resets it for the link name in distributed cache
+    // Instead of using the spark conf of the current spark context, a new
+    // instance of SparkConf is needed for the original value of spark.yarn.keytab
+    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
+    // keytab configuration for the link name in distributed cache
     val sparkConf = new SparkConf
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
