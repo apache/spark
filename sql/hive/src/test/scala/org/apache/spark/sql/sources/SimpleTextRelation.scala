@@ -89,7 +89,7 @@ class SimpleTextRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation {
+  extends HadoopFsRelation(parameters) {
 
   import sqlContext.sparkContext
 
@@ -127,6 +127,9 @@ class SimpleTextRelation(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus]): RDD[Row] = {
+
+    SimpleTextRelation.requiredColumns = requiredColumns
+    SimpleTextRelation.pushedFilters = filters.toSet
 
     val fields = this.dataSchema.map(_.dataType)
     val inputAttributes = this.dataSchema.toAttributes
@@ -189,6 +192,14 @@ class SimpleTextRelation(
       case _ => true
     }
   }
+}
+
+object SimpleTextRelation {
+  // Used to test column pruning
+  var requiredColumns: Seq[String] = Nil
+
+  // Used to test filter push-down
+  var pushedFilters: Set[Filter] = Set.empty
 }
 
 /**

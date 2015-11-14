@@ -34,7 +34,6 @@ connExists <- function(env) {
 sparkR.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
-    # cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")
@@ -78,7 +77,7 @@ sparkR.stop <- function() {
 #' Initialize a new Spark Context.
 #'
 #' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at 
+#' and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
 #' @param master The Spark master URL.

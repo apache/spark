@@ -44,8 +44,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
-      case j: ShuffledHashJoin => j
-      case j: ShuffledHashOuterJoin => j
       case j: LeftSemiJoinHash => j
       case j: BroadcastHashJoin => j
       case j: BroadcastHashOuterJoin => j
@@ -96,75 +94,39 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
         classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      Seq(
-        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2",
-          classOf[ShuffledHashJoin]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2",
-          classOf[ShuffledHashJoin]),
-        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[ShuffledHashOuterJoin]),
-        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-          classOf[ShuffledHashOuterJoin]),
-        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-          classOf[ShuffledHashOuterJoin]),
-        ("SELECT * FROM testData full outer join testData2 ON key = a",
-          classOf[ShuffledHashOuterJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    }
   }
 
-  test("SortMergeJoin shouldn't work on unsortable columns") {
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      Seq(
-        ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    }
-  }
+//  ignore("SortMergeJoin shouldn't work on unsortable columns") {
+//    Seq(
+//      ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
+//    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+//  }
 
   test("broadcasted hash join operator selection") {
     sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
-    for (sortMergeJoinEnabled <- Seq(true, false)) {
-      withClue(s"sortMergeJoinEnabled=$sortMergeJoinEnabled") {
-        withSQLConf(SQLConf.SORTMERGE_JOIN.key -> s"$sortMergeJoinEnabled") {
-          Seq(
-            ("SELECT * FROM testData join testData2 ON key = a",
-              classOf[BroadcastHashJoin]),
-            ("SELECT * FROM testData join testData2 ON key = a and key = 2",
-              classOf[BroadcastHashJoin]),
-            ("SELECT * FROM testData join testData2 ON key = a where key = 2",
-              classOf[BroadcastHashJoin])
-          ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-        }
-      }
-    }
+    Seq(
+      ("SELECT * FROM testData join testData2 ON key = a",
+        classOf[BroadcastHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+        classOf[BroadcastHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a where key = 2",
+        classOf[BroadcastHashJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash outer join operator selection") {
     sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "true") {
-      Seq(
-        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
-          classOf[SortMergeOuterJoin]),
-        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-          classOf[BroadcastHashOuterJoin]),
-        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-          classOf[BroadcastHashOuterJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    }
-    withSQLConf(SQLConf.SORTMERGE_JOIN.key -> "false") {
-      Seq(
-        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
-          classOf[ShuffledHashOuterJoin]),
-        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-          classOf[BroadcastHashOuterJoin]),
-        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-          classOf[BroadcastHashOuterJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    }
+    Seq(
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
+        classOf[SortMergeOuterJoin]),
+      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+        classOf[BroadcastHashOuterJoin]),
+      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+        classOf[BroadcastHashOuterJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     sql("UNCACHE TABLE testData")
   }
 
@@ -279,16 +241,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(
         """
-          |SELECT l.N, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY l.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) :: Nil)
+        |SELECT l.N, count(*)
+        |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+        |GROUP BY l.N
+      """.
+          stripMargin),
+    Row(1, 1) ::
+      Row(2, 1) ::
+      Row(3, 1) ::
+      Row(4, 1) ::
+      Row(5, 1) ::
+      Row(6, 1) :: Nil)
 
     checkAnswer(
       sql(
@@ -343,7 +306,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
           |GROUP BY l.a
         """.stripMargin),
-      Row(null, 6))
+      Row(null,
+        6))
 
     checkAnswer(
       sql(
@@ -352,7 +316,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
           |GROUP BY r.N
         """.stripMargin),
-      Row(1, 1) ::
+      Row(1
+        , 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
@@ -396,14 +361,16 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
 
-    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
+    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+    // operator.
     checkAnswer(
       sql(
         """
-          |SELECT l.a, count(*)
-          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.stripMargin),
+        |SELECT l.a, count(*)
+        |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+        |GROUP BY l.a
+      """.
+          stripMargin),
       Row(null, 10))
 
     checkAnswer(
@@ -413,7 +380,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
           |GROUP BY r.N
         """.stripMargin),
-      Row(1, 1) ::
+      Row
+        (1, 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
@@ -428,7 +396,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
           |GROUP BY l.N
         """.stripMargin),
-      Row(1, 1) ::
+      Row(1
+        , 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
@@ -439,10 +408,11 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(
         """
-          |SELECT r.a, count(*)
-          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY r.a
-        """.stripMargin),
+        |SELECT r.a, count(*)
+        |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+        |GROUP BY r.a
+      """.
+          stripMargin),
       Row(null, 10))
   }
 
