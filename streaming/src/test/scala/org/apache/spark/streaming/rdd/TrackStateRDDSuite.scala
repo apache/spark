@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
 import org.apache.spark.streaming.{Time, State}
 import org.apache.spark.{HashPartitioner, SparkConf, SparkContext, SparkFunSuite}
 
@@ -50,6 +51,131 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.partitions.size === partitioner.numPartitions)
 
     assert(rdd.partitioner === Some(partitioner))
+  }
+
+  test("updating state and generating emitted data in TrackStateRecord") {
+
+    val initialTime = 1000L
+    val updatedTime = 2000L
+    val thresholdTime = 1500L
+    @volatile var functionCalled = false
+
+    /**
+     * Assert that applying given data on a prior record generates correct updated record, with
+     * correct state map and emitted data
+     */
+    def assertRecordUpdate(
+        initStates: Iterable[Int],
+        data: Iterable[String],
+        expectedStates: Iterable[(Int, Long)],
+        timeoutThreshold: Option[Long] = None,
+        removeTimedoutData: Boolean = false,
+        expectedOutput: Iterable[Int] = None,
+        expectedTimingOutStates: Iterable[Int] = None,
+        expectedRemovedStates: Iterable[Int] = None
+      ): Unit = {
+      val initialStateMap = new OpenHashMapBasedStateMap[String, Int]()
+      initStates.foreach { s => initialStateMap.put("key", s, initialTime) }
+      functionCalled = false
+      val record = TrackStateRDDRecord[String, Int, Int](initialStateMap, Seq.empty)
+      val dataIterator = data.map { v => ("key", v) }.iterator
+      val removedStates = new ArrayBuffer[Int]
+      val timingOutStates = new ArrayBuffer[Int]
+      /**
+       * Tracking function that updates/removes state based on instructions in the data, and
+       * return state (when instructed or when state is timing out).
+       */
+      def testFunc(t: Time, key: String, data: Option[String], state: State[Int]): Option[Int] = {
+        functionCalled = true
+
+        assert(t.milliseconds === updatedTime, "tracking func called with wrong time")
+
+        data match {
+          case Some("noop") =>
+            None
+          case Some("get-state") =>
+            Some(state.getOption().getOrElse(-1))
+          case Some("update-state") =>
+            if (state.exists) state.update(state.get + 1) else state.update(0)
+            None
+          case Some("remove-state") =>
+            removedStates += state.get()
+            state.remove()
+            None
+          case None =>
+            assert(state.isTimingOut() === true, "State is not timing out when data = None")
+            timingOutStates += state.get()
+            None
+          case _ =>
+            fail("Unexpected test data")
+        }
+      }
+
+      val updatedRecord = TrackStateRDDRecord.updateRecordWithData[String, String, Int, Int](
+        Some(record), dataIterator, testFunc,
+        Time(updatedTime), timeoutThreshold, removeTimedoutData)
+
+      val updatedStateData = updatedRecord.stateMap.getAll().map { x => (x._2, x._3) }
+      assert(updatedStateData.toSet === expectedStates.toSet,
+        "states do not match after updating the TrackStateRecord")
+
+      assert(updatedRecord.emittedRecords.toSet === expectedOutput.toSet,
+        "emitted data do not match after updating the TrackStateRecord")
+
+      assert(timingOutStates.toSet === expectedTimingOutStates.toSet, "timing out states do not " +
+        "match those that were expected to do so while updating the TrackStateRecord")
+
+      assert(removedStates.toSet === expectedRemovedStates.toSet, "removed states do not " +
+        "match those that were expected to do so while updating the TrackStateRecord")
+
+    }
+
+    // No data, no state should be changed, function should not be called,
+    assertRecordUpdate(initStates = Nil, data = None, expectedStates = Nil)
+    assert(functionCalled === false)
+    assertRecordUpdate(initStates = Seq(0), data = None, expectedStates = Seq((0, initialTime)))
+    assert(functionCalled === false)
+
+    // Data present, function should be called irrespective of whether state exists
+    assertRecordUpdate(initStates = Seq(0), data = Seq("noop"),
+      expectedStates = Seq((0, initialTime)))
+    assert(functionCalled === true)
+    assertRecordUpdate(initStates = None, data = Some("noop"), expectedStates = None)
+    assert(functionCalled === true)
+
+    // Function called with right state data
+    assertRecordUpdate(initStates = None, data = Seq("get-state"),
+      expectedStates = None, expectedOutput = Seq(-1))
+    assertRecordUpdate(initStates = Seq(123), data = Seq("get-state"),
+      expectedStates = Seq((123, initialTime)), expectedOutput = Seq(123))
+
+    // Update state and timestamp, when timeout not present
+    assertRecordUpdate(initStates = Nil, data = Seq("update-state"),
+      expectedStates = Seq((0, updatedTime)))
+    assertRecordUpdate(initStates = Seq(0), data = Seq("update-state"),
+      expectedStates = Seq((1, updatedTime)))
+
+    // Remove state
+    assertRecordUpdate(initStates = Seq(345), data = Seq("remove-state"),
+      expectedStates = Nil, expectedRemovedStates = Seq(345))
+
+    // State strictly older than timeout threshold should be timed out
+    assertRecordUpdate(initStates = Seq(123), data = Nil,
+      timeoutThreshold = Some(initialTime), removeTimedoutData = true,
+      expectedStates = Seq((123, initialTime)), expectedTimingOutStates = Nil)
+
+    assertRecordUpdate(initStates = Seq(123), data = Nil,
+      timeoutThreshold = Some(initialTime + 1), removeTimedoutData = true,
+      expectedStates = Nil, expectedTimingOutStates = Seq(123))
+
+    // State should not be timed out after it has received data
+    assertRecordUpdate(initStates = Seq(123), data = Seq("noop"),
+      timeoutThreshold = Some(initialTime + 1), removeTimedoutData = true,
+      expectedStates = Seq((123, updatedTime)), expectedTimingOutStates = Nil)
+    assertRecordUpdate(initStates = Seq(123), data = Seq("remove-state"),
+      timeoutThreshold = Some(initialTime + 1), removeTimedoutData = true,
+      expectedStates = Nil, expectedTimingOutStates = Nil, expectedRemovedStates = Seq(123))
+
   }
 
   test("states generated by TrackStateRDD") {
@@ -148,9 +274,8 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val rdd7 = testStateUpdates(                      // should remove k2's state
       rdd6, Seq(("k2", 2), ("k0", 2), ("k3", 1)), Set(("k3", 0, updateTime)))
 
-    val rdd8 = testStateUpdates(
-      rdd7, Seq(("k3", 2)), Set()                     //
-    )
+    val rdd8 = testStateUpdates(                      // should remove k3's state
+      rdd7, Seq(("k3", 2)), Set())
   }
 
   /** Assert whether the `trackStateByKey` operation generates expected results */
@@ -176,7 +301,7 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // Persist to make sure that it gets computed only once and we can track precisely how many
     // state keys the computing touched
-    newStateRDD.persist()
+    newStateRDD.persist().count()
     assertRDD(newStateRDD, expectedStates, expectedEmittedRecords)
     newStateRDD
   }
@@ -188,7 +313,8 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       expectedEmittedRecords: Set[T]): Unit = {
     val states = trackStateRDD.flatMap { _.stateMap.getAll() }.collect().toSet
     val emittedRecords = trackStateRDD.flatMap { _.emittedRecords }.collect().toSet
-    assert(states === expectedStates, "states after track state operation were not as expected")
+    assert(states === expectedStates,
+      "states after track state operation were not as expected")
     assert(emittedRecords === expectedEmittedRecords,
       "emitted records after track state operation were not as expected")
   }
