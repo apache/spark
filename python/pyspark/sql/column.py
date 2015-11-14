@@ -17,6 +17,18 @@
 
 import sys
 import warnings
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
 
 if sys.version >= '3':
     basestring = str
@@ -447,11 +459,16 @@ def _test():
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
 
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.column, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    t = doctest.DocTestSuite(pyspark.sql.column, globs=globs,
+                             optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE |
+                             doctest.REPORT_NDIFF)
+    if xmlrunner:
+        result = xmlrunner.XMLTestRunner(output='target/test-reports',
+                                         verbosity=3).run(t)
+    else:
+        result = unittest.TextTestRunner(verbosity=3).run(t)
     globs['sc'].stop()
-    if failure_count:
+    if not result.wasSuccessful():
         exit(-1)
 
 

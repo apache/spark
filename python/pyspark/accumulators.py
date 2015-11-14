@@ -15,77 +15,6 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.context import SparkContext
->>> sc = SparkContext('local', 'test')
->>> a = sc.accumulator(1)
->>> a.value
-1
->>> a.value = 2
->>> a.value
-2
->>> a += 5
->>> a.value
-7
-
->>> sc.accumulator(1.0).value
-1.0
-
->>> sc.accumulator(1j).value
-1j
-
->>> rdd = sc.parallelize([1,2,3])
->>> def f(x):
-...     global a
-...     a += x
->>> rdd.foreach(f)
->>> a.value
-13
-
->>> b = sc.accumulator(0)
->>> def g(x):
-...     b.add(x)
->>> rdd.foreach(g)
->>> b.value
-6
-
->>> from pyspark.accumulators import AccumulatorParam
->>> class VectorAccumulatorParam(AccumulatorParam):
-...     def zero(self, value):
-...         return [0.0] * len(value)
-...     def addInPlace(self, val1, val2):
-...         for i in range(len(val1)):
-...              val1[i] += val2[i]
-...         return val1
->>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
->>> va.value
-[1.0, 2.0, 3.0]
->>> def g(x):
-...     global va
-...     va += [x] * 3
->>> rdd.foreach(g)
->>> va.value
-[7.0, 8.0, 9.0]
-
->>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> def h(x):
-...     global a
-...     a.value = 7
->>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-Py4JJavaError:...
-
->>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
-Traceback (most recent call last):
-    ...
-TypeError:...
-"""
-
 import sys
 import select
 import struct
@@ -96,6 +25,19 @@ else:
 import threading
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
+import doctest
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 
 __all__ = ['Accumulator', 'AccumulatorParam']
@@ -117,6 +59,76 @@ def _deserialize_accumulator(aid, zero_value, accum_param):
 
 
 class Accumulator(object):
+    """
+    >>> from pyspark.context import SparkContext
+    >>> sc = SparkContext('local', 'test')
+    >>> a = sc.accumulator(1)
+    >>> a.value
+    1
+    >>> a.value = 2
+    >>> a.value
+    2
+    >>> a += 5
+    >>> a.value
+    7
+
+    >>> sc.accumulator(1.0).value
+    1.0
+
+    >>> sc.accumulator(1j).value
+    1j
+
+    >>> rdd = sc.parallelize([1,2,3])
+    >>> def f(x):
+    ...     global a
+    ...     a += x
+    >>> rdd.foreach(f)
+    >>> a.value
+    13
+
+    >>> b = sc.accumulator(0)
+    >>> def g(x):
+    ...     b.add(x)
+    >>> rdd.foreach(g)
+    >>> b.value
+    6
+
+    >>> from pyspark.accumulators import AccumulatorParam
+    >>> class VectorAccumulatorParam(AccumulatorParam):
+    ...     def zero(self, value):
+    ...         return [0.0] * len(value)
+    ...     def addInPlace(self, val1, val2):
+    ...         for i in range(len(val1)):
+    ...              val1[i] += val2[i]
+    ...         return val1
+    >>> va = sc.accumulator([1.0, 2.0, 3.0], VectorAccumulatorParam())
+    >>> va.value
+    [1.0, 2.0, 3.0]
+    >>> def g(x):
+    ...     global va
+    ...     va += [x] * 3
+    >>> rdd.foreach(g)
+    >>> va.value
+    [7.0, 8.0, 9.0]
+
+    >>> rdd.map(lambda x: a.value).collect() # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError:...
+
+    >>> def h(x):
+    ...     global a
+    ...     a.value = 7
+    >>> rdd.foreach(h) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    Py4JJavaError:...
+
+    >>> sc.accumulator([1.0, 2.0, 3.0]) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    TypeError:...
+    """
 
     """
     A shared variable that can be accumulated, i.e., has a commutative and associative "add"
@@ -263,7 +275,11 @@ def _start_update_server():
     return server
 
 if __name__ == "__main__":
-    import doctest
-    (failure_count, test_count) = doctest.testmod()
-    if failure_count:
+    t = doctest.DocTestSuite()
+    if xmlrunner:
+        result = xmlrunner.XMLTestRunner(output='target/test-reports',
+                                         verbosity=3).run(t)
+    else:
+        result = unittest.TextTestRunner(verbosity=3).run(t)
+    if not result.wasSuccessful():
         exit(-1)

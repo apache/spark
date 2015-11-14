@@ -15,49 +15,22 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.conf import SparkConf
->>> from pyspark.context import SparkContext
->>> conf = SparkConf()
->>> conf.setMaster("local").setAppName("My app")
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.master")
-u'local'
->>> conf.get("spark.app.name")
-u'My app'
->>> sc = SparkContext(conf=conf)
->>> sc.master
-u'local'
->>> sc.appName
-u'My app'
->>> sc.sparkHome is None
-True
-
->>> conf = SparkConf(loadDefaults=False)
->>> conf.setSparkHome("/path")
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.home")
-u'/path'
->>> conf.setExecutorEnv("VAR1", "value1")
-<pyspark.conf.SparkConf object at ...>
->>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
-<pyspark.conf.SparkConf object at ...>
->>> conf.get("spark.executorEnv.VAR1")
-u'value1'
->>> print(conf.toDebugString())
-spark.executorEnv.VAR1=value1
-spark.executorEnv.VAR3=value3
-spark.executorEnv.VAR4=value4
-spark.home=/path
->>> sorted(conf.getAll(), key=lambda p: p[0])
-[(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
-(u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
-"""
-
 __all__ = ['SparkConf']
 
 import sys
 import re
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
 
 if sys.version > '3':
     unicode = str
@@ -84,6 +57,45 @@ class SparkConf(object):
 
     Note that once a SparkConf object is passed to Spark, it is cloned
     and can no longer be modified by the user.
+    """
+
+    """
+    >>> from pyspark.conf import SparkConf
+    >>> from pyspark.context import SparkContext
+    >>> conf = SparkConf()
+    >>> conf.setMaster("local").setAppName("My app")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.master")
+    u'local'
+    >>> conf.get("spark.app.name")
+    u'My app'
+    >>> sc = SparkContext(conf=conf)
+    >>> sc.master
+    u'local'
+    >>> sc.appName
+    u'My app'
+    >>> sc.sparkHome is None
+    True
+
+    >>> conf = SparkConf(loadDefaults=False)
+    >>> conf.setSparkHome("/path")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.home")
+    u'/path'
+    >>> conf.setExecutorEnv("VAR1", "value1")
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.setExecutorEnv(pairs = [("VAR3", "value3"), ("VAR4", "value4")])
+    <pyspark.conf.SparkConf object at ...>
+    >>> conf.get("spark.executorEnv.VAR1")
+    u'value1'
+    >>> print(conf.toDebugString())
+    spark.executorEnv.VAR1=value1
+    spark.executorEnv.VAR3=value3
+    spark.executorEnv.VAR4=value4
+    spark.home=/path
+    >>> sorted(conf.getAll(), key=lambda p: p[0])
+    [(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), \
+    (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
     """
 
     def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
@@ -182,8 +194,13 @@ class SparkConf(object):
 
 def _test():
     import doctest
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
-    if failure_count:
+    t = doctest.DocTestSuite(optionflags=doctest.ELLIPSIS)
+    if xmlrunner:
+        result = xmlrunner.XMLTestRunner(output='target/test-reports',
+                                         verbosity=3).run(t)
+    else:
+        result = unittest.TextTestRunner(verbosity=3).run(t)
+    if not result.wasSuccessful():
         exit(-1)
 
 

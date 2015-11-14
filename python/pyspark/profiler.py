@@ -19,6 +19,19 @@ import cProfile
 import pstats
 import os
 import atexit
+import sys
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
 
 from pyspark.accumulators import AccumulatorParam
 
@@ -171,6 +184,11 @@ class BasicProfiler(Profiler):
 
 if __name__ == "__main__":
     import doctest
-    (failure_count, test_count) = doctest.testmod()
-    if failure_count:
+    t = doctest.DocTestSuite()
+    if xmlrunner:
+        result = xmlrunner.XMLTestRunner(output='target/test-reports',
+                                         verbosity=3).run(t)
+    else:
+        result = unittest.TextTestRunner(verbosity=3).run(t)
+    if not result.wasSuccessful():
         exit(-1)
