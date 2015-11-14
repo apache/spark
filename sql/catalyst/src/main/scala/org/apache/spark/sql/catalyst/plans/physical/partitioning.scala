@@ -235,7 +235,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
-      expressions.forall(x=>requiredClustering.exists(_.semanticEquals(x)))
+      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 
@@ -276,7 +276,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).forall(x=>requiredClustering.exists(_.semanticEquals(x)))
+      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 
