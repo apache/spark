@@ -152,6 +152,11 @@ private[hive] class ClientWrapper(
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
 
+    // Set up kerberos credentials for UserGroupInformation.loginUser within
+    // current class loader
+    // Instead of using the spark conf of the current spark context, a new instance of
+    // SparkConf is needed for the original value of spark.yarn.keytab specified by user,
+    // as yarn.Client resets it for the link name in distributed cache
     val sparkConf = new SparkConf
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")

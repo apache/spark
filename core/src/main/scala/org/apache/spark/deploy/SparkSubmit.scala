@@ -525,8 +525,12 @@ object SparkSubmit {
         if (!new File(args.keytab).exists()) {
           throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
         } else {
+          // Add keytab and principal configurations in sysProps to make them available
+          // for later use (e.g. by spark sql). These Configurations will be set as
+          // Java system properties and then loaded by SparkConf
           sysProps.put("spark.yarn.keytab", args.keytab)
           sysProps.put("spark.yarn.principal", args.principal)
+
           UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
         }
       }
