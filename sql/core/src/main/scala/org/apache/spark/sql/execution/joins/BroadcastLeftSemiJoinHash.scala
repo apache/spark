@@ -54,7 +54,7 @@ case class BroadcastLeftSemiJoinHash(
       val hashSet = buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
-      left.execute().mapPartitions { streamIter =>
+      left.execute().mapPartitionsInternal { streamIter =>
         hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
       }
     } else {
@@ -62,7 +62,7 @@ case class BroadcastLeftSemiJoinHash(
         HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
-      left.execute().mapPartitions { streamIter =>
+      left.execute().mapPartitionsInternal { streamIter =>
         val hashedRelation = broadcastedRelation.value
         hashedRelation match {
           case unsafe: UnsafeHashedRelation =>

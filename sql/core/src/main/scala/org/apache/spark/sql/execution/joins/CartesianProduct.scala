@@ -46,7 +46,7 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
       row.copy()
     }
 
-    leftResults.cartesian(rightResults).mapPartitions { iter =>
+    leftResults.cartesian(rightResults).mapPartitionsInternal { iter =>
       val joinedRow = new JoinedRow
       iter.map { r =>
         numOutputRows += 1

@@ -125,7 +125,7 @@ private[sql] case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitions { rowIterator =>
+    val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -292,7 +292,7 @@ private[sql] case class InMemoryColumnarTableScan(
     val relOutput = relation.output
     val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitions { cachedBatchIterator =>
+    buffers.mapPartitionsInternal { cachedBatchIterator =>
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
