@@ -190,7 +190,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
     // command need to be in an atomic block.
     if (!isCancelled) {
       val job = rdd.context.submitJob(rdd, processPartition, partitions, resultHandler, resultFunc)
-      subActions = job::subActions
+      subActions = job :: subActions
       job
     } else {
       throw new SparkException("Action has been cancelled")
