@@ -447,12 +447,22 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertGreaterEqual(info.submissionTime(), 0)
 
             for streamId in info.streamIdToInputInfo():
-                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
-                # access fields of streamInputInfo
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
 
             for outputOpId in info.outputOperationInfos():
-                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
-                # access fields of outputOperationInfo
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), -1)
+                self.assertGreaterEqual(outputInfo.endTime(), -1)
+                self.assertIsNone(outputInfo.failureReason())
 
             self.assertEqual(info.schedulingDelay(), -1)
             self.assertEqual(info.processingDelay(), -1)
@@ -465,12 +475,22 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertGreaterEqual(info.submissionTime(), 0)
 
             for streamId in info.streamIdToInputInfo():
-                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
-                # access fields of streamInputInfo
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
 
             for outputOpId in info.outputOperationInfos():
-                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
-                # access fields of outputOperationInfo
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), -1)
+                self.assertGreaterEqual(outputInfo.endTime(), -1)
+                self.assertIsNone(outputInfo.failureReason())
 
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertEqual(info.processingDelay(), -1)
@@ -483,12 +503,22 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.assertGreaterEqual(info.submissionTime(), 0)
 
             for streamId in info.streamIdToInputInfo():
-                self.assertIsNotNone(info.streamIdToInputInfo()[streamId])
-                # access fields of streamInputInfo
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
 
             for outputOpId in info.outputOperationInfos():
-                self.assertIsNotNone(info.outputOperationInfos()[outputOpId])
-                # access fields of outputOperationInfo
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), 0)
+                self.assertGreaterEqual(outputInfo.endTime(), 0)
+                self.assertIsNone(outputInfo.failureReason())
 
             self.assertGreaterEqual(info.schedulingDelay(), 0)
             self.assertGreaterEqual(info.processingDelay(), 0)
