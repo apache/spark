@@ -47,7 +47,7 @@ private[ann] class SigmoidLayerWithSquaredError extends Layer {
 }
 
 private[ann] class SigmoidLayerModelWithSquaredError
-  extends FunctionalLayerModel(new SigmoidFunction) with LossFunction {
+  extends FunctionalLayerModel(new FunctionalLayer(new SigmoidFunction)) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
     val error = Bsum(delta :* delta) / 2 / output.cols
@@ -68,7 +68,7 @@ private[ann] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
 
 private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with LossFunction {
 
-  private lazy val emptyWeights = new Array[Double](0)
+  val weights = new BDV[Double](0)
 
   def inplaceEval(x: BDM[Double], y: BDM[Double]): Unit = {
     var j = 0
@@ -103,8 +103,6 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
     inplaceEval(data, output)
   }
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {}
-
-  override def weights(): Vector = Vectors.dense(emptyWeights)
 
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
 

@@ -31,6 +31,8 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 
+import breeze.linalg.{DenseVector => BDV}
+
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol {
@@ -209,7 +211,7 @@ class MultilayerPerceptronClassifier(override val uid: String)
       .setNumIterations($(maxIter))
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
-    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights())
+    new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
   }
 }
 
@@ -240,7 +242,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
 
   override val numFeatures: Int = layers.head
 
-  private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
+  private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).model(weights)
 
   /**
    * Returns layers in a Java List.

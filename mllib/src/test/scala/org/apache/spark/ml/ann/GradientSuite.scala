@@ -36,8 +36,8 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     for (layerWithError <- layersWithErrors) {
       topology.layers(topology.layers.length - 1) = layerWithError
-      val model = topology.getInstance(12L)
-      val weights = model.weights().toArray
+      val model = topology.model(12L)
+      val weights = model.weights.toArray
       val numWeights = weights.size
       val gradient = Vectors.dense(Array.fill[Double](numWeights)(0.0))
       val loss = model.computeGradient(input, target, gradient, 1)
@@ -47,7 +47,7 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
       while (i < numWeights) {
         val originalValue = weights(i)
         weights(i) += eps
-        val newModel = topology.getInstance(Vectors.dense(weights))
+        val newModel = topology.model(Vectors.dense(weights))
         val newLoss = computeLoss(input, target, newModel)
         val derivativeEstimate = (newLoss - loss) / eps
         assert((gradient(i) - derivativeEstimate) < tol)

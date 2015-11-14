@@ -78,6 +78,7 @@ private[ann] trait Layer extends Serializable {
  */
 private[ann] trait LayerModel extends Serializable {
 
+  val weights: BDV[Double]
   /**
    * Evaluates the data (process the data through the layer)
    * @param data data
@@ -102,12 +103,6 @@ private[ann] trait LayerModel extends Serializable {
    * @return gradient
    */
   def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit
-
-  /**
-   * Returns weights for the layer in a single vector
-   * @return layer weights
-   */
-  def weights(): Vector
 }
 
 /**
@@ -123,21 +118,23 @@ private[ann] class AffineLayer(val numIn: Int, val numOut: Int) extends Layer {
 
   override val inPlace = false
 
-  override def model(weights: BDV[Double]): LayerModel = {
-    AffineLayerModel(this, weights)
-  }
+  override def model(weights: BDV[Double]): LayerModel = new AffineLayerModel(weights, this)
 
-  override def initModel(weights: BDV[Double], random: Random): LayerModel = {
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
     AffineLayerModel(this, weights, random)
-  }
 }
 
 /**
- * Model of Affine layer y=A*x+b
- * @param w weights (matrix A)
- * @param b bias (vector b)
+ * Model of Affine layer
+ * @param weights weights
+ * @param layer layer properties
  */
-private[ann] class AffineLayerModel private(w: BDM[Double], b: BDV[Double]) extends LayerModel {
+private[ann] class AffineLayerModel private[ann] (
+    val weights: BDV[Double],
+    val layer: AffineLayer) extends LayerModel {
+  val w = new BDM[Double](layer.numOut, layer.numIn, weights.data, weights.offset)
+  val b =
+    new BDV[Double](weights.data, weights.offset + (layer.numOut * layer.numIn), 1, layer.numOut)
 
   private var ones: BDV[Double] = null
 
@@ -159,8 +156,6 @@ private[ann] class AffineLayerModel private(w: BDM[Double], b: BDV[Double]) exte
     val cumGradientOfBias = new BDV[Double](cumGrad.data, cumGrad.offset + w.size, 1, b.length)
     BreezeUtil.dgemv(1.0 / input.cols, delta, ones, 1.0, cumGradientOfBias)
   }
-
-  override def weights(): Vector = AffineLayerModel.roll(w, b)
 }
 
 /**
@@ -171,76 +166,32 @@ private[ann] object AffineLayerModel {
   /**
    * Creates a model of Affine layer
    * @param layer layer properties
-   * @param weights vector with weights
-   * @return model of Affine layer
-   */
-  def apply(layer: AffineLayer, weights: BDV[Double]): AffineLayerModel = {
-    val (w, b) = unroll(weights, layer.numIn, layer.numOut)
-    new AffineLayerModel(w, b)
-  }
-
-  /**
-   * Creates a model of Affine layer
-   * @param layer layer properties
    * @param weights vector for weights initialization
    * @param random random number generator
    * @return model of Affine layer
    */
   def apply(layer: AffineLayer, weights: BDV[Double], random: Random): AffineLayerModel = {
-    val (w, b) = randomWeights(layer.numIn, layer.numOut, weights, random)
-    new AffineLayerModel(w, b)
+    randomWeights(layer.numIn, layer.numOut, weights, random)
+    new AffineLayerModel(weights, layer)
   }
 
   /**
-   * Unrolls the weights from the vector
-   * @param weights vector with weights
-   * @param numIn number of layer inputs
-   * @param numOut number of layer outputs
-   * @return matrix A and vector b
-   */
-  def unroll(
-    weights: BDV[Double],
-    numIn: Int,
-    numOut: Int): (BDM[Double], BDV[Double]) = {
-    // TODO: the array is not copied to BDMs, make sure this is OK!
-    val a = new BDM[Double](numOut, numIn, weights.data, weights.offset)
-    val b = new BDV[Double](weights.data, weights.offset + (numOut * numIn), 1, numOut)
-    (a, b)
-  }
-
-  /**
-   * Roll the layer weights into a vector
-   * @param a matrix A
-   * @param b vector b
-   * @return vector of weights
-   */
-  def roll(a: BDM[Double], b: BDV[Double]): Vector = {
-    val result = new Array[Double](a.size + b.length)
-    // TODO: make sure that we need to copy!
-    System.arraycopy(a.toArray, 0, result, 0, a.size)
-    System.arraycopy(b.toArray, 0, result, a.size, b.length)
-    Vectors.dense(result)
-  }
-
-  /**
-   * Generate random weights for the layer
+   * Initialize weights
    * @param numIn number of inputs
    * @param numOut number of outputs
    * @param weights vector for weights initialization
    * @param random random number generator
-   * @return (matrix A, vector b)
    */
   def randomWeights(
     numIn: Int,
     numOut: Int,
     weights: BDV[Double],
-    random: Random): (BDM[Double], BDV[Double]) = {
+    random: Random): Unit = {
     var i = 0
     while (i < weights.length) {
       weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
       i += 1
     }
-    unroll(weights, numIn, numOut)
   }
 }
 
@@ -318,7 +269,7 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
 
   override val inPlace = true
 
-  override def model(weights: BDV[Double]): LayerModel = FunctionalLayerModel(this)
+  override def model(weights: BDV[Double]): LayerModel = new FunctionalLayerModel(this)
 
   override def initModel(weights: BDV[Double], random: Random): LayerModel =
     model(weights)
@@ -326,48 +277,40 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
 
 /**
  * Functional layer model. Holds no weights.
- * @param activationFunction activation function
+ * @param layer functiona layer
  */
-private[ann] class FunctionalLayerModel protected (val activationFunction: ActivationFunction)
+private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer)
   extends LayerModel {
 
   // empty weights
-  private lazy val emptyWeights = new Array[Double](0)
+  val weights = new BDV[Double](0)
 
   override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    UniversalFunction(data, output, activationFunction.eval)
+    UniversalFunction(data, output, layer.activationFunction.eval)
   }
 
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {
-    UniversalFunction(input, delta, activationFunction.derivative)
+    UniversalFunction(input, delta, layer.activationFunction.derivative)
     delta :*= nextDelta
   }
 
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
-
-  override def weights(): Vector = Vectors.dense(emptyWeights)
-}
-
-/**
- * Fabric of functional layer models
- */
-private[ann] object FunctionalLayerModel {
-  def apply(layer: FunctionalLayer): FunctionalLayerModel =
-    new FunctionalLayerModel(layer.activationFunction)
 }
 
 /**
  * Trait for the artificial neural network (ANN) topology properties
  */
 private[ann] trait Topology extends Serializable {
-  def getInstance(weights: Vector): TopologyModel
-  def getInstance(seed: Long): TopologyModel
+  def model(weights: Vector): TopologyModel
+  def model(seed: Long): TopologyModel
 }
 
 /**
  * Trait for ANN topology model
  */
 private[ann] trait TopologyModel extends Serializable {
+
+  val weights: Vector
   /**
    * Array of layers
    */
@@ -401,12 +344,6 @@ private[ann] trait TopologyModel extends Serializable {
    */
   def computeGradient(data: BDM[Double], target: BDM[Double], cumGradient: Vector,
                       blockSize: Int): Double
-
-  /**
-   * Returns the weights of the ANN
-   * @return weights
-   */
-  def weights(): Vector
 }
 
 /**
@@ -414,9 +351,9 @@ private[ann] trait TopologyModel extends Serializable {
  * @param layers
  */
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
-  override def getInstance(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
+  override def model(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
 
-  override def getInstance(seed: Long): TopologyModel = FeedForwardModel(this, seed)
+  override def model(seed: Long): TopologyModel = FeedForwardModel(this, seed)
 }
 
 /**
@@ -464,13 +401,21 @@ private[ml] object FeedForwardTopology {
 /**
  * Model of Feed Forward Neural Network.
  * Implements forward, gradient computation and can return weights in vector format.
- * @param layerModels models of layers
- * @param layers topology of the network
+ * @param weights network weights
+ * @param topology network topology
  */
 private[ml] class FeedForwardModel private(
-    val layerModels: Array[LayerModel],
-    val layers: Array[Layer]) extends TopologyModel {
+    val weights: Vector,
+    val topology: FeedForwardTopology) extends TopologyModel {
 
+  val layers = topology.layers
+  val layerModels = new Array[LayerModel](layers.length)
+  private var offset = 0
+  for (i <- 0 until layers.length) {
+    layerModels(i) = layers(i).model(
+      new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
+    offset += layers(i).weightSize
+  }
   private var outputs: Array[BDM[Double]] = null
   private var deltas: Array[BDM[Double]] = null
 
@@ -536,23 +481,6 @@ private[ml] class FeedForwardModel private(
     loss
   }
 
-  // TODO: do we really need to copy the weights? they should be read-only
-  override def weights(): Vector = {
-    // TODO: can copy the whole vector
-    var size = 0
-    for (i <- 0 until layerModels.length) {
-      size += layers(i).weightSize
-    }
-    val array = new Array[Double](size)
-    var offset = 0
-    for (i <- 0 until layerModels.length) {
-      val layerWeights = layerModels(i).weights().toArray
-      System.arraycopy(layerWeights, 0, array, offset, layerWeights.length)
-      offset += layerWeights.length
-    }
-    Vectors.dense(array)
-  }
-
   override def predict(data: Vector): Vector = {
     val size = data.size
     val result = forward(new BDM[Double](size, 1, data.toArray))
@@ -573,15 +501,7 @@ private[ann] object FeedForwardModel {
    */
   def apply(topology: FeedForwardTopology, weights: Vector): FeedForwardModel = {
     // TODO: check that weights size is equal to sum of layers sizes
-    val layers = topology.layers
-    val layerModels = new Array[LayerModel](layers.length)
-    var offset = 0
-    for (i <- 0 until layers.length) {
-      layerModels(i) = layers(i).model(
-        new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
-      offset += layers(i).weightSize
-    }
-    new FeedForwardModel(layerModels, layers)
+    new FeedForwardModel(weights, topology)
   }
 
   /**
@@ -605,7 +525,7 @@ private[ann] object FeedForwardModel {
         initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
       offset += layers(i).weightSize
     }
-    new FeedForwardModel(layerModels, layers)
+    new FeedForwardModel(Vectors.fromBreeze(weights), topology)
   }
 }
 
@@ -628,7 +548,7 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
     weights: Vector,
     cumGradient: Vector): Double = {
     val (input, target, realBatchSize) = dataStacker.unstack(data)
-    val model = topology.getInstance(weights)
+    val model = topology.model(weights)
     model.computeGradient(input, target, cumGradient, realBatchSize)
   }
 }
@@ -837,9 +757,15 @@ private[ml] class FeedForwardTrainer(
    * @return model
    */
   def train(data: RDD[(Vector, Vector)]): TopologyModel = {
-    val w = if (getWeights == null) topology.getInstance(_seed).weights() else getWeights
+    val w = if (getWeights == null) {
+      // TODO: will make a copy if vector is a subvector of BDV (see Vectors code)
+      topology.model(_seed).weights
+    } else {
+      getWeights
+    }
+    // TODO: deprecate standard optimizer because it needs Vector
     val newWeights = optimizer.optimize(dataStacker.stack(data), w)
-    topology.getInstance(newWeights)
+    topology.model(newWeights)
   }
 
 }
