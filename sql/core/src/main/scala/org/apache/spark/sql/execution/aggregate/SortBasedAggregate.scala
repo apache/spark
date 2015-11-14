@@ -69,7 +69,7 @@ case class SortBasedAggregate(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
