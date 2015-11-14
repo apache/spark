@@ -2222,11 +2222,6 @@ setMethod("str",
           signature(object = "DataFrame"),
           function(object) {
 
-            # A synonym for easily concatenating strings
-            "%++%" <- function(x, y) {
-              paste(x, y, sep = "")
-            }
-
             # TODO: These could be made global parameters, though in R it's not the case
             DEFAULT_HEAD_ROWS <- 6
             MAX_CHAR_PER_ROW <- 120
@@ -2250,10 +2245,10 @@ setMethod("str",
             # The number of observations will be displayed only if the number
             # of rows of the dataset has already been cached.
             if (!is.null(cachedCount)) {
-              cat("'" %++% class(object) %++% "': " %++% cachedCount %++% " obs. of " %++%
-                    length(names) %++% " variables:\n")
+              cat(paste0("'", class(object), "': ", cachedCount, " obs. of ",
+                    length(names), " variables:\n"))
             } else {
-              cat("'" %++% class(object) %++% "': " %++% length(names) %++% " variables:\n")
+              cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
             }
 
             # Whether the ... should be printed at the end of each row
@@ -2270,7 +2265,7 @@ setMethod("str",
 
                 # Get the first elements for each column
                 if (types[i] == "chr") {
-                  firstElements <- paste("\"" %++% dataFrame[,i] %++% "\"", collapse = " ")
+                  firstElements <- paste(paste0("\"", dataFrame[,i], "\""), collapse = " ")
                 } else {
                   firstElements <- paste(dataFrame[,i], collapse = " ")
                 }
@@ -2287,8 +2282,8 @@ setMethod("str",
 
                 # Concatenate the colnames, coltypes, and first
                 # elements of each column
-                line <- " $ " %++% names[i] %++% spaces %++% ": " %++%
-                  dataType %++% " " %++% firstElements
+                line <- paste0(" $ ", names[i], spaces, ": ",
+                  dataType, " ",firstElements)
 
                 # Chop off extra characters if this is too long
                 cat(substr(line, 1, MAX_CHAR_PER_ROW))
@@ -2299,7 +2294,7 @@ setMethod("str",
               }
 
               if (ncol(dataFrame) < ncol(object)) {
-                cat("\nDisplaying first " %++% ncol(dataFrame) %++% " columns only.")
+                cat(paste0("\nDisplaying first ", ncol(dataFrame), " columns only."))
               }
             }
           })
