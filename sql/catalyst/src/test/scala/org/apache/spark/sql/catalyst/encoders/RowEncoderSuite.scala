@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
-  override def hashCode = 41 * (41 + x.toInt) + y.toInt
+  override def hashCode: Int = 41 * (41 + x.toInt) + y.toInt
   override def equals(that: Any): Boolean = {
     if (that.isInstanceOf[ExamplePoint]) {
       val e = that.asInstanceOf[ExamplePoint]
