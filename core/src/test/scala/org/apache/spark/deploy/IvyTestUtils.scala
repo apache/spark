@@ -30,7 +30,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.ivy.core.settings.IvySettings
 
-import org.apache.spark.TestUtils.{createCompiledClasses, JavaSourceFromString}
+import org.apache.spark.TestUtils.{createCompiledClass, JavaSourceFromString}
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 
 private[deploy] object IvyTestUtils {
@@ -145,7 +145,7 @@ private[deploy] object IvyTestUtils {
       """.stripMargin
     val sourceFile =
       new JavaSourceFromString(new File(dir, className).getAbsolutePath, contents)
-    createCompiledClasses(className, dir, sourceFile, Seq.empty).head
+    createCompiledClass(className, dir, sourceFile, Seq.empty)
   }
 
   private def createDescriptor(
