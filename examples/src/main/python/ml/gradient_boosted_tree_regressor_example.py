@@ -66,8 +66,10 @@ if __name__ == "__main__":
     evaluator = RegressionEvaluator(
         labelCol="label", predictionCol="prediction", metricName="rmse")
     rmse = evaluator.evaluate(predictions)
-    print "Root Mean Squared Error (RMSE) on test data = %g" % rmse
+    print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
     
     gbtModel = model.stages[1]
-    print gbtModel # summary only
+    print(gbtModel) # summary only
     # $example off$
+
+    sc.stop()

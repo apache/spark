@@ -69,8 +69,10 @@ if __name__ == "__main__":
     evaluator = MulticlassClassificationEvaluator(
         labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
     accuracy = evaluator.evaluate(predictions)
-    print "Test Error = %g" % (1.0 - accuracy)
+    print("Test Error = %g" % (1.0 - accuracy))
     
     rfModel = model.stages[2]
-    print rfModel # summary only
+    print(rfModel) # summary only
     # $example off$
+
+    sc.stop()
