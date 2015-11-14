@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessorCheckpointer, IRecordProcessor, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 import com.amazonaws.services.kinesis.model.Record
 
@@ -31,8 +31,7 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkEnv}
-
+import org.apache.spark.Logging
 
 private[kinesis]
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
@@ -80,7 +79,7 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
  *                             the credentials
  */
-private[kinesis] class KinesisReceiver(
+private[kinesis] class KinesisReceiver[T](
     val streamName: String,
     endpointUrl: String,
     regionName: String,
@@ -88,8 +87,9 @@ private[kinesis] class KinesisReceiver(
     checkpointAppName: String,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
-    awsCredentialsOption: Option[SerializableAWSCredentials]
-  ) extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
+    messageHandler: Record => T,
+    awsCredentialsOption: Option[SerializableAWSCredentials])
+  extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
    * =================================================================================
@@ -127,6 +127,11 @@ private[kinesis] class KinesisReceiver(
     with mutable.SynchronizedMap[StreamBlockId, SequenceNumberRanges]
 
   /**
+   * The centralized kinesisCheckpointer that checkpoints based on the given checkpointInterval.
+   */
+  @volatile private var kinesisCheckpointer: KinesisCheckpointer = null
+
+  /**
    * Latest sequence number ranges that have been stored successfully.
    * This is used for checkpointing through KCL */
   private val shardIdToLatestStoredSeqNum = new mutable.HashMap[String, String]
@@ -140,6 +145,7 @@ private[kinesis] class KinesisReceiver(
 
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
+    kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
     // KCL config instance
     val awsCredProvider = resolveAWSCredentialsProvider()
     val kinesisClientLibConfiguration =
@@ -156,8 +162,8 @@ private[kinesis] class KinesisReceiver(
     *  We're using our custom KinesisRecordProcessor in this case.
     */
     val recordProcessorFactory = new IRecordProcessorFactory {
-      override def createProcessor: IRecordProcessor = new KinesisRecordProcessor(receiver,
-        workerId, new KinesisCheckpointState(checkpointInterval))
+      override def createProcessor: IRecordProcessor =
+        new KinesisRecordProcessor(receiver, workerId)
     }
 
     worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
@@ -197,27 +203,44 @@ private[kinesis] class KinesisReceiver(
       logInfo(s"Stopped receiver for workerId $workerId")
     }
     workerId = null
+    if (kinesisCheckpointer != null) {
+      kinesisCheckpointer.shutdown()
+      kinesisCheckpointer = null
+    }
   }
 
   /** Add records of the given shard to the current block being generated */
   private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
     if (records.size > 0) {
-      val dataIterator = records.iterator().asScala.map { record =>
-        val byteBuffer = record.getData()
-        val byteArray = new Array[Byte](byteBuffer.remaining())
-        byteBuffer.get(byteArray)
-        byteArray
-      }
+      val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
-
     }
   }
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
   private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
     shardIdToLatestStoredSeqNum.get(shardId)
+  }
+
+  /**
+   * Set the checkpointer that will be used to checkpoint sequence numbers to DynamoDB for the
+   * given shardId.
+   */
+  def setCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.setCheckpointer(shardId, checkpointer)
+  }
+
+  /**
+   * Remove the checkpointer for the given shardId. The provided checkpointer will be used to
+   * checkpoint one last time for the given shard. If `checkpointer` is `null`, then we will not
+   * checkpoint.
+   */
+  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.removeCheckpointer(shardId, checkpointer)
   }
 
   /**
@@ -240,7 +263,7 @@ private[kinesis] class KinesisReceiver(
 
   /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
-      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[Array[Byte]]): Unit = {
+      blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
     val rangesToReportOption = blockIdToSeqNumRanges.remove(blockId)
     if (rangesToReportOption.isEmpty) {
       stop("Error while storing block into Spark, could not find sequence number ranges " +
@@ -325,7 +348,7 @@ private[kinesis] class KinesisReceiver(
     /** Callback method called when a block is ready to be pushed / stored. */
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
       storeBlockWithRanges(blockId,
-        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[Array[Byte]]])
+        arrayBuffer.asInstanceOf[mutable.ArrayBuffer[T]])
     }
 
     /** Callback called in case of any error in internal of the BlockGenerator */

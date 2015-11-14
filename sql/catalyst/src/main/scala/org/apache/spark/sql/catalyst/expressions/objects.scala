@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 
 import scala.language.existentials
 
@@ -456,7 +457,13 @@ case class MapObjects(
   }
 }
 
-case class CreateRow(children: Seq[Expression]) extends Expression {
+/**
+ * Constructs a new external row, using the result of evaluating the specified expressions
+ * as content.
+ *
+ * @param children A list of expression to use as content of the external row.
+ */
+case class CreateExternalRow(children: Seq[Expression]) extends Expression {
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false
@@ -482,5 +489,26 @@ case class CreateRow(children: Seq[Expression]) extends Expression {
          """
       }.mkString("\n") +
       s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+  }
+}
+
+case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
+  extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val row = child.gen(ctx)
+    s"""
+      ${row.code}
+      final boolean ${ev.isNull} = ${row.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
+      }
+    """
   }
 }
