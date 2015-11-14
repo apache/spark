@@ -256,9 +256,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       { statement =>
 
         val queries = Seq(
-            s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
-            "SET hive.cli.print.header=true"
-            )
+          s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
+          "SET hive.cli.print.header=true"
+        )
 
         queries.map(statement.execute)
         val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
@@ -461,6 +461,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement { statement =>
+      statement.executeQuery("SET spark.sql.hive.thriftServer.async=true")
+
       val jarPath = "../hive/src/test/resources/TestUDTF.jar"
       val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
