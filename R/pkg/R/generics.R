@@ -388,7 +388,6 @@ setGeneric("subtractByKey",
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
 
-
 ####################  DataFrame Methods ########################
 
 #' @rdname agg
@@ -398,6 +397,18 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @rdname arrange
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
+
+#' @rdname as.data.frame
+#' @export
+setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
 
 #' @rdname schema
 #' @export
@@ -578,6 +589,10 @@ setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 #' @rdname filter
 #' @export
 setGeneric("where", function(x, condition) { standardGeneric("where") })
+
+#' @rdname with
+#' @export
+setGeneric("with")
 
 #' @rdname withColumn
 #' @export
@@ -971,6 +986,9 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
 
+#' @export
+setGeneric("str")
+
 #' @rdname substring_index
 #' @export
 setGeneric("substring_index", function(x, delim, count) { standardGeneric("substring_index") })
@@ -1034,22 +1052,3 @@ setGeneric("glm")
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
-
-#' @rdname as.data.frame
-#' @export
-setGeneric("as.data.frame")
-
-#' @rdname attach
-#' @export
-setGeneric("attach")
-
-#' @rdname with
-#' @export
-setGeneric("with")
-
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
-
-#' @export
-setGeneric("str")
