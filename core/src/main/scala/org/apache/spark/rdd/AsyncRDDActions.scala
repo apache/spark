@@ -79,8 +79,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     def continue(partsScanned : Int) : Future[Seq[T]] =
       if (results.size >= num || partsScanned >= totalParts) {
         Future.successful(results.toSeq)
-      }
-      else {
+      } else {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1
@@ -107,7 +106,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
           Unit)
-        job.flatMap {case _ =>
+        job.flatMap {_ =>
           buf.foreach(results ++= _.take(num - results.size))
           continue(partsScanned + numPartsToTry)
         }

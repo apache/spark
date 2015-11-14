@@ -139,7 +139,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   override def isCancelled: Boolean = _cancelled
 
   override def value: Option[Try[T]] =
-    jobWaiter.completionFuture.value.map {res => res.map {_ => resultFunc}}
+    jobWaiter.completionFuture.value.map {res => res.map(_ => resultFunc)}
 
   def jobIds: Seq[Int] = Seq(jobWaiter.jobId)
 }
@@ -163,7 +163,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
   override def cancel(): Unit = synchronized {
     _cancelled = true
     p.tryFailure(new SparkException("Action has been cancelled"))
-    subActions.foreach {_.cancel()}
+    subActions.foreach(_.cancel())
   }
 
   /**
@@ -219,7 +219,7 @@ class ComplexFutureAction[T] extends FutureAction[T] {
 
   override def value: Option[Try[T]] = p.future.value
 
-  def jobIds: Seq[Int] = subActions flatMap {_.jobIds}
+  def jobIds: Seq[Int] = subActions.flatMap(_.jobIds)
 
 }
 
