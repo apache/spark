@@ -162,8 +162,8 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "sorting by unsupported column types",
-    listRelation.orderBy('list.asc),
-    "sort" :: "type" :: "array<int>" :: Nil)
+    mapRelation.orderBy('map.asc),
+    "sort" :: "type" :: "map<int,int>" :: Nil)
 
   errorTest(
     "non-boolean filters",

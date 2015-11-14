@@ -129,6 +129,7 @@ object RowOrdering {
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
+    case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
     case _ => false
   }
 
