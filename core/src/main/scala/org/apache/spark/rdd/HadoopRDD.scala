@@ -256,6 +256,7 @@ class HadoopRDD[K, V](
 
       override def close() {
         if (reader != null) {
+          SqlNewHadoopRDD.unsetInputFileName()
           // Close the reader and release it. Note: it's very important that we don't close the
           // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
           // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
