@@ -19,7 +19,6 @@ package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicReference;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
