@@ -1294,6 +1294,12 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "DataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")
+
+  # Test base::rbind is working
+  expect_equal(length(rbind(1:4, c = 2, a = 10, 10, deparse.level = 0)), 16)
+
+  # Test base::intersect is working
+  expect_equal(length(intersect(1:20, 3:23)), 18)
 })
 
 test_that("withColumn() and withColumnRenamed()", {
@@ -1523,6 +1529,9 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
   result <- corr(df, "singles", "doubles", "pearson")
   expect_true(abs(result - 1.0) < 1e-12)
+
+  # Test stats::cov is working
+  expected_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
 })
 
 test_that("freqItems() on a DataFrame", {
