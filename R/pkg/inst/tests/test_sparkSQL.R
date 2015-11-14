@@ -433,6 +433,10 @@ test_that("table() returns a new DataFrame", {
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
   dropTempTable(sqlContext, "table1")
+
+  # Test base::table is working
+  a <- letters[1:3]
+  expect_equal(class(table(a, sample(a))), "table")
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -673,6 +677,9 @@ test_that("sample on a DataFrame", {
   # Also test sample_frac
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
+
+  # Test base::sample is working
+  expect_equal(length(sample(1:12)), 12)
 })
 
 test_that("select operators", {
@@ -888,6 +895,9 @@ test_that("column functions", {
   expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
+
+  # Test that stats::lag is working
+  expect_equal(length(lag(ldeaths, 12)), 72)
 })
 #
 test_that("column binary mathfunctions", {
@@ -1365,6 +1375,9 @@ test_that("describe() and summarize() on a DataFrame", {
   stats2 <- summary(df)
   expect_equal(collect(stats2)[4, "name"], "Andy")
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # Test base::summary is working
+  expect_equal(length(summary(attenu, digits = 4)), 35)
 })
 
 test_that("dropna() and na.omit() on a DataFrame", {
