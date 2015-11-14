@@ -209,6 +209,12 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1, result.length);
   }
 
+  @Test
+  public void testCreateStructTypeFromList(){
+    StructType schema = StructType$.MODULE$.apply(Arrays.asList(createStructField("i", IntegerType, true)));
+    Assert.assertEquals(0, schema.fieldIndex("i"));
+  }
+
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
     @Override
     public int compare(Row row1, Row row2) {
