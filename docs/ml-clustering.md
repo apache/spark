@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Multilayer perceptron classifier - ML
+title: Clustering - ML
 displayTitle: <a href="ml-guide.html">ML</a> - Clustering
 ---
 
