@@ -35,7 +35,7 @@ import org.apache.spark.util.collection.ExternalSorter
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
- * sorted by a reference implementation ([[ReferenceSort]] defined at the bottom of this file).
+ * sorted by a reference implementation ([[ReferenceSort]]).
  */
 class SortSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
@@ -112,38 +112,4 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
       )
     }
   }
-}
-
-
-/**
- * A reference sort implementation used to compare against our normal sort.
- */
-case class ReferenceSort(
-    sortOrder: Seq[SortOrder],
-    global: Boolean,
-    child: SparkPlan)
-  extends UnaryNode {
-
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
-      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
-        TaskContext.get(), ordering = Some(ordering))
-      sorter.insertAll(iterator.map(r => (r.copy(), null)))
-      val baseIterator = sorter.iterator.map(_._1)
-      val context = TaskContext.get()
-      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
-      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-      context.internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
-      CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
-    }, preservesPartitioning = true)
-  }
-
-  override def output: Seq[Attribute] = child.output
-
-  override def outputOrdering: Seq[SortOrder] = sortOrder
 }
