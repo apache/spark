@@ -34,7 +34,7 @@ import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatu
 import org.apache.spark.storage._
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
-import org.roaringbitmap.RoaringBitmap
+import org.roaringbitmap._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -363,6 +363,11 @@ private[serializer] object KryoSerializer {
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
     classOf[RoaringBitmap],
+    classOf[RoaringArray],
+    classOf[Array[Container]],
+    classOf[ArrayContainer],
+    classOf[BitmapContainer],
+    classOf[RunContainer],
     classOf[BitSet],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],

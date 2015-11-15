@@ -29,10 +29,29 @@ import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.storage.BlockManagerId
+import org.roaringbitmap.RoaringBitmap
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
+
+  test("Roaring") {
+    val conf = new SparkConf(false)
+    conf.set("spark.kryo.registrationRequired", "true")
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+    val b = new RoaringBitmap()
+    check(b)
+    for (i <- 1 to 1<<16 by 2) {
+      b.add(i)
+    }
+    check(b)
+    b.add(1, 1<<16)
+    b.runOptimize()
+    check(b)
+  }
 
   test("SPARK-7392 configuration limits") {
     val kryoBufferProperty = "spark.kryoserializer.buffer"
