@@ -167,6 +167,17 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_trigger_dagrun(self):
+        def trigga(context, obj):
+            if True:
+                return obj
+        t = operators.TriggerDagRunOperator(
+            task_id='test_trigger_dagrun',
+            dag_id='example_bash_operator',
+            python_callable=trigga,
+            dag=self.dag)
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_dryrun(self):
         t = operators.BashOperator(
             task_id='time_sensor_check',

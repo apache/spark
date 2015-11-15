@@ -48,6 +48,7 @@ Operator API
     :members:
         BashOperator,
         BranchPythonOperator,
+        TriggerDagRunOperator,
         DummyOperator,
         EmailOperator,
         ExternalTaskSensor,
