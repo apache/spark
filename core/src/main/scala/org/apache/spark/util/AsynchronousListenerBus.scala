@@ -57,7 +57,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   // A counter that represents the number of events produced and consumed in the queue
   private val eventLock = new Semaphore(0)
   // limit on the number of events to process before exiting. -1 means no limit
-  private val eventLimit = -1
+  private var eventLimit = -1
 
   private val listenerThread = new Thread(name) {
     setDaemon(true)
