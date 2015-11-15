@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.catalyst.encoders.Encoder
 
 abstract class QueryTest extends PlanTest {
 
@@ -83,18 +82,21 @@ abstract class QueryTest extends PlanTest {
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.encoder}
-             |${ds.encoder.constructExpression.treeString}
+             |${ds.resolvedTEncoder}
+             |${ds.resolvedTEncoder.fromRowExpression.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
 
     if (decoded != expectedAnswer.toSet) {
+      val expected = expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted
+      val actual = decoded.toSet.toSeq.map((a: Any) => a.toString).sorted
+
+      val comparision = sideBySide("expected" +: expected, "spark" +: actual).mkString("\n")
       fail(
         s"""Decoded objects do not match expected objects:
-           |Expected: ${expectedAnswer.toSet.toSeq.map((a: Any) => a.toString).sorted}
-            |Actual ${decoded.toSet.toSeq.map((a: Any) => a.toString).sorted}
-            |${ds.encoder.constructExpression.treeString}
+            |$comparision
+            |${ds.resolvedTEncoder.fromRowExpression.treeString}
          """.stripMargin)
     }
   }
