@@ -555,31 +555,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("monotonicallyIncreasingId") {
-    {
-      // Make sure we have 2 partitions, each with 2 records.
-      val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
-        Iterator(Tuple1(1), Tuple1(2))
-      }.toDF("a")
-      checkAnswer(
-        df.select(monotonicallyIncreasingId()),
-        Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
-      )
-    }
-
-    {
-      withTempTable("monotonicallyIncreasingId") {
-        // Make sure we have 2 partitions, each with 2 records.
-        val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
-          Iterator(Tuple1(1), Tuple1(2))
-        }.toDF("a")
-        df.registerTempTable("monotonicallyIncreasingId")
-        checkAnswer(
-          sql("select monotonically_increasing_id() from monotonicallyIncreasingId"),
-          Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
-        )
-      }
-
-    }
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
+      Iterator(Tuple1(1), Tuple1(2))
+    }.toDF("a")
+    checkAnswer(
+      df.select(monotonicallyIncreasingId()),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
+    checkAnswer(
+      df.select(expr("monotonically_increasing_id()")),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
   }
 
   test("sparkPartitionId") {
