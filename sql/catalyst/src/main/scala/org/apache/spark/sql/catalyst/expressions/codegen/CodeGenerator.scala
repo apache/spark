@@ -274,7 +274,6 @@ class CodeGenContext {
       val elementB = freshName("elementB")
       val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
-      val i = freshName("i")
       val minLength = freshName("minLength")
       val funcCode: String =
         s"""
@@ -282,14 +281,9 @@ class CodeGenContext {
             int lengthA = a.numElements();
             int lengthB = b.numElements();
             int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
-            boolean $isNullA;
-            boolean $isNullB;
-            ${javaType(elementType)} $elementA;
-            ${javaType(elementType)} $elementB;
-            for (int $i = 0; $i < $minLength; $i++) {
-              $isNullA = a.isNullAt($i);
-              $isNullB = b.isNullAt($i);
-
+            for (int i = 0; i < $minLength; i++) {
+              boolean $isNullA = a.isNullAt(i);
+              boolean $isNullB = b.isNullAt(i);
               if ($isNullA && $isNullB) {
                 // Nothing
               } else if ($isNullA) {
@@ -297,8 +291,8 @@ class CodeGenContext {
               } else if ($isNullB) {
                 return 1;
               } else {
-                $elementA = ${getValue("a", elementType, i)};
-                $elementB = ${getValue("b", elementType, i)};
+                ${javaType(elementType)} $elementA = ${getValue("a", elementType, "i")};
+                ${javaType(elementType)} $elementB = ${getValue("b", elementType, "i")};
                 int comp = ${genComp(elementType, elementA, elementB)};
                 if (comp != 0) {
                   return comp;
