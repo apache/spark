@@ -56,19 +56,24 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
 
   // A counter that represents the number of events produced and consumed in the queue
   private val eventLock = new Semaphore(0)
+  // limit on the number of events to process before exiting. -1 means no limit
+  private val eventLimit = -1
 
   private val listenerThread = new Thread(name) {
     setDaemon(true)
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
-      while (true) {
+      while (eventLimit != 0) {
         eventLock.acquire()
         self.synchronized {
           processingEvent = true
         }
         try {
           if (stopped.get()) {
-            // Get out of the while loop and shutdown the daemon thread
-            return
+            eventLimit = eventQueue.size
+            if (eventLimit == 0) {
+              // Get out of the while loop and shutdown the daemon thread
+              return
+            }
           }
           val event = eventQueue.poll
           assert(event != null, "event queue was empty but the listener bus was not stopped")
