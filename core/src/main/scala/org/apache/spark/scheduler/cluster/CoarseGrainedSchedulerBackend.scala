@@ -276,11 +276,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (executorIsAlive(executorId)) {
           executorsPendingLossReason += executorId
           true
-        } else if (executorsPendingToRemove.contains(executorId)) {
-          // Returns true for explicitly killed executors, we also need to get pending loss reasons
-          true
         } else {
-          false
+          // Returns true for explicitly killed executors, we also need to get pending loss reasons;
+          // For others return false.
+          executorsPendingToRemove.contains(executorId)
         }
       }
 

@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
@@ -96,10 +96,9 @@ private[yarn] class YarnAllocator(
   // was lost.
   private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
 
-  // Executor loss reason for explicitly released executors, it will be added when executor loss
-  // reason is got from AM-RM call, and be removed after query this loss reason.
-  private val releasedExecutorLossReasons =
-    new ConcurrentHashMap[String, ExecutorLossReason]
+  // Maintain loss reasons for already released executors, it will be added when executor loss
+  // reason is got from AM-RM call, and be removed after querying this loss reason.
+  private val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
@@ -525,7 +524,7 @@ private[yarn] class YarnAllocator(
 
           case None =>
             // We cannot find executor for pending reasons. This is because completed container
-            // process is before than querying pending result. We should store it for later query.
+            // is processed before querying pending result. We should store it for later query.
             // This is usually happened when explicitly killing a container, the result will be
             // returned in one AM-RM communication. So query RPC will be later than this completed
             // container process.
@@ -551,13 +550,14 @@ private[yarn] class YarnAllocator(
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
-    } else if (releasedExecutorLossReasons.get(eid) != null) {
+    } else if (releasedExecutorLossReasons.contains(eid)) {
       // Executor is already released explicitly before getting the loss reason, so directly send
       // the pre-stored lost reason
-      context.reply(releasedExecutorLossReasons.get(eid))
-      releasedExecutorLossReasons.remove(eid)
+      context.reply(releasedExecutorLossReasons.remove(eid).get)
     } else {
       logWarning(s"Tried to get the loss reason for non-existent executor $eid")
+      context.sendFailure(
+        new SparkException(s"Fail to find loss reason for non-existent executor $eid"))
     }
   }
 
