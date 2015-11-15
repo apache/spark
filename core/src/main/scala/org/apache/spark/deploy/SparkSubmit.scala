@@ -39,7 +39,7 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
 
-import org.apache.spark.{SparkUserAppException, SPARK_VERSION}
+import org.apache.spark.{SparkException, SparkUserAppException, SPARK_VERSION}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -521,8 +521,19 @@ object SparkSubmit {
         sysProps.put("spark.yarn.isPython", "true")
       }
       if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when the keytab is specified")
-        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        require(args.keytab != null, "Keytab must be specified when principal is specified")
+        if (!new File(args.keytab).exists()) {
+          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+        } else {
+          // Add keytab and principal configurations in sysProps to make them available
+          // for later use; e.g. in spark sql, the isolated class loader used to talk
+          // to HiveMetastore will use these settings. They will be set as Java system
+          // properties and then loaded by SparkConf
+          sysProps.put("spark.yarn.keytab", args.keytab)
+          sysProps.put("spark.yarn.principal", args.principal)
+
+          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        }
       }
     }
 
