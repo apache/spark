@@ -56,12 +56,10 @@ class KafkaRDD[
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
   override def getPartitions: Array[Partition] = {
-    offsetRanges
-      .filter(_.count() > 0)
-      .zipWithIndex.map { case (o, i) =>
+    offsetRanges.zipWithIndex.filter(_._1.count() > 0).map { case (o, i) =>
         val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
-      }.toArray
+    }.toArray
   }
 
   override def count(): Long = offsetRanges.map(_.count).sum
