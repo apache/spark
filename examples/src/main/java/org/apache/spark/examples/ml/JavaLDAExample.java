@@ -45,53 +45,53 @@ import java.util.regex.Pattern;
  */
 public class JavaLDAExample {
 
-    private static class ParseVector implements Function<String, Row> {
-        private static final Pattern separator = Pattern.compile(" ");
+  private static class ParseVector implements Function<String, Row> {
+    private static final Pattern separator = Pattern.compile(" ");
 
-        @Override
-        public Row call(String line) {
-            String[] tok = separator.split(line);
-            double[] point = new double[tok.length];
-            for (int i = 0; i < tok.length; ++i) {
-                point[i] = Double.parseDouble(tok[i]);
-            }
-            Vector[] points = {Vectors.dense(point)};
-            return new GenericRow(points);
-        }
+    @Override
+    public Row call(String line) {
+      String[] tok = separator.split(line);
+      double[] point = new double[tok.length];
+      for (int i = 0; i < tok.length; ++i) {
+        point[i] = Double.parseDouble(tok[i]);
+      }
+      Vector[] points = {Vectors.dense(point)};
+      return new GenericRow(points);
     }
+  }
 
-    public static void main(String[] args) {
-        if (args.length != 2) {
-            System.err.println("Usage: ml.JavaLDAExample <file> <k>");
-            System.exit(1);
-        }
-        String inputFile = args[0];
-        int k = Integer.parseInt(args[1]);
-
-        // Parses the arguments
-        SparkConf conf = new SparkConf().setAppName("JavaLDAExample");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
-
-        // Loads data
-        JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParseVector());
-        StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
-        StructType schema = new StructType(fields);
-        DataFrame dataset = sqlContext.createDataFrame(points, schema);
-
-        // Trains a LDA model
-        LDA lda = new LDA()
-                .setK(k)
-                .setMaxIter(10);
-        LDAModel model = lda.fit(dataset);
-
-        System.out.println(model.logLikelihood(dataset));
-        System.out.println(model.logPerplexity(dataset));
-
-        // Shows the result
-        DataFrame topics = model.describeTopics(3);
-        topics.show(false);
-
-        jsc.stop();
+  public static void main(String[] args) {
+    if (args.length != 2) {
+      System.err.println("Usage: ml.JavaLDAExample <file> <k>");
+      System.exit(1);
     }
+    String inputFile = args[0];
+    int k = Integer.parseInt(args[1]);
+
+    // Parses the arguments
+    SparkConf conf = new SparkConf().setAppName("JavaLDAExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext sqlContext = new SQLContext(jsc);
+
+    // Loads data
+    JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParseVector());
+    StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
+    StructType schema = new StructType(fields);
+    DataFrame dataset = sqlContext.createDataFrame(points, schema);
+
+    // Trains a LDA model
+    LDA lda = new LDA()
+      .setK(k)
+      .setMaxIter(10);
+    LDAModel model = lda.fit(dataset);
+
+    System.out.println(model.logLikelihood(dataset));
+    System.out.println(model.logPerplexity(dataset));
+
+    // Shows the result
+    DataFrame topics = model.describeTopics(3);
+    topics.show(false);
+
+    jsc.stop();
+  }
 }

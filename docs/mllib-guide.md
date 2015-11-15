@@ -73,6 +73,7 @@ concepts. It also contains sections on using algorithms within the Pipelines API
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)
+* [Clustering](ml-clustering.html)
 
 # Dependencies
 
