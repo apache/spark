@@ -137,32 +137,14 @@ trait CheckAnalysis {
               case e => e.children.foreach(checkValidAggregateExpression)
             }
 
-            def checkSupportedGroupingDataType(
-                expressionString: String,
-                dataType: DataType): Unit = dataType match {
-              case BinaryType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in binary type or its inner field is " +
-                  s"in binary type")
-              case a: ArrayType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in array type or its inner field is " +
-                  s"in array type")
-              case m: MapType =>
-                failAnalysis(s"expression $expressionString cannot be used in " +
-                  s"grouping expression because it is in map type or its inner field is " +
-                  s"in map type")
-              case s: StructType =>
-                s.fields.foreach { f =>
-                  checkSupportedGroupingDataType(expressionString, f.dataType)
-                }
-              case udt: UserDefinedType[_] =>
-                checkSupportedGroupingDataType(expressionString, udt.sqlType)
-              case _ => // OK
-            }
-
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              checkSupportedGroupingDataType(expr.prettyString, expr.dataType)
+              // Check if the data type of expr is orderable.
+              if (!RowOrdering.isOrderable(expr.dataType)) {
+                failAnalysis(
+                  s"expression ${expr.prettyString} cannot be used as a grouping expression " +
+                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"data type.")
+              }
 
               if (!expr.deterministic) {
                 // This is just a sanity check, our analysis rule PullOutNondeterministic should

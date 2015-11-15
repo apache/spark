@@ -267,6 +267,49 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
+    case array: ArrayType =>
+      val elementType = array.elementType
+      val elementA = freshName("elementA")
+      val isNullA = freshName("isNullA")
+      val elementB = freshName("elementB")
+      val isNullB = freshName("isNullB")
+      val compareFunc = freshName("compareArray")
+      val minLength = freshName("minLength")
+      val funcCode: String =
+        s"""
+          public int $compareFunc(ArrayData a, ArrayData b) {
+            int lengthA = a.numElements();
+            int lengthB = b.numElements();
+            int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
+            for (int i = 0; i < $minLength; i++) {
+              boolean $isNullA = a.isNullAt(i);
+              boolean $isNullB = b.isNullAt(i);
+              if ($isNullA && $isNullB) {
+                // Nothing
+              } else if ($isNullA) {
+                return -1;
+              } else if ($isNullB) {
+                return 1;
+              } else {
+                ${javaType(elementType)} $elementA = ${getValue("a", elementType, "i")};
+                ${javaType(elementType)} $elementB = ${getValue("b", elementType, "i")};
+                int comp = ${genComp(elementType, elementA, elementB)};
+                if (comp != 0) {
+                  return comp;
+                }
+              }
+            }
+
+            if (lengthA < lengthB) {
+              return -1;
+            } else if (lengthA > lengthB) {
+              return 1;
+            }
+            return 0;
+          }
+        """
+      addNewFunction(compareFunc, funcCode)
+      s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
