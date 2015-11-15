@@ -354,60 +354,72 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     // EXTERNAL OpenCSVSerde table pointing to LOCATION
 
     val location1 = Utils.getSparkClassLoader.getResource("data/files/csv_table").getFile
-    sql(s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
-         ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
-         WITH SERDEPROPERTIES (
-           \"separatorChar\" = \",\",
-           \"quoteChar\"     = \"\\\"\",
-           \"escapeChar\"    = \"\\\\\")
-         LOCATION '$location1'""")
+    sql(
+      s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+        ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        WITH SERDEPROPERTIES (
+          \"separatorChar\" = \",\",
+          \"quoteChar\"     = \"\\\"\",
+          \"escapeChar\"    = \"\\\\\")
+        LOCATION '$location1'
+      """)
 
-    val answer1 = sql("select input_file_name() from csv_table").head().getString(0)
+    val answer1 =
+      sql("SELECT input_file_name() FROM csv_table").head().getString(0)
     assert(answer1.contains(location1))
-    assert(sql("select input_file_name() from csv_table").distinct().collect().length == 2)
+
+    val count1 = sql("SELECT input_file_name() FROM csv_table").distinct().count()
+    assert(count1 == 2)
     sql("DROP TABLE csv_table")
 
     // EXTERNAL pointing to LOCATION
 
     val location2 = Utils.getSparkClassLoader.getResource("data/files/external_t5").getFile
-    sql(s"""CREATE EXTERNAL table external_t5 (c1 int, c2 int)
-        row format delimited fields terminated by ','
-        location '$location2'""")
+    sql(
+      s"""CREATE EXTERNAL TABLE external_t5 (c1 int, c2 int)
+        ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+        LOCATION '$location2'
+      """)
 
-    val answer2 = sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
+    val answer2 =
+      sql("SELECT input_file_name() as file FROM external_t5").head().getString(0)
     assert(answer2.contains("external_t5"))
-    assert(sql("SELECT input_file_name() as file FROM external_t5")
-      .distinct().collect().length == 1)
+
+    val count2 = sql("SELECT input_file_name() as file FROM external_t5").distinct().count
+    assert(count2 == 1)
     sql("DROP TABLE external_t5")
 
-   // External parquet pointing to LOCATION
+    // External parquet pointing to LOCATION
 
     val location3 = Utils.getSparkClassLoader.getResource("data/files/external_parquet").getFile
-    sql(s"""CREATE EXTERNAL table external_parquet(c1 int, c2 int)
+    sql(
+      s"""CREATE EXTERNAL TABLE external_parquet(c1 int, c2 int)
         stored as parquet
-        LOCATION '$location3'""")
+        LOCATION '$location3'
+      """)
 
-    val answer3 = sql("SELECT input_file_name() as file FROM external_parquet")
-      .head().getString(0)
+    val answer3 =
+      sql("SELECT input_file_name() as file FROM external_parquet").head().getString(0)
     assert(answer3.contains("external_parquet"))
-    assert(sql("SELECT input_file_name() as file FROM external_parquet")
-      .distinct().collect().length == 1)
+
+    val count3 = sql("SELECT input_file_name() as file FROM external_parquet").distinct().count
+    assert(count3 == 1)
     sql("DROP TABLE external_parquet")
 
     // Non-External parquet pointing to /tmp/...
 
-    sql("CREATE table internal_parquet_tmp(c1 int, c2 int) " +
-      " stored as parquet " +
-      " as select 1, 2")
+    sql("CREATE TABLE parquet_tmp(c1 int, c2 int) " +
+      " STORED AS parquet " +
+      " AS SELECT 1, 2")
 
-    val answer4 = sql("SELECT input_file_name() as file FROM internal_parquet_tmp")
-      .head().getString(0)
-    assert(answer4.contains("internal_parquet_tmp"))
-    assert(sql("SELECT input_file_name() as file FROM internal_parquet_tmp")
-      .distinct().collect().length == 1)
-    sql("DROP TABLE internal_parquet_tmp")
+    val answer4 =
+      sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)
+    assert(answer4.contains("parquet_tmp"))
+
+    val count4 = sql("SELECT input_file_name() as file FROM parquet_tmp").distinct().count
+    assert(count4 == 1)
+    sql("DROP TABLE parquet_tmp")
   }
-
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
