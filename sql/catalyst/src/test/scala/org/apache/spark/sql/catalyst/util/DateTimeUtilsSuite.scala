@@ -358,7 +358,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(getSeconds(c.getTimeInMillis * 1000) === 9)
   }
 
-  test("hours / miniute / seconds") {
+  test("hours / minutes / seconds") {
     Seq(Timestamp.valueOf("2015-06-11 10:12:35.789"),
       Timestamp.valueOf("2015-06-11 20:13:40.789"),
       Timestamp.valueOf("1900-06-11 12:14:50.789"),
