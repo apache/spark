@@ -23,7 +23,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
-import scala.collection.mutable.{HashMap, HashSet, Set, Stack}
+import scala.collection.immutable.Set
+import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -427,7 +428,7 @@ class DAGScheduler(
     while (waitingForVisit.nonEmpty) {
       visit(waitingForVisit.pop())
     }
-    parents
+    parents.toSet
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
