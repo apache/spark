@@ -830,7 +830,7 @@ private[sql] object HadoopFsRelation extends Logging {
       }
       else
       {
-        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       }
     }
