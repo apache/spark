@@ -242,6 +242,14 @@ test_that("create DataFrame from list or data.frame", {
   expect_equal(count(df), 3)
   ldf2 <- collect(df)
   expect_equal(ldf$a, ldf2$a)
+
+  irisdf <- createDataFrame(sqlContext, iris)
+  iris_collected <- collect(irisdf)
+  expect_equivalent(iris_collected[,-5], iris[,-5])
+  expect_equal(iris_collected$Species, as.character(iris$Species))
+
+  mtcarsdf <- createDataFrame(sqlContext, mtcars)
+  expect_equivalent(collect(mtcarsdf), mtcars)
 })
 
 test_that("create DataFrame with different data types", {
@@ -281,6 +289,14 @@ test_that("create DataFrame with complex types", {
   expect_equal(class(s), "struct")
   expect_equal(s$a, "aa")
   expect_equal(s$b, 3L)
+})
+
+test_that("create DataFrame from a data.frame with complex types", {
+  ldf <- data.frame(row.names=1:2)
+  ldf$a_list <- list(list(1, 2), list(3, 4))
+  sdf <- createDataFrame(sqlContext, ldf)
+
+  expect_equivalent(ldf, collect(sdf))
 })
 
 # For test map type and struct type in DataFrame
