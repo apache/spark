@@ -363,3 +363,11 @@ class StreamingContext(object):
         first = dstreams[0]
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def addStreamingListener(self, streamingListener):
+        """
+        Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+        receiving system events related to streaming.
+        """
+        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
+            self._jvm.PythonStreamingListenerWrapper(streamingListener)))
