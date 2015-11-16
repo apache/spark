@@ -44,23 +44,20 @@ case class Exchange(
   override def nodeName: String = {
     val extraInfo = coordinator match {
       case Some(exchangeCoordinator) if exchangeCoordinator.isEstimated =>
-        "Shuffle"
+        s"(coordinator id: ${System.identityHashCode(coordinator)})"
       case Some(exchangeCoordinator) if !exchangeCoordinator.isEstimated =>
-        "May shuffle"
-      case None => "Shuffle without coordinator"
+        s"(coordinator id: ${System.identityHashCode(coordinator)})"
+      case None => ""
     }
 
     val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
-    s"$simpleNodeName($extraInfo)"
+    s"$simpleNodeName$extraInfo"
   }
 
   /**
    * Returns true iff we can support the data type, and we are not doing range partitioning.
    */
-  private lazy val tungstenMode: Boolean = {
-    unsafeEnabled && codegenEnabled && GenerateUnsafeProjection.canSupport(child.schema) &&
-      !newPartitioning.isInstanceOf[RangePartitioning]
-  }
+  private lazy val tungstenMode: Boolean = !newPartitioning.isInstanceOf[RangePartitioning]
 
   override def outputPartitioning: Partitioning = newPartitioning
 
@@ -171,7 +168,7 @@ case class Exchange(
       case RangePartitioning(sortingExpressions, numPartitions) =>
         // Internally, RangePartitioner runs a job on the RDD that samples keys to compute
         // partition bounds. To get accurate samples, we need to copy the mutable keys.
-        val rddForSampling = rdd.mapPartitions { iter =>
+        val rddForSampling = rdd.mapPartitionsInternal { iter =>
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
@@ -203,12 +200,12 @@ case class Exchange(
     }
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
       if (needToCopyObjectsBeforeShuffle(part, serializer)) {
-        rdd.mapPartitions { iter =>
+        rdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           iter.map { row => (part.getPartition(getPartitionKey(row)), row.copy()) }
         }
       } else {
-        rdd.mapPartitions { iter =>
+        rdd.mapPartitionsInternal { iter =>
           val getPartitionKey = getPartitionKeyExtractor()
           val mutablePair = new MutablePair[Int, InternalRow]()
           iter.map { row => mutablePair.update(part.getPartition(getPartitionKey(row)), row) }
@@ -478,10 +475,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          sqlContext.planner.BasicOperators.getSortOperator(
-            requiredOrdering,
-            global = false,
-            child)
+          Sort(requiredOrdering, global = false, child = child)
         } else {
           child
         }

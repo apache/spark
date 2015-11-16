@@ -19,9 +19,10 @@ package org.apache.spark.scheduler
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
+import org.roaringbitmap.RoaringBitmap
+
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
-import org.roaringbitmap.RoaringBitmap
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
@@ -172,6 +173,9 @@ private[spark] object HighlyCompressedMapStatus {
     var i = 0
     var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
+    // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
+    // blocks. From a performance standpoint, we benefit from tracking empty blocks because
+    // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
     val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
     while (i < totalNumBlocks) {
@@ -189,8 +193,8 @@ private[spark] object HighlyCompressedMapStatus {
     } else {
       0
     }
-    emptyBlocks.runOptimize()
     emptyBlocks.trim()
+    emptyBlocks.runOptimize()
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
   }
 }

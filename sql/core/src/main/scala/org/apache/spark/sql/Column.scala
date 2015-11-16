@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.Encoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
@@ -39,10 +41,32 @@ private[sql] object Column {
 }
 
 /**
- * A [[Column]] where an [[Encoder]] has been given for the expected return type.
+ * A [[Column]] where an [[Encoder]] has been given for the expected input and return type.
  * @since 1.6.0
+ * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
+ *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
+ * @tparam U The output type of this column.
  */
-class TypedColumn[T](expr: Expression)(implicit val encoder: Encoder[T]) extends Column(expr)
+class TypedColumn[-T, U](
+    expr: Expression,
+    private[sql] val encoder: ExpressionEncoder[U]) extends Column(expr) {
+
+  /**
+   * Inserts the specific input type and schema into any expressions that are expected to operate
+   * on a decoded object.
+   */
+  private[sql] def withInputType(
+      inputEncoder: ExpressionEncoder[_],
+      schema: Seq[Attribute]): TypedColumn[T, U] = {
+    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
+    new TypedColumn[T, U] (expr transform {
+      case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
+        ta.copy(
+          aEncoder = Some(boundEncoder),
+          children = schema)
+    }, encoder)
+  }
+}
 
 /**
  * :: Experimental ::
@@ -70,6 +94,25 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
+  /**
+   * Returns the expression for this column either with an existing or auto assigned name.
+   */
+  private[sql] def named: NamedExpression = expr match {
+    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
+    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
+    // make it a NamedExpression.
+    case u: UnresolvedAttribute => UnresolvedAlias(u)
+
+    case expr: NamedExpression => expr
+
+    // Leave an unaliased generator with an empty list of names since the analyzer will generate
+    // the correct defaults after the nested expression's type has been resolved.
+    case explode: Explode => MultiAlias(explode, Nil)
+    case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case expr: Expression => Alias(expr, expr.prettyString)()
+  }
+
   override def toString: String = expr.prettyString
 
   override def equals(that: Any): Boolean = that match {
@@ -85,7 +128,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * results into the correct JVM types.
    * @since 1.6.0
    */
-  def as[T : Encoder]: TypedColumn[T] = new TypedColumn[T](expr)
+  def as[U : Encoder]: TypedColumn[Any, U] = new TypedColumn[Any, U](expr, encoderFor[U])
 
   /**
    * Extracts a value or values from a complex type.

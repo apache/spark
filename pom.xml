@@ -98,6 +98,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
@@ -154,6 +155,8 @@
     <jets3t.version>0.7.1</jets3t.version>
     <aws.java.sdk.version>1.9.40</aws.java.sdk.version>
     <aws.kinesis.client.version>1.4.0</aws.kinesis.client.version>
+    <!-- the producer is used in tests -->
+    <aws.kinesis.producer.version>0.10.1</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
     <!--  commons-httpclient/commons-httpclient-->
@@ -389,6 +392,14 @@
             <artifactId>asm-commons</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
+           For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
+      <dependency>
+        <groupId>org.apache.xbean</groupId>
+        <artifactId>xbean-asm5-shaded</artifactId>
+        <version>4.4</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -780,6 +791,19 @@
         <artifactId>junit-interface</artifactId>
         <version>0.11</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.spotify</groupId>
+        <artifactId>docker-client</artifactId>
+        <classifier>shaded</classifier>
+        <version>3.2.1</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <artifactId>guava</artifactId>
+            <groupId>com.google.guava</groupId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.curator</groupId>
