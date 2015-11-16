@@ -1604,7 +1604,8 @@ test_that("Method str()", {
   expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9 ...")
   expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7 ...")
   expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4 ...")
-  expect_equal(out[6], " $ Species     : chr \"setosa\" \"setosa\" \"setosa\" \"setosa\" \"setosa\" \"setosa\" ...")
+  expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
+                              "setosa\" \"setosa\" \"setosa\" \"setosa\" ..."))
   expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE ...")
 
   # A random dataset with many columns. This test is to check str limits
