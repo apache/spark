@@ -34,8 +34,7 @@ To write a Spark application, you need to add a Maven dependency on Spark. Spark
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -66,8 +65,7 @@ To write a Spark application in Java, you need to add a dependency on Spark. Spa
     version = {{site.SPARK_VERSION}}
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on
-`hadoop-client` for your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+`hadoop-client` for your version of HDFS.
 
     groupId = org.apache.hadoop
     artifactId = hadoop-client
@@ -93,8 +91,7 @@ This script will load Spark's Java/Scala libraries and allow you to submit appli
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
 If you wish to access HDFS data, you need to use a build of PySpark linking
-to your version of HDFS. Some common HDFS version tags are listed on the
-[third party distributions](hadoop-third-party-distributions.html) page.
+to your version of HDFS.
 [Prebuilt packages](http://spark.apache.org/downloads.html) are also available on the Spark homepage
 for common HDFS versions.
 
@@ -805,9 +802,9 @@ print("Counter value: " + counter)
 
 The primary challenge is that the behavior of the above code is undefined. In local mode with a single JVM, the above code will sum the values within the RDD and store it in **counter**. This is because both the RDD and the variable **counter** are in the same memory space on the driver node.
 
-However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on seperate worker nodes each have their own copy of the closure.
+However, in `cluster` mode, what happens is more complicated, and the above may not work as intended. To execute jobs, Spark breaks up the processing of RDD operations into tasks - each of which is operated on by an executor. Prior to execution, Spark computes the **closure**. The closure is those variables and methods which must be visible for the executor to perform its computations on the RDD (in this case `foreach()`). This closure is serialized and sent to each executor. In `local` mode, there is only the one executors so everything shares the same closure. In other modes however, this is not the case and the executors running on separate worker nodes each have their own copy of the closure.
 
-What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only sees the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
+What is happening here is that the variables within the closure sent to each executor are now copies and thus, when **counter** is referenced within the `foreach` function, it's no longer the **counter** on the driver node. There is still a **counter** in the memory of the driver node but this is no longer visible to the executors! The executors only see the copy from the serialized closure. Thus, the final value of **counter** will still be zero since all operations on **counter** were referencing the value within the serialized closure.  
 
 To ensure well-defined behavior in these sorts of scenarios one should use an [`Accumulator`](#AccumLink). Accumulators in Spark are used specifically to provide a mechanism for safely updating a variable when execution is split up across worker nodes in a cluster. The Accumulators section of this guide discusses these in more detail.  
 

@@ -20,7 +20,7 @@ package org.apache.spark.mllib.random
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.linalg.Vector
@@ -29,10 +29,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
  * Generator methods for creating RDDs comprised of `i.i.d.` samples from some distribution.
  */
-@Experimental
 @Since("1.1.0")
 object RandomRDDs {
 

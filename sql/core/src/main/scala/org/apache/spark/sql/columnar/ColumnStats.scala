@@ -213,8 +213,8 @@ private[sql] class StringColumnStats extends ColumnStats {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getUTF8String(ordinal)
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
+      if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
+      if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
       sizeInBytes += STRING.actualSize(row, ordinal)
     }
   }
@@ -235,7 +235,9 @@ private[sql] class BinaryColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
 
-private[sql] class FixedDecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
+private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
+  def this(dt: DecimalType) = this(dt.precision, dt.scale)
+
   protected var upper: Decimal = null
   protected var lower: Decimal = null
 
@@ -245,7 +247,8 @@ private[sql] class FixedDecimalColumnStats(precision: Int, scale: Int) extends C
       val value = row.getDecimal(ordinal, precision, scale)
       if (upper == null || value.compareTo(upper) > 0) upper = value
       if (lower == null || value.compareTo(lower) < 0) lower = value
-      sizeInBytes += FIXED_DECIMAL.defaultSize
+      // TODO: this is not right for DecimalType with precision > 18
+      sizeInBytes += 8
     }
   }
 
@@ -253,8 +256,8 @@ private[sql] class FixedDecimalColumnStats(precision: Int, scale: Int) extends C
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
-  val columnType = GENERIC(dataType)
+private[sql] class ObjectColumnStats(dataType: DataType) extends ColumnStats {
+  val columnType = ColumnType(dataType)
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
@@ -266,7 +269,3 @@ private[sql] class GenericColumnStats(dataType: DataType) extends ColumnStats {
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
-
-private[sql] class DateColumnStats extends IntColumnStats
-
-private[sql] class TimestampColumnStats extends LongColumnStats

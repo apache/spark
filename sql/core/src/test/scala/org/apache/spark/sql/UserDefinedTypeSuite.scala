@@ -17,17 +17,16 @@
 
 package org.apache.spark.sql
 
-import scala.beans.{BeanInfo, BeanProperty}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.OpenHashSet
 
 
@@ -68,7 +67,7 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
   import testImplicits._
 
   private lazy val pointsRDD = Seq(
@@ -98,17 +97,28 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
       Seq(Row(true), Row(true)))
   }
 
-
-  test("UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.write.parquet(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
-  test("Repartition UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.repartition(1).write.parquet(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("Repartition UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.repartition(1).write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
   // Tests to make sure that all operators correctly convert types on the way out.
@@ -118,25 +128,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
     df.take(1)(0).getAs[MyDenseVector](1)
     df.limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
-  }
-
-  test("HyperLogLogUDT") {
-    val hyperLogLogUDT = HyperLogLogUDT
-    val hyperLogLog = new HyperLogLog(0.4)
-    (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
-
-    val actual = hyperLogLogUDT.deserialize(hyperLogLogUDT.serialize(hyperLogLog))
-    assert(actual.cardinality() === hyperLogLog.cardinality())
-    assert(java.util.Arrays.equals(actual.getBytes, hyperLogLog.getBytes))
-  }
-
-  test("OpenHashSetUDT") {
-    val openHashSetUDT = new OpenHashSetUDT(IntegerType)
-    val set = new OpenHashSet[Int]
-    (1 to 10).foreach(i => set.add(i))
-
-    val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
-    assert(actual.iterator.toSet === set.iterator.toSet)
   }
 
   test("UDTs with JSON") {
@@ -162,7 +153,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10472 UserDefinedType.typeName") {
     assert(IntegerType.typeName === "integer")
     assert(new MyDenseVectorUDT().typeName === "mydensevector")
-    assert(new OpenHashSetUDT(IntegerType).typeName === "openhashset")
   }
 
   test("Catalyst type converter null handling for UDTs") {

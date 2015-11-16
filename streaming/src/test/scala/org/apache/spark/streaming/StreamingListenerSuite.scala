@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -140,6 +140,27 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("output operation reporting") {
+    ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count())
+    inputStream.foreachRDD(_.collect())
+    inputStream.foreachRDD(_.count())
+
+    val collector = new OutputOperationInfoCollector
+    ssc.addStreamingListener(collector)
+
+    ssc.start()
+    try {
+      eventually(timeout(30 seconds), interval(20 millis)) {
+        collector.startedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+        collector.completedOutputOperationIds.take(3) should be (Seq(0, 1, 2))
+      }
+    } finally {
+      ssc.stop()
+    }
+  }
+
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
@@ -200,7 +221,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     _ssc.stop()
-    failureReasonsCollector.failureReasons
+    failureReasonsCollector.failureReasons.toMap
   }
 
   /** Check if a sequence of numbers is in increasing order */
@@ -254,6 +275,22 @@ class ReceiverInfoCollector extends StreamingListener {
   }
 }
 
+/** Listener that collects information on processed output operations */
+class OutputOperationInfoCollector extends StreamingListener {
+  val startedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+  val completedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int]
+
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
+    startedOutputOperationIds += outputOperationStarted.outputOperationInfo.id
+  }
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    completedOutputOperationIds += outputOperationCompleted.outputOperationInfo.id
+  }
+}
+
 class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_ONLY) with Logging {
   def onStart() {
     Future {
@@ -270,14 +307,16 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
 }
 
 /**
- * A StreamingListener that saves the latest `failureReasons` in `BatchInfo` to the `failureReasons`
- * field.
+ * A StreamingListener that saves all latest `failureReasons` in a batch.
  */
 class FailureReasonsCollector extends StreamingListener {
 
-  @volatile var failureReasons: Map[Int, String] = null
+  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String]
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-    failureReasons = batchCompleted.batchInfo.failureReasons
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
+      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+    }
   }
 }

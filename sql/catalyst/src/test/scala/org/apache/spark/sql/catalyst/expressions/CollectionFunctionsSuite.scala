@@ -49,6 +49,7 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
     val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
     val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
 
     checkEvaluation(new SortArray(a0), Seq(1, 2, 3))
     checkEvaluation(new SortArray(a1), Seq[Integer]())
@@ -64,6 +65,12 @@ class CollectionFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new SortArray(a3, Literal(false)), Seq("b", "a", null))
 
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
+    checkEvaluation(new SortArray(a4), Seq(null, null))
+
+    val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
+
+    checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
   }
 
   test("Array contains") {

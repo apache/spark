@@ -22,13 +22,15 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
 
 import scala.util.matching.Regex
 
 private[r] object SQLUtils {
+  SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
+
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     new SQLContext(jsc)
   }
@@ -61,15 +63,27 @@ private[r] object SQLUtils {
       case "boolean" => org.apache.spark.sql.types.BooleanType
       case "timestamp" => org.apache.spark.sql.types.TimestampType
       case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.*)${elemType}>\Z" => {
+      case r"\Aarray<(.+)${elemType}>\Z" =>
         org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      }
-      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
+      case r"\Amap<(.+)${keyType},(.+)${valueType}>\Z" =>
         if (keyType != "string" && keyType != "character") {
           throw new IllegalArgumentException("Key type of a map must be string or character")
         }
         org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      }
+      case r"\Astruct<(.+)${fieldsStr}>\Z" =>
+        if (fieldsStr(fieldsStr.length - 1) == ',') {
+          throw new IllegalArgumentException(s"Invaid type $dataType")
+        }
+        val fields = fieldsStr.split(",")
+        val structFields = fields.map { field =>
+          field match {
+            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
+              createStructField(fieldName, fieldType, true)
+
+            case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+          }
+        }
+        createStructType(structFields)
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
   }
@@ -116,16 +130,18 @@ private[r] object SQLUtils {
   }
 
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
-    // localDF is Array[Row]
-    val localDF = df.collect()
+    val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length
+    val numRows = localDF.length
 
-    // result is Array[Array[Any]]
-    (0 until numCols).map { colIdx =>
-      localDF.map { row =>
-        row(colIdx)
+    val colArray = new Array[Array[Any]](numCols)
+    for (colNo <- 0 until numCols) {
+      colArray(colNo) = new Array[Any](numRows)
+      for (rowNo <- 0 until numRows) {
+        colArray(colNo)(rowNo) = localDF(rowNo)(colNo)
       }
-    }.toArray
+    }
+    colArray
   }
 
   def saveMode(mode: String): SaveMode = {
@@ -150,5 +166,28 @@ private[r] object SQLUtils {
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
     sqlContext.read.format(source).schema(schema).options(options).load()
+  }
+
+  def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
+    dataType match {
+      case 's' =>
+        // Read StructType for DataFrame
+        val fields = SerDe.readList(dis).asInstanceOf[Array[Object]]
+        Row.fromSeq(fields)
+      case _ => null
+    }
+  }
+
+  def writeSqlObject(dos: DataOutputStream, obj: Object): Boolean = {
+    obj match {
+      // Handle struct type in DataFrame
+      case v: GenericRowWithSchema =>
+        dos.writeByte('s')
+        SerDe.writeObject(dos, v.schema.fieldNames)
+        SerDe.writeObject(dos, v.values)
+        true
+      case _ =>
+        false
+    }
   }
 }

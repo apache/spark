@@ -59,7 +59,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           ${eval.code}
           nullBits[$i] = ${eval.isNull};
           if (!${eval.isNull}) {
-            c$i = ${eval.primitive};
+            c$i = ${eval.value};
           }
         }
         """
@@ -82,7 +82,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.length > 0) {
         val getter = "get" + ctx.primitiveTypeName(jt)
         s"""
-      @Override
       public $jt $getter(int i) {
         if (isNullAt(i)) {
           return ${ctx.defaultValue(jt)};
@@ -107,7 +106,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
       if (cases.length > 0) {
         val setter = "set" + ctx.primitiveTypeName(jt)
         s"""
-      @Override
       public void $setter(int i, $jt value) {
         nullBits[i] = false;
         switch (i) {
@@ -169,7 +167,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         ${initMutableStates(ctx)}
       }
 
-      @Override
       public Object apply(Object r) {
         // GenerateProjection does not work with UnsafeRows.
         assert(!(r instanceof ${classOf[UnsafeRow].getName}));
@@ -180,7 +177,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
 
         $columns
 
-        public SpecificRow(InternalRow i) {
+        public SpecificRow(InternalRow ${ctx.INPUT_ROW}) {
           $initColumns
         }
 
@@ -189,7 +186,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        @Override
         public Object genericGet(int i) {
           if (isNullAt(i)) return null;
           switch (i) {
@@ -210,14 +206,12 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         $specificAccessorFunctions
         $specificMutatorFunctions
 
-        @Override
         public int hashCode() {
           int result = 37;
           $hashUpdates
           return result;
         }
 
-        @Override
         public boolean equals(Object other) {
           if (other instanceof SpecificRow) {
             SpecificRow row = (SpecificRow) other;
@@ -227,7 +221,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           return super.equals(other);
         }
 
-        @Override
         public InternalRow copy() {
           Object[] arr = new Object[${expressions.length}];
           ${copyColumns}
