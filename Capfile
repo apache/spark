@@ -13,7 +13,7 @@ set :branch, fetch(:branch, `git symbolic-ref --short HEAD`.gsub("\s",""))
 
 DATANODES = (2..73).map {|i| "dn%02d.chi.shopify.com" % i }
 OTHERNODES = ["hadoop-misc4.chi.shopify.com", "dn48.chi.shopify.com", "reportify-etl4.chi.shopify.com", "streams2.chi.shopify.com"]
-BROKEN = ["dn57.chi.shopify.com", "dn58.chi.shopify.com"] # Node is down don't try to send code
+BROKEN = ["dn58.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
   role :app, *(DATANODES + OTHERNODES - BROKEN)
