@@ -96,12 +96,13 @@ format. We will then cover tuning Spark's cache size and the Java garbage collec
 
 ## Memory Management Overview
 
-Memory usage in Spark largely falls into one of two categories: execution and storage.
+Memory usage in Spark largely falls under one of two categories: execution and storage.
 Execution memory refers to that used for computation in shuffles, joins, sorts and aggregations,
 while storage memory refers to that used for caching and propagating internal data across the
 cluster. In Spark, execution and storage share a unified region (M). When no execution memory is
 used, storage can acquire all the available memory and vice versa. Execution may evict storage
 if necessary, but only until total storage memory usage falls under a certain threshold (R).
+In other words, `R` describes a subregion within `M` where cached blocks are never evicted.
 Storage may not evict execution due to complexities in implementation.
 
 This design ensures several desirable properties. First, applications that do not use caching
@@ -118,7 +119,7 @@ as the default values are applicable to most workloads:
 metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
 large records.
 * `spark.memory.storageFraction` expresses the size of `R` as a fraction of `M` (default 0.5).
-This is the amount of storage memory immune to being evicted by execution.
+`R` is the storage space within `M` where cached blocks immune to being evicted by execution.
 
 
 ## Determining Memory Consumption
