@@ -20,8 +20,8 @@ package org.apache.spark.scheduler
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.Utils
+import org.roaringbitmap.RoaringBitmap
 
 /**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
@@ -121,8 +121,7 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
- * is compressed.
+ * plus a bitmap for tracking which blocks are empty.
  *
  * @param loc location where the task is being executed
  * @param numNonEmptyBlocks the number of non-empty blocks
@@ -132,7 +131,7 @@ private[spark] class CompressedMapStatus(
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
     private[this] var numNonEmptyBlocks: Int,
-    private[this] var emptyBlocks: BitSet,
+    private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long)
   extends MapStatus with Externalizable {
 
@@ -145,7 +144,7 @@ private[spark] class HighlyCompressedMapStatus private (
   override def location: BlockManagerId = loc
 
   override def getSizeForBlock(reduceId: Int): Long = {
-    if (emptyBlocks.get(reduceId)) {
+    if (emptyBlocks.contains(reduceId)) {
       0
     } else {
       avgSize
@@ -160,7 +159,7 @@ private[spark] class HighlyCompressedMapStatus private (
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
-    emptyBlocks = new BitSet
+    emptyBlocks = new RoaringBitmap()
     emptyBlocks.readExternal(in)
     avgSize = in.readLong()
   }
@@ -173,18 +172,15 @@ private[spark] object HighlyCompressedMapStatus {
     var i = 0
     var numNonEmptyBlocks: Int = 0
     var totalSize: Long = 0
-    // From a compression standpoint, it shouldn't matter whether we track empty or non-empty
-    // blocks. From a performance standpoint, we benefit from tracking empty blocks because
-    // we expect that there will be far fewer of them, so we will perform fewer bitmap insertions.
+    val emptyBlocks = new RoaringBitmap()
     val totalNumBlocks = uncompressedSizes.length
-    val emptyBlocks = new BitSet(totalNumBlocks)
     while (i < totalNumBlocks) {
       var size = uncompressedSizes(i)
       if (size > 0) {
         numNonEmptyBlocks += 1
         totalSize += size
       } else {
-        emptyBlocks.set(i)
+        emptyBlocks.add(i)
       }
       i += 1
     }
@@ -193,6 +189,8 @@ private[spark] object HighlyCompressedMapStatus {
     } else {
       0
     }
+    emptyBlocks.runOptimize()
+    emptyBlocks.trim()
     new HighlyCompressedMapStatus(loc, numNonEmptyBlocks, emptyBlocks, avgSize)
   }
 }
