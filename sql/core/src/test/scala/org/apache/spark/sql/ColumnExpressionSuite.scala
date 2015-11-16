@@ -373,7 +373,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         Row("abc") ::
         Row(null)  ::
         Row("xyz") :: Nil),
-      StructType(Seq(StructField("a", StringType,true))))
+        StructType(Seq(StructField("a", StringType, true))))
 
     checkAnswer(
       nullData2.filter($"a" <=> null),
