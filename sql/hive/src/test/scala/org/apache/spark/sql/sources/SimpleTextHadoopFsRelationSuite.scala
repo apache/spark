@@ -248,7 +248,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     projections = Seq('c, 'p),
     filter = 'a < 3 && 'p > 0,
     requiredColumns = Seq("c", "a"),
-    pushedFilters = Nil,
+    pushedFilters = Seq(LessThan("a", 3)),
     inconvertibleFilters = Nil,
     unhandledFilters = Seq('a < 3),
     partitioningFilters = Seq('p > 0)
@@ -327,7 +327,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     projections = Seq('b, 'p),
     filter = 'c > "val_7" && 'b < 18 && 'p > 0,
     requiredColumns = Seq("b"),
-    pushedFilters = Seq(GreaterThan("c", "val_7")),
+    pushedFilters = Seq(GreaterThan("c", "val_7"), LessThan("b", 18)),
     inconvertibleFilters = Nil,
     unhandledFilters = Seq('b < 18),
     partitioningFilters = Seq('p > 0)
@@ -344,7 +344,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     projections = Seq('b, 'p),
     filter = 'a % 2 === 0 && 'c > "val_7" && 'b < 18 && 'p > 0,
     requiredColumns = Seq("b", "a"),
-    pushedFilters = Seq(GreaterThan("c", "val_7")),
+    pushedFilters = Seq(GreaterThan("c", "val_7"), LessThan("b", 18)),
     inconvertibleFilters = Seq('a % 2 === 0),
     unhandledFilters = Seq('b < 18),
     partitioningFilters = Seq('p > 0)
@@ -361,7 +361,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
     projections = Seq('b, 'p),
     filter = 'a > 7 && 'a < 9,
     requiredColumns = Seq("b", "a"),
-    pushedFilters = Seq(GreaterThan("a", 7)),
+    pushedFilters = Seq(GreaterThan("a", 7), LessThan("a", 9)),
     inconvertibleFilters = Nil,
     unhandledFilters = Seq('a < 9),
     partitioningFilters = Nil

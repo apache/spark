@@ -73,10 +73,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
-   * - Sort merge: if the matching join keys are sortable and
-   *     [[org.apache.spark.sql.SQLConf.SORTMERGE_JOIN]] is enabled (default), then sort merge join
-   *     will be used.
-   * - Hash: will be chosen if neither of the above optimizations apply to this join.
+   * - Sort merge: if the matching join keys are sortable.
    */
   object EquiJoinSelection extends Strategy with PredicateHelper {
 
@@ -103,21 +100,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         makeBroadcastHashJoin(leftKeys, rightKeys, left, right, condition, joins.BuildLeft)
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.sortMergeJoinEnabled && RowOrdering.isOrderable(leftKeys) =>
+        if RowOrdering.isOrderable(leftKeys) =>
         val mergeJoin =
           joins.SortMergeJoin(leftKeys, rightKeys, planLater(left), planLater(right))
         condition.map(Filter(_, mergeJoin)).getOrElse(mergeJoin) :: Nil
-
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
-        val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-            joins.BuildRight
-          } else {
-            joins.BuildLeft
-          }
-        val hashJoin = joins.ShuffledHashJoin(
-          leftKeys, rightKeys, buildSide, planLater(left), planLater(right))
-        condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       // --- Outer joins --------------------------------------------------------------------------
 
@@ -132,12 +118,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           leftKeys, rightKeys, RightOuter, condition, planLater(left), planLater(right)) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if sqlContext.conf.sortMergeJoinEnabled && RowOrdering.isOrderable(leftKeys) =>
+        if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeOuterJoin(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
-
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        joins.ShuffledHashOuterJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
@@ -320,21 +302,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object BasicOperators extends Strategy {
     def numPartitions: Int = self.numPartitions
 
-    /**
-     * Picks an appropriate sort operator.
-     *
-     * @param global when true performs a global sort of all partitions by shuffling the data first
-     *               if necessary.
-     */
-    def getSortOperator(sortExprs: Seq[SortOrder], global: Boolean, child: SparkPlan): SparkPlan = {
-      if (sqlContext.conf.unsafeEnabled && sqlContext.conf.codegenEnabled &&
-        TungstenSort.supportsSchema(child.schema)) {
-        execution.TungstenSort(sortExprs, global, child)
-      } else {
-        execution.Sort(sortExprs, global, child)
-      }
-    }
-
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
@@ -344,7 +311,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.MapPartitions(f, tEnc, uEnc, output, child) =>
         execution.MapPartitions(f, tEnc, uEnc, output, planLater(child)) :: Nil
-      case logical.AppendColumn(f, tEnc, uEnc, newCol, child) =>
+      case logical.AppendColumns(f, tEnc, uEnc, newCol, child) =>
         execution.AppendColumns(f, tEnc, uEnc, newCol, planLater(child)) :: Nil
       case logical.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, child) =>
         execution.MapGroups(f, kEnc, tEnc, uEnc, grouping, output, planLater(child)) :: Nil
@@ -362,18 +329,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
-        getSortOperator(sortExprs, global = false, planLater(child)) :: Nil
+        execution.Sort(sortExprs, global = false, child = planLater(child)) :: Nil
       case logical.Sort(sortExprs, global, child) =>
-        getSortOperator(sortExprs, global, planLater(child)):: Nil
+        execution.Sort(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
-        // If unsafe mode is enabled and we support these data types in Unsafe, use the
-        // Tungsten project. Otherwise, use the normal project.
-        if (sqlContext.conf.unsafeEnabled &&
-          UnsafeProjection.canSupport(projectList) && UnsafeProjection.canSupport(child.schema)) {
-          execution.TungstenProject(projectList, planLater(child)) :: Nil
-        } else {
-          execution.Project(projectList, planLater(child)) :: Nil
-        }
+        execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case e @ logical.Expand(_, _, child) =>

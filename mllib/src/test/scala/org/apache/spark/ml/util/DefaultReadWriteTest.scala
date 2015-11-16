@@ -31,8 +31,9 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * Checks "overwrite" option and params.
    * @param instance ML instance to test saving/loading
    * @tparam T ML instance type
+   * @return  Instance loaded from file
    */
-  def testDefaultReadWrite[T <: Params with Writable](instance: T): Unit = {
+  def testDefaultReadWrite[T <: Params with Writable](instance: T): T = {
     val uid = instance.uid
     val path = new File(tempDir, uid).getPath
 
@@ -61,6 +62,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val load = instance.getClass.getMethod("load", classOf[String])
     val another = load.invoke(instance, path).asInstanceOf[T]
     assert(another.uid === instance.uid)
+    another
   }
 }
 
