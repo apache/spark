@@ -52,6 +52,8 @@ private[hive] class HiveFunctionRegistry(
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {
+    // Hive Registry need current database to lookup function
+    // TODO: the current database of executionHive should be consistent with metadataHive
     hiveContext.executionHive.withHiveState {
       FunctionRegistry.getFunctionInfo(name)
     }
