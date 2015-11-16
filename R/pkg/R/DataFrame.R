@@ -2204,24 +2204,21 @@ setMethod("coltypes",
 #' a small sample of rows.
 #' @name str
 #' @title Compactly display the structure of a dataset
-#' @rdname str_data_frame
-#' @family dataframe_funcs
-#' @param x a DataFrame
+#' @rdname str
+#' @family DataFrame functions
+#' @param object a DataFrame
 #' @examples \dontrun{
-#'
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Show the structure of the DataFrame
 #' str(irisDF)
-#' 
 #' }
 setMethod("str",
           signature(object = "DataFrame"),
           function(object) {
 
             # TODO: These could be made global parameters, though in R it's not the case
-            DEFAULT_HEAD_ROWS <- 6
             MAX_CHAR_PER_ROW <- 120
             MAX_COLS <- 100
 
@@ -2235,9 +2232,9 @@ setMethod("str",
 
             # Get the first elements of the dataset. Limit number of columns accordingly
             dataFrame <- if (ncol(object) > MAX_COLS) {
-                           head(object[, c(1:MAX_COLS)], DEFAULT_HEAD_ROWS)
+                           head(object[, c(1:MAX_COLS)])
                          } else {
-                           head(object, DEFAULT_HEAD_ROWS)
+                           head(object)
                          }
 
             # The number of observations will be displayed only if the number
@@ -2253,7 +2250,7 @@ setMethod("str",
             ellipsis <- FALSE
 
             # Add ellipsis (i.e., "...") if there are more rows than shown
-            if (!is.null(cachedCount) && (cachedCount > DEFAULT_HEAD_ROWS)) {
+            if (!is.null(cachedCount) && (cachedCount > 6)) {
               ellipsis <- TRUE
             }
 
@@ -2262,7 +2259,7 @@ setMethod("str",
                 firstElements <- ""
 
                 # Get the first elements for each column
-                if (types[i] == "chr") {
+                if (types[i] == "character") {
                   firstElements <- paste(paste0("\"", dataFrame[,i], "\""), collapse = " ")
                 } else {
                   firstElements <- paste(dataFrame[,i], collapse = " ")
