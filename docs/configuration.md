@@ -305,7 +305,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>daily</td>
   <td>
     Set the time interval by which the executor logs will be rolled over.
-    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly<code>, <code>minutely<code> or
+    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly</code>, <code>minutely</code> or
     any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -330,13 +330,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
-    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()<code>,
+    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()</code>,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    <code>sc.dump_profiles(path)<code>. If some of the profile results had been displayed manually,
+    <code>sc.dump_profiles(path)</code>. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
-    By default the <code>pyspark.profiler.BasicProfiler<code> will be used, but this can be overridden by
-    passing a profiler class in as a parameter to the <code>SparkContext<code> constructor.
+    By default the <code>pyspark.profiler.BasicProfiler</code> will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the <code>SparkContext</code> constructor.
   </td>
 </tr>
 <tr>

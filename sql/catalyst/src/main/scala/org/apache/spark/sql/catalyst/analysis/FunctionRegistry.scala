@@ -281,7 +281,8 @@ object FunctionRegistry {
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
   )
 
   val builtin: SimpleFunctionRegistry = {
