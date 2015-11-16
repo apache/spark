@@ -367,10 +367,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val path = dir.getCanonicalPath
 
         // For field "a", the first column has odds integers. This is to check the filtered count
-        // when `isNull` is performed.
-        // For Field "b", `isNotNull` of ORC file filters rows only when all the values are
-        // null (maybe this works differently when the data or query is complicated).
-        // So, simply here a column only having `null` is added.
+        // when `isNull` is performed. For Field "b", `isNotNull` of ORC file filters rows
+        // only when all the values are null (maybe this works differently when the data
+        // or query is complicated). So, simply here a column only having `null` is added.
         val data = (0 until 10).map { i =>
           val maybeInt = if (i % 2 == 0) None else Some(i)
           val nullValue: Option[String] = None
@@ -379,33 +378,33 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         createDataFrame(data).toDF("a", "b").write.orc(path)
         val df = sqlContext.read.orc(path)
 
-        def checkPredicate(pred: Column, answer: Seq[Any]): Unit = {
+        def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
           val sourceDf = extractSourceRDDToDataFrame(df.where(pred))
           val data = sourceDf.collect().toSet
-          val expectedData = answer.map(Row(_, null)).toSet
+          val expectedData = answer.toSet
 
-          // The result should be single row. When a filter is pushed to ORC, ORC can apply it to
-          // every row. So, we can check the number of rows returned from the ORC to make sure
-          // our filter pushdown work. A tricky part is, ORC does not process filter fully but
-          // return some possible results. So, the number is checked if it is less than
-          // the original count, and then checks if it contains the expected value.
+          // When a filter is pushed to ORC, ORC can apply it to rows. So, we can check
+          // the number of rows returned from the ORC to make sure our filter pushdown work.
+          // A tricky part is, ORC does not process filter rows fully but return some possible
+          // results. So, this checks if the number of result is less than the original count
+          // of data, and then checks if it contains the expected data.
           val isOrcFiltered = sourceDf.count < 10 && expectedData.subsetOf(data)
           assert(isOrcFiltered)
         }
 
-        checkPredicate('a === 5, Seq(5))
-        checkPredicate('a <=> 5, Seq(5))
-        checkPredicate('a < 5, Seq(1, 3))
-        checkPredicate('a <= 5, Seq(1, 3, 5))
-        checkPredicate('a > 5, Seq(7, 9))
-        checkPredicate('a >= 5, Seq(5, 7, 9))
-        checkPredicate('a.isNull, Seq(null))
-        checkPredicate('b.isNotNull, Seq())
-        checkPredicate('a.isin(3, 5, 7), Seq(3, 5, 7))
-        checkPredicate('a > 0 && 'a < 3, Seq(1))
-        checkPredicate('a < 1 || 'a > 8, Seq(9))
-        checkPredicate(!('a > 3), Seq(1, 3))
-        checkPredicate(!('a > 0 && 'a < 3), Seq(3, 5, 7, 9))
+        checkPredicate('a === 5, List(5).map(Row(_, null)))
+        checkPredicate('a <=> 5, List(5).map(Row(_, null)))
+        checkPredicate('a < 5, List(1, 3).map(Row(_, null)))
+        checkPredicate('a <= 5, List(1, 3, 5).map(Row(_, null)))
+        checkPredicate('a > 5, List(7, 9).map(Row(_, null)))
+        checkPredicate('a >= 5, List(5, 7, 9).map(Row(_, null)))
+        checkPredicate('a.isNull, List(null).map(Row(_, null)))
+        checkPredicate('b.isNotNull, List())
+        checkPredicate('a.isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate('a > 0 && 'a < 3, List(1).map(Row(_, null)))
+        checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
+        checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
+        checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
   }
