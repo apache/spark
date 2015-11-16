@@ -152,7 +152,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row
+   *   StructType -> org.apache.spark.sql.Row (or Product)
    * }}}
    */
   def apply(i: Int): Any = get(i)
@@ -177,7 +177,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row
+   *   StructType -> org.apache.spark.sql.Row (or Product)
    * }}}
    */
   def get(i: Int): Any
@@ -306,7 +306,15 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getStruct(i: Int): Row = getAs[Row](i)
+  def getStruct(i: Int): Row = {
+    // Product and Row both are recoginized as StructType in a Row
+    val t = get(i)
+    if (t.isInstanceOf[Product]) {
+      Row.fromTuple(t.asInstanceOf[Product])
+    } else {
+      t.asInstanceOf[Row]
+    }
+  }
 
   /**
    * Returns the value at position i.
