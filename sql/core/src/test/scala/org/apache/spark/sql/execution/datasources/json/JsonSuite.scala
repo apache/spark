@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{FilenameFilter, File, StringWriter}
+import java.io.{File, StringWriter}
 import java.sql.{Date, Timestamp}
+import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-import org.apache.spark.rdd.RDD
 import org.scalactic.Tolerance._
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -1407,43 +1409,50 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       ret.asInstanceOf[Boolean]
     }
 
-    val dir = Utils.createTempDir()
-    dir.delete()
-    val path = dir.getCanonicalPath
-    val emps = Seq(
-      Row(1, "Emp-1"),
-      Row(2, "Emp-2")
-    )
-
-    val empRows = sqlContext.sparkContext.parallelize(emps, 1)
-    val empSchema = StructType(
-      Seq(
-        StructField("id", IntegerType, true),
-        StructField("name", StringType, true)
+    val clonedConf = new Configuration(hadoopConfiguration)
+    try {
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      val emps = Seq(
+        Row(1, "Emp-1"),
+        Row(2, "Emp-2")
       )
-    )
-    val empDF = sqlContext.createDataFrame(empRows, empSchema)
-    empDF.write.json(path)
-    val files = dir.listFiles().filter(filterFunc(_))
-    files.map(_.renameTo(new File(path + File.separator + "pathmap.tmp")))
-    FileUtils.copyFile(new File(path + File.separator + "pathmap.tmp"),
+
+      val empRows = sqlContext.sparkContext.parallelize(emps, 1)
+      val empSchema = StructType(
+        Seq(
+          StructField("id", IntegerType, true),
+          StructField("name", StringType, true)
+        )
+      )
+      val empDF = sqlContext.createDataFrame(empRows, empSchema)
+      empDF.write.json(path)
+      val files = dir.listFiles().filter(filterFunc(_))
+      files.map(_.renameTo(new File(path + File.separator + "pathmap.tmp")))
+      FileUtils.copyFile(new File(path + File.separator + "pathmap.tmp"),
         new File(path + File.separator + "data.json"))
 
-    // Both the files should be read and count should be 4
-    val empDF2 = sqlContext.read.json(path)
-    empDF2.registerTempTable("jsonTable1")
-    checkAnswer(
-      sql("select count(*) from jsonTable1"),
-      Row(4)
-    )
-    // After applying the path filter, only one file should be read and the count should be 2
-    sqlContext.sparkContext.hadoopConfiguration.setClass("mapreduce.input.pathFilter.class",
-      classOf[TmpFileFilter], classOf[PathFilter])
-    val empDF3 = sqlContext.read.json(path)
-    empDF3.registerTempTable("jsonTable2")
-    checkAnswer(
-      sql("select count(*) from jsonTable2"),
-      Row(2)
-    )
+      // Both the files should be read and count should be 4
+      val empDF2 = sqlContext.read.json(path)
+      empDF2.registerTempTable("jsonTable1")
+      checkAnswer(
+        sql("select count(*) from jsonTable1"),
+        Row(4)
+      )
+      // After applying the path filter, only one file should be read and the count should be 2
+      sqlContext.sparkContext.hadoopConfiguration.setClass("mapreduce.input.pathFilter.class",
+        classOf[TmpFileFilter], classOf[PathFilter])
+      val empDF3 = sqlContext.read.json(path)
+      empDF3.registerTempTable("jsonTable2")
+      checkAnswer(
+        sql("select count(*) from jsonTable2"),
+        Row(2)
+      )
+    } finally {
+      // Hadoop 1 doesn't have `Configuration.unset`
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+    }
   }
 }

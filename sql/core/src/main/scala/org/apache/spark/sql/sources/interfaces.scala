@@ -441,14 +441,13 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          logInfo(s"Listing $qualified on dr iver")
+          logInfo(s"Listing $qualified on driver")
           // Dummy jobconf to get to the pathFilter defined in configuration
           val jobConf = new JobConf(hadoopConf, this.getClass())
           val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
           if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
-          }
-          else {
+            Try(fs.listStatus(qualified, pathFilter)) .getOrElse(Array.empty)
+          } else {
             Try(fs.listStatus(qualified)).getOrElse(Array.empty)
           }
         }.filterNot { status =>
