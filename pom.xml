@@ -101,6 +101,7 @@
     <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
+    <module>external/akka</module>
     <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>

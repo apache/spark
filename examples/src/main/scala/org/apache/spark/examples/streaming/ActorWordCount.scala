@@ -22,13 +22,12 @@ import scala.collection.mutable.LinkedList
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
+import akka.actor._
+import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.{SparkConf, SecurityManager}
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.util.AkkaUtils
-import org.apache.spark.streaming.receiver.ActorHelper
+import org.apache.spark.streaming.akka.{AkkaUtils, ActorHelper}
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)
@@ -111,9 +110,13 @@ object FeederActor {
     }
     val Seq(host, port) = args.toSeq
 
-    val conf = new SparkConf
-    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = conf,
-      securityManager = new SecurityManager(conf))._1
+    val akkaConf = ConfigFactory.parseString(
+      s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+         |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+         |akka.remote.netty.tcp.hostname = "$host"
+         |akka.remote.netty.tcp.port = $port
+      """.stripMargin)
+    val actorSystem = ActorSystem("test", akkaConf)
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 
     println("Feeder started as:" + feeder)
@@ -129,9 +132,9 @@ object FeederActor {
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.FeederActor 127.0.0.1 9999`
  * and then run the example
- *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.1.1 9999`
+ *    `$ bin/run-example org.apache.spark.examples.streaming.ActorWordCount 127.0.0.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {
@@ -149,26 +152,50 @@ object ActorWordCount {
     val ssc = new StreamingContext(sparkConf, Seconds(2))
 
     /*
-     * Following is the use of actorStream to plug in custom actor as receiver
+     * Following is the use of AkkaUtils.createStream to plug in custom actor as receiver
      *
      * An important point to note:
      * Since Actor may exist outside the spark framework, It is thus user's responsibility
-     * to ensure the type safety, i.e type of data received and InputDstream
+     * to ensure the type safety, i.e type of data received and InputDStream
      * should be same.
      *
-     * For example: Both actorStream and SampleActorReceiver are parameterized
+     * For example: Both AkkaUtils.createStream and SampleActorReceiver are parameterized
      * to same type to ensure type safety.
      */
 
-    val lines = ssc.actorStream[String](
-      Props(new SampleActorReceiver[String]("akka.tcp://test@%s:%s/user/FeederActor".format(
-        host, port.toInt))), "SampleReceiver")
+    val lines1 = AkkaUtils.createStream[String](
+      ssc,
+      () => GlobalActorSystem.actorSystem,
+      Props(new SampleActorReceiver[String](s"akka.tcp://test@$host:$port/user/FeederActor")),
+      "SampleReceiver1")
 
+    val lines2 = AkkaUtils.createStream[String](
+      ssc,
+      () => GlobalActorSystem.actorSystem,
+      Props(new SampleActorReceiver[String](s"akka.tcp://test@$host:$port/user/FeederActor")),
+      "SampleReceiver2")
+
+    val lines = lines1.union(lines2)
     // compute wordcount
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
 
     ssc.start()
     ssc.awaitTermination()
   }
+}
+
+/**
+ * A global `ActorSystem` to avoid creating multiple `ActorSystem`s in an executor.
+ */
+object GlobalActorSystem {
+
+  lazy val actorSystem = {
+    val akkaConf = ConfigFactory.parseString(
+      s"""akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+         |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+          """.stripMargin)
+    ActorSystem("test", akkaConf)
+  }
+
 }
 // scalastyle:on println

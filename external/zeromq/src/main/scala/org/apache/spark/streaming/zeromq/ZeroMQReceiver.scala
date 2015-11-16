@@ -24,7 +24,7 @@ import akka.util.ByteString
 import akka.zeromq._
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.receiver.ActorHelper
+import org.apache.spark.streaming.akka.ActorHelper
 
 /**
  * A receiver to subscribe to ZeroMQ stream.

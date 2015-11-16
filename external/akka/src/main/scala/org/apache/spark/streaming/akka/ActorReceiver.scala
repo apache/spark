@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receiver
+package org.apache.spark.streaming.akka
 
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,16 +27,16 @@ import scala.reflect.ClassTag
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.receiver.Receiver
 
 /**
  * :: DeveloperApi ::
  * A helper with set of defaults for supervisor strategy
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.ActorSupervisorStrategy instead", "1.6.0")
 object ActorSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
@@ -70,7 +70,6 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.ActorHelper instead", "1.6.0")
 trait ActorHelper extends Logging{
 
   self: Actor => // to ensure that this can be added to Actor classes only
@@ -106,10 +105,9 @@ trait ActorHelper extends Logging{
  * :: DeveloperApi ::
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receiver.ActorHelper]].
+ * [[org.apache.spark.streaming.akka.ActorHelper]].
  */
 @DeveloperApi
-@deprecated("Use org.apache.spark.streaming.akka.Statistics instead", "1.6.0")
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
   numberOfHiccups: Int,
@@ -141,13 +139,14 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  * }}}
  */
 private[streaming] class ActorReceiver[T: ClassTag](
+    actorSystemCreator: () => ActorSystem,
     props: Props,
     name: String,
     storageLevel: StorageLevel,
     receiverSupervisorStrategy: SupervisorStrategy
   ) extends Receiver[T](storageLevel) with Logging {
 
-  protected lazy val actorSupervisor = SparkEnv.get.actorSystem.actorOf(Props(new Supervisor),
+  protected lazy val actorSupervisor = actorSystemCreator().actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
   class Supervisor extends Actor {

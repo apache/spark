@@ -366,7 +366,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
+   * @deprecated As of 1.5.0, replaced by `org.apache.spark.streaming.akka.AkkaUtils.createStream)`.
    */
+  @deprecated("Use org.apache.spark.streaming.akka.AkkaUtils.createStream instead", "1.5.0")
   def actorStream[T](
       props: Props,
       name: String,
@@ -388,7 +390,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
+   * @deprecated As of 1.5.0, replaced by `org.apache.spark.streaming.akka.AkkaUtils.createStream)`.
    */
+  @deprecated("Use org.apache.spark.streaming.akka.AkkaUtils.createStream instead", "1.5.0")
   def actorStream[T](
       props: Props,
       name: String,
@@ -409,7 +413,9 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    *       Since Actor may exist outside the spark framework, It is thus user's responsibility
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
+   * @deprecated As of 1.5.0, replaced by `org.apache.spark.streaming.akka.AkkaUtils.createStream)`.
    */
+  @deprecated("Use org.apache.spark.streaming.akka.AkkaUtils.createStream instead", "1.5.0")
   def actorStream[T](
       props: Props,
       name: String

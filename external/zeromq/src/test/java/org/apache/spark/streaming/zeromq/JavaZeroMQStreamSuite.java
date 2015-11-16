@@ -17,14 +17,17 @@
 
 package org.apache.spark.streaming.zeromq;
 
-import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
-import org.junit.Test;
+import akka.actor.ActorSystem;
 import akka.actor.SupervisorStrategy;
 import akka.util.ByteString;
 import akka.zeromq.Subscribe;
+import org.junit.Test;
+
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
+import org.apache.spark.streaming.akka.ActorSystemFactory;
+import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
+import org.apache.spark.storage.StorageLevel;
 
 public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
 
@@ -32,19 +35,29 @@ public class JavaZeroMQStreamSuite extends LocalJavaStreamingContext {
   public void testZeroMQStream() {
     String publishUrl = "abc";
     Subscribe subscribe = new Subscribe((ByteString)null);
-    Function<byte[][], Iterable<String>> bytesToObjects = new Function<byte[][], Iterable<String>>() {
-      @Override
-      public Iterable<String> call(byte[][] bytes) throws Exception {
-        return null;
-      }
-    };
-
+    Function<byte[][], Iterable<String>> bytesToObjects = new BytesToObjects();
+    ActorSystemFactory actorSystemFactory = new ActorSystemFactoryForTest();
     JavaReceiverInputDStream<String> test1 = ZeroMQUtils.<String>createStream(
-      ssc, publishUrl, subscribe, bytesToObjects);
+      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects);
     JavaReceiverInputDStream<String> test2 = ZeroMQUtils.<String>createStream(
-      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2());
+      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects,
+        StorageLevel.MEMORY_AND_DISK_SER_2());
     JavaReceiverInputDStream<String> test3 = ZeroMQUtils.<String>createStream(
-      ssc,publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2(),
-      SupervisorStrategy.defaultStrategy());
+      ssc, actorSystemFactory, publishUrl, subscribe, bytesToObjects,
+        StorageLevel.MEMORY_AND_DISK_SER_2(), SupervisorStrategy.defaultStrategy());
+  }
+}
+
+class BytesToObjects implements Function<byte[][], Iterable<String>> {
+  @Override
+  public Iterable<String> call(byte[][] bytes) throws Exception {
+    return null;
+  }
+}
+
+class ActorSystemFactoryForTest implements ActorSystemFactory {
+  @Override
+  public ActorSystem create() {
+    return null;
   }
 }

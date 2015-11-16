@@ -306,6 +306,7 @@ class StreamingContext private[streaming] (
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
+  @deprecated("Use org.apache.spark.streaming.akka.AkkaUtils.createStream instead", "1.5.0")
   def actorStream[T: ClassTag](
       props: Props,
       name: String,

@@ -34,13 +34,17 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
+  val nonStreamingProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
+    sql, networkCommon, networkShuffle, launcher, unsafe, testTags) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
-      "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+      "sql", "network-common", "network-shuffle", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+
+  val streamingProjects@Seq(streaming, streamingFlumeSink, streamingAkka, streamingFlume, streamingKafka,
+    streamingMqtt, streamingTwitter, streamingZeromq) =
+    Seq("streaming", "streaming-flume-sink", "streaming-akka", "streaming-flume", "streaming-kafka",
+      "streaming-mqtt", "streaming-twitter", "streaming-zeromq").map(ProjectRef(buildLocation, _))
+
+  val allProjects = nonStreamingProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
@@ -222,8 +226,18 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
+  /* Enable sun.io.serialization.extendedDebugInfo for all projects except streamingAkka */
+  (allProjects ++ optionallyEnabledProjects).filter { x =>
+    // The unit tests in streamingAkka need to serialize com.typesafe.config.Config. However, we
+    // cannot enable sun.io.serialization.extendedDebugInfo because of
+    // https://github.com/typesafehub/config/issues/176
+    // Note: although this issue is already resolved in Config 1.3.0, but it only supports Java 8.
+    x != streamingAkka
+  }.foreach(enable(SerializationDebugSettings.settings))
+
+  // TODO: remove streamingAkka from this list after 1.6.0
   allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe, testTags).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn, unsafe, streamingAkka, testTags).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -568,7 +582,7 @@ object Unidoc {
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
-        "streaming.api.java", "streaming.flume", "streaming.kafka",
+        "streaming.api.java", "streaming.akka", "streaming.flume", "streaming.kafka",
         "streaming.mqtt", "streaming.twitter", "streaming.zeromq", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
@@ -634,7 +648,6 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
-    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test ++= System.getProperties.asScala.filter(_._1.startsWith("spark"))
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
@@ -680,4 +693,12 @@ object TestSettings {
     )
   )
 
+}
+
+object SerializationDebugSettings {
+  import BuildCommons._
+
+  lazy val settings = Seq (
+    javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true"
+  )
 }
