@@ -46,22 +46,8 @@ public class TransportFrameDecoderSuite {
   public void testFrameDecoding() throws Exception {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mockChannelHandlerContext();
-
-    final int frameCount = 100;
-    ByteBuf data = createInputBuffer(frameCount);
-    try {
-      while (data.isReadable()) {
-        int size = RND.nextInt(16 * 1024) + 256;
-        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
-      }
-
-      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
-
-      decoder.channelInactive(ctx);
-      assertTrue("There shouldn't be dangling references to the data.", data.release());
-    } finally {
-      release(data);
-    }
+    ByteBuf data = createAndFeedFrames(100, decoder, ctx);
+    verifyAndCloseDecoder(decoder, ctx, data);
   }
 
   @Test
@@ -116,30 +102,19 @@ public class TransportFrameDecoderSuite {
       }
     });
 
-    final int frameCount = 100;
-    ByteBuf data = createInputBuffer(frameCount);
+    ByteBuf data = createAndFeedFrames(100, decoder, ctx);
     try {
-      while (data.isReadable()) {
-        int size = RND.nextInt(16 * 1024) + 256;
-        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
-      }
-
-      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
-
       // Verify all retained buffers are readable.
       for (ByteBuf b : retained) {
         byte[] tmp = new byte[b.readableBytes()];
         b.readBytes(tmp);
         b.release();
       }
-
-      decoder.channelInactive(ctx);
-      assertTrue("There shouldn't be dangling references to the data.", data.release());
+      verifyAndCloseDecoder(decoder, ctx, data);
     } finally {
       for (ByteBuf b : retained) {
         release(b);
       }
-      release(data);
     }
   }
 
@@ -160,14 +135,45 @@ public class TransportFrameDecoderSuite {
     testInvalidFrame(Integer.MAX_VALUE + 9);
   }
 
-  private ByteBuf createInputBuffer(int frameCount) throws Exception {
+  /**
+   * Creates a number of randomly sized frames and feed them to the given decoder, verifying
+   * that the frames were read.
+   */
+  private ByteBuf createAndFeedFrames(
+      int frameCount,
+      TransportFrameDecoder decoder,
+      ChannelHandlerContext ctx) throws Exception {
     ByteBuf data = Unpooled.buffer();
     for (int i = 0; i < frameCount; i++) {
       byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
       data.writeLong(frame.length + 8);
       data.writeBytes(frame);
     }
+
+    try {
+      while (data.isReadable()) {
+        int size = RND.nextInt(4 * 1024) + 256;
+        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
+      }
+
+      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
+    } catch (Exception e) {
+      release(data);
+      throw e;
+    }
     return data;
+  }
+
+  private void verifyAndCloseDecoder(
+      TransportFrameDecoder decoder,
+      ChannelHandlerContext ctx,
+      ByteBuf data) throws Exception {
+    try {
+      decoder.channelInactive(ctx);
+      assertTrue("There shouldn't be dangling references to the data.", data.release());
+    } finally {
+      release(data);
+    }
   }
 
   private void testInvalidFrame(long size) throws Exception {
