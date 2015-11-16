@@ -249,9 +249,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       ParquetFileWriter.writeMetadataFile(sparkContext.hadoopConfiguration, path, footer)
 
       val jsonDataType = sqlContext.read.parquet(path.toString).schema(0).dataType
-      assert(jsonDataType == StringType)
+      assert(jsonDataType === StringType)
       val bsonDataType = sqlContext.read.parquet(path.toString).schema(1).dataType
-      assert(bsonDataType == BinaryType)
+      assert(bsonDataType === BinaryType)
     }
   }
 
