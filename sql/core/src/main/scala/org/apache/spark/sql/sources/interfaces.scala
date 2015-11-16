@@ -446,7 +446,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val jobConf = new JobConf(hadoopConf, this.getClass())
           val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
           if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)) .getOrElse(Array.empty)
+            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
           } else {
             Try(fs.listStatus(qualified)).getOrElse(Array.empty)
           }
@@ -827,9 +827,7 @@ private[sql] object HadoopFsRelation extends Logging {
       if (pathFilter != null) {
         val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      }
-      else
-      {
+      } else {
         val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
         files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
       }
