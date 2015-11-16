@@ -760,8 +760,8 @@ class DataFrame(object):
         |summary|               age| name|
         +-------+------------------+-----+
         |  count|                 2|    2|
-        |   mean|               3.5|  NaN|
-        | stddev|2.1213203435596424|  NaN|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+

@@ -239,7 +239,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-8828 sum should return null if all input values are null") {
     checkAnswer(
       sql("select sum(a), avg(a) from allNulls"),
-      Seq(Row(null, Double.NaN))
+      Seq(Row(null, null))
     )
   }
 
@@ -335,7 +335,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // Aggregate with Code generation handling all null values
       testCodeGen(
         "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-        Row(null, Double.NaN, 0) :: Nil)
+        Row(null, null, 0) :: Nil)
     } finally {
       sqlContext.dropTempTable("testData3x")
     }
