@@ -28,6 +28,7 @@ def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
     if s is None:
         return None
+    s = unicode(s, errors='ignore')
     return s.decode('utf-8')
 
 

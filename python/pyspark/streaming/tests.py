@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import glob
 import os
 import sys
@@ -26,6 +25,7 @@ import random
 import struct
 import shutil
 from functools import reduce
+
 
 try:
     import xmlrunner
@@ -47,7 +47,7 @@ from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 from pyspark.streaming.flume import FlumeUtils
 from pyspark.streaming.mqtt import MQTTUtils
-from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream, utf8_decoder
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -1132,6 +1132,9 @@ class MQTTStreamTests(PySparkStreamingTestCase):
 
 
 class KinesisStreamTests(PySparkStreamingTestCase):
+    def test_utf8_decoder(self):
+        # Testing for exception being thrown with a non-utf8 string.
+        utf8_decoder("\x81")
 
     def test_kinesis_stream_api(self):
         # Don't start the StreamingContext because we cannot test it in Jenkins
