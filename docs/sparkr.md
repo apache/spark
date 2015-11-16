@@ -342,7 +342,7 @@ training <- filter(df, df$Species != "setosa")
 # Fit a binomial GLM model over the dataset.
 model <- glm(Species ~ Sepal_Length + Sepal_Width, data = training, family = "binomial")
 
-# Model summary are returned in a similar format to R's native glm().
+# Model coefficients are returned in a similar format to R's native glm().
 summary(model)
 ##$coefficients
 ##               Estimate
