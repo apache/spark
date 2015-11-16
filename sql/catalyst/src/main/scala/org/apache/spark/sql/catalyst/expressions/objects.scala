@@ -363,30 +363,15 @@ case class MapObjects(
       (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
       (".length", (i: String) => s"[$i]", false)
-    case ArrayType(s: StructType, _) =>
-      (".numElements()", itemAccessorMethod(s), false)
-    case ArrayType(a: ArrayType, _) =>
-      (".numElements()", itemAccessorMethod(a), true)
-    case ArrayType(IntegerType, _) =>
-      (".numElements()", itemAccessorMethod(IntegerType), true)
-    case ArrayType(LongType, _) =>
-      (".numElements()", itemAccessorMethod(LongType), true)
-    case ArrayType(FloatType, _) =>
-      (".numElements()", itemAccessorMethod(FloatType), true)
-    case ArrayType(DoubleType, _) =>
-      (".numElements()", itemAccessorMethod(DoubleType), true)
-    case ArrayType(ByteType, _) =>
-      (".numElements()", itemAccessorMethod(ByteType), true)
-    case ArrayType(ShortType, _) =>
-      (".numElements()", itemAccessorMethod(ShortType), true)
-    case ArrayType(BooleanType, _) =>
-      (".numElements()", itemAccessorMethod(BooleanType), true)
-    case ArrayType(StringType, _) =>
-      (".numElements()", itemAccessorMethod(StringType), false)
-    case ArrayType(m: MapType, _) =>
-      (".numElements()", itemAccessorMethod(m), false)
-    case ArrayType(udt: UserDefinedType[_], _) =>
-      (".numElements()", itemAccessorMethod(udt.sqlType), false)
+    case ArrayType(t, _) =>
+      val (sqlType, primitiveElement) = t match {
+        case m: MapType => (m, false)
+        case s: StructType => (s, false)
+        case s: StringType => (s, false)
+        case udt: UserDefinedType[_] => (udt.sqlType, false)
+        case o => (o, true)
+      }
+      (".numElements()", itemAccessorMethod(sqlType), primitiveElement)
   }
 
   override def nullable: Boolean = true
