@@ -267,10 +267,10 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     sqlContext.baseRelationToDataFrame(
       new JSONRelation(
         Some(jsonRDD),
-        JSONOptions.createFromConfigMap(extraOptions.toMap),
-        userSpecifiedSchema,
-        None,
-        None)(sqlContext)
+        maybeDataSchema = userSpecifiedSchema,
+        maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
     )
   }
 

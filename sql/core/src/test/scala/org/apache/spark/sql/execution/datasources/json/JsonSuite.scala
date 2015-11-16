@@ -588,7 +588,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
     assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
-    assert(relation.asInstanceOf[JSONRelation].configOptions.samplingRatio === (0.49 +- 0.001))
+    assert(relation.asInstanceOf[JSONRelation].options.samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
@@ -597,7 +597,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
-    assert(relationWithSchema.configOptions.samplingRatio > 0.99)
+    assert(relationWithSchema.options.samplingRatio > 0.99)
   }
 
   test("Loading a JSON dataset from a text file") {
@@ -1165,28 +1165,25 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("JSONRelation equality test") {
     val relation0 = new JSONRelation(
       Some(empty),
-      JSONOptions(),
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None,
       None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
-      JSONOptions(),
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None,
       None)(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
-      JSONOptions(samplingRatio = 0.5),
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None,
-      None)(sqlContext)
+      None,
+      parameters = Map("samplingRatio" -> "0.5"))(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
-      JSONOptions(),
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
       None,
       None)(sqlContext)

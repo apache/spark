@@ -55,7 +55,6 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
     new JSONRelation(
       inputRDD = None,
-      configOptions = JSONOptions.createFromConfigMap(parameters),
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
@@ -66,7 +65,6 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
 private[sql] class JSONRelation(
     val inputRDD: Option[RDD[String]],
-    val configOptions: JSONOptions,
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
@@ -74,6 +72,8 @@ private[sql] class JSONRelation(
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
 
   /** Constraints to be imposed on schema to be stored. */
   private def checkConstraints(schema: StructType): Unit = {
@@ -114,7 +114,7 @@ private[sql] class JSONRelation(
       InferSchema.infer(
         inputRDD.getOrElse(createBaseRdd(files)),
         sqlContext.conf.columnNameOfCorruptRecord,
-        configOptions)
+        options)
     }
     checkConstraints(jsonSchema)
 
@@ -131,7 +131,7 @@ private[sql] class JSONRelation(
       inputRDD.getOrElse(createBaseRdd(inputPaths)),
       requiredDataSchema,
       sqlContext.conf.columnNameOfCorruptRecord,
-      configOptions)
+      options)
 
     rows.mapPartitions { iterator =>
       val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
