@@ -160,6 +160,20 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      testData.write.parquet(path)
+      val df = sqlContext.read.parquet(path)
+      sqlContext.registerDataFrameAsTable(df, "testPushed")
+
+      withTempTable("testPushed") {
+        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        assert(exp.toString.contains("PushedFilter: [EqualTo(key,15)]"))
+      }
+    }
+  }
+
   test("efficient limit -> project -> sort") {
     {
       val query =
