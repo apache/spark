@@ -369,8 +369,7 @@ class SparkSubmitSuite
 
   // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
   // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
-  /*
-  test("correctly builds R packages included in a jar with --packages") {
+  ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -389,7 +388,6 @@ class SparkSubmitSuite
       runSparkSubmit(args)
     }
   }
-  */
 
   test("resolves command line argument paths correctly") {
     val jars = "/jar1,/jar2"                 // --jars
