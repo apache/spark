@@ -52,13 +52,9 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-    val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
-    val primitivesAsString = parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
 
     new JSONRelation(
       inputRDD = None,
-      samplingRatio = samplingRatio,
-      primitivesAsString = primitivesAsString,
       maybeDataSchema = dataSchema,
       maybePartitionSpec = None,
       userDefinedPartitionColumns = partitionColumns,
@@ -69,8 +65,6 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
 private[sql] class JSONRelation(
     val inputRDD: Option[RDD[String]],
-    val samplingRatio: Double,
-    val primitivesAsString: Boolean,
     val maybeDataSchema: Option[StructType],
     val maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
@@ -78,6 +72,8 @@ private[sql] class JSONRelation(
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters) {
+
+  val options: JSONOptions = JSONOptions.createFromConfigMap(parameters)
 
   /** Constraints to be imposed on schema to be stored. */
   private def checkConstraints(schema: StructType): Unit = {
@@ -109,17 +105,16 @@ private[sql] class JSONRelation(
       classOf[Text]).map(_._2.toString) // get the text line
   }
 
-  override lazy val dataSchema = {
+  override lazy val dataSchema: StructType = {
     val jsonSchema = maybeDataSchema.getOrElse {
       val files = cachedLeafStatuses().filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
       }.toArray
-      InferSchema(
+      InferSchema.infer(
         inputRDD.getOrElse(createBaseRdd(files)),
-        samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord,
-        primitivesAsString)
+        options)
     }
     checkConstraints(jsonSchema)
 
@@ -132,10 +127,11 @@ private[sql] class JSONRelation(
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-    val rows = JacksonParser(
+    val rows = JacksonParser.parse(
       inputRDD.getOrElse(createBaseRdd(inputPaths)),
       requiredDataSchema,
-      sqlContext.conf.columnNameOfCorruptRecord)
+      sqlContext.conf.columnNameOfCorruptRecord,
+      options)
 
     rows.mapPartitions { iterator =>
       val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
