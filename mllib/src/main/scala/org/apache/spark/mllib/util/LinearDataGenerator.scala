@@ -131,7 +131,7 @@ object LinearDataGenerator {
       eps: Double,
       sparsity: Double): Seq[LabeledPoint] = {
     require(0.0 <= sparsity && sparsity <= 1.0)
-    
+
     val rnd = new Random(seed)
     val rndG = new Random(seed)
     if (sparsity <= 0.0) {
