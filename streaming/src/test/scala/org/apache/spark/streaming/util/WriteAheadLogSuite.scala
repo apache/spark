@@ -20,7 +20,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{TimeUnit, CountDownLatch, ThreadPoolExecutor}
+import java.util.concurrent.{RejectedExecutionException, TimeUnit, CountDownLatch, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -189,6 +189,28 @@ abstract class CommonWriteAheadLogTests(
       wal.read(writtenSegment.head)
     }
     assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
+  }
+
+  test(testPrefix + "parallel recovery not enabled if closeFileAfterWrite = false") {
+    // write some data
+    val writtenData = (1 to 10).map { i =>
+      val data = generateRandomData()
+      val file = testDir + s"/log-$i-$i"
+      writeDataManually(data, file, allowBatching)
+      data
+    }.flatten
+
+    val wal = createWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
+    // create iterator but don't materialize it
+    val readData = wal.readAll().asScala.map(byteBufferToString)
+    wal.close()
+    if (closeFileAfterWrite) {
+      // the threadpool is shutdown by the wal.close call above, therefore we shouldn't be able
+      // to materialize the iterator with parallel recovery
+      intercept[RejectedExecutionException](readData.toArray)
+    } else {
+      assert(readData.toSeq === writtenData)
+    }
   }
 }
 

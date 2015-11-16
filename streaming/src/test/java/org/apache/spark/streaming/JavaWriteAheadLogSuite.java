@@ -108,6 +108,7 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
   public void testCustomWAL() {
     SparkConf conf = new SparkConf();
     conf.set("spark.streaming.driver.writeAheadLog.class", JavaWriteAheadLogSuite.class.getName());
+    conf.set("spark.streaming.driver.writeAheadLog.allowBatching", "false");
     WriteAheadLog wal = WriteAheadLogUtils.createLogForDriver(conf, null, null);
 
     String data1 = "data1";
