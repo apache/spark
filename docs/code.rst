@@ -61,6 +61,7 @@ Operator API
         HiveToMySqlTransfer,
         SimpleHttpOperator,
         HttpSensor,
+        MetastorePartitionSensor,
         MsSqlOperator,
         MsSqlToHiveTransfer,
         MySqlOperator,
