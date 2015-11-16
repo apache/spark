@@ -21,9 +21,6 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.spark.TestUtils.JavaSourceFromString
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -33,6 +30,8 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.storage.TaskResultBlockId
+import org.apache.spark.TestUtils.JavaSourceFromString
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
  * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
@@ -125,9 +124,19 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     assert(scheduler.nextTaskId.get() === 2)
   }
 
-  // SPARK-11195
-  // Make sure we are using the context classloader when deserializing failed TaskResults instead of
-  // the Spark classloader.
+  /**
+   * SPARK-11195
+
+   * Make sure we are using the context classloader when deserializing failed TaskResults instead
+   * of the Spark classloader.
+
+   * This test compiles a jar containing an exception and tests that when it is thrown on the
+   * executor, enqueueFailedTask can correctly deserialize the failure and identify the thrown
+   * exception as the cause.
+
+   * Before this fix, enqueueFailedTask would throw a ClassNotFoundException when deserializing
+   * the exception, resulting in an UnknownReason for the TaskEndResult.
+   */
   test("failed task deserialized with the correct classloader") {
     // compile a small jar containing an exception that will be thrown on an executor.
     val tempDir = Utils.createTempDir()
@@ -144,18 +153,22 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     TestUtils.createJar(Seq(excFile), jarFile, directoryPrefix = Some("repro"))
 
     // load the exception from the jar
-    val loader = new MutableURLClassLoader(new Array[URL](0), Thread.currentThread.getContextClassLoader)
+    val originalClassLoader = Thread.currentThread.getContextClassLoader
+    val loader = new MutableURLClassLoader(new Array[URL](0), originalClassLoader)
     loader.addURL(jarFile.toURI.toURL)
     Thread.currentThread().setContextClassLoader(loader)
-    val excClass: Class[_] = Class.forName("repro.MyException", false, loader)
+    val excClass: Class[_] = Utils.classForName("repro.MyException")
 
+    // NOTE: we must run the cluster with "local" so that the executor can load the compiled
+    // jar.
     sc = new SparkContext("local", "test", conf)
     val rdd = sc.parallelize(Seq(1), 1).map(x => {
       val exc = excClass.newInstance().asInstanceOf[Exception]
       throw exc
     })
 
-    // the driver should not have any problems resolving the exception class and determining why the task failed.
+    // the driver should not have any problems resolving the exception class and determining
+    // why the task failed.
     val exceptionMessage = intercept[SparkException] {
       rdd.collect()
     }.getMessage
@@ -165,6 +178,9 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
 
     assert(expectedFailure.findFirstMatchIn(exceptionMessage).isDefined)
     assert(unknownFailure.findFirstMatchIn(exceptionMessage).isEmpty)
+
+    // reset the classloader to the default value
+    Thread.currentThread.setContextClassLoader(originalClassLoader)
   }
 }
 

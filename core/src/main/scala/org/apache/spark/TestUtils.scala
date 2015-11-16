@@ -131,7 +131,7 @@ private[spark] object TestUtils {
     val fileName = className + ".class"
     val result = new File(fileName)
     assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, result.getName)
+    val out = new File(destDir, fileName)
 
     // renameTo cannot handle in and out files in different filesystems
     // use google's Files.move instead
