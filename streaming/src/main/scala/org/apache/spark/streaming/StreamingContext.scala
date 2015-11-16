@@ -694,7 +694,8 @@ class StreamingContext private[streaming] (
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
     if (AsynchronousListenerBus.withinListenerThread.value) {
-      throw new SparkException("Cannot stop StreamingContext within listener thread of AsynchronousListenerBus")
+      throw new SparkException("Cannot stop StreamingContext within listener thread of
+        AsynchronousListenerBus")
     }
     synchronized {
       try {

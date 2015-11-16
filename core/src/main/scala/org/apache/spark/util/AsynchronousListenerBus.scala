@@ -186,3 +186,4 @@ private[spark] object AsynchronousListenerBus {
   */
   val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 }
+
