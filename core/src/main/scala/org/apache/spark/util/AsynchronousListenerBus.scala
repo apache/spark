@@ -78,7 +78,7 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
           val event = eventQueue.poll
           assert(event != null, "event queue was empty but the listener bus was not stopped")
           if (eventLimit > 0) {
-            eventLimit--
+            eventLimit-=1
           }
           postToAll(event)
         } finally {
