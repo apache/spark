@@ -33,9 +33,9 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     case c: ConvertToSafe => c
   }
 
-  private val outputsSafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsSafe = ReferenceSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsUnsafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {

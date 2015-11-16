@@ -162,6 +162,31 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("multiple column distinct count") {
+    val df1 = Seq(
+      ("a", "b", "c"),
+      ("a", "b", "c"),
+      ("a", "b", "d"),
+      ("x", "y", "z"),
+      ("x", "q", null.asInstanceOf[String]))
+      .toDF("key1", "key2", "key3")
+
+    checkAnswer(
+      df1.agg(countDistinct('key1, 'key2)),
+      Row(3)
+    )
+
+    checkAnswer(
+      df1.agg(countDistinct('key1, 'key2, 'key3)),
+      Row(3)
+    )
+
+    checkAnswer(
+      df1.groupBy('key1).agg(countDistinct('key2, 'key3)),
+      Seq(Row("a", 2), Row("x", 1))
+    )
+  }
+
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
@@ -170,7 +195,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("stddev") {
-    val testData2ADev = math.sqrt(4 / 5.0)
+    val testData2ADev = math.sqrt(4.0 / 5.0)
     checkAnswer(
       testData2.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
       Row(testData2ADev, math.sqrt(4 / 6.0), testData2ADev))
@@ -180,7 +205,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
     emptyTableData.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
-    Row(null, null, null))
+    Row(Double.NaN, Double.NaN, Double.NaN))
   }
 
   test("zero sum") {

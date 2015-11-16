@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.HashMap
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Future, ExecutionContext}
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
@@ -437,7 +437,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     // TODO Remove this thread pool after https://github.com/apache/spark/issues/7385 is merged
     private val submitJobThreadPool = ExecutionContext.fromExecutorService(
-      ThreadUtils.newDaemonCachedThreadPool("submit-job-thead-pool"))
+      ThreadUtils.newDaemonCachedThreadPool("submit-job-thread-pool"))
+
+    private val walBatchingThreadPool = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonCachedThreadPool("wal-batching-thread-pool"))
+
+    @volatile private var active: Boolean = true
 
     override def receive: PartialFunction[Any, Unit] = {
       // Local messages
@@ -488,7 +493,19 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           registerReceiver(streamId, typ, host, executorId, receiverEndpoint, context.senderAddress)
         context.reply(successful)
       case AddBlock(receivedBlockInfo) =>
-        context.reply(addBlock(receivedBlockInfo))
+        if (WriteAheadLogUtils.isBatchingEnabled(ssc.conf, isDriver = true)) {
+          walBatchingThreadPool.execute(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              if (active) {
+                context.reply(addBlock(receivedBlockInfo))
+              } else {
+                throw new IllegalStateException("ReceiverTracker RpcEndpoint shut down.")
+              }
+            }
+          })
+        } else {
+          context.reply(addBlock(receivedBlockInfo))
+        }
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
@@ -599,6 +616,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     override def onStop(): Unit = {
       submitJobThreadPool.shutdownNow()
+      active = false
+      walBatchingThreadPool.shutdown()
     }
 
     /**

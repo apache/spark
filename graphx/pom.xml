@@ -48,6 +48,10 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.xbean</groupId>
+      <artifactId>xbean-asm5-shaded</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>

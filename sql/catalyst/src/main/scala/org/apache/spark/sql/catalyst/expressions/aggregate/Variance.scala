@@ -24,6 +24,8 @@ case class VarianceSamp(child: Expression,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
 
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -42,10 +44,13 @@ case class VarianceSamp(child: Expression,
   }
 }
 
-case class VariancePop(child: Expression,
+case class VariancePop(
+    child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
+
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
