@@ -421,7 +421,8 @@ object DateTimeUtils {
    * microseconds.
    */
   def getSeconds(microsec: SQLTimestamp): Int = {
-    ((absoluteMicroSecond(microsec) / MICROS_PER_SECOND) % 60).toInt
+    val localTs = absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
+    ((localTs / MICROS_PER_SECOND) % 60).toInt
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {
