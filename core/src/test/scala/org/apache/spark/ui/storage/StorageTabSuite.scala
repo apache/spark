@@ -18,11 +18,12 @@
 package org.apache.spark.ui.storage
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
+
+import org.apache.spark.SparkConf
 import org.apache.spark.Success
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
-import org.apache.spark.SparkConf
 
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
