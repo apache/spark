@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{SparkUI, UIUtils}
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -261,7 +261,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       l <- links
       attrs <- l.attribute("href")
     } yield (attrs.toString)
-    justHrefs should contain(link)
+    justHrefs should contain (UIUtils.prependBaseUri(resource = link))
+  }
+
+  test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
+    val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
+    val page = new HistoryPage(server)
+    val request = mock[HttpServletRequest]
+
+    // when
+    System.setProperty("spark.ui.proxyBase", uiRoot)
+    val response = page.render(request)
+    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
+
+    // then
+    val urls = response \\ "@href" map (_.toString)
+    val siteRelativeLinks = urls filter (_.startsWith("/"))
+    all (siteRelativeLinks) should startWith (uiRoot)
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {

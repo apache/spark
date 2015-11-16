@@ -24,19 +24,19 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
 import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
 
 /**
  * A serialized version of a Python lambda function.  Suitable for use in a [[PythonRDD]].
@@ -121,12 +121,10 @@ object EvaluatePython {
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
-    // This is an annoying hack - we should refactor the code so executeCollect and executeTake
-    // returns InternalRow rather than Row.
-    val converter = CatalystTypeConverters.createToCatalystConverter(df.schema)
-    val iter = new SerDeUtil.AutoBatchedPickler(df.take(n).iterator.map { row =>
-      EvaluatePython.toJava(converter(row).asInstanceOf[InternalRow], df.schema)
-    })
+    val iter = new SerDeUtil.AutoBatchedPickler(
+      df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
+        EvaluatePython.toJava(row, df.schema)
+      })
     PythonRDD.serveIterator(iter, s"serve-DataFrame")
   }
 
@@ -322,10 +320,8 @@ object EvaluatePython {
 }
 
 /**
- * :: DeveloperApi ::
  * Evaluates a [[PythonUDF]], appending the result to the end of the input tuple.
  */
-@DeveloperApi
 case class EvaluatePython(
     udf: PythonUDF,
     child: LogicalPlan,
@@ -339,7 +335,6 @@ case class EvaluatePython(
 }
 
 /**
- * :: DeveloperApi ::
  * Uses PythonRDD to evaluate a [[PythonUDF]], one partition of tuples at a time.
  *
  * Python evaluation works by sending the necessary (projected) input data via a socket to an
@@ -349,7 +344,6 @@ case class EvaluatePython(
  * we drain the queue to find the original input row. Note that if the Python process is way too
  * slow, this could lead to the queue growing unbounded and eventually run out of memory.
  */
-@DeveloperApi
 case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
 

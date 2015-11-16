@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
+import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -96,11 +97,16 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
+ * TODO: Unify with [[GetInternalRowField]], remove the need to specify a [[StructField]].
  */
 case class GetStructField(child: Expression, field: StructField, ordinal: Int)
   extends UnaryExpression {
 
-  override def dataType: DataType = field.dataType
+  override def dataType: DataType = child.dataType match {
+    case s: StructType => s(ordinal).dataType
+    // This is a hack to avoid breaking existing code until we remove the need for the struct field
+    case _ => field.dataType
+  }
   override def nullable: Boolean = child.nullable || field.nullable
   override def toString: String = s"$child.${field.name}"
 
@@ -113,7 +119,7 @@ case class GetStructField(child: Expression, field: StructField, ordinal: Int)
         if ($eval.isNullAt($ordinal)) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
         }
       """
     })
@@ -175,7 +181,7 @@ case class GetArrayStructFields(
             }
           }
         }
-        ${ev.primitive} = new $arrayClass(values);
+        ${ev.value} = new $arrayClass(values);
       """
     })
   }
@@ -219,7 +225,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
         if (index >= $eval1.numElements() || index < 0) {
           ${ev.isNull} = true;
         } else {
-          ${ev.primitive} = ${ctx.getValue(eval1, dataType, "index")};
+          ${ev.value} = ${ctx.getValue(eval1, dataType, "index")};
         }
       """
     })
@@ -295,7 +301,7 @@ case class GetMapValue(child: Expression, key: Expression)
         }
 
         if ($found) {
-          ${ev.primitive} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
+          ${ev.value} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
         } else {
           ${ev.isNull} = true;
         }

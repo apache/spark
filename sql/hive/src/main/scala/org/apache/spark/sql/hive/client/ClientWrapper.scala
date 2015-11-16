@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
@@ -33,9 +32,10 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, SparkException, Logging}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -60,7 +60,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
 private[hive] class ClientWrapper(
     override val version: HiveVersion,
     config: Map[String, String],
-    initClassLoader: ClassLoader)
+    initClassLoader: ClassLoader,
+    val clientLoader: IsolatedClientLoader)
   extends ClientInterface
   with Logging {
 
@@ -149,32 +150,51 @@ private[hive] class ClientWrapper(
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
-    val ret = try {
-      val oldState = SessionState.get()
-      if (oldState == null) {
-        val initialConf = new HiveConf(classOf[SessionState])
-        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-        // the initial value will be the current thread's context class loader
-        // (i.e. initClassLoader at here).
-        // We call initialConf.setClassLoader(initClassLoader) at here to make
-        // this action explicit.
-        initialConf.setClassLoader(initClassLoader)
-        config.foreach { case (k, v) =>
-          if (k.toLowerCase.contains("password")) {
-            logDebug(s"Hive Config: $k=xxx")
-          } else {
-            logDebug(s"Hive Config: $k=$v")
-          }
-          initialConf.set(k, v)
-        }
-        val newState = new SessionState(initialConf)
-        SessionState.start(newState)
-        newState.out = new PrintStream(outputBuffer, true, "UTF-8")
-        newState.err = new PrintStream(outputBuffer, true, "UTF-8")
-        newState
+
+    // Set up kerberos credentials for UserGroupInformation.loginUser within
+    // current class loader
+    // Instead of using the spark conf of the current spark context, a new
+    // instance of SparkConf is needed for the original value of spark.yarn.keytab
+    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
+    // keytab configuration for the link name in distributed cache
+    val sparkConf = new SparkConf
+    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
+      val principalName = sparkConf.get("spark.yarn.principal")
+      val keytabFileName = sparkConf.get("spark.yarn.keytab")
+      if (!new File(keytabFileName).exists()) {
+        throw new SparkException(s"Keytab file: ${keytabFileName}" +
+          " specified in spark.yarn.keytab does not exist")
       } else {
-        oldState
+        logInfo("Attempting to login to Kerberos" +
+          s" using principal: ${principalName} and keytab: ${keytabFileName}")
+        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
       }
+    }
+
+    val ret = try {
+      val initialConf = new HiveConf(classOf[SessionState])
+      // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+      // the initial value will be the current thread's context class loader
+      // (i.e. initClassLoader at here).
+      // We call initialConf.setClassLoader(initClassLoader) at here to make
+      // this action explicit.
+      initialConf.setClassLoader(initClassLoader)
+      config.foreach { case (k, v) =>
+        if (k.toLowerCase.contains("password")) {
+          logDebug(s"Hive Config: $k=xxx")
+        } else {
+          logDebug(s"Hive Config: $k=$v")
+        }
+        initialConf.set(k, v)
+      }
+      val state = new SessionState(initialConf)
+      if (clientLoader.cachedHive != null) {
+        Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
+      }
+      SessionState.start(state)
+      state.out = new PrintStream(outputBuffer, true, "UTF-8")
+      state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
     }
@@ -188,11 +208,6 @@ private[hive] class ClientWrapper(
     conf.get(key, defaultValue)
   }
 
-  // TODO: should be a def?s
-  // When we create this val client, the HiveConf of it (conf) is the one associated with state.
-  @GuardedBy("this")
-  private var client = Hive.get(conf)
-
   // We use hive's conf for compatibility.
   private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
   private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)
@@ -200,7 +215,7 @@ private[hive] class ClientWrapper(
   /**
    * Runs `f` with multiple retries in case the hive metastore is temporarily unreachable.
    */
-  private def retryLocked[A](f: => A): A = synchronized {
+  private def retryLocked[A](f: => A): A = clientLoader.synchronized {
     // Hive sometimes retries internally, so set a deadline to avoid compounding delays.
     val deadline = System.nanoTime + (retryLimit * retryDelayMillis * 1e6).toLong
     var numTries = 0
@@ -215,13 +230,8 @@ private[hive] class ClientWrapper(
           logWarning(
             "HiveClientWrapper got thrift exception, destroying client and retrying " +
               s"(${retryLimit - numTries} tries remaining)", e)
+          clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
-          try {
-            client = Hive.get(state.getConf, true)
-          } catch {
-            case e: Exception if causedByThrift(e) =>
-              logWarning("Failed to refresh hive client, will retry.", e)
-          }
       }
     } while (numTries <= retryLimit && System.nanoTime < deadline)
     if (System.nanoTime > deadline) {
@@ -242,13 +252,26 @@ private[hive] class ClientWrapper(
     false
   }
 
+  def client: Hive = {
+    if (clientLoader.cachedHive != null) {
+      clientLoader.cachedHive.asInstanceOf[Hive]
+    } else {
+      val c = Hive.get(conf)
+      clientLoader.cachedHive = c
+      c
+    }
+  }
+
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  private def withHiveState[A](f: => A): A = retryLocked {
+  def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     // Set the thread local metastore client to the client associated with this ClientWrapper.
     Hive.set(client)
+    // The classloader in clientLoader could be changed after addJar, always use the latest
+    // classloader
+    state.getConf.setClassLoader(clientLoader.classLoader)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
@@ -352,6 +375,37 @@ private[hive] class ClientWrapper(
     table.serde.foreach(qlTable.setSerializationLib)
 
     qlTable
+  }
+
+  private def toViewTable(view: HiveTable): metadata.Table = {
+    // TODO: this is duplicated with `toQlTable` except the table type stuff.
+    val tbl = new metadata.Table(view.database, view.name)
+    tbl.setTableType(HTableType.VIRTUAL_VIEW)
+    tbl.setSerializationLib(null)
+    tbl.clearSerDeInfo()
+
+    // TODO: we will save the same SQL string to original and expanded text, which is different
+    // from Hive.
+    tbl.setViewOriginalText(view.viewText.get)
+    tbl.setViewExpandedText(view.viewText.get)
+
+    tbl.setFields(view.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
+    view.properties.foreach { case (k, v) => tbl.setProperty(k, v) }
+
+    // set owner
+    tbl.setOwner(conf.getUser)
+    // set create time
+    tbl.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
+
+    tbl
+  }
+
+  override def createView(view: HiveTable): Unit = withHiveState {
+    client.createTable(toViewTable(view))
+  }
+
+  override def alertView(view: HiveTable): Unit = withHiveState {
+    client.alterTable(view.qualifiedName, toViewTable(view))
   }
 
   override def createTable(table: HiveTable): Unit = withHiveState {
@@ -512,6 +566,23 @@ private[hive] class ClientWrapper(
       numDP,
       holdDDLTime,
       listBucketingEnabled)
+  }
+
+  def addJar(path: String): Unit = {
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    clientLoader.addJar(jarURL)
+    runSqlHive(s"ADD JAR $path")
+  }
+
+  def newSession(): ClientWrapper = {
+    clientLoader.createClient().asInstanceOf[ClientWrapper]
   }
 
   def reset(): Unit = withHiveState {

@@ -19,9 +19,11 @@ package org.apache.spark.sql.columnar
 
 import scala.collection.immutable.HashSet
 import scala.util.Random
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.types.{DataType, Decimal, AtomicType}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericMutableRow}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData}
+import org.apache.spark.sql.types.{AtomicType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ColumnarTestUtils {
@@ -39,21 +41,25 @@ object ColumnarTestUtils {
     }
 
     (columnType match {
+      case NULL => null
       case BOOLEAN => Random.nextBoolean()
       case BYTE => (Random.nextInt(Byte.MaxValue * 2) - Byte.MaxValue).toByte
       case SHORT => (Random.nextInt(Short.MaxValue * 2) - Short.MaxValue).toShort
       case INT => Random.nextInt()
-      case DATE => Random.nextInt()
       case LONG => Random.nextLong()
-      case TIMESTAMP => Random.nextLong()
       case FLOAT => Random.nextFloat()
       case DOUBLE => Random.nextDouble()
       case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))
       case BINARY => randomBytes(Random.nextInt(32))
-      case FIXED_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
-      case _ =>
-        // Using a random one-element map instead of an arbitrary object
-        Map(Random.nextInt() -> Random.nextString(Random.nextInt(32)))
+      case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
+      case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
+      case STRUCT(_) =>
+        new GenericInternalRow(Array[Any](UTF8String.fromString(Random.nextString(10))))
+      case ARRAY(_) =>
+        new GenericArrayData(Array[Any](Random.nextInt(), Random.nextInt()))
+      case MAP(_) =>
+        ArrayBasedMapData(
+          Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32)))))
     }).asInstanceOf[JvmType]
   }
 

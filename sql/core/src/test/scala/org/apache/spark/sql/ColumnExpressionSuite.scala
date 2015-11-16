@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.execution.{Project, TungstenProject}
+import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -563,6 +563,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       df.select(monotonicallyIncreasingId()),
       Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
     )
+    checkAnswer(
+      df.select(expr("monotonically_increasing_id()")),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
   }
 
   test("sparkPartitionId") {
@@ -586,12 +590,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(data.select(inputFileName()).limit(1), Row(""))
     }
-  }
-
-  test("lift alias out of cast") {
-    compareExpressions(
-      col("1234").as("name").cast("int").expr,
-      col("1234").cast("int").as("name").expr)
   }
 
   test("columns can be compared") {
@@ -621,8 +619,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
       val projects = df.queryExecution.executedPlan.collect {
-        case project: Project => project
-        case tungstenProject: TungstenProject => tungstenProject
+        case tungstenProject: Project => tungstenProject
       }
       assert(projects.size === expectedNumProjects)
     }

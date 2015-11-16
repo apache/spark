@@ -24,6 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Success, Failure, Try}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -89,20 +90,34 @@ object ResolvedDataSource extends Logging {
     val relation = userSpecifiedSchema match {
       case Some(schema: StructType) => clazz.newInstance() match {
         case dataSource: SchemaRelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
         case dataSource: HadoopFsRelationProvider =>
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
           } else {
-            Some(partitionColumnsSchema(schema, partitionColumns))
+            Some(partitionColumnsSchema(
+              schema, partitionColumns, sqlContext.conf.caseSensitiveAnalysis))
           }
 
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            val patternPath = new Path(caseInsensitiveOptions("path"))
-            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
+            caseInsensitiveOptions.get("paths")
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .flatMap{ pathString =>
+                val hdfsPath = new Path(pathString)
+                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
+              }
           }
 
           val dataSchema =
@@ -122,14 +137,27 @@ object ResolvedDataSource extends Logging {
 
       case None => clazz.newInstance() match {
         case dataSource: RelationProvider =>
-          dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+          if (caseInsensitiveOptions.contains("paths")) {
+            throw new AnalysisException(s"$className does not support paths option.")
+          }
+          dataSource.createRelation(sqlContext, caseInsensitiveOptions)
         case dataSource: HadoopFsRelationProvider =>
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
           val paths = {
-            val patternPath = new Path(caseInsensitiveOptions("path"))
-            val fs = patternPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-            val qualifiedPattern = patternPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-            SparkHadoopUtil.get.globPathIfNecessary(qualifiedPattern).map(_.toString).toArray
+            if (caseInsensitiveOptions.contains("paths") &&
+              caseInsensitiveOptions.contains("path")) {
+              throw new AnalysisException(s"Both path and paths options are present.")
+            }
+            caseInsensitiveOptions.get("paths")
+              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
+              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .flatMap{ pathString =>
+                val hdfsPath = new Path(pathString)
+                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
+              }
           }
           dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
@@ -145,12 +173,22 @@ object ResolvedDataSource extends Logging {
 
   def partitionColumnsSchema(
       schema: StructType,
-      partitionColumns: Array[String]): StructType = {
+      partitionColumns: Array[String],
+      caseSensitive: Boolean): StructType = {
+    val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
-      schema.find(_.name == col).getOrElse {
+      schema.find(f => equality(f.name, col)).getOrElse {
         throw new RuntimeException(s"Partition column $col not found in schema $schema")
       }
     }).asNullable
+  }
+
+  private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
+    if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given DataFrame. */
@@ -180,14 +218,18 @@ object ResolvedDataSource extends Logging {
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(data.schema, partitionColumns)
+        val caseSensitive = sqlContext.conf.caseSensitiveAnalysis
+        PartitioningUtils.validatePartitionColumnDataTypes(
+          data.schema, partitionColumns, caseSensitive)
 
-        val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
+        val equality = columnNameEquality(caseSensitive)
+        val dataSchema = StructType(
+          data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         val r = dataSource.createRelation(
           sqlContext,
           Array(outputPath.toString),
           Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns)),
+          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column

@@ -24,7 +24,6 @@ from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.feature import StringIndexer
 from pyspark.ml.regression import GBTRegressor
 from pyspark.mllib.evaluation import BinaryClassificationMetrics, RegressionMetrics
-from pyspark.mllib.util import MLUtils
 from pyspark.sql import Row, SQLContext
 
 """
@@ -70,8 +69,8 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonGBTExample")
     sqlContext = SQLContext(sc)
 
-    # Load and parse the data file into a dataframe.
-    df = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    # Load the data stored in LIBSVM format as a DataFrame.
+    df = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Map labels into an indexed column of labels in [0, numLabels)
     stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")

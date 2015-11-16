@@ -64,23 +64,13 @@ case class JobSet(
   }
 
   def toBatchInfo: BatchInfo = {
-    val failureReasons: Map[Int, String] = {
-      if (hasCompleted) {
-        jobs.filter(_.result.isFailure).map { job =>
-          (job.outputOpId, Utils.exceptionString(job.result.asInstanceOf[Failure[_]].exception))
-        }.toMap
-      } else {
-        Map.empty
-      }
-    }
-    val binfo = new BatchInfo(
+    BatchInfo(
       time,
       streamIdToInputInfo,
       submissionTime,
       if (processingStartTime >= 0) Some(processingStartTime) else None,
-      if (processingEndTime >= 0) Some(processingEndTime) else None
+      if (processingEndTime >= 0) Some(processingEndTime) else None,
+      jobs.map { job => (job.outputOpId, job.toOutputOperationInfo) }.toMap
     )
-    binfo.setFailureReason(failureReasons)
-    binfo
   }
 }
