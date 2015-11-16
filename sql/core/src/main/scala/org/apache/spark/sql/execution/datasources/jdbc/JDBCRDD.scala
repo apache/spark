@@ -120,7 +120,7 @@ private[sql] object JDBCRDD extends Logging {
     val dialect = JdbcDialects.get(url)
     val conn: Connection = getConnector(properties.getProperty("driver"), url, properties)()
     try {
-      val rs = conn.prepareStatement(s"SELECT * FROM $table WHERE 1=0").executeQuery()
+      val rs = conn.createStatement.executeQuery(s"SELECT * FROM $table WHERE 1=0")
       try {
         val rsmd = rs.getMetaData
         val ncols = rsmd.getColumnCount
