@@ -322,6 +322,12 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
+    // these cases require knowing the internals of RoaringBitmap a little.  Blocks span 2^16
+    // values, and they use a bitmap (dense) if they have more than 4096 values, and an
+    // array (sparse) if they use less.  So we just create two cases, one sparse and one dense.
+    // and we use a roaring bitmap for the empty blocks, so we trigger the dense case w/ mostly
+    // empty blocks
+
     val ser = new KryoSerializer(conf).newInstance()
     val denseBlockSizes = new Array[Long](5000)
     val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
