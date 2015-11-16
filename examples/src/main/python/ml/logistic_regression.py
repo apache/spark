@@ -28,7 +28,7 @@ from pyspark.sql import SQLContext
 """
 A simple example demonstrating a logistic regression with elastic net regularization Pipeline.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/logistic_regression.py
+  bin/spark-submit examples/src/main/python/ml/logistic_regression.py <file> <iterations>
 """
 
 if __name__ == "__main__":
