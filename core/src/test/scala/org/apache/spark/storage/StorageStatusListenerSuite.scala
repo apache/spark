@@ -159,19 +159,18 @@ class StorageStatusListenerSuite extends SparkFunSuite {
   }
   
   test("Killed Executor Entry removed after configurable time") {
-    val localtestconf = new SparkConf().set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR,"5s")
+    val localtestconf = new SparkConf()
+    .set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR, "5s")
     val ticker = new Ticker {
-      val nanos = new AtomicLong()
-      def advance(time: Long, timeUnit: TimeUnit) = {
-        nanos.addAndGet(timeUnit.toNanos(time))
-      }
+      var nanos: Long = 0
       override def read() = {
-        nanos.getAndAdd(0)
+        nanos
       }
     }
     val listener = new StorageStatusListener(localtestconf, ticker)
     listener.removedExecutorIdToStorageStatus.put("1", new StorageStatus(null, 50))
-    ticker.advance(5, TimeUnit.SECONDS)
-    assert(listener.removedExecutorIdToStorageStatus.asMap.get("1") == null)
+    assert(listener.removedExecutorStorageStatusList.nonEmpty)
+    ticker.nanos = 5000000001L
+    assert(listener.removedExecutorStorageStatusList.isEmpty)
   }
 }

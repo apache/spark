@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import com.google.common.base.Ticker
 import com.google.common.cache.CacheBuilder
@@ -42,7 +41,7 @@ object StorageStatusListener {
 }
 
 @DeveloperApi
-class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) {
+class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) extends SparkListener {
   def this(conf: SparkConf) = {
     this(conf, Ticker.systemTicker())
   }
@@ -51,8 +50,9 @@ class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) {
   
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
-  private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder()
-    .expireAfterWrite(conf.getTimeAsSeconds(TIME_TO_EXPIRE_KILLED_EXECUTOR, "0"), TimeUnit.SECONDS)
+  private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder().
+    expireAfterWrite(conf.getTimeAsSeconds(TIME_TO_EXPIRE_KILLED_EXECUTOR, "0"), TimeUnit.SECONDS)
+    .ticker(ticker)
     .build[String, StorageStatus]()
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
