@@ -18,10 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -211,8 +208,14 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCreateStructTypeFromList(){
-    StructType schema = StructType$.MODULE$.apply(Arrays.asList(createStructField("i", IntegerType, true)));
-    Assert.assertEquals(0, schema.fieldIndex("i"));
+    List<StructField> f_1 = new ArrayList<>();
+    f_1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(f_1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> f_2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(f_2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
