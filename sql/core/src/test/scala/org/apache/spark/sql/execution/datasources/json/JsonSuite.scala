@@ -588,7 +588,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       relation.isInstanceOf[JSONRelation],
       "The DataFrame returned by jsonFile should be based on JSONRelation.")
     assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
-    assert(relation.asInstanceOf[JSONRelation].samplingRatio === (0.49 +- 0.001))
+    assert(relation.asInstanceOf[JSONRelation].options.samplingRatio === (0.49 +- 0.001))
 
     val schema = StructType(StructField("a", LongType, true) :: Nil)
     val logicalRelation =
@@ -597,7 +597,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
     assert(relationWithSchema.paths === Array(path))
     assert(relationWithSchema.schema === schema)
-    assert(relationWithSchema.samplingRatio > 0.99)
+    assert(relationWithSchema.options.samplingRatio > 0.99)
   }
 
   test("Loading a JSON dataset from a text file") {
@@ -1165,31 +1165,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   test("JSONRelation equality test") {
     val relation0 = new JSONRelation(
       Some(empty),
-      1.0,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
     val relation1 = new JSONRelation(
       Some(singleRow),
-      1.0,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
     val relation2 = new JSONRelation(
       Some(singleRow),
-      0.5,
-      false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None,
+      parameters = Map("samplingRatio" -> "0.5"))(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
     val relation3 = new JSONRelation(
       Some(singleRow),
-      1.0,
-      false,
       Some(StructType(StructField("b", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      None,
+      None)(sqlContext)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation0 !== relation1)
@@ -1232,7 +1229,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-6245 JsonRDD.inferSchema on empty RDD") {
     // This is really a test that it doesn't throw an exception
-    val emptySchema = InferSchema(empty, 1.0, "")
+    val emptySchema = InferSchema.infer(empty, "", JSONOptions())
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1256,7 +1253,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-8093 Erase empty structs") {
-    val emptySchema = InferSchema(emptyRecords, 1.0, "")
+    val emptySchema = InferSchema.infer(emptyRecords, "", JSONOptions())
     assert(StructType(Seq()) === emptySchema)
   }
 

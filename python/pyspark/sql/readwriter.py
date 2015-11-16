@@ -153,6 +153,16 @@ class DataFrameReader(object):
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
+        You can set the following JSON-specific options to deal with non-standard JSON files:
+            * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
+                type
+            * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
+            * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
+            * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
+                quotes
+            * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
+                (e.g. 00012)
+
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
