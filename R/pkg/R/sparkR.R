@@ -48,6 +48,12 @@ sparkR.stop <- function() {
       }
     }
 
+    # Remove the R package lib path from .libPaths()
+    if (exists(".libPath", envir = env)) {
+      libPath <- get(".libPath", envir = env)
+      .libPaths(.libPaths()[.libPaths() != libPath])
+    }
+
     if (exists(".backendLaunched", envir = env)) {
       callJStatic("SparkRHandler", "stopBackend")
     }
@@ -155,14 +161,20 @@ sparkR.init <- function(
     f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
+    rLibPath <- readString(f)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
-        length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0 ||
+        length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
+    if (rLibPath != "") {
+      assign(".libPath", rLibPath, envir = .sparkREnv)
+      .libPaths(c(rLibPath, .libPaths()))
+    }
   }
 
   .sparkREnv$backendPort <- backendPort
