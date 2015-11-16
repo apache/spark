@@ -473,6 +473,7 @@ private[spark] class TaskSchedulerImpl(
              // If the host mapping still exists, it means we don't know the loss reason for the
              // executor. So call removeExecutor() to update tasks running on that executor when
              // the real loss reason is finally known.
+             logError(s"Actual reason for lost executor $executorId: ${reason.message}")
              removeExecutor(executorId, reason)
 
            case None =>
