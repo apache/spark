@@ -27,6 +27,7 @@ import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.Pipeline.SharedReadWrite
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
@@ -151,7 +152,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val path = new File(tempDir, pipeline.uid).getPath
     val stagesDir = new Path(path, "stages").toString
-    val expectedStagePath = PipelineSharedWriter.getStagePath(writableStage.uid, 0, 1, stagesDir)
+    val expectedStagePath = SharedReadWrite.getStagePath(writableStage.uid, 0, 1, stagesDir)
     assert(FileSystem.get(sc.hadoopConfiguration).exists(new Path(expectedStagePath)),
       s"Expected stage 0 of 1 with uid ${writableStage.uid} in Pipeline with uid ${pipeline.uid}" +
         s" to be saved to path: $expectedStagePath")
@@ -160,9 +161,8 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("PipelineModel read/write: getStagePath") {
     val stageUid = "myStage"
     val stagesDir = new Path("pipeline", "stages").toString
-    import PipelineSharedWriter.getStagePath
     def testStage(stageIdx: Int, numStages: Int, expectedPrefix: String): Unit = {
-      val path = getStagePath(stageUid, stageIdx, numStages, stagesDir)
+      val path = SharedReadWrite.getStagePath(stageUid, stageIdx, numStages, stagesDir)
       val expected = new Path(stagesDir, expectedPrefix + "_" + stageUid).toString
       assert(path === expected)
     }
