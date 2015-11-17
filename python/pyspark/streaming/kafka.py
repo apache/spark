@@ -36,16 +36,6 @@ def utf8_decoder(s):
     return s.decode('utf-8')
 
 
-def default_message_handler(s):
-    """
-    Function for translating each message and metadata into the desired type
-
-    :param s: A KafkaMessageAndMetadata object includes message and metadata
-    :return: A tuple of Kafka key and message
-    """
-    return s and (s.key, s.message)
-
-
 class KafkaUtils(object):
 
     @staticmethod
@@ -95,7 +85,7 @@ class KafkaUtils(object):
     @staticmethod
     def createDirectStream(ssc, topics, kafkaParams, fromOffsets=None,
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
-                           messageHandler=default_message_handler):
+                           messageHandler=None):
         """
         .. note:: Experimental
 
@@ -120,6 +110,8 @@ class KafkaUtils(object):
                             point of the stream.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder).
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A DStream object
         """
         if fromOffsets is None:
@@ -129,6 +121,14 @@ class KafkaUtils(object):
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
 
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
         try:
             helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
@@ -136,25 +136,28 @@ class KafkaUtils(object):
 
             jfromOffsets = dict([(k._jTopicAndPartition(helper),
                                   v) for (k, v) in fromOffsets.items()])
-            jstream = helper.createDirectStream(ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+            if messageHandler is None:
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                func = funcWithoutMessageHandler
+                jstream = helper.createDirectStreamWithoutMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+            else:
+                ser = AutoBatchedSerializer(PickleSerializer())
+                func = funcWithMessageHandler
+                jstream = helper.createDirectStreamWithMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
 
-        def func(m):
-            m._set_key_decoder(keyDecoder)
-            m._set_value_decoder(valueDecoder)
-            return messageHandler(m)
-
-        ser = AutoBatchedSerializer(PickleSerializer())
         stream = DStream(jstream, ssc, ser).map(func)
         return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
     @staticmethod
     def createRDD(sc, kafkaParams, offsetRanges, leaders=None,
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
-                  messageHandler=default_message_handler):
+                  messageHandler=None):
         """
         .. note:: Experimental
 
@@ -167,6 +170,8 @@ class KafkaUtils(object):
             map, in which case leaders will be looked up on the driver.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A RDD object
         """
         if leaders is None:
@@ -176,6 +181,14 @@ class KafkaUtils(object):
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
 
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
+
         try:
             helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
                 .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
@@ -183,18 +196,20 @@ class KafkaUtils(object):
             joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
             jleaders = dict([(k._jTopicAndPartition(helper),
                               v._jBroker(helper)) for (k, v) in leaders.items()])
-            jrdd = helper.createRDD(sc._jsc, kafkaParams, joffsetRanges, jleaders)
+            if messageHandler is None:
+                jrdd = helper.createRDDWithoutMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                rdd = RDD(jrdd, sc, ser).map(funcWithoutMessageHandler)
+            else:
+                jrdd = helper.createRDDWithMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                rdd = RDD(jrdd, sc).map(funcWithMessageHandler)
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(sc)
             raise e
 
-        def func(m):
-            m._set_key_decoder(keyDecoder)
-            m._set_value_decoder(valueDecoder)
-            return messageHandler(m)
-
-        rdd = RDD(jrdd, sc).map(func)
         return KafkaRDD(rdd._jrdd, sc, rdd._jrdd_deserializer)
 
     @staticmethod
