@@ -137,6 +137,10 @@ object MimaExcludes {
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationInfo.this")
+      ) ++ Seq(
+        // SPARK-11766 add toJson to Vector
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.mllib.linalg.Vector.toJson")
       )
     case v if v.startsWith("1.5") =>
       Seq(
