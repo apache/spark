@@ -268,9 +268,10 @@ setMethod("column",
 #' @family math_funcs
 #' @export
 #' @examples \dontrun{corr(df$c, df$d)}
-setMethod("corr", signature(x = "Column", col1 = "Column", col2 = "missing", method = "missing"),
-          function(x, col1, col2, method) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "corr", x@jc, col1@jc)
+setMethod("corr", signature(x = "Column"),
+          function(x, col2) {
+            stopifnot(class(col2) == "Column")
+            jc <- callJStatic("org.apache.spark.sql.functions", "corr", x@jc, col2@jc)
             column(jc)
           })
 
