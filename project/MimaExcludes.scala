@@ -139,9 +139,9 @@ object MimaExcludes {
           "org.apache.spark.status.api.v1.ApplicationInfo.this")
       ) ++ Seq(
         // SPARK-9065 Support message handler in Kafka Python API
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
-          ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
       )
     case v if v.startsWith("1.5") =>
