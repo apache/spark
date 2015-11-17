@@ -320,10 +320,15 @@ object SparkEnv extends Logging {
 
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
     val memoryManager: MemoryManager =
-      if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf, numUsableCores)
-      } else {
-        UnifiedMemoryManager(conf, numUsableCores)
+      conf.getOption("spark.memory.manager").map(Utils.classForName(_)
+          .getConstructor(classOf[SparkConf], classOf[Int])
+          .newInstance(conf, Int.box(numUsableCores))
+          .asInstanceOf[MemoryManager]).getOrElse {
+        if (useLegacyMemoryManager) {
+          new StaticMemoryManager(conf, numUsableCores)
+        } else {
+          UnifiedMemoryManager(conf, numUsableCores)
+        }
       }
 
     val blockTransferService =
