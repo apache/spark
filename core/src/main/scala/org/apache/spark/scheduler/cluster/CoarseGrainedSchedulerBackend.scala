@@ -269,7 +269,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
      * Stop making resource offers for the given executor. The executor is marked as lost with
      * the loss reason still pending.
      *
-     * @return Whether executor was alive.
+     * @return Whether executor should be disabled
      */
     protected def disableExecutor(executorId: String): Boolean = {
       val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
@@ -277,7 +277,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorsPendingLossReason += executorId
           true
         } else {
-          false
+          // Returns true for explicitly killed executors, we also need to get pending loss reasons;
+          // For others return false.
+          executorsPendingToRemove.contains(executorId)
         }
       }
 

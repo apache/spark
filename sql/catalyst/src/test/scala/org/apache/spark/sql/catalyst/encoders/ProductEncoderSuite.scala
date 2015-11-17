@@ -117,6 +117,35 @@ class ProductEncoderSuite extends ExpressionEncoderSuite {
   productTest(("Seq[Seq[(Int, Int)]]",
     Seq(Seq((1, 2)))))
 
+  encodeDecodeTest(
+    1 -> 10L,
+    ExpressionEncoder.tuple(FlatEncoder[Int], FlatEncoder[Long]),
+    "tuple with 2 flat encoders")
+
+  encodeDecodeTest(
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
+    ExpressionEncoder.tuple(ProductEncoder[PrimitiveData], ProductEncoder[(Int, Long)]),
+    "tuple with 2 product encoders")
+
+  encodeDecodeTest(
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
+    ExpressionEncoder.tuple(ProductEncoder[PrimitiveData], FlatEncoder[Int]),
+    "tuple with flat encoder and product encoder")
+
+  encodeDecodeTest(
+    (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
+    ExpressionEncoder.tuple(FlatEncoder[Int], ProductEncoder[PrimitiveData]),
+    "tuple with product encoder and flat encoder")
+
+  encodeDecodeTest(
+    (1, (10, 100L)),
+    {
+      val intEnc = FlatEncoder[Int]
+      val longEnc = FlatEncoder[Long]
+      ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
+    },
+    "nested tuple encoder")
+
   private def productTest[T <: Product : TypeTag](input: T): Unit = {
     encodeDecodeTest(input, ProductEncoder[T], input.getClass.getSimpleName)
   }
