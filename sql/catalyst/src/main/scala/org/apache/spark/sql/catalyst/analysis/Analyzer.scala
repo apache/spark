@@ -977,6 +977,25 @@ class Analyzer(
       case p if !p.resolved => p // Skip unresolved nodes.
       case p: Project => p
       case f: Filter => f
+      case j: Join if j.expressions.exists(!_.deterministic) =>
+        val join_nondeterministicExprs = j.expressions.filterNot(_.deterministic).flatMap { expr =>
+          val join_leafNondeterministic = expr.collect {
+            case n: Nondeterministic => n
+          }
+          join_leafNondeterministic.map { e =>
+            val ne = e match {
+              case n: NamedExpression => n
+              case _ => Alias(e, "_nondeterministic")()
+            }
+            new TreeNodeRef(e) -> ne
+          }
+        }.toMap
+        val join_newPlan = j.transformExpressions { case e =>
+          join_nondeterministicExprs.get(new TreeNodeRef(e)).map(_.toAttribute).getOrElse(e)
+        }
+        //because of join has left and right child, now, pull out the nondeterministic expresssions to left child
+        val join_leftNewChild = Project(j.left.output ++ join_nondeterministicExprs.values, j.left)
+        Project(j.output, join_newPlan.withNewChildren(List(join_leftNewChild, j.right)))
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
