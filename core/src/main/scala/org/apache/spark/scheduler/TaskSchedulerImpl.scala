@@ -87,7 +87,7 @@ private[spark] class TaskSchedulerImpl(
   // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
 
-  // Number of tasks runing on each executor
+  // Number of tasks running on each executor
   private val executorIdToTaskCount = new HashMap[String, Int]
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
