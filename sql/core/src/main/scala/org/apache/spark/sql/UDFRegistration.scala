@@ -88,7 +88,7 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
           val inputTypes = Try($inputTypes).getOrElse(Nil)
           def builder(e: Seq[Expression]) = ScalaUDF(func, dataType, e, inputTypes)
           functionRegistry.registerFunction(name, builder)
-          UserDefinedFunction(func, dataType)
+          UserDefinedFunction(func, dataType, inputTypes)
         }""")
     }
 
