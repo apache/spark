@@ -131,7 +131,7 @@ object VectorAssembler extends Readable[VectorAssembler] {
   @Since("1.6.0")
   override def read: Reader[VectorAssembler] = new DefaultParamsReader[VectorAssembler]
 
-  private def assemble(vv: Any*): Vector = {
+  private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
     var cur = 0
