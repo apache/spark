@@ -190,6 +190,9 @@ class HiveContext private[hive](
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
+  protected[hive] def hiveThriftServerSingleSession: Boolean =
+    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
