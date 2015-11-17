@@ -169,8 +169,23 @@ object JdbcUtils extends Logging {
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
       val name = field.name
-      val typ: String =
-        dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition).getOrElse(
+      val dbcolumntype = {
+        // check if user specified target database column type for the field.
+        if (field.metadata.contains("db.column.type")) {
+          val coltype: String = field.metadata.getString("db.column.type")
+            if (coltype != null) {
+              // remove spaces to avoid any invalid sql statements in the input.
+              // spaces are not required in the database type names.
+              Some(coltype.replaceAll("\\s", ""))
+            } else {
+              None
+            }
+        } else {
+          None
+        }
+      }
+      val typ: String = dbcolumntype.
+        orElse(dialect.getJDBCType(field.dataType).map(_.databaseTypeDefinition)).getOrElse(
           field.dataType match {
             case IntegerType => "INTEGER"
             case LongType => "BIGINT"
