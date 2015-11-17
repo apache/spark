@@ -35,7 +35,7 @@ import org.apache.spark.streaming.Durations;
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: DirectKafkaWordCount <brokers> <topics>
+ * Usage: JavaDirectKafkaWordCount <brokers> <topics>
  *   <brokers> is a list of one or more Kafka brokers
  *   <topics> is a list of one or more kafka topics to consume from
  *
