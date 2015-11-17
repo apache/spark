@@ -25,8 +25,8 @@ from pyspark.streaming import DStream
 from pyspark.streaming.dstream import TransformedDStream
 from pyspark.streaming.util import TransformFunction
 
-__all__ = ['Broker', 'default_message_handler', 'KafkaMessageAndMetadata', 'KafkaUtils',
-           'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
+__all__ = ['Broker', 'KafkaMessageAndMetadata', 'KafkaUtils', 'OffsetRange',
+           'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
