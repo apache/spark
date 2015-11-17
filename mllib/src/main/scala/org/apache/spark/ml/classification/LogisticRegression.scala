@@ -157,7 +157,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with Logging {
+  with LogisticRegressionParams with Writable with Logging {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -385,6 +385,12 @@ class LogisticRegression(override val uid: String)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object LogisticRegression extends Readable[LogisticRegression] {
+  override def read: Reader[LogisticRegression] = new DefaultParamsReader[LogisticRegression]
 }
 
 /**
@@ -517,61 +523,62 @@ class LogisticRegressionModel private[ml] (
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
    */
-  override def write: Writer = new LogisticRegressionWriter(this)
-}
-
-
-/** [[Writer]] instance for [[LogisticRegressionModel]] */
-private[classification] class LogisticRegressionWriter(instance: LogisticRegressionModel)
-  extends Writer with Logging {
-
-  private case class Data(
-      numClasses: Int,
-      numFeatures: Int,
-      intercept: Double,
-      coefficients: Vector)
-
-  override protected def saveImpl(path: String): Unit = {
-    // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
-    // Save model data: numClasses, numFeatures, intercept, coefficients
-    val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
-      instance.coefficients)
-    val dataPath = new Path(path, "data").toString
-    sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
-  }
+  override def write: Writer = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
 
 
 object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
 
-  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionReader
+  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
   override def load(path: String): LogisticRegressionModel = read.load(path)
-}
 
+  /** [[Writer]] instance for [[LogisticRegressionModel]] */
+  private[classification] class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
+    extends Writer with Logging {
 
-private[classification] class LogisticRegressionReader extends Reader[LogisticRegressionModel] {
+    private case class Data(
+        numClasses: Int,
+        numFeatures: Int,
+        intercept: Double,
+        coefficients: Vector)
 
-  /** Checked against metadata when loading model */
-  private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: numClasses, numFeatures, intercept, coefficients
+      val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
+        instance.coefficients)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
+    }
+  }
 
-  override def load(path: String): LogisticRegressionModel = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+  private[classification] class LogisticRegressionModelReader
+    extends Reader[LogisticRegressionModel] {
 
-    val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.format("parquet").load(dataPath)
-      .select("numClasses", "numFeatures", "intercept", "coefficients").head()
-    // We will need numClasses, numFeatures in the future for multinomial logreg support.
-    // val numClasses = data.getInt(0)
-    // val numFeatures = data.getInt(1)
-    val intercept = data.getDouble(2)
-    val coefficients = data.getAs[Vector](3)
-    val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+    /** Checked against metadata when loading model */
+    private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"
 
-    DefaultParamsReader.getAndSetParams(model, metadata)
-    model
+    override def load(path: String): LogisticRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+      // We will need numClasses, numFeatures in the future for multinomial logreg support.
+      // val numClasses = data.getInt(0)
+      // val numFeatures = data.getInt(1)
+      val intercept = data.getDouble(2)
+      val coefficients = data.getAs[Vector](3)
+      val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
 

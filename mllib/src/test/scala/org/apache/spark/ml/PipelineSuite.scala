@@ -149,13 +149,6 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(pipeline2.stages(0).isInstanceOf[WritableStage])
     val writableStage2 = pipeline2.stages(0).asInstanceOf[WritableStage]
     assert(writableStage.getIntParam === writableStage2.getIntParam)
-
-    val path = new File(tempDir, pipeline.uid).getPath
-    val stagesDir = new Path(path, "stages").toString
-    val expectedStagePath = SharedReadWrite.getStagePath(writableStage.uid, 0, 1, stagesDir)
-    assert(FileSystem.get(sc.hadoopConfiguration).exists(new Path(expectedStagePath)),
-      s"Expected stage 0 of 1 with uid ${writableStage.uid} in Pipeline with uid ${pipeline.uid}" +
-        s" to be saved to path: $expectedStagePath")
   }
 
   test("PipelineModel read/write: getStagePath") {
