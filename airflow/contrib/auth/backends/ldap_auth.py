@@ -14,11 +14,15 @@ from airflow import settings
 from airflow import models
 from airflow import configuration
 
+import logging
+
 DEFAULT_USERNAME = 'airflow'
 
 login_manager = flask_login.LoginManager()
 login_manager.login_view = 'airflow.login'  # Calls login() bellow
 login_manager.login_message = None
+
+LOG = logging.getLogger(__name__)
 
 
 class AuthenticationError(Exception):
@@ -39,6 +43,7 @@ def get_ldap_connection(dn=None, password=None):
     conn = Connection(server, dn, password)
 
     if not conn.bind():
+        LOG.error("Cannot bind to ldap server: %s ", conn.last_error)
         raise AuthenticationError("Username or password incorrect")
 
     return conn
@@ -64,6 +69,7 @@ class LdapUser(models.User):
 
         # todo: use list or result?
         if not res:
+            LOG.info("Cannot find user %s", username)
             raise AuthenticationError("Invalid username or password")
 
         entry = conn.response[0]
@@ -72,6 +78,7 @@ class LdapUser(models.User):
         conn = get_ldap_connection(entry['dn'], password)
 
         if not conn:
+            LOG.info("Password incorrect for user %s", username)
             raise AuthenticationError("Invalid username or password")
 
     def is_active(self):
@@ -129,15 +136,16 @@ def login(self, request):
 
     try:
         LdapUser.try_login(username, password)
+        LOG.info("User %s successfully authenticated", username)
 
         session = settings.Session()
         user = session.query(models.User).filter(
-            models.User.username == DEFAULT_USERNAME).first()
+            models.User.username == username).first()
 
         if not user:
             user = models.User(
-                username=DEFAULT_USERNAME,
-                is_superuser=True)
+                username=username,
+                is_superuser=False)
 
         session.merge(user)
         session.commit()

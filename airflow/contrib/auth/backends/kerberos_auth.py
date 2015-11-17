@@ -107,12 +107,12 @@ def login(self, request):
 
         session = settings.Session()
         user = session.query(models.User).filter(
-            models.User.username == DEFAULT_USERNAME).first()
+            models.User.username == username).first()
 
         if not user:
             user = models.User(
-                username=DEFAULT_USERNAME,
-                is_superuser=True)
+                username=username,
+                is_superuser=False)
 
         session.merge(user)
         session.commit()
