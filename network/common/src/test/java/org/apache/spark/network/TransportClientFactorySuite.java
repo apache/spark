@@ -50,7 +50,7 @@ public class TransportClientFactorySuite {
 
   @Before
   public void setUp() {
-    conf = new TransportConf(new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();
@@ -73,9 +73,8 @@ public class TransportClientFactorySuite {
     throws IOException, InterruptedException {
 
     Map<String, String> configMap = Maps.newHashMap();
-    configMap.put(
-      TransportConf.SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, Integer.toString(maxConnections));
-    TransportConf conf = new TransportConf(new MapConfigProvider(configMap));
+    configMap.put("spark.shuffle.io.numConnectionsPerPeer", Integer.toString(maxConnections));
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 
     RpcHandler rpcHandler = new NoOpRpcHandler();
     TransportContext context = new TransportContext(conf, rpcHandler);

@@ -18,7 +18,6 @@
 package org.apache.spark.network.netty
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.shuffle.ShuffleConfigProvider
 import org.apache.spark.network.util.{TransportConf, ConfigProvider}
 
 /**
@@ -45,7 +44,7 @@ object SparkTransportConf {
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
    */
-  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0, isShuffle: Boolean = true):
+  def fromSparkConf(_conf: SparkConf, module: String, numUsableCores: Int = 0):
     TransportConf = {
     val conf = _conf.clone
 
@@ -53,15 +52,14 @@ object SparkTransportConf {
     // assuming we have all the machine's cores).
     // NB: Only set if serverThreads/clientThreads not already set.
     val numThreads = defaultNumThreads(numUsableCores)
-    conf.set(TransportConf.SPARK_NETWORK_IO_SERVERTHREADS_KEY,
-      conf.get(TransportConf.SPARK_NETWORK_IO_SERVERTHREADS_KEY, numThreads.toString))
-    conf.set(TransportConf.SPARK_NETWORK_IO_CLIENTTHREADS_KEY,
-      conf.get(TransportConf.SPARK_NETWORK_IO_CLIENTTHREADS_KEY, numThreads.toString))
+    conf.set("spark." + module + ".io.serverThreads",
+      conf.get("spark." + module + ".io.serverThreads", numThreads.toString))
+    conf.set("spark." + module + ".io.clientThreads",
+      conf.get("spark." + module + ".io.clientThreads", numThreads.toString))
 
-    val configProvider = new ConfigProvider {
+    new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
-    }
-    new TransportConf(if (isShuffle) new ShuffleConfigProvider(configProvider) else configProvider)
+    })
   }
 
   /**

@@ -45,7 +45,7 @@ private[spark] class IndexShuffleBlockResolver(conf: SparkConf) extends ShuffleB
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
-  private val transportConf = SparkTransportConf.fromSparkConf(conf)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
   def getDataFile(shuffleId: Int, mapId: Int): File = {
     blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))

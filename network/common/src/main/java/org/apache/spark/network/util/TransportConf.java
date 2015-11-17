@@ -24,26 +24,42 @@ import com.google.common.primitives.Ints;
  */
 public class TransportConf {
 
-  public static final String SPARK_NETWORK_IO_MODE_KEY = "spark.network.io.mode";
-  public static final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY =
-    "spark.network.io.preferDirectBufs";
-  public static final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY =
-    "spark.network.io.connectionTimeout";
-  public static final String SPARK_NETWORK_IO_BACKLOG_KEY = "spark.network.io.backLog";
-  public static final String SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY =
-    "spark.network.io.numConnectionsPerPeer";
-  public static final String SPARK_NETWORK_IO_SERVERTHREADS_KEY = "spark.network.io.serverThreads";
-  public static final String SPARK_NETWORK_IO_CLIENTTHREADS_KEY = "spark.network.io.clientThreads";
-  public static final String SPARK_NETWORK_IO_RECEIVEBUFFER_KEY = "spark.network.io.receiveBuffer";
-  public static final String SPARK_NETWORK_IO_SENDBUFFER_KEY = "spark.network.io.sendBuffer";
-  public static final String SPARK_NETWORK_SASL_TIMEOUT_KEY = "spark.network.sasl.timeout";
-  public static final String SPARK_NETWORK_IO_MAXRETRIES_KEY = "spark.network.io.maxRetries";
-  public static final String SPARK_NETWORK_IO_RETRYWAIT_KEY = "spark.network.io.retryWait";
+  private final String SPARK_NETWORK_IO_MODE_KEY;
+  private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
+  private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
+  private final String SPARK_NETWORK_IO_BACKLOG_KEY;
+  private final String SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY;
+  private final String SPARK_NETWORK_IO_SERVERTHREADS_KEY;
+  private final String SPARK_NETWORK_IO_CLIENTTHREADS_KEY;
+  private final String SPARK_NETWORK_IO_RECEIVEBUFFER_KEY;
+  private final String SPARK_NETWORK_IO_SENDBUFFER_KEY;
+  private final String SPARK_NETWORK_SASL_TIMEOUT_KEY;
+  private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
+  private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
 
   private final ConfigProvider conf;
 
-  public TransportConf(ConfigProvider conf) {
+  private final String module;
+
+  public TransportConf(String module, ConfigProvider conf) {
+    this.module = module;
     this.conf = conf;
+    SPARK_NETWORK_IO_MODE_KEY = getConfKey("io.mode");
+    SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY = getConfKey("io.preferDirectBufs");
+    SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY = getConfKey("io.connectionTimeout");
+    SPARK_NETWORK_IO_BACKLOG_KEY = getConfKey("io.backLog");
+    SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY =  getConfKey("io.numConnectionsPerPeer");
+    SPARK_NETWORK_IO_SERVERTHREADS_KEY = getConfKey("io.serverThreads");
+    SPARK_NETWORK_IO_CLIENTTHREADS_KEY = getConfKey("io.clientThreads");
+    SPARK_NETWORK_IO_RECEIVEBUFFER_KEY = getConfKey("io.receiveBuffer");
+    SPARK_NETWORK_IO_SENDBUFFER_KEY = getConfKey("io.sendBuffer");
+    SPARK_NETWORK_SASL_TIMEOUT_KEY = getConfKey("sasl.timeout");
+    SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
+    SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
+  }
+
+  private String getConfKey(String suffix) {
+    return "spark." + module + "." + suffix;
   }
 
   /** IO mode: nio or epoll */

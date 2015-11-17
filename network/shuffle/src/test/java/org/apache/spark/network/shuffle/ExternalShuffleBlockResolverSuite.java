@@ -42,8 +42,7 @@ public class ExternalShuffleBlockResolverSuite {
 
   static TestShuffleDataContext dataContext;
 
-  static TransportConf conf =
-    new TransportConf(new ShuffleConfigProvider(new SystemPropertyConfigProvider()));
+  static TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
   @BeforeClass
   public static void beforeAll() throws IOException {

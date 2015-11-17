@@ -105,7 +105,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
     if (shuffleServiceEnabled) {
       Some(new MesosExternalShuffleClient(
-        SparkTransportConf.fromSparkConf(conf),
+        SparkTransportConf.fromSparkConf(conf, "shuffle"),
         securityManager,
         securityManager.isAuthenticationEnabled(),
         securityManager.isSaslEncryptionEnabled()))
