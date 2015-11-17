@@ -19,9 +19,11 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
+// $example on$
 import org.apache.spark.ml.clustering.LDA
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.types.{StructField, StructType}
+// $example off$
 
 /**
  * An example demonstrating a LDA of ML pipeline.
@@ -49,6 +51,7 @@ object LDAExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     // Loads data
     val rowRDD = sc.textFile(input).filter(_.nonEmpty)
       .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
@@ -73,6 +76,7 @@ object LDAExample {
     topics.show(false)
     transformed.show(false)
 
+    // $example off$
     sc.stop()
   }
 }
