@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
-@Experimental
 class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
   val sparkContext: SparkContext = sqlContext.sparkContext
 
@@ -64,7 +62,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition =
+    val filterCondition: Option[Expression] =
       prunePushedDownFilters(filterPredicates).reduceLeftOption(catalyst.expressions.And)
 
     // Right now we still use a projection even if the only evaluation is applying an alias

@@ -262,6 +262,7 @@ object FunctionRegistry {
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ToDate]("to_date"),
+    expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -280,7 +281,8 @@ object FunctionRegistry {
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
   )
 
   val builtin: SimpleFunctionRegistry = {

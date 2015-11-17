@@ -55,7 +55,7 @@ case class TypedAggregateExpression(
     aEncoder: Option[ExpressionEncoder[Any]],
     bEncoder: ExpressionEncoder[Any],
     cEncoder: ExpressionEncoder[Any],
-    children: Seq[Expression],
+    children: Seq[Attribute],
     mutableAggBufferOffset: Int,
     inputAggBufferOffset: Int)
   extends ImperativeAggregate with Logging {
@@ -78,8 +78,7 @@ case class TypedAggregateExpression(
 
   override lazy val resolved: Boolean = aEncoder.isDefined
 
-  override lazy val inputTypes: Seq[DataType] =
-    aEncoder.map(_.schema.map(_.dataType)).getOrElse(Nil)
+  override lazy val inputTypes: Seq[DataType] = Nil
 
   override val aggBufferSchema: StructType = bEncoder.schema
 
@@ -90,12 +89,8 @@ case class TypedAggregateExpression(
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  lazy val inputAttributes = aEncoder.get.schema.toAttributes
-  lazy val inputMapping = AttributeMap(inputAttributes.zip(children))
-  lazy val boundA =
-    aEncoder.get.copy(constructExpression = aEncoder.get.constructExpression transform {
-      case a: AttributeReference => inputMapping(a)
-    })
+  // We let the dataset do the binding for us.
+  lazy val boundA = aEncoder.get
 
   val bAttributes = bEncoder.schema.toAttributes
   lazy val boundB = bEncoder.resolve(bAttributes).bind(bAttributes)

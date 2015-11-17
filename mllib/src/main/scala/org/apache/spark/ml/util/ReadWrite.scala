@@ -48,8 +48,11 @@ private[util] sealed trait BaseReadWrite {
   /**
    * Returns the user-specified SQL context or the default.
    */
-  protected final def sqlContext: SQLContext = optionSQLContext.getOrElse {
-    SQLContext.getOrCreate(SparkContext.getOrCreate())
+  protected final def sqlContext: SQLContext = {
+    if (optionSQLContext.isEmpty) {
+      optionSQLContext = Some(SQLContext.getOrCreate(SparkContext.getOrCreate()))
+    }
+    optionSQLContext.get
   }
 
   /** Returns the [[SparkContext]] underlying [[sqlContext]] */
@@ -161,6 +164,8 @@ trait Readable[T] {
 
   /**
    * Reads an ML instance from the input path, a shortcut of `read.load(path)`.
+   *
+   * Note: Implementing classes should override this to be Java-friendly.
    */
   @Since("1.6.0")
   def load(path: String): T = read.load(path)
@@ -187,7 +192,7 @@ private[ml] object DefaultParamsWriter {
    *  - timestamp
    *  - sparkVersion
    *  - uid
-   *  - paramMap
+   *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
   def saveMetadata(instance: Params, path: String, sc: SparkContext): Unit = {
     val uid = instance.uid
