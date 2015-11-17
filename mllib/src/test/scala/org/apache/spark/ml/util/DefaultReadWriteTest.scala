@@ -30,10 +30,13 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   /**
    * Checks "overwrite" option and params.
    * @param instance ML instance to test saving/loading
+   * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
    * @return  Instance loaded from file
    */
-  def testDefaultReadWrite[T <: Params with Writable](instance: T): T = {
+  def testDefaultReadWrite[T <: Params with Writable](
+      instance: T,
+      testParams: Boolean = true): T = {
     val uid = instance.uid
     val path = new File(tempDir, uid).getPath
 
@@ -46,16 +49,18 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val newInstance = loader.load(path)
 
     assert(newInstance.uid === instance.uid)
-    instance.params.foreach { p =>
-      if (instance.isDefined(p)) {
-        (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
-          case (Array(values), Array(newValues)) =>
-            assert(values === newValues, s"Values do not match on param ${p.name}.")
-          case (value, newValue) =>
-            assert(value === newValue, s"Values do not match on param ${p.name}.")
+    if (testParams) {
+      instance.params.foreach { p =>
+        if (instance.isDefined(p)) {
+          (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
+            case (Array(values), Array(newValues)) =>
+              assert(values === newValues, s"Values do not match on param ${p.name}.")
+            case (value, newValue) =>
+              assert(value === newValue, s"Values do not match on param ${p.name}.")
+          }
+        } else {
+          assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
         }
-      } else {
-        assert(!newInstance.isDefined(p), s"Param ${p.name} shouldn't be defined.")
       }
     }
 
