@@ -31,7 +31,7 @@ case class JSONOptions(
     allowUnquotedFieldNames: Boolean = false,
     allowSingleQuotes: Boolean = true,
     allowNumericLeadingZeros: Boolean = false,
-    allowNonNumericNumbers: Boolean = false) {
+    allowNonNumericNumbers: Boolean = true) {
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -59,6 +59,6 @@ object JSONOptions {
     allowNumericLeadingZeros =
       parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false),
     allowNonNumericNumbers =
-      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(false)
+      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   )
 }

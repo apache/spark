@@ -106,18 +106,7 @@ object JacksonParser {
         parser.getDoubleValue
 
       case (VALUE_STRING, DoubleType) =>
-        // Special case handling for NaN and Infinity.
-        val value = parser.getText
-        val lowerCaseValue = value.toLowerCase()
-        if (lowerCaseValue.equals("nan") ||
-          lowerCaseValue.equals("infinity") ||
-          lowerCaseValue.equals("-infinity") ||
-          lowerCaseValue.equals("inf") ||
-          lowerCaseValue.equals("-inf")) {
-          value.toDouble
-        } else {
-          sys.error(s"Cannot parse $value as DoubleType.")
-        }
+        parser.getDoubleValue
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
         Decimal(parser.getDecimalValue, dt.precision, dt.scale)

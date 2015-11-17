@@ -94,19 +94,28 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("allowNonNumericNumbers off") {
-    val str = """{"age": NaN}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.json(rdd)
+    val testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
+      """{"age": -Infinity}""")
 
-    assert(df.schema.head.name == "_corrupt_record")
+    testCases.foreach { str =>
+      val rdd = sqlContext.sparkContext.parallelize(Seq(str))
+      val df = sqlContext.read.option("allowNonNumericNumbers", "false").json(rdd)
+
+      assert(df.schema.head.name == "_corrupt_record")
+    }
   }
 
   test("allowNonNumericNumbers on") {
-    val str = """{"age": NaN}"""
-    val rdd = sqlContext.sparkContext.parallelize(Seq(str))
-    val df = sqlContext.read.option("allowNonNumericNumbers", "true").json(rdd)
+    val testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
+      """{"age": -Infinity}""")
+    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity)
 
-    assert(df.schema.head.name == "age")
-    assert(df.first().getDouble(0).isNaN)
+    testCases.zipWithIndex.foreach { case (str, idx) =>
+      val rdd = sqlContext.sparkContext.parallelize(Seq(str))
+      val df = sqlContext.read.json(rdd)
+
+      assert(df.schema.head.name == "age")
+      assert(tests(idx)(df.first().getDouble(0)))
+    }
   }
 }
