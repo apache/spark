@@ -509,6 +509,7 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
     removeTimes.remove(executorId)
+    executorsPendingToRemove.remove(executorId)
   }
 
   /**
