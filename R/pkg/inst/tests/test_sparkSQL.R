@@ -876,7 +876,7 @@ test_that("column functions", {
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
 
   # Test array_contains() and sort_array()
-  df<-createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
+  df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
   result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
   expect_equal(result, c(TRUE, FALSE))
 
