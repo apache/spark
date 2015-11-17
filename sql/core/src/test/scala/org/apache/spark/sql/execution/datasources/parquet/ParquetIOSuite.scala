@@ -251,25 +251,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-11692 Support for Parquet logical types, JSON and BSON (embedded types)") {
-    val parquetSchema = MessageTypeParser.parseMessageType(
-      """message root {
-        |  required binary a(JSON);
-        |  required binary b(BSON);
-        |}
-      """.stripMargin)
-
-    val expectedSparkTypes = Seq(StringType, BinaryType)
-
-    withTempPath { location =>
-      val path = new Path(location.getCanonicalPath)
-      val conf = sparkContext.hadoopConfiguration
-      writeMetadata(parquetSchema, path, conf)
-      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
-      assert(sparkTypes === expectedSparkTypes)
-    }
-  }
-
   test("compression codec") {
     def compressionCodecFor(path: String, codecName: String): String = {
       val codecs = for {
