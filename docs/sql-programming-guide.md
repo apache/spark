@@ -2008,18 +2008,6 @@ or system properties:
   ...
 {% endhighlight %}
 
-From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
-connection owns a copy of their own SQL configuration and temporary function registry.  Cached
-tables are still shared though.  If you prefer to run the Thrift server in the old single-session
-mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
-this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
-
-{% highlight bash %}
-./sbin/start-thriftserver.sh \
-  --conf spark.sql.hive.thriftServer.singleSession=true \
-  ...
-{% endhighlight %}
-
 Now you can use beeline to test the Thrift JDBC/ODBC server:
 
     ./bin/beeline
@@ -2062,6 +2050,20 @@ You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 1.5 to 1.6
+
+ - From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
+   connection owns a copy of their own SQL configuration and temporary function registry.  Cached
+   tables are still shared though.  If you prefer to run the Thrift server in the old single-session
+   mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
+   this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
+
+   {% highlight bash %}
+   ./sbin/start-thriftserver.sh \
+     --conf spark.sql.hive.thriftServer.singleSession=true \
+     ...
+   {% endhighlight %}
 
 ## Upgrading From Spark SQL 1.4 to 1.5
 
