@@ -19,10 +19,10 @@ package org.apache.spark.ml.feature
 
 import edu.emory.mathcs.jtransforms.dct._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.BooleanParam
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.types.DataType
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class DCT(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, DCT] {
+  extends UnaryTransformer[Vector, Vector, DCT] with Writable {
 
   def this() = this(Identifiable.randomUID("dct"))
 
@@ -69,4 +69,17 @@ class DCT(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object DCT extends Readable[DCT] {
+
+  @Since("1.6.0")
+  override def read: Reader[DCT] = new DefaultParamsReader[DCT]
+
+  @Since("1.6.0")
+  override def load(path: String): DCT = read.load(path)
 }

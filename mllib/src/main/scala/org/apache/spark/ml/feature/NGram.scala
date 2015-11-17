@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Experimental
 class NGram(override val uid: String)
-  extends UnaryTransformer[Seq[String], Seq[String], NGram] {
+  extends UnaryTransformer[Seq[String], Seq[String], NGram] with Writable {
 
   def this() = this(Identifiable.randomUID("ngram"))
 
@@ -66,4 +66,17 @@ class NGram(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object NGram extends Readable[NGram] {
+
+  @Since("1.6.0")
+  override def read: Reader[NGram] = new DefaultParamsReader[NGram]
+
+  @Since("1.6.0")
+  override def load(path: String): NGram = read.load(path)
 }

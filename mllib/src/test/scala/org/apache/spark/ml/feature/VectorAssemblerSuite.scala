@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.param.ParamsSuite
@@ -25,7 +26,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
-class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class VectorAssemblerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new VectorAssembler)
@@ -100,5 +102,12 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(userSalaryOut === user.getAttr("salary").withName("user_salary").withIndex(4))
     assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5))
     assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6))
+  }
+
+  test("read/write") {
+    val t = new VectorAssembler()
+      .setInputCols(Array("myInputCol", "myInputCol2"))
+      .setOutputCol("myOutputCol")
+    testDefaultReadWrite(t)
   }
 }
