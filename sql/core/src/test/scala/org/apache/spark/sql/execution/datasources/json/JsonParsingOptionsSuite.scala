@@ -93,9 +93,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.first().getLong(0) == 18)
   }
 
-  // The following two tests are not really working - need to look into Jackson's
-  // JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS.
-  ignore("allowNonNumericNumbers off") {
+  test("allowNonNumericNumbers off") {
     val str = """{"age": NaN}"""
     val rdd = sqlContext.sparkContext.parallelize(Seq(str))
     val df = sqlContext.read.json(rdd)
@@ -103,7 +101,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.head.name == "_corrupt_record")
   }
 
-  ignore("allowNonNumericNumbers on") {
+  test("allowNonNumericNumbers on") {
     val str = """{"age": NaN}"""
     val rdd = sqlContext.sparkContext.parallelize(Seq(str))
     val df = sqlContext.read.option("allowNonNumericNumbers", "true").json(rdd)

@@ -59,6 +59,6 @@ object JSONOptions {
     allowNumericLeadingZeros =
       parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false),
     allowNonNumericNumbers =
-      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+      parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(false)
   )
 }

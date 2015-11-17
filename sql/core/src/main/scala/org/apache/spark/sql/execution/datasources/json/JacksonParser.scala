@@ -100,18 +100,7 @@ object JacksonParser {
         parser.getFloatValue
 
       case (VALUE_STRING, FloatType) =>
-        // Special case handling for NaN and Infinity.
-        val value = parser.getText
-        val lowerCaseValue = value.toLowerCase()
-        if (lowerCaseValue.equals("nan") ||
-          lowerCaseValue.equals("infinity") ||
-          lowerCaseValue.equals("-infinity") ||
-          lowerCaseValue.equals("inf") ||
-          lowerCaseValue.equals("-inf")) {
-          value.toFloat
-        } else {
-          sys.error(s"Cannot parse $value as FloatType.")
-        }
+        parser.getFloatValue
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
         parser.getDoubleValue
