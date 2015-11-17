@@ -862,8 +862,9 @@ class TaskInstance(Base):
             .first()
         )
         if not pool:
-            raise ValueError('Task specified a pool ({}) but the pool '
-                             'doesn\'t exist!').format(self.task.pool)
+            raise ValueError(
+                "Task specified a pool ({}) but the pool "
+                "doesn't exist!".format(self.task.pool))
         open_slots = pool.open_slots(session=session)
 
         return open_slots <= 0
