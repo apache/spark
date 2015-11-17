@@ -112,36 +112,34 @@ class MemoryUIInfo {
   }
 
   def updateExecutorMetrics(execMetrics: ExecutorMetrics): Unit = {
-    execMetrics.transportMetrics.map { transPortMetrics =>
-      transportInfo = transportInfo match {
-        case Some(transportMemSize) => transportInfo
-        case _ => Some(new TransportMemSize)
-      }
-      executorAddress = execMetrics.hostname
-      transportInfo.get.updateTransport(transPortMetrics)
+    transportInfo = transportInfo match {
+      case Some(transportMemSize) => transportInfo
+      case _ => Some(new TransportMemSize)
     }
+    executorAddress = execMetrics.hostname
+    transportInfo.get.updateTransport(execMetrics.transportMetrics)
   }
 }
 
 class TransportMemSize {
   var onHeapSize: Long = _
-  var directSize: Long = _
+  var offHeapSize: Long = _
   var peakOnHeapSizeTime: MemTime = new MemTime()
-  var peakDirectSizeTime: MemTime = new MemTime()
+  var peakOffHeapSizeTime: MemTime = new MemTime()
 
   def updateTransport(transportMetrics: TransportMetrics): Unit = {
     val updatedOnHeapSize = transportMetrics.onHeapSize
-    val updatedDirectSize = transportMetrics.directSize
+    val updatedOffHeapSize = transportMetrics.offHeapSize
     val updateTime: Long = transportMetrics.timeStamp
     onHeapSize = updatedOnHeapSize
-    directSize = updatedDirectSize
+    offHeapSize = updatedOffHeapSize
     if (updatedOnHeapSize >= peakOnHeapSizeTime.memorySize) {
       peakOnHeapSizeTime = MemTime(updatedOnHeapSize, updateTime)
     }
-    if (updatedDirectSize >= peakDirectSizeTime.memorySize) {
-      peakDirectSizeTime = MemTime(updatedDirectSize, updateTime)
+    if (updatedOffHeapSize >= peakOffHeapSizeTime.memorySize) {
+      peakOffHeapSizeTime = MemTime(updatedOffHeapSize, updateTime)
     }
   }
 }
 
-case class MemTime(memorySize: Long = 0L, timeStamp: Long = 0L)
+case class MemTime(memorySize: Long = System.currentTimeMillis, timeStamp: Long = 0L)

@@ -36,9 +36,9 @@ class ExecutorMetrics extends Serializable {
   def hostname: String = _hostname
   private[spark] def setHostname(value: String) = _hostname = value
 
-  private var _transportMetrics: Option[TransportMetrics] = None
-  def transportMetrics: Option[TransportMetrics] = _transportMetrics
-  private[spark] def setTransportMetrics(value: Option[TransportMetrics]) = {
+  private var _transportMetrics: TransportMetrics = new TransportMetrics
+  def transportMetrics: TransportMetrics = _transportMetrics
+  private[spark] def setTransportMetrics(value: TransportMetrics) = {
     _transportMetrics = value
   }
 }
@@ -48,7 +48,16 @@ class ExecutorMetrics extends Serializable {
  * Metrics for network layer
  */
 @DeveloperApi
-case class TransportMetrics(
-    timeStamp: Long,
-    onHeapSize: Long,
-    directSize: Long)
+class TransportMetrics (
+    val timeStamp: Long = System.currentTimeMillis,
+    val onHeapSize: Long = 0L,
+    val offHeapSize: Long = 0L)
+
+object TransportMetrics {
+  def apply(
+      timeStamp: Long,
+      onHeapSize: Long,
+      offHeapSize: Long): TransportMetrics = {
+    new TransportMetrics(timeStamp, onHeapSize, offHeapSize)
+  }
+}

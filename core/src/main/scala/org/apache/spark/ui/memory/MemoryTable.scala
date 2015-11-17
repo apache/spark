@@ -71,7 +71,7 @@ private[ui] class MemTableBase(
           {Utils.bytesToString(info._2.transportInfo.get.onHeapSize)}
         </td>
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.directSize)}
+          {Utils.bytesToString(info._2.transportInfo.get.offHeapSize)}
         </td>
         <td>
           {Utils.bytesToString(info._2.transportInfo.get.peakOnHeapSizeTime.memorySize)}
@@ -79,9 +79,9 @@ private[ui] class MemTableBase(
           {UIUtils.formatDate(info._2.transportInfo.get.peakOnHeapSizeTime.timeStamp)}
         </td>
         <td>
-          {Utils.bytesToString(info._2.transportInfo.get.peakDirectSizeTime.memorySize)}
+          {Utils.bytesToString(info._2.transportInfo.get.peakOffHeapSizeTime.memorySize)}
           /
-          {UIUtils.formatDate(info._2.transportInfo.get.peakDirectSizeTime.timeStamp)}
+          {UIUtils.formatDate(info._2.transportInfo.get.peakOffHeapSizeTime.timeStamp)}
         </td>
       } else {
         <td>N/A</td>

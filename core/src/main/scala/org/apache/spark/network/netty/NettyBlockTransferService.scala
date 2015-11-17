@@ -63,17 +63,17 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     val currentTime = clock.getTimeMillis()
     val clientPooledAllocator = clientFactory.getPooledAllocator()
     val serverAllocator = server.getAllocator()
-    val clientDirectSize: Long = sumOfMetrics(
+    val clientOffHeapSize: Long = sumOfMetrics(
       clientPooledAllocator.directArenas().asScala.toList)
     val clientOnHeapSize: Long = sumOfMetrics(clientPooledAllocator.heapArenas().asScala.toList)
-    val serverDirectSize: Long = sumOfMetrics(serverAllocator.directArenas().asScala.toList)
+    val serverOffHeapSize: Long = sumOfMetrics(serverAllocator.directArenas().asScala.toList)
     val serverOnHeapSize: Long = sumOfMetrics(serverAllocator.heapArenas().asScala.toList)
-    logDebug(s"Current Netty Client directSize is $clientDirectSize, " +
-      s"Client HeapSize is $clientOnHeapSize, server directHeapsize is $serverDirectSize, " +
+    logDebug(s"Current Netty Client offHeapSize is $clientOffHeapSize, " +
+      s"Client HeapSize is $clientOnHeapSize, server directHeapsize is $serverOffHeapSize, " +
       s"server heapsize is $serverOnHeapSize, executer id is " +
       s"${SparkEnv.get.blockManager.blockManagerId.executorId}")
-    executorMetrics.setTransportMetrics(Some(TransportMetrics(currentTime,
-      clientOnHeapSize + serverOnHeapSize, clientDirectSize + serverDirectSize)))
+    executorMetrics.setTransportMetrics(TransportMetrics(currentTime,
+      clientOnHeapSize + serverOnHeapSize, clientOffHeapSize + serverOffHeapSize))
   }
 
   private def sumOfMetrics(arenaMetricList: List[PoolArenaMetric]): Long = {

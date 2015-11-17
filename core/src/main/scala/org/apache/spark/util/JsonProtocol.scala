@@ -288,8 +288,7 @@ private[spark] object JsonProtocol {
   }
 
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
-    val transportMetrics = executorMetrics.transportMetrics.map(
-      transportMetricsToJson).getOrElse(JNothing)
+    val transportMetrics = transportMetricsToJson(executorMetrics.transportMetrics)
     ("Executor Hostname" -> executorMetrics.hostname) ~
     ("TransportMetrics" -> transportMetrics)
   }
@@ -297,7 +296,7 @@ private[spark] object JsonProtocol {
   def transportMetricsToJson(transportMetrics: TransportMetrics): JValue = {
     ("TimeStamep" -> transportMetrics.timeStamp) ~
     ("OnHeapSize" -> transportMetrics.onHeapSize) ~
-    ("DirectSize" -> transportMetrics.directSize)
+    ("OffHeapSize" -> transportMetrics.offHeapSize)
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -720,8 +719,7 @@ private[spark] object JsonProtocol {
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val metrics = new ExecutorMetrics
     metrics.setHostname((json \ "Executor Hostname").extract[String])
-    metrics.setTransportMetrics(
-      Utils.jsonOption((json \ "TransportMetrics")).map(transportMetricsFromJson))
+    metrics.setTransportMetrics(transportMetricsFromJson(json \ "TransportMetrics"))
     metrics
   }
 
@@ -729,7 +727,7 @@ private[spark] object JsonProtocol {
     val metrics = new TransportMetrics(
       (json \ "TimeStamep").extract[Long],
       (json \ "OnHeapSize").extract[Long],
-      (json \ "DirectSize").extract[Long])
+      (json \ "OffHeapSize").extract[Long])
     metrics
   }
 

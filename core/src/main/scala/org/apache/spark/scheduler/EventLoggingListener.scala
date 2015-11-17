@@ -20,8 +20,6 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 
-import org.apache.spark.executor.TransportMetrics
-
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
@@ -34,6 +32,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkConf, SPARK_VERSION}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.TransportMetrics
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -267,31 +266,30 @@ private[spark] class EventLoggingListener(
   private def updateModifiedMetrics(executorId: String): Unit = {
     val toBeModifiedEvent = executorIdToModifiedMaxMetrics.get(executorId)
     val latestEvent = executorIdToLatestMetrics.get(executorId)
-    if (toBeModifiedEvent.isEmpty) {
-      if (latestEvent.isDefined) executorIdToModifiedMaxMetrics.update(executorId, latestEvent.get)
-    } else {
-      val toBeModifiedMetrics = toBeModifiedEvent.get.executorMetrics.transportMetrics
-      if (toBeModifiedMetrics.isDefined) {
+    toBeModifiedEvent match {
+      case None => if (latestEvent.isDefined) executorIdToModifiedMaxMetrics.update(
+        executorId, latestEvent.get)
+      case Some(toBeModifiedEvent) =>
+        val toBeModifiedMetrics = toBeModifiedEvent.executorMetrics.transportMetrics
         // latestEvent must has value
-        val latestTransMetrics = latestEvent.get.executorMetrics.transportMetrics.get
-        val toBeModTransMetrics = toBeModifiedMetrics.get
+        val latestTransMetrics = latestEvent.get.executorMetrics.transportMetrics
+        val toBeModTransMetrics = toBeModifiedMetrics
         var timeStamp: Long = toBeModTransMetrics.timeStamp
         // the logic here should be the same with that for memoryListener
         val onHeapSize = if (latestTransMetrics.onHeapSize > toBeModTransMetrics.onHeapSize) {
-            timeStamp = latestTransMetrics.timeStamp
-            latestTransMetrics.onHeapSize
-          } else {
-            toBeModTransMetrics.onHeapSize
-          }
-        val directSize = if (latestTransMetrics.directSize > toBeModTransMetrics.directSize) {
-            timeStamp = latestTransMetrics.timeStamp
-            latestTransMetrics.directSize
-          } else {
-            toBeModTransMetrics.directSize
-          }
-        toBeModifiedEvent.get.executorMetrics.setTransportMetrics(
-          Some(TransportMetrics(timeStamp, onHeapSize, directSize)))
-      }
+          timeStamp = latestTransMetrics.timeStamp
+          latestTransMetrics.onHeapSize
+        } else {
+          toBeModTransMetrics.onHeapSize
+        }
+        val offHeapSize = if (latestTransMetrics.offHeapSize > toBeModTransMetrics.offHeapSize) {
+          timeStamp = latestTransMetrics.timeStamp
+          latestTransMetrics.offHeapSize
+        } else {
+          toBeModTransMetrics.offHeapSize
+        }
+        toBeModifiedEvent.executorMetrics.setTransportMetrics(
+          TransportMetrics(timeStamp, onHeapSize, offHeapSize))
     }
   }
 }
