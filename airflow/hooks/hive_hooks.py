@@ -31,6 +31,10 @@ class HiveCliHook(BaseHook):
     Note that you can also set default hive CLI parameters using the
     ``hive_cli_params`` to be used in your connection as in
     ``{"hive_cli_params": "-hiveconf mapred.job.tracker=some.jobtracker:444"}``
+
+    The extra connection parameter ``auth`` gets passed as in the ``jdbc``
+    connection string as is.
+
     """
 
     def __init__(
@@ -40,7 +44,7 @@ class HiveCliHook(BaseHook):
         conn = self.get_connection(hive_cli_conn_id)
         self.hive_cli_params = conn.extra_dejson.get('hive_cli_params', '')
         self.use_beeline = conn.extra_dejson.get('use_beeline', False)
-        self.auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
+        self.auth = conn.extra_dejson.get('auth', 'noSasl')
         self.conn = conn
         self.run_as = run_as
 
@@ -81,8 +85,8 @@ class HiveCliHook(BaseHook):
                             proxy_user = "hive.server2.proxy.user={0}".format(self.run_as)
 
                         jdbc_url += ";principal={template};{proxy_user}"
-                    elif self.auth_mechanism == "NOSASL":
-                        jdbc_url += ";auth=noSasl"
+                    elif self.auth:
+                        jdbc_url += ";auth=" + self.auth
 
                     jdbc_url = jdbc_url.format(**locals())
 
