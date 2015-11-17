@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql
 
+
+import java.io.IOException
+import java.util.{List => JList, Map => JMap}
+
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
+import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
+
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -30,6 +36,7 @@ import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * Functions for registering user-defined functions. Use [[SQLContext.udf]] to access this.
@@ -412,6 +419,63 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Register a Java UDF class
+   * @param name
+   * @param className
+   * @param returnType
+   */
+  def registerJava(name: String, className: String, returnType: DataType): Unit = {
+
+    try {
+      // scalastyle:off classforname
+      val clazz = Class.forName(className, false, Utils.getContextOrSparkClassLoader)
+      // scalastyle:on classforname
+      val udfInterfaces = clazz.getGenericInterfaces.filter(_.isInstanceOf[ParameterizedTypeImpl]).map(_.asInstanceOf[ParameterizedTypeImpl])
+        .filter(_.getRawType.getName.startsWith("org.apache.spark.sql.api.java.UDF"))
+      if (udfInterfaces.length == 0) {
+        throw new IOException(s"UDF class ${className} doesn't implement any UDF interface")
+      } else if (udfInterfaces.length > 1) {
+        throw new IOException(s"It is invalid to implement multiple UDF interfaces, UDF class ${className}")
+      } else {
+        try {
+          val udf = clazz.newInstance()
+          udfInterfaces(0).getActualTypeArguments.length match {
+            case 2 => register(name, udf.asInstanceOf[UDF1[_, _]], returnType)
+            case 3 => register(name, udf.asInstanceOf[UDF2[_, _, _]], returnType)
+            case 4 => register(name, udf.asInstanceOf[UDF3[_, _, _, _]], returnType)
+            case 5 => register(name, udf.asInstanceOf[UDF4[_, _, _, _, _]], returnType)
+            case 6 => register(name, udf.asInstanceOf[UDF5[_, _, _, _, _, _]], returnType)
+            case 7 => register(name, udf.asInstanceOf[UDF6[_, _, _, _, _, _, _]], returnType)
+            case 8 => register(name, udf.asInstanceOf[UDF7[_, _, _, _, _, _, _, _]], returnType)
+            case 9 => register(name, udf.asInstanceOf[UDF8[_, _, _, _, _, _, _, _, _]], returnType)
+            case 10 => register(name, udf.asInstanceOf[UDF9[_, _, _, _, _, _, _, _, _, _]], returnType)
+            case 11 => register(name, udf.asInstanceOf[UDF10[_, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 12 => register(name, udf.asInstanceOf[UDF11[_, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 13 => register(name, udf.asInstanceOf[UDF12[_, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 14 => register(name, udf.asInstanceOf[UDF13[_, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 15 => register(name, udf.asInstanceOf[UDF14[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 16 => register(name, udf.asInstanceOf[UDF15[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 17 => register(name, udf.asInstanceOf[UDF16[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 18 => register(name, udf.asInstanceOf[UDF17[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 19 => register(name, udf.asInstanceOf[UDF18[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 20 => register(name, udf.asInstanceOf[UDF19[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 21 => register(name, udf.asInstanceOf[UDF20[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 22 => register(name, udf.asInstanceOf[UDF21[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case 23 => register(name, udf.asInstanceOf[UDF22[_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _]], returnType)
+            case n => logError(s"UDF class with ${n} type arguments is not supported ")
+          }
+        } catch {
+          case e @ (_: InstantiationException | _: IllegalArgumentException) =>
+            logError(s"Can not instantiate class ${className}, please make sure it has public non argument constructor")
+        }
+      }
+    } catch {
+      case e: ClassNotFoundException => logError(s"Can not load class ${className}, please make sure it is on the classpath")
+    }
+
+  }
 
   /**
    * Register a user-defined function with 1 arguments.
