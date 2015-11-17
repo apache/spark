@@ -33,8 +33,11 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @param lambda Regularization parameter
 #' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
 #' @param standardize Whether to standardize features before training
-#' @param solver The solver algorithm used for optimization. Currently support "auto", "normal"
-#'               or "l-bfgs"
+#' @param solver The solver algorithm used for optimization, this can be "l-bfgs", "normal" and
+#'               "auto". "l-bfgs" denotes Limited-memory BFGS which is a limited-memory
+#'               quasi-Newton optimization method. "normal" denotes using Normal Equation as an
+#'               analytical solution to the linear regression problem. The default value is "auto"
+#'               which means that the solver algorithm is selected automatically.
 #' @return a fitted MLlib model
 #' @rdname glm
 #' @export
