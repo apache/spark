@@ -368,6 +368,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
+
+    val nullData2 = sqlContext.createDataFrame(sparkContext.parallelize(
+        Row("abc") ::
+        Row(null)  ::
+        Row("xyz") :: Nil),
+        StructType(Seq(StructField("a", StringType, true))))
+
+    checkAnswer(
+      nullData2.filter($"a" <=> null),
+      Row(null) :: Nil)
+
   }
 
   test(">") {
