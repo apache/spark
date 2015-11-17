@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Aggregator
 
 /** An `Aggregator` that adds up any numeric type returned by the given function. */
-class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
+class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
   val numeric = implicitly[Numeric[N]]
 
   override def zero: N = numeric.zero
@@ -37,7 +37,7 @@ class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializ
   override def finish(reduction: N): N = reduction
 }
 
-object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with Serializable {
+object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] {
   override def zero: (Long, Long) = (0, 0)
 
   override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
@@ -51,8 +51,7 @@ object TypedAverage extends Aggregator[(String, Int), (Long, Long), Double] with
   override def finish(countAndSum: (Long, Long)): Double = countAndSum._2 / countAndSum._1
 }
 
-object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)]
-  with Serializable {
+object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
 
   override def zero: (Long, Long) = (0, 0)
 
@@ -160,6 +159,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.select(ClassInputAgg.toColumn),
       1)
+
+    checkAnswer(
+      ds.select(expr("avg(a)").as[Double], ClassInputAgg.toColumn),
+      (1.0, 1))
 
     checkAnswer(
       ds.groupBy(_.b).agg(ClassInputAgg.toColumn),

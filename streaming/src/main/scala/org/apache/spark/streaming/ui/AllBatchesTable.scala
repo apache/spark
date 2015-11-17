@@ -33,6 +33,22 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
         {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</th>
   }
 
+  /**
+   * Return the first failure reason if finding in the batches.
+   */
+  protected def getFirstFailureReason(batches: Seq[BatchUIData]): Option[String] = {
+    batches.flatMap(_.outputOperations.flatMap(_._2.failureReason)).headOption
+  }
+
+  protected def getFirstFailureTableCell(batch: BatchUIData): Seq[Node] = {
+    val firstFailureReason = batch.outputOperations.flatMap(_._2.failureReason).headOption
+    firstFailureReason.map { failureReason =>
+      val failureReasonForUI = UIUtils.createOutputOperationFailureForUI(failureReason)
+      UIUtils.failureReasonCell(
+        failureReasonForUI, rowspan = 1, includeFirstLineInExpandDetails = false)
+    }.getOrElse(<td>-</td>)
+  }
+
   protected def baseRow(batch: BatchUIData): Seq[Node] = {
     val batchTime = batch.batchTime.milliseconds
     val formattedBatchTime = UIUtils.formatBatchTime(batchTime, batchInterval)
@@ -97,9 +113,17 @@ private[ui] class ActiveBatchTable(
     waitingBatches: Seq[BatchUIData],
     batchInterval: Long) extends BatchTableBase("active-batches-table", batchInterval) {
 
+  private val firstFailureReason = getFirstFailureReason(runningBatches)
+
   override protected def columns: Seq[Node] = super.columns ++ {
     <th>Output Ops: Succeeded/Total</th>
-      <th>Status</th>
+      <th>Status</th> ++ {
+      if (firstFailureReason.nonEmpty) {
+        <th>Error</th>
+      } else {
+        Nil
+      }
+    }
   }
 
   override protected def renderRows: Seq[Node] = {
@@ -110,20 +134,41 @@ private[ui] class ActiveBatchTable(
   }
 
   private def runningBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>processing</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>processing</td> ++ {
+      if (firstFailureReason.nonEmpty) {
+        getFirstFailureTableCell(batch)
+      } else {
+        Nil
+      }
+    }
   }
 
   private def waitingBatchRow(batch: BatchUIData): Seq[Node] = {
-    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>queued</td>
+    baseRow(batch) ++ createOutputOperationProgressBar(batch) ++ <td>queued</td>++ {
+      if (firstFailureReason.nonEmpty) {
+        // Waiting batches have not run yet, so must have no failure reasons.
+        <td>-</td>
+      } else {
+        Nil
+      }
+    }
   }
 }
 
 private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: Long)
   extends BatchTableBase("completed-batches-table", batchInterval) {
 
+  private val firstFailureReason = getFirstFailureReason(batches)
+
   override protected def columns: Seq[Node] = super.columns ++ {
     <th>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</th>
-      <th>Output Ops: Succeeded/Total</th>
+      <th>Output Ops: Succeeded/Total</th> ++ {
+      if (firstFailureReason.nonEmpty) {
+        <th>Error</th>
+      } else {
+        Nil
+      }
+    }
   }
 
   override protected def renderRows: Seq[Node] = {
@@ -138,6 +183,12 @@ private[ui] class CompletedBatchTable(batches: Seq[BatchUIData], batchInterval: 
       <td sorttable_customkey={totalDelay.getOrElse(Long.MaxValue).toString}>
         {formattedTotalDelay}
       </td>
-    } ++ createOutputOperationProgressBar(batch)
+    } ++ createOutputOperationProgressBar(batch)++ {
+      if (firstFailureReason.nonEmpty) {
+        getFirstFailureTableCell(batch)
+      } else {
+        Nil
+      }
+    }
   }
 }

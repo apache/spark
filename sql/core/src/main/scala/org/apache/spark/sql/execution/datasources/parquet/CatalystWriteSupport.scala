@@ -429,7 +429,7 @@ private[parquet] object CatalystWriteSupport {
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
     schema.map(_.name).foreach(CatalystSchemaConverter.checkFieldName)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
-    configuration.set(
+    configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,
       ParquetProperties.WriterVersion.PARQUET_1_0.toString)
   }
