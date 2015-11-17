@@ -1483,7 +1483,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test ("SPARK-11633: HiveContext throws TreeNode Exception : Failed to Copy Node") {
-    val rdd1 = sparkContext.parallelize(Seq( Individual(1,3), Individual(2,1)))
+    val rdd1 = sparkContext.parallelize(Seq( Individual(1, 3), Individual(2, 1)))
     val df = hiveContext.createDataFrame(rdd1)
     df.registerTempTable("foo")
     val df2 = sql("select f1, F2 as F2 from foo")
