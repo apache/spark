@@ -217,6 +217,7 @@ private[ml] object DefaultParamsWriter {
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  * @tparam T ML instance type
+ * TODO: Consider adding check for correct class name.
  */
 private[ml] class DefaultParamsReader[T] extends Reader[T] {
 
