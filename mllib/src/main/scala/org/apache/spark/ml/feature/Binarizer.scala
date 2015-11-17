@@ -96,4 +96,7 @@ object Binarizer extends Readable[Binarizer] {
 
   @Since("1.6.0")
   override def read: Reader[Binarizer] = new DefaultParamsReader[Binarizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Binarizer = read.load(path)
 }

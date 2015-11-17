@@ -84,6 +84,10 @@ class HashingTF(override val uid: String)
 
 @Since("1.6.0")
 object HashingTF extends Readable[HashingTF] {
+
   @Since("1.6.0")
   override def read: Reader[HashingTF] = new DefaultParamsReader[HashingTF]
+
+  @Since("1.6.0")
+  override def load(path: String): HashingTF = read.load(path)
 }

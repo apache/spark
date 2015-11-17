@@ -183,4 +183,7 @@ object PolynomialExpansion extends Readable[PolynomialExpansion] {
 
   @Since("1.6.0")
   override def read: Reader[PolynomialExpansion] = new DefaultParamsReader[PolynomialExpansion]
+
+  @Since("1.6.0")
+  override def load(path: String): PolynomialExpansion = read.load(path)
 }

@@ -180,4 +180,7 @@ object QuantileDiscretizer extends Readable[QuantileDiscretizer] with Logging {
 
   @Since("1.6.0")
   override def read: Reader[QuantileDiscretizer] = new DefaultParamsReader[QuantileDiscretizer]
+
+  @Since("1.6.0")
+  override def load(path: String): QuantileDiscretizer = read.load(path)
 }

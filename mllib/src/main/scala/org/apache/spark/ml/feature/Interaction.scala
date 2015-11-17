@@ -231,8 +231,12 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
 
 @Since("1.6.0")
 object Interaction extends Readable[Interaction] {
+
   @Since("1.6.0")
   override def read: Reader[Interaction] = new DefaultParamsReader[Interaction]
+
+  @Since("1.6.0")
+  override def load(path: String): Interaction = read.load(path)
 }
 
 /**

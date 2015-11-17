@@ -172,6 +172,10 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
 @Since("1.6.0")
 object OneHotEncoder extends Readable[OneHotEncoder] {
+
   @Since("1.6.0")
   override def read: Reader[OneHotEncoder] = new DefaultParamsReader[OneHotEncoder]
+
+  @Since("1.6.0")
+  override def load(path: String): OneHotEncoder = read.load(path)
 }

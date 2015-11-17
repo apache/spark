@@ -161,6 +161,10 @@ class StopWordsRemover(override val uid: String)
 
 @Since("1.6.0")
 object StopWordsRemover extends Readable[StopWordsRemover] {
+
   @Since("1.6.0")
   override def read: Reader[StopWordsRemover] = new DefaultParamsReader[StopWordsRemover]
+
+  @Since("1.6.0")
+  override def load(path: String): StopWordsRemover = read.load(path)
 }

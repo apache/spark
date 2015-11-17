@@ -53,8 +53,12 @@ class Tokenizer(override val uid: String)
 
 @Since("1.6.0")
 object Tokenizer extends Readable[Tokenizer] {
+
   @Since("1.6.0")
   override def read: Reader[Tokenizer] = new DefaultParamsReader[Tokenizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Tokenizer = read.load(path)
 }
 
 /**
@@ -142,9 +146,16 @@ class RegexTokenizer(override val uid: String)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object RegexTokenizer extends Readable[RegexTokenizer] {
+
+  @Since("1.6.0")
   override def read: Reader[RegexTokenizer] = new DefaultParamsReader[RegexTokenizer]
+
+  @Since("1.6.0")
+  override def load(path: String): RegexTokenizer = read.load(path)
 }

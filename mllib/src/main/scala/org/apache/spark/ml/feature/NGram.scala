@@ -73,6 +73,10 @@ class NGram(override val uid: String)
 
 @Since("1.6.0")
 object NGram extends Readable[NGram] {
+
   @Since("1.6.0")
   override def read: Reader[NGram] = new DefaultParamsReader[NGram]
+
+  @Since("1.6.0")
+  override def load(path: String): NGram = read.load(path)
 }

@@ -175,4 +175,7 @@ object VectorSlicer extends Readable[VectorSlicer] {
 
   @Since("1.6.0")
   override def read: Reader[VectorSlicer] = new DefaultParamsReader[VectorSlicer]
+
+  @Since("1.6.0")
+  override def load(path: String): VectorSlicer = read.load(path)
 }

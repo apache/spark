@@ -63,6 +63,10 @@ class Normalizer(override val uid: String)
 
 @Since("1.6.0")
 object Normalizer extends Readable[Normalizer] {
+
   @Since("1.6.0")
   override def read: Reader[Normalizer] = new DefaultParamsReader[Normalizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Normalizer = read.load(path)
 }

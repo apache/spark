@@ -79,4 +79,7 @@ object DCT extends Readable[DCT] {
 
   @Since("1.6.0")
   override def read: Reader[DCT] = new DefaultParamsReader[DCT]
+
+  @Since("1.6.0")
+  override def load(path: String): DCT = read.load(path)
 }

@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import java.{util => ju}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
@@ -94,6 +94,7 @@ final class Bucketizer(override val uid: String)
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
@@ -138,5 +139,9 @@ object Bucketizer extends Readable[Bucketizer] {
     }
   }
 
+  @Since("1.6.0")
   override def read: Reader[Bucketizer] = new DefaultParamsReader[Bucketizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Bucketizer = read.load(path)
 }

@@ -263,6 +263,10 @@ class IndexToString private[ml] (override val uid: String)
 
 @Since("1.6.0")
 object IndexToString extends Readable[IndexToString] {
+
   @Since("1.6.0")
   override def read: Reader[IndexToString] = new DefaultParamsReader[IndexToString]
+
+  @Since("1.6.0")
+  override def load(path: String): IndexToString = read.load(path)
 }

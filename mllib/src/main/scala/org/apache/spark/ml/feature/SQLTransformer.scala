@@ -84,6 +84,10 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
 @Since("1.6.0")
 object SQLTransformer extends Readable[SQLTransformer] {
+
   @Since("1.6.0")
   override def read: Reader[SQLTransformer] = new DefaultParamsReader[SQLTransformer]
+
+  @Since("1.6.0")
+  override def load(path: String): SQLTransformer = read.load(path)
 }
