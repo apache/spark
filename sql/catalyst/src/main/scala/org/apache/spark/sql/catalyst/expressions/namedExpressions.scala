@@ -194,13 +194,19 @@ case class AttributeReference(
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
   override def equals(other: Any): Boolean = other match {
-    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference =>
+      name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
+        metadata == ar.metadata && exprId == ar.exprId && qualifiers == ar.qualifiers
     case _ => false
   }
 
   override def semanticEquals(other: Expression): Boolean = other match {
     case ar: AttributeReference => sameRef(ar)
     case _ => false
+  }
+
+  override def semanticHash(): Int = {
+    this.exprId.hashCode()
   }
 
   override def hashCode: Int = {
@@ -254,6 +260,10 @@ case class AttributeReference(
   }
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
+
+  // Since the expression id is not in the first constructor it is missing from the default
+  // tree string.
+  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 }
 
 /**
