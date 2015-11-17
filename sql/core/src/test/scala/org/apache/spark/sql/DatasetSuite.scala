@@ -218,6 +218,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "a", "30", "b", "3", "c", "1")
   }
 
+  test("groupBy function, reduce") {
+    val ds = Seq("abc", "xyz", "hello").toDS()
+    val agged = ds.groupBy(_.length).reduce(_ + _)
+
+    checkAnswer(
+      agged,
+      3 -> "abcxyz", 5 -> "hello")
+  }
+
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1")
@@ -312,5 +321,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
     checkAnswer(joined, ("2", 2))
+  }
+
+  test("toString") {
+    val ds = Seq((1, 2)).toDS()
+    assert(ds.toString == "[_1: int, _2: int]")
   }
 }

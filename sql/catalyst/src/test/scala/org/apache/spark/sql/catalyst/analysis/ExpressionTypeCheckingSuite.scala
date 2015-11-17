@@ -22,8 +22,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{TypeCollection, StringType}
+import org.apache.spark.sql.types.{LongType, TypeCollection, StringType}
 
 class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
@@ -31,7 +32,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     'intField.int,
     'stringField.string,
     'booleanField.boolean,
-    'complexField.array(StringType))
+    'arrayField.array(StringType),
+    'mapField.map(StringType, LongType))
 
   def assertError(expr: Expression, errorMessage: String): Unit = {
     val e = intercept[AnalysisException] {
@@ -89,9 +91,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(BitwiseOr('booleanField, 'booleanField), "requires integral type")
     assertError(BitwiseXor('booleanField, 'booleanField), "requires integral type")
 
-    assertError(MaxOf('complexField, 'complexField),
+    assertError(MaxOf('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
-    assertError(MinOf('complexField, 'complexField),
+    assertError(MinOf('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
   }
 
@@ -108,20 +110,20 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(EqualTo('intField, 'booleanField))
     assertSuccess(EqualNullSafe('intField, 'booleanField))
 
-    assertErrorForDifferingTypes(EqualTo('intField, 'complexField))
-    assertErrorForDifferingTypes(EqualNullSafe('intField, 'complexField))
+    assertErrorForDifferingTypes(EqualTo('intField, 'mapField))
+    assertErrorForDifferingTypes(EqualNullSafe('intField, 'mapField))
     assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
 
-    assertError(LessThan('complexField, 'complexField),
+    assertError(LessThan('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
-    assertError(LessThanOrEqual('complexField, 'complexField),
+    assertError(LessThanOrEqual('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
-    assertError(GreaterThan('complexField, 'complexField),
+    assertError(GreaterThan('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
-    assertError(GreaterThanOrEqual('complexField, 'complexField),
+    assertError(GreaterThanOrEqual('mapField, 'mapField),
       s"requires ${TypeCollection.Ordered.simpleString} type")
 
     assertError(If('intField, 'stringField, 'stringField),
@@ -129,10 +131,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(If('booleanField, 'intField, 'booleanField))
 
     assertError(
-      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'complexField)),
+      CaseWhen(Seq('booleanField, 'intField, 'booleanField, 'mapField)),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
-      CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'complexField)),
+      CaseKeyWhen('intField, Seq('intField, 'stringField, 'intField, 'mapField)),
       "THEN and ELSE expressions should all be same type or coercible to a common type")
     assertError(
       CaseWhen(Seq('booleanField, 'intField, 'intField, 'intField)),
@@ -140,15 +142,17 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for aggregates") {
+    // We use AggregateFunction directly at here because the error will be thrown from it
+    // instead of from AggregateExpression, which is the wrapper of an AggregateFunction.
+
     // We will cast String to Double for sum and average
     assertSuccess(Sum('stringField))
-    assertSuccess(SumDistinct('stringField))
     assertSuccess(Average('stringField))
+    assertSuccess(Min('arrayField))
 
-    assertError(Min('complexField), "min does not support ordering on type")
-    assertError(Max('complexField), "max does not support ordering on type")
+    assertError(Min('mapField), "min does not support ordering on type")
+    assertError(Max('mapField), "max does not support ordering on type")
     assertError(Sum('booleanField), "function sum requires numeric type")
-    assertError(SumDistinct('booleanField), "function sumDistinct requires numeric type")
     assertError(Average('booleanField), "function average requires numeric type")
   }
 
@@ -182,7 +186,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
     assertError(Round('intField, 'intField), "Only foldable Expression is allowed")
     assertError(Round('intField, 'booleanField), "requires int type")
-    assertError(Round('intField, 'complexField), "requires int type")
+    assertError(Round('intField, 'mapField), "requires int type")
     assertError(Round('booleanField, 'intField), "requires numeric type")
   }
 }

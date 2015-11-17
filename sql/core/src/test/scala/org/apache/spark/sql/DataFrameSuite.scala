@@ -459,7 +459,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),
       Row("mean", null, null),
-      Row("stddev", null, null),
+      Row("stddev", "NaN", "NaN"),
       Row("min", null, null),
       Row("max", null, null))
 
@@ -621,11 +621,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      checkAnswer(
-        decimalData.agg(avg('a)),
-        Row(new java.math.BigDecimal(2.0)))
-    }
+    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2.0)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -844,31 +840,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
-    // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      val df = testData.select(rand(33))
-      assert(df.showString(5) == df.showString(5))
-    }
-
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-      val df = testData.select(rand(33))
-      assert(df.showString(5) == df.showString(5))
-    }
+    val df = testData.select(rand(33))
+    assert(df.showString(5) == df.showString(5))
 
     // We will reuse the same Expression object for LocalRelation.
-    val df = (1 to 10).map(Tuple1.apply).toDF().select(rand(33))
-    assert(df.showString(5) == df.showString(5))
+    val df1 = (1 to 10).map(Tuple1.apply).toDF().select(rand(33))
+    assert(df1.showString(5) == df1.showString(5))
   }
 
   test("SPARK-8609: local DataFrame with random columns should return same value after sort") {
-    // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
-    }
-
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
-    }
+    checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
 
     // We will reuse the same Expression object for LocalRelation.
     val df = (1 to 10).map(Tuple1.apply).toDF()

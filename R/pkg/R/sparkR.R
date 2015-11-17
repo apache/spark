@@ -34,7 +34,6 @@ connExists <- function(env) {
 sparkR.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
-    # cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")
@@ -47,6 +46,12 @@ sparkR.stop <- function() {
       if (exists(".sparkRHivesc", envir = env)) {
         rm(".sparkRHivesc", envir = env)
       }
+    }
+
+    # Remove the R package lib path from .libPaths()
+    if (exists(".libPath", envir = env)) {
+      libPath <- get(".libPath", envir = env)
+      .libPaths(.libPaths()[.libPaths() != libPath])
     }
 
     if (exists(".backendLaunched", envir = env)) {
@@ -78,7 +83,7 @@ sparkR.stop <- function() {
 #' Initialize a new Spark Context.
 #'
 #' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at 
+#' and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
 #' @param master The Spark master URL.
@@ -156,14 +161,20 @@ sparkR.init <- function(
     f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
+    rLibPath <- readString(f)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
-        length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0 ||
+        length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
+    if (rLibPath != "") {
+      assign(".libPath", rLibPath, envir = .sparkREnv)
+      .libPaths(c(rLibPath, .libPaths()))
+    }
   }
 
   .sparkREnv$backendPort <- backendPort
