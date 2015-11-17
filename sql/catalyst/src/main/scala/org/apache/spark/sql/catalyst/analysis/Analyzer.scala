@@ -1070,7 +1070,15 @@ class Analyzer(
  * scoping information for attributes and can be removed once analysis is complete.
  */
 object EliminateSubQueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case Project(projectList, child: Subquery) =>
+      Project(
+        projectList.map {
+          case ar: AttributeReference if ar.qualifiers.contains(child.alias) =>
+            ar.withQualifiers(ar.qualifiers.filter(_!=child.alias))
+          case o => o
+        },
+        child)
     case Subquery(_, child) => child
   }
 }
