@@ -174,4 +174,33 @@ class AnalysisSuite extends AnalysisTest {
     )
     assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
   }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val string = testRelation2.output(0)
+    val double = testRelation2.output(2)
+    val short = testRelation2.output(4)
+    val nullResult = Literal.create(null, StringType)
+
+    def checkUDF(udf: Expression, transformed: Expression): Unit = {
+      checkAnalysis(
+        Project(Alias(udf, "")() :: Nil, testRelation2),
+        Project(Alias(transformed, "")() :: Nil, testRelation2)
+      )
+    }
+
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val expected1 = udf1
+    checkUDF(udf1, expected1)
+
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
+    val expected2 = If(IsNull(double), nullResult, udf2)
+    checkUDF(udf2, expected2)
+
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val expected3 = If(
+      IsNull(double),
+      nullResult,
+      If(IsNull(short), nullResult, udf3))
+    checkUDF(udf3, expected3)
+  }
 }

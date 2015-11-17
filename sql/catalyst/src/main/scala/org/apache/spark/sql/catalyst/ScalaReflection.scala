@@ -719,6 +719,12 @@ trait ScalaReflection {
     }
   }
 
+  def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
+    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
+    assert(methods.length == 1)
+    methods.head.getParameterTypes
+  }
+
   def typeOfObject: PartialFunction[Any, DataType] = {
     // The data type can be determined without ambiguity.
     case obj: Boolean => BooleanType
