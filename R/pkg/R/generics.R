@@ -1056,7 +1056,7 @@ setGeneric("glm")
 
 #' @rdname predict
 #' @export
-setGeneric("predict", function(object, newData) { standardGeneric("predict") })
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 
 #' @rdname rbind
 #' @export
