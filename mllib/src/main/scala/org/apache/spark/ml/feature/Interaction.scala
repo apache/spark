@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.Transformer
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{DataFrame, Row}
@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 class Interaction(override val uid: String) extends Transformer
-  with HasInputCols with HasOutputCol {
+  with HasInputCols with HasOutputCol with Writable {
 
   def this() = this(Identifiable.randomUID("interaction"))
 
@@ -216,6 +216,12 @@ class Interaction(override val uid: String) extends Transformer
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
   }
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object Interaction extends Readable[Interaction] {
+  override def read: Reader[Interaction] = new DefaultParamsReader[Interaction]
 }
 
 /**

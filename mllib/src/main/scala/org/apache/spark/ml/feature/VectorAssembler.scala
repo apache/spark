@@ -25,7 +25,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 class VectorAssembler(override val uid: String)
-  extends Transformer with HasInputCols with HasOutputCol {
+  extends Transformer with HasInputCols with HasOutputCol with Writable {
 
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
@@ -120,9 +120,13 @@ class VectorAssembler(override val uid: String)
   }
 
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-private object VectorAssembler {
+private object VectorAssembler extends Readable[VectorAssembler] {
+
+  override def read: Reader[VectorAssembler] = new DefaultParamsReader[VectorAssembler]
 
   private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]

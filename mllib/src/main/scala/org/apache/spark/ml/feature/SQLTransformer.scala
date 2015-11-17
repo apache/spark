@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 import org.apache.spark.sql.types.StructType
 
@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
  * where '__THIS__' represents the underlying table of the input dataset.
  */
 @Experimental
-class SQLTransformer (override val uid: String) extends Transformer {
+class SQLTransformer (override val uid: String) extends Transformer with Writable {
 
   def this() = this(Identifiable.randomUID("sql"))
 
@@ -69,4 +69,10 @@ class SQLTransformer (override val uid: String) extends Transformer {
   }
 
   override def copy(extra: ParamMap): SQLTransformer = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object SQLTransformer extends Readable[SQLTransformer] {
+  override def read: Reader[SQLTransformer] = new DefaultParamsReader[SQLTransformer]
 }

@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * @see [[RegexTokenizer]]
  */
 @Experimental
-class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class Tokenizer(override val uid: String)
+  extends UnaryTransformer[String, Seq[String], Tokenizer] with Writable {
 
   def this() = this(Identifiable.randomUID("tok"))
 
@@ -45,6 +46,12 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object Tokenizer extends Readable[Tokenizer] {
+  override def read: Reader[Tokenizer] = new DefaultParamsReader[Tokenizer]
 }
 
 /**
@@ -56,7 +63,7 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
  */
 @Experimental
 class RegexTokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] with Writable {
 
   def this() = this(Identifiable.randomUID("regexTok"))
 
@@ -131,4 +138,10 @@ class RegexTokenizer(override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object RegexTokenizer extends Readable[RegexTokenizer] {
+  override def read: Reader[RegexTokenizer] = new DefaultParamsReader[RegexTokenizer]
 }

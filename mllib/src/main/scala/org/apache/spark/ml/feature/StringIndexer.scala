@@ -24,7 +24,7 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -188,9 +188,8 @@ class StringIndexerModel (
  * @see [[StringIndexer]] for converting strings into indices
  */
 @Experimental
-class IndexToString private[ml] (
-  override val uid: String) extends Transformer
-    with HasInputCol with HasOutputCol {
+class IndexToString private[ml] (override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol with Writable {
 
   def this() =
     this(Identifiable.randomUID("idxToStr"))
@@ -257,4 +256,10 @@ class IndexToString private[ml] (
   override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object IndexToString extends Readable[IndexToString] {
+  override def read: Reader[IndexToString] = new DefaultParamsReader[IndexToString]
 }

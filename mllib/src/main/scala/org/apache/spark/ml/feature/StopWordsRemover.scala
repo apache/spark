@@ -21,7 +21,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
@@ -86,7 +86,7 @@ private[spark] object StopWords {
  */
 @Experimental
 class StopWordsRemover(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol {
+  extends Transformer with HasInputCol with HasOutputCol with Writable {
 
   def this() = this(Identifiable.randomUID("stopWords"))
 
@@ -154,4 +154,10 @@ class StopWordsRemover(override val uid: String)
   }
 
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object StopWordsRemover extends Readable[StopWordsRemover] {
+  override def read: Reader[StopWordsRemover] = new DefaultParamsReader[StopWordsRemover]
 }

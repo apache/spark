@@ -60,7 +60,7 @@ private[feature] trait QuantileDiscretizerBase extends Params with HasInputCol w
  */
 @Experimental
 final class QuantileDiscretizer(override val uid: String)
-  extends Estimator[Bucketizer] with QuantileDiscretizerBase {
+  extends Estimator[Bucketizer] with QuantileDiscretizerBase with Writable {
 
   def this() = this(Identifiable.randomUID("quantileDiscretizer"))
 
@@ -93,9 +93,11 @@ final class QuantileDiscretizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-private[feature] object QuantileDiscretizer extends Logging {
+private[feature] object QuantileDiscretizer extends Readable[QuantileDiscretizer] with Logging {
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
@@ -172,5 +174,6 @@ private[feature] object QuantileDiscretizer extends Logging {
       Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)
     }
   }
-}
 
+  override def read: Reader[QuantileDiscretizer] = new DefaultParamsReader[QuantileDiscretizer]
+}

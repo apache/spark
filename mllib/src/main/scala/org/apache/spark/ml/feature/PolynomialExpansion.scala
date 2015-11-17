@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{ParamMap, IntParam, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql.types.DataType
 
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class PolynomialExpansion(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, PolynomialExpansion] {
+  extends UnaryTransformer[Vector, Vector, PolynomialExpansion] with Writable {
 
   def this() = this(Identifiable.randomUID("poly"))
 
@@ -63,6 +63,8 @@ class PolynomialExpansion(override val uid: String)
   override protected def outputDataType: DataType = new VectorUDT()
 
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 /**
@@ -77,7 +79,7 @@ class PolynomialExpansion(override val uid: String)
  * To handle sparsity, if c is zero, we can skip all monomials that contain it. We remember the
  * current index and increment it properly for sparse input.
  */
-private[feature] object PolynomialExpansion {
+private[feature] object PolynomialExpansion extends Readable[PolynomialExpansion] {
 
   private def choose(n: Int, k: Int): Int = {
     Range(n, n - k, -1).product / Range(k, 1, -1).product
@@ -176,4 +178,6 @@ private[feature] object PolynomialExpansion {
       case _ => throw new IllegalArgumentException
     }
   }
+
+  override def read: Reader[PolynomialExpansion] = new DefaultParamsReader[PolynomialExpansion]
 }
