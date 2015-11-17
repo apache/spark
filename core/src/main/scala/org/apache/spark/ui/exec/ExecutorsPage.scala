@@ -23,9 +23,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
+import org.apache.spark.storage.StorageStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
-import org.apache.spark.storage.StorageStatus
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
 private[ui] case class ExecutorSummaryInfo(
