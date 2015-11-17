@@ -583,8 +583,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jsc: JavaSparkContext,
       kafkaParams: JMap[String, String],
       offsetRanges: JList[OffsetRange],
-      leaders: JMap[TopicAndPartition, Broker]
-      ): JavaRDD[(Array[Byte], Array[Byte])] = {
+      leaders: JMap[TopicAndPartition, Broker]): JavaRDD[(Array[Byte], Array[Byte])] = {
     val messageHandler =
       (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) => (mmd.key, mmd.message)
     new JavaRDD(createRDD(jsc, kafkaParams, offsetRanges, leaders, messageHandler))
@@ -594,8 +593,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jsc: JavaSparkContext,
       kafkaParams: JMap[String, String],
       offsetRanges: JList[OffsetRange],
-      leaders: JMap[TopicAndPartition, Broker]
-    ): JavaRDD[Array[Byte]] = {
+      leaders: JMap[TopicAndPartition, Broker]): JavaRDD[Array[Byte]] = {
     val messageHandler = (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) =>
       new PythonMessageAndMetadata(
         mmd.topic, mmd.partition, mmd.offset, mmd.key(), mmd.message())
@@ -623,8 +621,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
       topics: JSet[String],
-      fromOffsets: JMap[TopicAndPartition, JLong]
-      ): JavaDStream[(Array[Byte], Array[Byte])] = {
+      fromOffsets: JMap[TopicAndPartition, JLong]): JavaDStream[(Array[Byte], Array[Byte])] = {
     val messageHandler =
       (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) => (mmd.key, mmd.message)
     new JavaDStream(createDirectStream(jssc, kafkaParams, topics, fromOffsets, messageHandler))
@@ -634,8 +631,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
       topics: JSet[String],
-      fromOffsets: JMap[TopicAndPartition, JLong]
-      ): JavaDStream[Array[Byte]] = {
+      fromOffsets: JMap[TopicAndPartition, JLong]): JavaDStream[Array[Byte]] = {
     val messageHandler = (mmd: MessageAndMetadata[Array[Byte], Array[Byte]]) =>
       new PythonMessageAndMetadata(mmd.topic, mmd.partition, mmd.offset, mmd.key(), mmd.message())
     val stream = createDirectStream(jssc, kafkaParams, topics, fromOffsets, messageHandler).
@@ -648,8 +644,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       kafkaParams: JMap[String, String],
       topics: JSet[String],
       fromOffsets: JMap[TopicAndPartition, JLong],
-      messageHandler: MessageAndMetadata[Array[Byte], Array[Byte]] => V
-    ): DStream[V] = {
+      messageHandler: MessageAndMetadata[Array[Byte], Array[Byte]] => V): DStream[V] = {
 
     val currentFromOffsets = if (!fromOffsets.isEmpty) {
       val topicsFromOffsets = fromOffsets.keySet().asScala.map(_.topic)
