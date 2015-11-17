@@ -51,7 +51,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect {
+abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
