@@ -19,6 +19,7 @@ package org.apache.spark.ml
 
 import java.{util => ju}
 
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
@@ -35,6 +36,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+
 
 /**
  * :: DeveloperApi ::

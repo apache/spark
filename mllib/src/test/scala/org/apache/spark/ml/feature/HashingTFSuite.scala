@@ -23,9 +23,11 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.util.Utils
 
-class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
+class HashingTFSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new HashingTF)
@@ -49,5 +51,17 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
     assert(features ~== expected absTol 1e-14)
+  }
+
+  test("read/write") {
+    val tf = new HashingTF()
+      .setNumFeatures(1024)
+      .setInputCol("test_input")
+      .setOutputCol("test_output")
+    val tf2 = testDefaultReadWrite(tf)
+    assert(tf.getNumFeatures === tf2.getNumFeatures)
+    assert(tf.uid === tf2.uid)
+    assert(tf.getInputCol === tf2.getInputCol)
+    assert(tf.getOutputCol === tf2.getOutputCol)
   }
 }
