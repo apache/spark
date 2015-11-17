@@ -157,7 +157,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with Logging {
+  with LogisticRegressionParams with Writable with Logging {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -385,6 +385,12 @@ class LogisticRegression(override val uid: String)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+object LogisticRegression extends Readable[LogisticRegression] {
+  override def read: Reader[LogisticRegression] = new DefaultParamsReader[LogisticRegression]
 }
 
 /**
@@ -518,12 +524,12 @@ class LogisticRegressionModel private[ml] (
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
    */
-  override def write: Writer = new LogisticRegressionWriter(this)
+  override def write: Writer = new LogisticRegressionModelWriter(this)
 }
 
 
 /** [[Writer]] instance for [[LogisticRegressionModel]] */
-private[classification] class LogisticRegressionWriter(instance: LogisticRegressionModel)
+private[classification] class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
   extends Writer with Logging {
 
   private case class Data(
@@ -546,13 +552,14 @@ private[classification] class LogisticRegressionWriter(instance: LogisticRegress
 
 object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
 
-  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionReader
+  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
   override def load(path: String): LogisticRegressionModel = read.load(path)
 }
 
 
-private[classification] class LogisticRegressionReader extends Reader[LogisticRegressionModel] {
+private[classification] class LogisticRegressionModelReader
+  extends Reader[LogisticRegressionModel] {
 
   /** Checked against metadata when loading model */
   private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"

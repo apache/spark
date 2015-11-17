@@ -15,36 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.util
+package org.apache.spark.ml.classification
 
-import java.io.File
+object ClassifierSuite {
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "rawPredictionCol" -> "myRawPrediction"
+  )
 
-import org.apache.spark.util.Utils
-
-/**
- * Trait that creates a temporary directory before all tests and deletes it after all.
- */
-trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
-
-  private var _tempDir: File = _
-
-  /** Returns the temporary directory as a [[File]] instance. */
-  protected def tempDir: File = _tempDir
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    _tempDir = Utils.createTempDir(this.getClass.getName)
-  }
-
-  override def afterAll(): Unit = {
-    deleteTempDir()
-    super.afterAll()
-  }
-
-  /** Delete [[tempDir]] */
-  def deleteTempDir(): Unit = {
-    Utils.deleteRecursively(_tempDir)
-  }
 }
