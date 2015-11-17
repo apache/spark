@@ -417,16 +417,13 @@ class StandaloneDynamicAllocationSuite
       assert(apps.head.executors.size === 2)
       assert(apps.head.getExecutorLimit === Int.MaxValue)
     }
+    var apps = getApplications()
     // sync executors between the Master and the driver, needed because
     // the driver refuses to kill executors it does not know about
     syncExecutors(sc)
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
-    // force kill busy executor
-    assert(killExecutor(sc, executors.head, force = true))
-    var apps = getApplications()
-    // kill executor successfully
-    assert(apps.head.executors.size === 1)
+
     // simulate running a task on the executor
     val getMap = PrivateMethod[mutable.HashMap[String, Int]]('executorIdToTaskCount)
     val taskScheduler = sc.taskScheduler.asInstanceOf[TaskSchedulerImpl]
@@ -435,7 +432,14 @@ class StandaloneDynamicAllocationSuite
     // kill the busy executor without force; this should fail
     assert(killExecutor(sc, executors.head, force = false))
     apps = getApplications()
+    assert(apps.head.executors.size === 2)
+
+    // force kill busy executor
+    assert(killExecutor(sc, executors.head, force = true))
+    apps = getApplications()
+    // kill executor successfully
     assert(apps.head.executors.size === 1)
+
   }
 
   // ===============================
