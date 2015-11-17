@@ -919,6 +919,10 @@ class TaskInstance(Base):
             logging.info(msg.format(**locals()))
 
             self.start_date = datetime.now()
+            if self.state == State.UP_FOR_RETRY:
+                self.try_number += 1
+            else:
+                self.try_number = 1
             if not force and (self.pool or self.task.dag.concurrency_reached):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
@@ -929,10 +933,6 @@ class TaskInstance(Base):
                 session.close()
                 logging.info("Queuing into pool {}".format(self.pool))
                 return
-            if self.state == State.UP_FOR_RETRY:
-                self.try_number += 1
-            else:
-                self.try_number = 1
             if not test_mode:
                 session.add(Log(State.RUNNING, self))
             self.state = State.RUNNING
