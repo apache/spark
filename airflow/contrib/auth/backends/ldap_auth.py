@@ -97,6 +97,9 @@ class LdapUser(models.User):
 
 @login_manager.user_loader
 def load_user(userid):
+    if not userid or userid == 'None':
+        return None
+
     session = settings.Session()
     user = session.query(models.User).filter(models.User.id == int(userid)).first()
     session.expunge_all()
