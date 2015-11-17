@@ -133,7 +133,9 @@ private[sql] case class InMemoryRelation(
           }.toArray
 
           var rowCount = 0
-          while (rowIterator.hasNext && rowCount < batchSize) {
+          var totalSize = 0L
+          while (rowIterator.hasNext && rowCount < batchSize
+            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
             val row = rowIterator.next()
 
             // Added for SPARK-6082. This assertion can be useful for scenarios when something
@@ -147,8 +149,10 @@ private[sql] case class InMemoryRelation(
                 s"\nRow content: $row")
 
             var i = 0
+            totalSize = 0
             while (i < row.numFields) {
               columnBuilders(i).appendFrom(row, i)
+              totalSize += columnBuilders(i).columnStats.sizeInBytes
               i += 1
             }
             rowCount += 1
