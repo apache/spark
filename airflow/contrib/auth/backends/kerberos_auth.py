@@ -72,6 +72,9 @@ class KerberosUser(models.User):
 
 @login_manager.user_loader
 def load_user(userid):
+    if not userid:
+        return None
+
     session = settings.Session()
     user = session.query(models.User).filter(models.User.id == userid).first()
     session.expunge_all()
