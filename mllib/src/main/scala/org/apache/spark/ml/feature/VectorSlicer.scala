@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -152,13 +152,15 @@ final class VectorSlicer(override val uid: String)
 
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
-private[feature] object VectorSlicer extends Readable[VectorSlicer] {
+@Since("1.6.0")
+object VectorSlicer extends Readable[VectorSlicer] {
 
   /** Return true if given feature indices are valid */
-  def validIndices(indices: Array[Int]): Boolean = {
+  private[feature] def validIndices(indices: Array[Int]): Boolean = {
     if (indices.isEmpty) {
       true
     } else {
@@ -167,9 +169,10 @@ private[feature] object VectorSlicer extends Readable[VectorSlicer] {
   }
 
   /** Return true if given feature names are valid */
-  def validNames(names: Array[String]): Boolean = {
+  private[feature] def validNames(names: Array[String]): Boolean = {
     names.forall(_.nonEmpty) && names.length == names.distinct.length
   }
 
+  @Since("1.6.0")
   override def read: Reader[VectorSlicer] = new DefaultParamsReader[VectorSlicer]
 }

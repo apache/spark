@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param._
@@ -166,9 +166,12 @@ class OneHotEncoder(override val uid: String) extends Transformer
 
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object OneHotEncoder extends Readable[OneHotEncoder] {
+  @Since("1.6.0")
   override def read: Reader[OneHotEncoder] = new DefaultParamsReader[OneHotEncoder]
 }

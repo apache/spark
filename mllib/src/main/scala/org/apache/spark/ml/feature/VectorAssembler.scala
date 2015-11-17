@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.param.ParamMap
@@ -121,14 +121,17 @@ class VectorAssembler(override val uid: String)
 
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
-private object VectorAssembler extends Readable[VectorAssembler] {
+@Since("1.6.0")
+object VectorAssembler extends Readable[VectorAssembler] {
 
+  @Since("1.6.0")
   override def read: Reader[VectorAssembler] = new DefaultParamsReader[VectorAssembler]
 
-  private[feature] def assemble(vv: Any*): Vector = {
+  private def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
     var cur = 0

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
@@ -78,9 +78,12 @@ class HashingTF(override val uid: String)
 
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object HashingTF extends Readable[HashingTF] {
+  @Since("1.6.0")
   override def read: Reader[HashingTF] = new DefaultParamsReader[HashingTF]
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
@@ -257,9 +257,12 @@ class IndexToString private[ml] (override val uid: String)
     defaultCopy(extra)
   }
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object IndexToString extends Readable[IndexToString] {
+  @Since("1.6.0")
   override def read: Reader[IndexToString] = new DefaultParamsReader[IndexToString]
 }

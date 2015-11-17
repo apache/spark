@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
@@ -67,9 +67,12 @@ class NGram(override val uid: String)
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object NGram extends Readable[NGram] {
+  @Since("1.6.0")
   override def read: Reader[NGram] = new DefaultParamsReader[NGram]
 }

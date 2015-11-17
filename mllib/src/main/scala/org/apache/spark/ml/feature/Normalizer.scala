@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
@@ -57,9 +57,12 @@ class Normalizer(override val uid: String)
 
   override protected def outputDataType: DataType = new VectorUDT()
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object Normalizer extends Readable[Normalizer] {
+  @Since("1.6.0")
   override def read: Reader[Normalizer] = new DefaultParamsReader[Normalizer]
 }
