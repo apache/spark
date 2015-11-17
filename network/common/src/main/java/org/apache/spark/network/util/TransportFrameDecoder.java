@@ -56,32 +56,43 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
       buffer = in.alloc().compositeBuffer();
     }
 
-    buffer.writeBytes(in);
+    buffer.addComponent(in).writerIndex(buffer.writerIndex() + in.readableBytes());
 
     while (buffer.isReadable()) {
-      feedInterceptor();
-      if (interceptor != null) {
-        continue;
-      }
+      discardReadBytes();
+      if (!feedInterceptor()) {
+        ByteBuf frame = decodeNext();
+        if (frame == null) {
+          break;
+        }
 
-      ByteBuf frame = decodeNext();
-      if (frame != null) {
         ctx.fireChannelRead(frame);
-      } else {
-        break;
       }
     }
 
-    // We can't discard read sub-buffers if there are other references to the buffer (e.g.
-    // through slices used for framing). This assumes that code that retains references
-    // will call retain() from the thread that called "fireChannelRead()" above, otherwise
-    // ref counting will go awry.
-    if (buffer != null && buffer.refCnt() == 1) {
+    discardReadBytes();
+  }
+
+  private void discardReadBytes() {
+    // If the buffer's been retained by downstream code, then make a copy of the remaining
+    // bytes into a new buffer. Otherwise, just discard stale components.
+    if (buffer.refCnt() > 1) {
+      CompositeByteBuf newBuffer = buffer.alloc().compositeBuffer();
+
+      if (buffer.readableBytes() > 0) {
+        ByteBuf spillBuf = buffer.alloc().buffer(buffer.readableBytes());
+        spillBuf.writeBytes(buffer);
+        newBuffer.addComponent(spillBuf).writerIndex(spillBuf.readableBytes());
+      }
+
+      buffer.release();
+      buffer = newBuffer;
+    } else {
       buffer.discardReadComponents();
     }
   }
 
-  protected ByteBuf decodeNext() throws Exception {
+  private ByteBuf decodeNext() throws Exception {
     if (buffer.readableBytes() < LENGTH_SIZE) {
       return null;
     }
@@ -127,10 +138,14 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     this.interceptor = interceptor;
   }
 
-  private void feedInterceptor() throws Exception {
+  /**
+   * @return Whether the interceptor is still active after processing the data.
+   */
+  private boolean feedInterceptor() throws Exception {
     if (interceptor != null && !interceptor.handle(buffer)) {
       interceptor = null;
     }
+    return interceptor != null;
   }
 
   public static interface Interceptor {
