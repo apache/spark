@@ -816,7 +816,10 @@ import org.apache.spark.annotation.DeveloperApi
    *         incomplete code, compilation error, or runtime error
    */
   @DeveloperApi
-  def interpret(line: String): IR.Result = interpret(line, false)
+  def interpret(line: String): IR.Result = {
+    val fullLine = if (line contains "class") "sqlContext.addOuterScope(this); " + line else line
+    interpret(fullLine, false)
+  }
 
   /**
    * Interpret one line of input. All feedback, including parse errors
