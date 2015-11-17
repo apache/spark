@@ -121,7 +121,8 @@ class OneHotEncoderSuite
       .withColumn("intLabel", df("labelIndex").cast(IntegerType))
       .withColumn("floatLabel", df("labelIndex").cast(FloatType))
       .withColumn("decimalLabel", df("labelIndex").cast(DecimalType(10, 0)))
-    val cols = Array("labelIndex", "shortLabel", "longLabel", "intLabel", "floatLabel", "decimalLabel")
+    val cols = Array("labelIndex", "shortLabel", "longLabel", "intLabel",
+      "floatLabel", "decimalLabel")
     for (col <- cols) {
       val encoder = new OneHotEncoder()
         .setInputCol(col)
