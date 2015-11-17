@@ -38,7 +38,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
-import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorKilled, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.util.Utils
 
@@ -481,7 +481,7 @@ private[yarn] class YarnAllocator(
             (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
-          case unknown =>
+          case _ =>
             numExecutorsFailed += 1
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
@@ -493,12 +493,11 @@ private[yarn] class YarnAllocator(
         } else {
           logInfo(containerExitReason)
         }
-        ExecutorExited(0, exitCausedByApp, containerExitReason)
+        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
-        ExecutorExited(completedContainer.getExitStatus, exitCausedByApp = false,
-          s"Container $containerId exited from explicit termination request.")
+        ExecutorKilled(s"Container $containerId exited from explicit termination request.")
       }
 
       for {
