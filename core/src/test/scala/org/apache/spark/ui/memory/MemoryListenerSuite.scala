@@ -47,6 +47,17 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     SparkListenerExecutorMetricsUpdate(execId, executorMetrics, null)
   }
 
+  private def createExecutorMetrics(
+      hostname: String,
+      timeStamp: Long,
+      onHeapSize: Long,
+      offHeapSize: Long): ExecutorMetrics = {
+    val execMetrics = new ExecutorMetrics
+    execMetrics.setHostname(hostname)
+    execMetrics.setTransportMetrics(TransportMetrics(timeStamp, onHeapSize, offHeapSize))
+    execMetrics
+  }
+
   test("test HashMap size for MemoryListener") {
     val listener = new MemoryListener
     val execId1 = "exec-1"
@@ -59,14 +70,14 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     // stages are all completed, no activeStages now
     assert(listener.activeStagesToMem.isEmpty)
 
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
-      execId1, new ExecutorMetrics, null))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(
+      execId1, new ExecutorMetrics))
     // ExecutorMetrics is not related with Stages directly
     assert(listener.activeStagesToMem.isEmpty)
 
     listener.onStageSubmitted(createStageStartEvent(3))
-    listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
-      execId2, new ExecutorMetrics, null))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(
+      execId2, new ExecutorMetrics))
     // totally 2 executors updated their metrics
     assert(listener.activeExecutorIdToMem.size == 2)
     assert(listener.activeStagesToMem.size == 1)
@@ -77,5 +88,4 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     assert(listener.activeExecutorIdToMem.size == listener.latestExecIdToExecMetrics.size)
     assert(listener.removedExecutorIdToMem.isEmpty)
   }
-
 }
