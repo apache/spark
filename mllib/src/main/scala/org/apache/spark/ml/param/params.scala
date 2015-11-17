@@ -29,6 +29,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: DeveloperApi ::
@@ -88,9 +89,11 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     value match {
       case x: String =>
         compact(render(JString(x)))
+      case v: Vector =>
+        v.toJson
       case _ =>
         throw new NotImplementedError(
-          "The default jsonEncode only supports string. " +
+          "The default jsonEncode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
     }
   }
@@ -100,9 +103,14 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     parse(json) match {
       case JString(x) =>
         x.asInstanceOf[T]
+      case JObject(v) =>
+        val keys = v.map(_._1)
+        assert(keys.contains("type") && keys.contains("values"),
+          s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
+        Vectors.fromJson(json).asInstanceOf[T]
       case _ =>
         throw new NotImplementedError(
-          "The default jsonDecode only supports string. " +
+          "The default jsonDecode only supports string and vector. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }
   }
