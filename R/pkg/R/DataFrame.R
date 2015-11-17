@@ -700,25 +700,30 @@ setMethod("collect",
                 # data of complex type can be held. But getting a cell from a column
                 # of list type returns a list instead of a vector. So for columns of
                 # non-complex type, append them as vector.
+                #
+                # For columns of complex type, be careful to access them.
+                # Get a column of complex type returns a list.
+                # Get a cell from a column of complex type returns a list instead of a vector.
                 col <- listCols[[colIndex]]
                 if (length(col) <= 0) {
                   df[[names[colIndex]]] <- col
                 } else {
                   # TODO: more robust check on column of primitive types
-                  vec <- do.call(c, col)
-                  if (class(vec) != "list") {
-                    df[[names[colIndex]]] <- vec
+                  if (!any(sapply(col, function(e) { length(e) > 1 }))) {
+                    vec <- do.call(c, col)
+                    if (class(vec) != "list") {
+                      df[[names[colIndex]]] <- vec
+                    } else {
+                      df[[names[colIndex]]] <- col
+                    }
                   } else {
-                    # For columns of complex type, be careful to access them.
-                    # Get a column of complex type returns a list.
-                    # Get a cell from a column of complex type returns a list instead of a vector.
                     df[[names[colIndex]]] <- col
-                 }
+                  }
+                }
               }
+              df
             }
-            df
-          }
-        })
+          })
 
 #' Limit
 #'
