@@ -19,6 +19,7 @@ package org.apache.spark.ml.util
 
 import java.io.{File, IOException}
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
@@ -31,6 +32,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
   /**
    * Checks "overwrite" option and params.
+   * This saves to and loads from [[tempDir]], but creates a subdirectory with a random name
+   * in order to avoid conflicts from multiple calls to this method.
    * @param instance ML instance to test saving/loading
    * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
@@ -40,7 +43,9 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       instance: T,
       testParams: Boolean = true): T = {
     val uid = instance.uid
-    val path = new File(tempDir, uid).getPath
+    val subdirName = Identifiable.randomUID("test")
+    val subdir = new Path(tempDir.getPath, subdirName).toString
+    val path = new File(subdir, uid).getPath
 
     instance.save(path)
     intercept[IOException] {
@@ -77,6 +82,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    *  - Explicitly set Params, and train model
    *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
    *  - Check Params on Estimator and Model
+   *
+   * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
    * @param estimator  Estimator to test
    * @param dataset  Dataset to pass to [[Estimator.fit()]]
    * @param testParams  Set of [[Param]] values to set in estimator
@@ -102,8 +109,6 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       val param = estimator.getParam(p)
       assert(estimator.get(param).get === estimator2.get(param).get)
     }
-
-    deleteTempDir()
 
     // Test Model save/load
     val model2 = testDefaultReadWrite(model)

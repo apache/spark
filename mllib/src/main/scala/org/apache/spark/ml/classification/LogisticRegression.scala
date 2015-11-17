@@ -523,6 +523,8 @@ class LogisticRegressionModel private[ml] (
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
    */
   override def write: Writer = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
