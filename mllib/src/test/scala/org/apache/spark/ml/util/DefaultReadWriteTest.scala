@@ -19,7 +19,6 @@ package org.apache.spark.ml.util
 
 import java.io.{File, IOException}
 
-import org.apache.hadoop.fs.Path
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
@@ -44,7 +43,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       testParams: Boolean = true): T = {
     val uid = instance.uid
     val subdirName = Identifiable.randomUID("test")
-    val subdir = new Path(tempDir.getPath, subdirName).toString
+
+    val subdir = new File(tempDir, subdirName)
     val path = new File(subdir, uid).getPath
 
     instance.save(path)
