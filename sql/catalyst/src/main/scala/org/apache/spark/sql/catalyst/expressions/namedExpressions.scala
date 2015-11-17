@@ -212,9 +212,12 @@ case class AttributeReference(
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + exprId.hashCode()
+    h = h * 37 + name.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
+    h = h * 37 + exprId.hashCode()
+    h = h * 37 + qualifiers.hashCode()
     h
   }
 
