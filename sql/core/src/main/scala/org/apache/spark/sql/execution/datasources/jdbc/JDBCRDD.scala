@@ -130,14 +130,14 @@ private[sql] object JDBCRDD extends Logging {
           val columnName = rsmd.getColumnLabel(i + 1)
           val dataType = rsmd.getColumnType(i + 1)
           val typeName = rsmd.getColumnTypeName(i + 1)
-          val precision = rsmd.getPrecision(i + 1)
-          val scale = rsmd.getScale(i + 1)
+          val fieldSize = rsmd.getPrecision(i + 1)
+          val fieldScale = rsmd.getScale(i + 1)
           val isSigned = rsmd.isSigned(i + 1)
           val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
           val metadata = new MetadataBuilder().putString("name", columnName)
           val columnType =
-            dialect.getCatalystType(dataType, typeName, precision, scale, metadata).getOrElse(
-              getCatalystType(dataType, precision, scale, isSigned))
+            dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+              getCatalystType(dataType, fieldSize, fieldScale, isSigned))
           fields(i) = StructField(columnName, columnType, nullable, metadata.build())
           i = i + 1
         }

@@ -28,25 +28,18 @@ private object PostgresDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      precision: Int,
-      scale: Int,
-      md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.BIT && typeName.equals("bit") && precision != 1) {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
       Some(BinaryType)
     } else if (sqlType == Types.OTHER) {
-      toCatalystType(typeName, precision, scale).filter(_ == StringType)
-    } else if (sqlType == Types.ARRAY && typeName(0) == '_') {
-      toCatalystType(typeName.drop(1), precision, scale).map(ArrayType(_))
+      toCatalystType(typeName).filter(_ == StringType)
+    } else if (sqlType == Types.ARRAY && typeName.length > 1 && typeName(0) == '_') {
+      toCatalystType(typeName.drop(1)).map(ArrayType(_))
     } else None
   }
 
   // TODO: support more type names.
-  private def toCatalystType(
-      typeName: String,
-      precision: Int,
-      scale: Int): Option[DataType] = typeName match {
+  private def toCatalystType(typeName: String): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
     case "bit" => Some(BinaryType)
     case "int2" => Some(ShortType)
@@ -59,7 +52,6 @@ private object PostgresDialect extends JdbcDialect {
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
     case "date" => Some(DateType)
-    case "numeric" if precision != 0 || scale != 0 => Some(DecimalType(precision, scale))
     case "numeric" => Some(DecimalType.SYSTEM_DEFAULT)
     case _ => None
   }

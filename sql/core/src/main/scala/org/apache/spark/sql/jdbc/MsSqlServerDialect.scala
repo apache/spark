@@ -25,11 +25,7 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      precision: Int,
-      scale: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (typeName.contains("datetimeoffset")) {
       // String is recommend by Microsoft SQL Server for datetimeoffset types in non-MS clients
       Option(StringType)

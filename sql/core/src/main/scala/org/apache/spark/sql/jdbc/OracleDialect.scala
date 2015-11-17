@@ -27,20 +27,16 @@ private case object OracleDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
 
   override def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      precision: Int,
-      scale: Int,
-      md: MetadataBuilder): Option[DataType] = {
+      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     // Handle NUMBER fields that have no precision/scale in special way
     // because JDBC ResultSetMetaData converts this to 0 procision and -127 scale
     // For more details, please see
     // https://github.com/apache/spark/pull/8780#issuecomment-145598968
     // and
     // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-    if (sqlType == Types.NUMERIC && precision == 0) {
+    if (sqlType == Types.NUMERIC && size == 0) {
       // This is sub-optimal as we have to pick a precision/scale in advance whereas the data
-      // in Oracle is allowed to have different precision/scale for each value.
+      //  in Oracle is allowed to have different precision/scale for each value.
       Option(DecimalType(DecimalType.MAX_PRECISION, 10))
     } else {
       None

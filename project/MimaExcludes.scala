@@ -106,13 +106,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.sql.SQLContext.setSession"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.sql.SQLContext.createSession"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.sql.jdbc.MySQLDialect.getCatalystType"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.sql.jdbc.AggregatedDialect.getCatalystType"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.sql.jdbc.PostgresDialect.getCatalystType")
+          "org.apache.spark.sql.SQLContext.createSession")
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_="),
