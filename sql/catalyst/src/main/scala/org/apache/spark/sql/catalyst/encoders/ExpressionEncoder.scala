@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.util.concurrent.ConcurrentMap
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
@@ -209,7 +211,9 @@ case class ExpressionEncoder[T](
    * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
    * given schema.
    */
-  def resolve(schema: Seq[Attribute]): ExpressionEncoder[T] = {
+  def resolve(
+      schema: Seq[Attribute],
+      outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
     val positionToAttribute = AttributeMap.toIndex(schema)
     val unbound = fromRowExpression transform {
       case b: BoundReference => positionToAttribute(b.ordinal)
@@ -217,7 +221,16 @@ case class ExpressionEncoder[T](
 
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
-    copy(fromRowExpression = analyzedPlan.expressions.head.children.head)
+
+    // In order to construct instances of inner classes (for example those declared in a REPL cell),
+    // we need an instance of the outer scope.  This rule substitues those outer objects into
+    // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
+    // registry.
+    copy(fromRowExpression = analyzedPlan.expressions.head.children.head transform {
+      case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
+        val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
+        n.copy(outerPointer = Some(Literal.fromObject(outer)))
+    })
   }
 
   /**

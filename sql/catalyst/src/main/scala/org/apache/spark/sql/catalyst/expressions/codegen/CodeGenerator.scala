@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -202,6 +204,11 @@ class CodeGenContext {
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
+//    case ObjectType(cls) if cls.isMemberClass =>
+//      val pkg = cls.getDeclaringClass.getPackage.getName + "."
+//      val name = pkg + cls.getName
+//      println(name)
+//      name
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"
@@ -524,7 +531,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(

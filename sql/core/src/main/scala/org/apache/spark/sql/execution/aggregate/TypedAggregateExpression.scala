@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import com.google.common.collect.MapMaker
+
 import scala.language.existentials
 
 import org.apache.spark.Logging
@@ -93,7 +95,7 @@ case class TypedAggregateExpression(
   lazy val boundA = aEncoder.get
 
   val bAttributes = bEncoder.schema.toAttributes
-  lazy val boundB = bEncoder.resolve(bAttributes).bind(bAttributes)
+  lazy val boundB = bEncoder.resolve(bAttributes, new MapMaker().makeMap()).bind(bAttributes)
 
   private def updateBuffer(buffer: MutableRow, value: InternalRow): Unit = {
     // todo: need a more neat way to assign the value.

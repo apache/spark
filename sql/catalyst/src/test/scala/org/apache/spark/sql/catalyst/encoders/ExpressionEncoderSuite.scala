@@ -18,13 +18,17 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import java.util.Arrays
+import java.util.concurrent.ConcurrentMap
 
+import com.google.common.collect.MapMaker
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.ArrayType
 
 abstract class ExpressionEncoderSuite extends SparkFunSuite {
+  val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
+
   protected def encodeDecodeTest[T](
       input: T,
       encoder: ExpressionEncoder[T],
@@ -32,7 +36,7 @@ abstract class ExpressionEncoderSuite extends SparkFunSuite {
     test(s"encode/decode for $testName: $input") {
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.resolve(schema).bind(schema)
+      val boundEncoder = encoder.resolve(schema, outers).bind(schema)
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(

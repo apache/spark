@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
+import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.AtomicReference
+
+import com.google.common.collect.MapMaker
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -187,6 +190,14 @@ class SQLContext private[sql](
 
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+
+  @transient
+  protected [sql] lazy val outerScopes: ConcurrentMap[String, AnyRef] =
+    new MapMaker().weakValues().makeMap()
+
+  def addOuterScope(outer: AnyRef): Unit = {
+    outerScopes.putIfAbsent(outer.getClass.getName, outer)
+  }
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =

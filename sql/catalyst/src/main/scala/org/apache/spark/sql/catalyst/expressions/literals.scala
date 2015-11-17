@@ -48,6 +48,8 @@ object Literal {
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 
+  def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
   }

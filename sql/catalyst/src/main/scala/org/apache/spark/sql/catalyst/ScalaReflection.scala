@@ -35,17 +35,6 @@ object ScalaReflection extends ScalaReflection {
   // class loader of the current thread.
   override def mirror: universe.Mirror =
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
-}
-
-/**
- * Support for generating catalyst schemas for scala objects.
- */
-trait ScalaReflection {
-  /** The universe we work in (runtime or macro) */
-  val universe: scala.reflect.api.Universe
-
-  /** The mirror used to access types in the universe */
-  def mirror: universe.Mirror
 
   import universe._
 
@@ -53,38 +42,14 @@ trait ScalaReflection {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
-  case class Schema(dataType: DataType, nullable: Boolean)
-
-  /** Returns a Sequence of attributes for the given case class type. */
-  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
-    case Schema(s: StructType, _) =>
-      s.toAttributes
-  }
-
-  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema =
-    ScalaReflectionLock.synchronized { schemaFor(localTypeOf[T]) }
-
   /**
-   * Return the Scala Type for `T` in the current classloader mirror.
-   *
-   * Use this method instead of the convenience method `universe.typeOf`, which
-   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
-   * That's not necessarily the case when running using Eclipse launchers or even
-   * Sbt console or test (without `fork := true`).
-   *
-   * @see SPARK-5281
-   */
-  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
-
-  /**
-   * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
-   * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
-   * those that hold primitive types.
-   *
-   * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
-   * system.  As a result, ObjectType will be returned for things like boxed Integers
-   */
+    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
+    * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
+    * those that hold primitive types.
+    *
+    * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
+    * system.  As a result, ObjectType will be returned for things like boxed Integers
+    */
   def dataTypeFor(tpe: `Type`): DataType = tpe match {
     case t if t <:< definitions.IntTpe => IntegerType
     case t if t <:< definitions.LongTpe => LongType
@@ -114,15 +79,17 @@ trait ScalaReflection {
 
           }
           ObjectType(cls)
-        case other => ObjectType(Utils.classForName(className))
+        case other =>
+          val clazz = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
+          ObjectType(clazz)
       }
   }
 
   /**
-   * Given a type `T` this function constructs and ObjectType that holds a class of type
-   * Array[T].  Special handling is performed for primitive types to map them back to their raw
-   * JVM form instead of the Scala Array that handles auto boxing.
-   */
+    * Given a type `T` this function constructs and ObjectType that holds a class of type
+    * Array[T].  Special handling is performed for primitive types to map them back to their raw
+    * JVM form instead of the Scala Array that handles auto boxing.
+    */
   def arrayClassFor(tpe: `Type`): DataType = {
     val cls = tpe match {
       case t if t <:< definitions.IntTpe => classOf[Array[Int]]
@@ -142,15 +109,15 @@ trait ScalaReflection {
   }
 
   /**
-   * Returns an expression that can be used to construct an object of type `T` given an input
-   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
-   * of the same name as the constructor arguments.  Nested classes will have their fields accessed
-   * using UnresolvedExtractValue.
-   *
-   * When used on a primitive type, the constructor will instead default to extracting the value
-   * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
-   * calling unbind/bind with a new schema.
-   */
+    * Returns an expression that can be used to construct an object of type `T` given an input
+    * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
+    * using UnresolvedExtractValue.
+    *
+    * When used on a primitive type, the constructor will instead default to extracting the value
+    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
+    * calling unbind/bind with a new schema.
+    */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
   private def constructorFor(
@@ -437,8 +404,8 @@ trait ScalaReflection {
 
   /** Helper for extracting internal fields from a case class. */
   protected def extractorFor(
-      inputObject: Expression,
-      tpe: `Type`): Expression = ScalaReflectionLock.synchronized {
+                              inputObject: Expression,
+                              tpe: `Type`): Expression = ScalaReflectionLock.synchronized {
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
@@ -640,6 +607,47 @@ trait ScalaReflection {
       }
     }
   }
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  /** The mirror used to access types in the universe */
+  def mirror: universe.Mirror
+
+  import universe._
+
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
+
+  case class Schema(dataType: DataType, nullable: Boolean)
+
+  /** Returns a Sequence of attributes for the given case class type. */
+  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
+    case Schema(s: StructType, _) =>
+      s.toAttributes
+  }
+
+  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(localTypeOf[T]) }
+
+  /**
+   * Return the Scala Type for `T` in the current classloader mirror.
+   *
+   * Use this method instead of the convenience method `universe.typeOf`, which
+   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
+   * That's not necessarily the case when running using Eclipse launchers or even
+   * Sbt console or test (without `fork := true`).
+   *
+   * @see SPARK-5281
+   */
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
