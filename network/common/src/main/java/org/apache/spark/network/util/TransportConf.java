@@ -36,6 +36,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_SASL_TIMEOUT_KEY;
   private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
+  private final String SPARK_NETWORK_IO_LAZYFD_KEY;
 
   private final ConfigProvider conf;
 
@@ -56,6 +57,7 @@ public class TransportConf {
     SPARK_NETWORK_SASL_TIMEOUT_KEY = getConfKey("sasl.timeout");
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
+    SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
   }
 
   private String getConfKey(String suffix) {
@@ -134,11 +136,11 @@ public class TransportConf {
   }
 
   /**
-   * Whether to initialize shuffle FileDescriptor lazily or not. If true, file descriptors are
+   * Whether to initialize FileDescriptor lazily or not. If true, file descriptors are
    * created only when data is going to be transferred. This can reduce the number of open files.
    */
   public boolean lazyFileDescriptor() {
-    return conf.getBoolean("spark.shuffle.io.lazyFD", true);
+    return conf.getBoolean(SPARK_NETWORK_IO_LAZYFD_KEY, true);
   }
 
   /**
