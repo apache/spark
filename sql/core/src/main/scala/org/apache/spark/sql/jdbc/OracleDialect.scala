@@ -26,8 +26,8 @@ private case object OracleDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
 
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+  override def getCatalystType(sqlType: Int, typeName: String, size: Int, scale: Int,
+                               md: MetadataBuilder): Option[DataType] = {
     // Handle NUMBER fields that have no precision/scale in special way
     // because JDBC ResultSetMetaData converts this to 0 procision and -127 scale
     // For more details, please see

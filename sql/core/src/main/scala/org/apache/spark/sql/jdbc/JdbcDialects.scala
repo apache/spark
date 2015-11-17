@@ -65,12 +65,13 @@ abstract class JdbcDialect {
    * @param sqlType The sql type (see java.sql.Types)
    * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
    * @param size The size of the type.
+   * @param scale The scale of the type.  Generally used for decimal types.
    * @param md Result metadata associated with this type.
    * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
    *         or null if the default type mapping should be used.
    */
-  def getCatalystType(
-    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
+  def getCatalystType(sqlType: Int, typeName: String, size: Int, scale: Int,
+                      md: MetadataBuilder): Option[DataType] = None
 
   /**
    * Retrieve the jdbc / sql type for a given datatype.
@@ -78,6 +79,30 @@ abstract class JdbcDialect {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+    * Retrieve standard jdbc types.
+    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
+    * @return The default JdbcType for this DataType
+    */
+  def getCommonJDBCType(dt: DataType): Option[JdbcType] = {
+    dt match {
+      case IntegerType => Option(JdbcType("INTEGER", java.sql.Types.INTEGER))
+      case LongType => Option(JdbcType("BIGINT", java.sql.Types.BIGINT))
+      case DoubleType => Option(JdbcType("DOUBLE PRECISION", java.sql.Types.DOUBLE))
+      case FloatType => Option(JdbcType("REAL", java.sql.Types.FLOAT))
+      case ShortType => Option(JdbcType("INTEGER", java.sql.Types.SMALLINT))
+      case ByteType => Option(JdbcType("BYTE", java.sql.Types.TINYINT))
+      case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
+      case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
+      case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
+      case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
+      case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
+      case t: DecimalType => Option(
+        JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
+      case _ => None
+    }
+  }
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column

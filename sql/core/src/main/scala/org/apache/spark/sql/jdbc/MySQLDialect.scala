@@ -26,8 +26,8 @@ private case object MySQLDialect extends JdbcDialect {
 
   override def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
 
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+  override def getCatalystType(sqlType: Int, typeName: String, size: Int, scale: Int,
+                               md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
       // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
       // byte arrays instead of longs.
