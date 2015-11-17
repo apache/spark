@@ -41,16 +41,19 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.sql.types._
 
 
 private[hive] class HiveFunctionRegistry(
     underlying: analysis.FunctionRegistry,
-    hiveContext: HiveContext)
+    executionHive: ClientWrapper)
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {
-    hiveContext.executionHive.withHiveState {
+    // Hive Registry need current database to lookup function
+    // TODO: the current database of executionHive should be consistent with metadataHive
+    executionHive.withHiveState {
       FunctionRegistry.getFunctionInfo(name)
     }
   }
