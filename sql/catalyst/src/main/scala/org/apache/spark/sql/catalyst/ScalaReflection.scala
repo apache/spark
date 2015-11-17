@@ -43,13 +43,13 @@ object ScalaReflection extends ScalaReflection {
   import scala.collection.Map
 
   /**
-    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
-    * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
-    * those that hold primitive types.
-    *
-    * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
-    * system.  As a result, ObjectType will be returned for things like boxed Integers
-    */
+   * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
+   * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
+   * those that hold primitive types.
+   *
+   * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
+   * system.  As a result, ObjectType will be returned for things like boxed Integers
+   */
   def dataTypeFor(tpe: `Type`): DataType = tpe match {
     case t if t <:< definitions.IntTpe => IntegerType
     case t if t <:< definitions.LongTpe => LongType
@@ -86,10 +86,10 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-    * Given a type `T` this function constructs and ObjectType that holds a class of type
-    * Array[T].  Special handling is performed for primitive types to map them back to their raw
-    * JVM form instead of the Scala Array that handles auto boxing.
-    */
+   * Given a type `T` this function constructs and ObjectType that holds a class of type
+   * Array[T].  Special handling is performed for primitive types to map them back to their raw
+   * JVM form instead of the Scala Array that handles auto boxing.
+   */
   def arrayClassFor(tpe: `Type`): DataType = {
     val cls = tpe match {
       case t if t <:< definitions.IntTpe => classOf[Array[Int]]
@@ -109,15 +109,15 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-    * Returns an expression that can be used to construct an object of type `T` given an input
-    * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
-    * of the same name as the constructor arguments.  Nested classes will have their fields accessed
-    * using UnresolvedExtractValue.
-    *
-    * When used on a primitive type, the constructor will instead default to extracting the value
-    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
-    * calling unbind/bind with a new schema.
-    */
+   * Returns an expression that can be used to construct an object of type `T` given an input
+   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * of the same name as the constructor arguments.  Nested classes will have their fields accessed
+   * using UnresolvedExtractValue.
+   *
+   * When used on a primitive type, the constructor will instead default to extracting the value
+   * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
+   * calling unbind/bind with a new schema.
+   */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
   private def constructorFor(
@@ -404,8 +404,8 @@ object ScalaReflection extends ScalaReflection {
 
   /** Helper for extracting internal fields from a case class. */
   protected def extractorFor(
-                              inputObject: Expression,
-                              tpe: `Type`): Expression = ScalaReflectionLock.synchronized {
+      inputObject: Expression,
+      tpe: `Type`): Expression = ScalaReflectionLock.synchronized {
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
@@ -610,7 +610,8 @@ object ScalaReflection extends ScalaReflection {
 }
 
 /**
- * Support for generating catalyst schemas for scala objects.
+ * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
+ * object, this trait able to work in both the runtime and the compile time (macro) universe.
  */
 trait ScalaReflection {
   /** The universe we work in (runtime or macro) */

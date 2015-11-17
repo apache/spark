@@ -158,11 +158,11 @@ object SparkBuild extends PomBuild {
     javacJVMVersion := "1.7",
     scalacJVMVersion := "1.7",
 
-//    javacOptions in Compile ++= Seq(
-//      "-encoding", "UTF-8",
-//      "-source", javacJVMVersion.value,
-//      "-target", javacJVMVersion.value
-//    ),
+    javacOptions in Compile ++= Seq(
+      "-encoding", "UTF-8",
+      "-source", javacJVMVersion.value,
+      "-target", javacJVMVersion.value
+    ),
 
     scalacOptions in Compile ++= Seq(
       s"-target:jvm-${scalacJVMVersion.value}",

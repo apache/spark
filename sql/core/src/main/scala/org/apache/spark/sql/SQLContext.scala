@@ -195,6 +195,18 @@ class SQLContext private[sql](
   protected [sql] lazy val outerScopes: ConcurrentMap[String, AnyRef] =
     new MapMaker().weakValues().makeMap()
 
+  /**
+   * :: DeveloperApi ::
+   * Adds a new outer scope to this context that can be used when instantiating an `inner class`
+   * during deserialialization. Inner classes are created when a case class is defined in the
+   * Spark REPL and registering the outer scope that this class was defined in allows us to create
+   * new instances on the spark executors.  In normal use, users should not need to call this
+   * function.
+   *
+   * Warning: this function operates on the assumption that there is only ever one instance of any
+   * given wrapper class.
+   */
+  @DeveloperApi
   def addOuterScope(outer: AnyRef): Unit = {
     outerScopes.putIfAbsent(outer.getClass.getName, outer)
   }

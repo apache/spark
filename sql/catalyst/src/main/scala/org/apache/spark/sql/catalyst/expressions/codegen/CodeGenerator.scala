@@ -204,11 +204,6 @@ class CodeGenContext {
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
-//    case ObjectType(cls) if cls.isMemberClass =>
-//      val pkg = cls.getDeclaringClass.getPackage.getName + "."
-//      val name = pkg + cls.getName
-//      println(name)
-//      name
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"

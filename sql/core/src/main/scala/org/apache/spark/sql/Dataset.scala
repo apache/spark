@@ -368,7 +368,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          resolvedTEncoder,
+          resolvedTEncoder.bind(queryExecution.analyzed.output),
           queryExecution.analyzed.output).named :: Nil,
         logicalPlan))
   }
