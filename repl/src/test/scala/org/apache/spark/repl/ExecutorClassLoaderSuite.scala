@@ -19,8 +19,10 @@ package org.apache.spark.repl
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
+import java.util
 
 import scala.concurrent.duration._
+import scala.io.Source
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
@@ -41,6 +43,7 @@ class ExecutorClassLoaderSuite
 
   val childClassNames = List("ReplFakeClass1", "ReplFakeClass2")
   val parentClassNames = List("ReplFakeClass1", "ReplFakeClass2", "ReplFakeClass3")
+  val parentResourceNames = List("fake-resource.txt")
   var tempDir1: File = _
   var tempDir2: File = _
   var url1: String = _
@@ -54,6 +57,7 @@ class ExecutorClassLoaderSuite
     url1 = "file://" + tempDir1
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
+    parentResourceNames.foreach(TestUtils.createResource(_, tempDir2, "resource"))
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
@@ -96,6 +100,32 @@ class ExecutorClassLoaderSuite
     val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
     intercept[java.lang.ClassNotFoundException] {
       classLoader.loadClass("ReplFakeClassDoesNotExist").newInstance()
+    }
+  }
+
+  test("resource from parent") {
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val resourceName: String = "fake-resource.txt"
+    Option(classLoader.getResource(resourceName)) match {
+      case Some(url) => {
+        val fileReader = Source.fromInputStream(url.openStream()).bufferedReader()
+        assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
+      }
+      case None => fail(s"Resource $resourceName not found")
+    }
+  }
+
+  test("resources from parent") {
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
+    val resourceName: String = "fake-resource.txt"
+    val resources: util.Enumeration[URL] = classLoader.getResources(resourceName)
+    if (!resources.hasMoreElements) {
+      fail(s"Resource $resourceName not found")
+    } else {
+      val fileReader = Source.fromInputStream(resources.nextElement().openStream()).bufferedReader()
+      assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
     }
   }
 
