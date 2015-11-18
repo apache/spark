@@ -855,7 +855,7 @@ class LinearRegressionSuite
     model.summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
   }
-  
+
   ignore("read/write") { // SPARK-11672
   // Set some Params to make sure set Params are serialized.
   val linearRegression = new LinearRegression()
@@ -865,5 +865,5 @@ class LinearRegressionSuite
     val linearRegression2 = testDefaultReadWrite(linearRegression)
     assert(linearRegression.intercept === linearRegression2.intercept)
     assert(linearRegression.coefficients.toArray === linearRegression2.coefficients.toArray)
-  }  
+  }
 }
