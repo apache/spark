@@ -87,13 +87,13 @@ setMethod("predict", signature(object = "PipelineModel"),
 #'
 #' @param object A fitted MLlib model
 #' @return a list with 'devianceResiduals' and 'coefficients' components for gaussian family
-#'         or a list with 'coefficients' component for binomial family.
+#'         or a list with 'coefficients' component for binomial family. \cr
 #'         For gaussian family: the 'devianceResiduals' gives the min/max deviance residuals
 #'         of the estimation, the 'coefficients' gives the estimated coefficients and their
 #'         estimated standard errors, t values and p-values. (It only available when model
-#'         fitted by normal solver.)
+#'         fitted by normal solver.) \cr
 #'         For binomial family: the 'coefficients' gives the estimated coefficients.
-#'         See summary.glm for more information.
+#'         See summary.glm for more information. \cr
 #' @rdname summary
 #' @export
 #' @examples
