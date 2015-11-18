@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.reflect.{ClassTag, classTag}
 
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
-import org.apache.spark.sql.catalyst.expressions.{DeserializeWithKryo, BoundReference, SerializeWithKryo}
+import org.apache.spark.sql.catalyst.expressions.{DecodeUsingSerializer, BoundReference, EncodeUsingSerializer}
 import org.apache.spark.sql.types._
 
 /**
@@ -43,27 +43,48 @@ trait Encoder[T] extends Serializable {
  */
 object Encoders {
 
+  /** A way to construct encoders using generic serializers. */
+  private def genericSerializer[T: ClassTag](useKryo: Boolean): Encoder[T] = {
+    ExpressionEncoder[T](
+      schema = new StructType().add("value", BinaryType),
+      flat = true,
+      toRowExpressions = Seq(
+        EncodeUsingSerializer(
+          BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true), kryo = useKryo)),
+      fromRowExpression =
+        DecodeUsingSerializer[T](
+          BoundReference(0, BinaryType, nullable = true), classTag[T], kryo = useKryo),
+      clsTag = classTag[T]
+    )
+  }
+
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
    * This encoder maps T into a single byte array (binary) field.
    */
-  def kryo[T: ClassTag]: Encoder[T] = {
-    val ser = SerializeWithKryo(BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true))
-    val deser = DeserializeWithKryo[T](BoundReference(0, BinaryType, nullable = true), classTag[T])
-    ExpressionEncoder[T](
-      schema = new StructType().add("value", BinaryType),
-      flat = true,
-      toRowExpressions = Seq(ser),
-      fromRowExpression = deser,
-      clsTag = classTag[T]
-    )
-  }
+  def kryo[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = true)
 
   /**
    * Creates an encoder that serializes objects of type T using Kryo.
    * This encoder maps T into a single byte array (binary) field.
    */
   def kryo[T](clazz: Class[T]): Encoder[T] = kryo(ClassTag[T](clazz))
+
+  /**
+   * (Scala-specific) Creates an encoder that serializes objects of type T using generic Java
+   * serialization. This encoder maps T into a single byte array (binary) field.
+   *
+   * Note that this is extremely inefficient and should only be used as the last resort.
+   */
+  def javaSerialization[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = false)
+
+  /**
+   * Creates an encoder that serializes objects of type T using generic Java serialization.
+   * This encoder maps T into a single byte array (binary) field.
+   *
+   * Note that this is extremely inefficient and should only be used as the last resort.
+   */
+  def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
 
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
