@@ -26,6 +26,7 @@ from pyspark import RDD, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
+from pyspark.sql import utils
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -131,9 +132,7 @@ class DataFrameReader(object):
             if type(path) == list:
                 paths = path
                 gateway = self._sqlContext._sc._gateway
-                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
-                for i in range(0, len(paths)):
-                    jpaths[i] = paths[i]
+                jpaths = utils.toJArray(gateway, gateway.jvm.java.lang.String, paths)
                 return self._df(self._jreader.load(jpaths))
             else:
                 return self._df(self._jreader.load(path))
@@ -269,8 +268,9 @@ class DataFrameReader(object):
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
-            arr = self._sqlContext._sc._jvm.PythonUtils.toArray(predicates)
-            return self._df(self._jreader.jdbc(url, table, arr, jprop))
+            gateway = self._sqlContext._sc._gateway
+            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
+            return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
 
