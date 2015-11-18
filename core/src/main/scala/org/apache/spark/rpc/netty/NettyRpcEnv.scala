@@ -46,7 +46,8 @@ private[netty] class NettyRpcEnv(
     securityManager: SecurityManager) extends RpcEnv(conf) with Logging {
 
   private val transportConf = SparkTransportConf.fromSparkConf(
-    conf.clone.set("spark.shuffle.io.numConnectionsPerPeer", "1"),
+    conf.clone.set("spark.rpc.io.numConnectionsPerPeer", "1"),
+    "rpc",
     conf.getInt("spark.rpc.io.threads", 0))
 
   private val dispatcher: Dispatcher = new Dispatcher(this)

@@ -308,10 +308,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null))
     )
 
-    val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
-    assert(intercept[AnalysisException] {
-      df2.selectExpr("sort_array(a)").collect()
-    }.getMessage().contains("does not support sorting array of type array<int>"))
+    val df2 = Seq((Array[Array[Int]](Array(2), Array(1), Array(2, 4), null), "x")).toDF("a", "b")
+    checkAnswer(
+      df2.selectExpr("sort_array(a, true)", "sort_array(a, false)"),
+      Seq(
+        Row(
+          Seq[Seq[Int]](null, Seq(1), Seq(2), Seq(2, 4)),
+          Seq[Seq[Int]](Seq(2, 4), Seq(2), Seq(1), null)))
+    )
 
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {

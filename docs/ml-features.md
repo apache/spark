@@ -1109,7 +1109,7 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame data = sqlContext.read.format("libsvm")
+DataFrame data = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 VectorIndexer indexer = new VectorIndexer()
   .setInputCol("features")
@@ -1187,7 +1187,7 @@ for more details on the API.
 import org.apache.spark.ml.feature.Normalizer;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 
 // Normalize each Vector using $L^1$ norm.
@@ -1273,7 +1273,7 @@ import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 StandardScaler scaler = new StandardScaler()
   .setInputCol("features")
@@ -1366,7 +1366,7 @@ import org.apache.spark.ml.feature.MinMaxScaler;
 import org.apache.spark.ml.feature.MinMaxScalerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 MinMaxScaler scaler = new MinMaxScaler()
   .setInputCol("features")

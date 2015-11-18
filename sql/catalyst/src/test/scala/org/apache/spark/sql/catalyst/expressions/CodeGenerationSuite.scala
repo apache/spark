@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.math._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{Row, RandomDataGenerator}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -47,40 +45,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     futures.foreach(Await.result(_, 10.seconds))
-  }
-
-  // Test GenerateOrdering for all common types. For each type, we construct random input rows that
-  // contain two columns of that type, then for pairs of randomly-generated rows we check that
-  // GenerateOrdering agrees with RowOrdering.
-  (DataTypeTestUtils.atomicTypes ++ Set(NullType)).foreach { dataType =>
-    test(s"GenerateOrdering with $dataType") {
-      val rowOrdering = InterpretedOrdering.forSchema(Seq(dataType, dataType))
-      val genOrdering = GenerateOrdering.generate(
-        BoundReference(0, dataType, nullable = true).asc ::
-          BoundReference(1, dataType, nullable = true).asc :: Nil)
-      val rowType = StructType(
-        StructField("a", dataType, nullable = true) ::
-          StructField("b", dataType, nullable = true) :: Nil)
-      val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
-      assume(maybeDataGenerator.isDefined)
-      val randGenerator = maybeDataGenerator.get
-      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
-      for (_ <- 1 to 50) {
-        val a = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
-        val b = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
-        withClue(s"a = $a, b = $b") {
-          assert(genOrdering.compare(a, a) === 0)
-          assert(genOrdering.compare(b, b) === 0)
-          assert(rowOrdering.compare(a, a) === 0)
-          assert(rowOrdering.compare(b, b) === 0)
-          assert(signum(genOrdering.compare(a, b)) === -1 * signum(genOrdering.compare(b, a)))
-          assert(signum(rowOrdering.compare(a, b)) === -1 * signum(rowOrdering.compare(b, a)))
-          assert(
-            signum(rowOrdering.compare(a, b)) === signum(genOrdering.compare(a, b)),
-            "Generated and non-generated orderings should agree")
-        }
-      }
-    }
   }
 
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {

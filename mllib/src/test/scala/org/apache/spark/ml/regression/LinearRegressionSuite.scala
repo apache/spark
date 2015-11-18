@@ -22,14 +22,15 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LinearRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   private val seed: Int = 42
   @transient var datasetWithDenseFeature: DataFrame = _
@@ -621,13 +622,13 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
         val devianceResidualsR = Array(-0.35566, 0.34504)
-        val seCoefR = Array(0.0011756, 0.0009032)
-        val tValsR = Array(3998, 7971)
-        val pValsR = Array(0, 0)
+        val seCoefR = Array(0.0011756, 0.0009032, 0.0018489)
+        val tValsR = Array(3998, 7971, 3407)
+        val pValsR = Array(0, 0, 0)
         model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-          assert(x._1 ~== x._2 absTol 1E-3) }
+          assert(x._1 ~== x._2 absTol 1E-5) }
         model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
-          assert(x._1 ~== x._2 absTol 1E-3) }
+          assert(x._1 ~== x._2 absTol 1E-5) }
         model.summary.tValues.map(_.round).zip(tValsR).foreach{ x => assert(x._1 === x._2) }
         model.summary.pValues.map(_.round).zip(pValsR).foreach{ x => assert(x._1 === x._2) }
       }
@@ -789,9 +790,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val coefficientsR = Vectors.dense(Array(6.080, -0.600))
     val interceptR = 18.080
     val devianceResidualsR = Array(-1.358, 1.920)
-    val seCoefR = Array(5.556, 1.960)
-    val tValsR = Array(1.094, -0.306)
-    val pValsR = Array(0.471, 0.811)
+    val seCoefR = Array(5.556, 1.960, 9.608)
+    val tValsR = Array(1.094, -0.306, 1.882)
+    val pValsR = Array(0.471, 0.811, 0.311)
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
@@ -854,4 +855,33 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     model.summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
   }
+
+  test("read/write") {
+    def checkModelData(model: LinearRegressionModel, model2: LinearRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients === model2.coefficients)
+    }
+    val lr = new LinearRegression()
+    testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
+      checkModelData)
+  }
+}
+
+object LinearRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> true,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "solver" -> "l-bfgs"
+  )
 }

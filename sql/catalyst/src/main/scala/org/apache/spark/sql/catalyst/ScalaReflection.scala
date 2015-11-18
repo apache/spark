@@ -75,7 +75,7 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  private def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /**
    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
@@ -153,18 +153,18 @@ trait ScalaReflection {
    */
   def constructorFor[T : TypeTag]: Expression = constructorFor(typeOf[T], None)
 
-  protected def constructorFor(
+  private def constructorFor(
       tpe: `Type`,
       path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
 
     /** Returns the current path with a sub-field extracted. */
-    def addToPath(part: String) =
+    def addToPath(part: String): Expression =
       path
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
 
     /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(ordinal: Int, dataType: DataType) =
+    def addToPathOrdinal(ordinal: Int, dataType: DataType): Expression =
       path
         .map(p => GetStructField(p, StructField(s"_$ordinal", dataType), ordinal))
         .getOrElse(BoundReference(ordinal, dataType, false))
@@ -717,6 +717,15 @@ trait ScalaReflection {
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
+  }
+
+  /**
+   * Returns classes of input parameters of scala function object.
+   */
+  def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
+    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
+    assert(methods.length == 1)
+    methods.head.getParameterTypes
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {

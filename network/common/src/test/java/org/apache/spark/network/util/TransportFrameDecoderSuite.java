@@ -18,41 +18,36 @@
 package org.apache.spark.network.util;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import org.junit.AfterClass;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class TransportFrameDecoderSuite {
 
+  private static Random RND = new Random();
+
+  @AfterClass
+  public static void cleanup() {
+    RND = null;
+  }
+
   @Test
   public void testFrameDecoding() throws Exception {
-    Random rnd = new Random();
     TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-
-    final int frameCount = 100;
-    ByteBuf data = Unpooled.buffer();
-    try {
-      for (int i = 0; i < frameCount; i++) {
-        byte[] frame = new byte[1024 * (rnd.nextInt(31) + 1)];
-        data.writeLong(frame.length + 8);
-        data.writeBytes(frame);
-      }
-
-      while (data.isReadable()) {
-        int size = rnd.nextInt(16 * 1024) + 256;
-        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)));
-      }
-
-      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
-    } finally {
-      data.release();
-    }
+    ChannelHandlerContext ctx = mockChannelHandlerContext();
+    ByteBuf data = createAndFeedFrames(100, decoder, ctx);
+    verifyAndCloseDecoder(decoder, ctx, data);
   }
 
   @Test
@@ -60,7 +55,7 @@ public class TransportFrameDecoderSuite {
     final int interceptedReads = 3;
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     TransportFrameDecoder.Interceptor interceptor = spy(new MockInterceptor(interceptedReads));
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    ChannelHandlerContext ctx = mockChannelHandlerContext();
 
     byte[] data = new byte[8];
     ByteBuf len = Unpooled.copyLong(8 + data.length);
@@ -70,16 +65,56 @@ public class TransportFrameDecoderSuite {
       decoder.setInterceptor(interceptor);
       for (int i = 0; i < interceptedReads; i++) {
         decoder.channelRead(ctx, dataBuf);
-        dataBuf.release();
+        assertEquals(0, dataBuf.refCnt());
         dataBuf = Unpooled.wrappedBuffer(data);
       }
       decoder.channelRead(ctx, len);
       decoder.channelRead(ctx, dataBuf);
       verify(interceptor, times(interceptedReads)).handle(any(ByteBuf.class));
       verify(ctx).fireChannelRead(any(ByteBuffer.class));
+      assertEquals(0, len.refCnt());
+      assertEquals(0, dataBuf.refCnt());
     } finally {
-      len.release();
-      dataBuf.release();
+      release(len);
+      release(dataBuf);
+    }
+  }
+
+  @Test
+  public void testRetainedFrames() throws Exception {
+    TransportFrameDecoder decoder = new TransportFrameDecoder();
+
+    final AtomicInteger count = new AtomicInteger();
+    final List<ByteBuf> retained = new ArrayList<>();
+
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    when(ctx.fireChannelRead(any())).thenAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock in) {
+        // Retain a few frames but not others.
+        ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        if (count.incrementAndGet() % 2 == 0) {
+          retained.add(buf);
+        } else {
+          buf.release();
+        }
+        return null;
+      }
+    });
+
+    ByteBuf data = createAndFeedFrames(100, decoder, ctx);
+    try {
+      // Verify all retained buffers are readable.
+      for (ByteBuf b : retained) {
+        byte[] tmp = new byte[b.readableBytes()];
+        b.readBytes(tmp);
+        b.release();
+      }
+      verifyAndCloseDecoder(decoder, ctx, data);
+    } finally {
+      for (ByteBuf b : retained) {
+        release(b);
+      }
     }
   }
 
@@ -100,6 +135,47 @@ public class TransportFrameDecoderSuite {
     testInvalidFrame(Integer.MAX_VALUE + 9);
   }
 
+  /**
+   * Creates a number of randomly sized frames and feed them to the given decoder, verifying
+   * that the frames were read.
+   */
+  private ByteBuf createAndFeedFrames(
+      int frameCount,
+      TransportFrameDecoder decoder,
+      ChannelHandlerContext ctx) throws Exception {
+    ByteBuf data = Unpooled.buffer();
+    for (int i = 0; i < frameCount; i++) {
+      byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
+      data.writeLong(frame.length + 8);
+      data.writeBytes(frame);
+    }
+
+    try {
+      while (data.isReadable()) {
+        int size = RND.nextInt(4 * 1024) + 256;
+        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
+      }
+
+      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
+    } catch (Exception e) {
+      release(data);
+      throw e;
+    }
+    return data;
+  }
+
+  private void verifyAndCloseDecoder(
+      TransportFrameDecoder decoder,
+      ChannelHandlerContext ctx,
+      ByteBuf data) throws Exception {
+    try {
+      decoder.channelInactive(ctx);
+      assertTrue("There shouldn't be dangling references to the data.", data.release());
+    } finally {
+      release(data);
+    }
+  }
+
   private void testInvalidFrame(long size) throws Exception {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
@@ -108,6 +184,25 @@ public class TransportFrameDecoderSuite {
       decoder.channelRead(ctx, frame);
     } finally {
       frame.release();
+    }
+  }
+
+  private ChannelHandlerContext mockChannelHandlerContext() {
+    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+    when(ctx.fireChannelRead(any())).thenAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock in) {
+        ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        buf.release();
+        return null;
+      }
+    });
+    return ctx;
+  }
+
+  private void release(ByteBuf buf) {
+    if (buf.refCnt() > 0) {
+      buf.release(buf.refCnt());
     }
   }
 

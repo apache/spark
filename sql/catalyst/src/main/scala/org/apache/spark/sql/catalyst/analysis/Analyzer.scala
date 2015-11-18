@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, AggregateExpression2, AggregateFunction2}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
+import org.apache.spark.sql.catalyst.{ScalaReflection, SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -72,6 +72,7 @@ class Analyzer(
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
+      ResolvePivot ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -79,10 +80,13 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
+      DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
+    Batch("UDF", Once,
+      HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -165,6 +169,10 @@ class Analyzer(
       case g: GroupingAnalytics if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
         g.withNewAggs(assignAliases(g.aggregations))
 
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
+        if child.resolved && hasUnresolvedAlias(groupByExprs) =>
+        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregates, child)
+
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
     }
@@ -244,6 +252,43 @@ class Analyzer(
           newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
           aggregation,
           Expand(x.bitmasks, newGroupByExprs, gid, child))
+    }
+  }
+
+  object ResolvePivot extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Pivot if !p.childrenResolved => p
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
+        val singleAgg = aggregates.size == 1
+        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
+          def ifExpr(expr: Expression) = {
+            If(EqualTo(pivotColumn, value), expr, Literal(null))
+          }
+          aggregates.map { aggregate =>
+            val filteredAggregate = aggregate.transformDown {
+              // Assumption is the aggregate function ignores nulls. This is true for all current
+              // AggregateFunction's with the exception of First and Last in their default mode
+              // (which we handle) and possibly some Hive UDAF's.
+              case First(expr, _) =>
+                First(ifExpr(expr), Literal(true))
+              case Last(expr, _) =>
+                Last(ifExpr(expr), Literal(true))
+              case a: AggregateFunction =>
+                a.withNewChildren(a.children.map(ifExpr))
+            }
+            if (filteredAggregate.fastEquals(aggregate)) {
+              throw new AnalysisException(
+                s"Aggregate expression required for pivot, found '$aggregate'")
+            }
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+            Alias(filteredAggregate, name)()
+          }
+        }
+        val newGroupByExprs = groupByExprs.map {
+          case UnresolvedAlias(e) => e
+          case e => e
+        }
+        Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
     }
   }
 
@@ -525,21 +570,14 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
-                // We get an aggregate function built based on AggregateFunction2 interface.
-                // So, we wrap it in AggregateExpression2.
-                case agg2: AggregateFunction2 => AggregateExpression2(agg2, Complete, isDistinct)
-                // Currently, our old aggregate function interface supports SUM(DISTINCT ...)
-                // and COUTN(DISTINCT ...).
-                case sumDistinct: SumDistinct => sumDistinct
-                case countDistinct: CountDistinct => countDistinct
-                // DISTINCT is not meaningful with Max and Min.
-                case max: Max if isDistinct => max
-                case min: Min if isDistinct => min
-                // For other aggregate functions, DISTINCT keyword is not supported for now.
-                // Once we converted to the new code path, we will allow using DISTINCT keyword.
-                case other: AggregateExpression1 if isDistinct =>
-                  failAnalysis(s"$name does not support DISTINCT keyword.")
-                // If it does not have DISTINCT keyword, we will return it as is.
+                // DISTINCT is not meaningful for a Max or a Min.
+                case max: Max if isDistinct =>
+                  AggregateExpression(max, Complete, isDistinct = false)
+                case min: Min if isDistinct =>
+                  AggregateExpression(min, Complete, isDistinct = false)
+                // We get an aggregate function, we need to wrap it in an AggregateExpression.
+                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
+                // This function is not an aggregate function, just return the resolved one.
                 case other => other
               }
             }
@@ -1025,6 +1063,34 @@ class Analyzer(
         }
         val newChild = Project(p.child.output ++ nondeterministicExprs.values, p.child)
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
+    }
+  }
+
+  /**
+   * Correctly handle null primitive inputs for UDF by adding extra [[If]] expression to do the
+   * null check.  When user defines a UDF with primitive parameters, there is no way to tell if the
+   * primitive parameter is null or not, so here we assume the primitive input is null-propagatable
+   * and we should return null if the input is null.
+   */
+  object HandleNullInputsForUDF extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.resolved => p // Skip unresolved nodes.
+
+      case plan => plan transformExpressionsUp {
+
+        case udf @ ScalaUDF(func, _, inputs, _) =>
+          val parameterTypes = ScalaReflection.getParameterTypes(func)
+          assert(parameterTypes.length == inputs.length)
+
+          val inputsNullCheck = parameterTypes.zip(inputs)
+            // TODO: skip null handling for not-nullable primitive inputs after we can completely
+            // trust the `nullable` information.
+            // .filter { case (cls, expr) => cls.isPrimitive && expr.nullable }
+            .filter { case (cls, _) => cls.isPrimitive }
+            .map { case (_, expr) => IsNull(expr) }
+            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
+          inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+      }
     }
   }
 }

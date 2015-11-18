@@ -38,6 +38,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{AnalysisException, catalyst}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{logical, _}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -1508,9 +1509,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       UnresolvedStar(Some(UnresolvedAttribute.parseAttributeName(name)))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
-    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
-    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
+      Count(args.map(nodeToExpr)).toAggregateExpression(isDistinct = true)
+    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) =>
+      Count(Literal(1)).toAggregateExpression()
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -1819,6 +1821,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   val explode = "(?i)explode".r
+  val jsonTuple = "(?i)json_tuple".r
   def nodesToGenerator(nodes: Seq[Node]): (Generator, Seq[String]) = {
     val function = nodes.head
 
@@ -1830,6 +1833,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
         (Explode(nodeToExpr(child)), attributes)
+
+      case Token("TOK_FUNCTION", Token(jsonTuple(), Nil) :: children) =>
+        (JsonTuple(children.map(nodeToExpr)), attributes)
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         val functionInfo: FunctionInfo =
