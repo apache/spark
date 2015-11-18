@@ -756,7 +756,7 @@ object WriteAheadLogSuite {
 
     override def write(record: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
       isWriteCalled = true
-      eventually(Eventually.timeout(4 second)) {
+      eventually(Eventually.timeout(2 second)) {
         assert(!blockWrite)
       }
       wal.write(record, time)
