@@ -20,8 +20,6 @@ package org.apache.spark.repl
 import java.io.{IOException, ByteArrayOutputStream, InputStream}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 
-import org.apache.spark.unsafe.Platform
-
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -58,10 +56,6 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
   }
 
   override def findClass(name: String): Class[_] = {
-    // This is a horrible hack to workround an issue that Janino has when operating on a
-    // REPL classloader :(.
-    if (name == "Platform") return classOf[Platform]
-
     userClassPathFirst match {
       case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
       case false => {

@@ -1221,24 +1221,14 @@ import org.apache.spark.annotation.DeveloperApi
         )
       }
 
-      val preamble = s"""
-        |class ${lineRep.readName} extends Serializable {
-        |  ${envLines.map("  " + _ + ";\n").mkString}
-        |  $importsPreamble
-        |
-        |  // If we need to construct any objects defined in the REPL on an executor we will need
-        |  // to pass the outer scope to the appropriate encoder.
-        |  org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)
-        |  ${indentCode(toCompute)}
-      """.stripMargin
-
+      val preamble = """
+        |class %s extends Serializable {
+        |  %s%s%s
+      """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
         "}\n"
-
-      System.out.println(preamble + postamble)
-
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 
       /*
