@@ -36,9 +36,14 @@ import org.apache.spark.util.collection.OpenHashSet
  * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
  * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
  * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
+ * The difference between a [[KnownSizeEstimation]] and
+ * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+ * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
+ * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
+ * using [[SizeEstimator]].
  */
-private[spark] trait SizeEstimation {
-  def estimatedSize: Option[Long]
+private[spark] trait KnownSizeEstimation {
+  def estimatedSize: Long
 }
 
 /**
@@ -209,18 +214,15 @@ object SizeEstimator extends Logging {
       // the size estimator since it references the whole REPL. Do nothing in this case. In
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
-      val estimatedSize = obj match {
-        case s: SizeEstimation => s.estimatedSize
-        case _ => None
-      }
-      if (estimatedSize.isDefined) {
-        state.size += estimatedSize.get
-      } else {
-        val classInfo = getClassInfo(cls)
-        state.size += alignSize(classInfo.shellSize)
-        for (field <- classInfo.pointerFields) {
-          state.enqueue(field.get(obj))
-        }
+      obj match {
+        case s: KnownSizeEstimation =>
+          state.size += s.estimatedSize
+        case _ =>
+          val classInfo = getClassInfo(cls)
+          state.size += alignSize(classInfo.shellSize)
+          for (field <- classInfo.pointerFields) {
+            state.enqueue(field.get(obj))
+          }
       }
     }
   }
