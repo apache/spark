@@ -42,11 +42,9 @@ case class StddevSamp(child: Expression,
 
     if (n == 0.0) {
       null
-    }
-    else if (n == 1.0) {
+    } else if (n == 1.0) {
       Double.NaN
-    }
-    else {
+    } else {
       math.sqrt(moments(2) / (n - 1.0))
     }
   }
@@ -76,8 +74,7 @@ case class StddevPop(
 
     if (n == 0.0) {
       null
-    }
-    else {
+    } else {
       math.sqrt(moments(2) / n)
     }
   }

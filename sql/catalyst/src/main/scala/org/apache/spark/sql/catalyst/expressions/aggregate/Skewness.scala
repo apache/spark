@@ -44,11 +44,9 @@ case class Skewness(child: Expression,
 
     if (n == 0.0) {
       null
-    }
-    else if (m2 == 0.0) {
+    } else if (m2 == 0.0) {
       Double.NaN
-    }
-    else {
+    } else {
       math.sqrt(n) * m3 / math.sqrt(m2 * m2 * m2)
     }
   }

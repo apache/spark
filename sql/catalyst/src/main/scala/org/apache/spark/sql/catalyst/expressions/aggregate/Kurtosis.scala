@@ -45,11 +45,9 @@ case class Kurtosis(child: Expression,
 
     if (n == 0.0) {
       null
-    }
-    else if (m2 == 0.0) {
+    } else if (m2 == 0.0) {
       Double.NaN
-    }
-    else {
+    } else {
       n * m4 / (m2 * m2) - 3.0
     }
   }

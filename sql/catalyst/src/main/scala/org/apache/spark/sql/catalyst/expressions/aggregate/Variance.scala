@@ -42,11 +42,9 @@ case class VarianceSamp(child: Expression,
 
     if (n == 0.0) {
       null
-    }
-    else if (n == 1.0) {
+    } else if (n == 1.0) {
       Double.NaN
-    }
-    else {
+    } else {
       moments(2) / (n - 1.0)
     }
   }
@@ -76,8 +74,7 @@ case class VariancePop(
 
     if (n == 0.0) {
       null
-    }
-    else {
+    } else {
       moments(2) / n
     }
   }
