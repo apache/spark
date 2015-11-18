@@ -199,11 +199,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+    encoderFor[T].assertUnresolved()
     new Dataset[U](
       sqlContext,
       MapPartitions[T, U](
         func,
-        encoderFor[T],
+        resolvedTEncoder,
         encoderFor[U],
         encoderFor[U].schema.toAttributes,
         logicalPlan))
