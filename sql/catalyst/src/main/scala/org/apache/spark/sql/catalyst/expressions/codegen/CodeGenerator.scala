@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -204,7 +206,7 @@ class CodeGenContext {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ => "Object"
+    case _ => "java.lang.Object"
   }
 
   /**
@@ -523,8 +525,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * Compile the Java source code into a Java class, using Janino.
    */
   private[this] def doCompile(code: String): GeneratedClass = {
+    assert(!code.contains(" Object ", s"java.lang.Object should be used instead in: \n$code"))
+    assert(!code.contains(" Object[] ", s"java.lang.Object[] should be used instead in: \n$code"))
+
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
