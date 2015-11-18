@@ -19,12 +19,16 @@ package org.apache.spark.ml.feature
 
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
-class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext{
+class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
 
   @transient var data: Array[Vector] = _
   @transient var resWithStd: Array[Vector] = _
@@ -56,23 +60,29 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext{
     )
   }
 
-  def assertResult(dataframe: DataFrame): Unit = {
-    dataframe.select("standarded_features", "expected").collect().foreach {
+  def assertResult(df: DataFrame): Unit = {
+    df.select("standardized_features", "expected").collect().foreach {
       case Row(vector1: Vector, vector2: Vector) =>
         assert(vector1 ~== vector2 absTol 1E-5,
           "The vector value is not correct after standardization.")
     }
   }
 
+  test("params") {
+    ParamsSuite.checkParams(new StandardScaler)
+    val oldModel = new feature.StandardScalerModel(Vectors.dense(1.0), Vectors.dense(2.0))
+    ParamsSuite.checkParams(new StandardScalerModel("empty", oldModel))
+  }
+
   test("Standardization with default parameter") {
     val df0 = sqlContext.createDataFrame(data.zip(resWithStd)).toDF("features", "expected")
 
-    val standardscaler0 = new StandardScaler()
+    val standardScaler0 = new StandardScaler()
       .setInputCol("features")
-      .setOutputCol("standarded_features")
+      .setOutputCol("standardized_features")
       .fit(df0)
 
-    assertResult(standardscaler0.transform(df0))
+    assertResult(standardScaler0.transform(df0))
   }
 
   test("Standardization with setter") {
@@ -80,29 +90,49 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext{
     val df2 = sqlContext.createDataFrame(data.zip(resWithMean)).toDF("features", "expected")
     val df3 = sqlContext.createDataFrame(data.zip(data)).toDF("features", "expected")
 
-    val standardscaler1 = new StandardScaler()
+    val standardScaler1 = new StandardScaler()
       .setInputCol("features")
-      .setOutputCol("standarded_features")
+      .setOutputCol("standardized_features")
       .setWithMean(true)
       .setWithStd(true)
       .fit(df1)
 
-    val standardscaler2 = new StandardScaler()
+    val standardScaler2 = new StandardScaler()
       .setInputCol("features")
-      .setOutputCol("standarded_features")
+      .setOutputCol("standardized_features")
       .setWithMean(true)
       .setWithStd(false)
       .fit(df2)
 
-    val standardscaler3 = new StandardScaler()
+    val standardScaler3 = new StandardScaler()
       .setInputCol("features")
-      .setOutputCol("standarded_features")
+      .setOutputCol("standardized_features")
       .setWithMean(false)
       .setWithStd(false)
       .fit(df3)
 
-    assertResult(standardscaler1.transform(df1))
-    assertResult(standardscaler2.transform(df2))
-    assertResult(standardscaler3.transform(df3))
+    assertResult(standardScaler1.transform(df1))
+    assertResult(standardScaler2.transform(df2))
+    assertResult(standardScaler3.transform(df3))
+  }
+
+  test("StandardScaler read/write") {
+    val t = new StandardScaler()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setWithStd(false)
+      .setWithMean(true)
+    testDefaultReadWrite(t)
+  }
+
+  test("StandardScalerModel read/write") {
+    val oldModel = new feature.StandardScalerModel(
+      Vectors.dense(1.0, 2.0), Vectors.dense(3.0, 4.0), false, true)
+    val instance = new StandardScalerModel("myStandardScalerModel", oldModel)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.std === instance.std)
+    assert(newInstance.mean === instance.mean)
+    assert(newInstance.getWithStd === instance.getWithStd)
+    assert(newInstance.getWithMean === instance.getWithMean)
   }
 }
