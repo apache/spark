@@ -356,12 +356,12 @@ class HasSeed(Params):
     """
 
     # a placeholder to make it appear in the generated doc
-    seed = Param(Params._dummy(), "seed", "random seed.", long)
+    seed = Param(Params._dummy(), "seed", "random seed.", int)
 
     def __init__(self):
         super(HasSeed, self).__init__()
         #: param for random seed.
-        self.seed = Param(self, "seed", "random seed.", long)
+        self.seed = Param(self, "seed", "random seed.", int)
         self._setDefault(seed=hash(type(self).__name__))
 
     def setSeed(self, value):
