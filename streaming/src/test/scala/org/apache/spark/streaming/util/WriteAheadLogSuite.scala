@@ -498,8 +498,19 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     }
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
+    // make sure the data is ordered so that the final comparison is valid
+    // in real use cases ordering across threads is not required
+    eventually(timeout(1 second)) {
+      assert(batchedWal.invokePrivate(queueLength()) === 1)
+    }
     writeAsync(batchedWal, event3, 8L)
+    eventually(timeout(1 second)) {
+      assert(batchedWal.invokePrivate(queueLength()) === 2)
+    }
     writeAsync(batchedWal, event4, 12L)
+    eventually(timeout(1 second)) {
+      assert(batchedWal.invokePrivate(queueLength()) === 3)
+    }
     writeAsync(batchedWal, event5, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
@@ -750,7 +761,7 @@ object WriteAheadLogSuite {
 
     override def write(record: ByteBuffer, time: Long): WriteAheadLogRecordHandle = {
       isWriteCalled = true
-      eventually(Eventually.timeout(2 second)) {
+      eventually(Eventually.timeout(4 second)) {
         assert(!blockWrite)
       }
       wal.write(record, time)
