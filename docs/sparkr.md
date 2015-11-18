@@ -351,3 +351,46 @@ summary(model)
 ##Sepal_Width    0.404655
 {% endhighlight %}
 </div>
+
+# R Function Name Conflicts
+
+When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
+function is masking another function.
+
+The following functions are masked by the SparkR package:
+
+<table class="table">
+  <tr><th>Masked function</th><th>How to Access</th></tr>
+  <tr>
+    <td><code>cov</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::cov(x, y = NULL, use = "everything",
+           method = c("pearson", "kendall", "spearman"))</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>filter</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::filter(x, filter, method = c("convolution", "recursive"),
+              sides = 2, circular = FALSE, init)</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>lag</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::lag(x, ...)</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>sample</code> in <code>package:base</code></td>
+    <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
+  </tr>
+  <tr>
+    <td><code>subset</code> in <code>package:base</code></td>
+    <td><code>base::subset(x, subset, select, drop = FALSE, ...)</code></td>
+  </tr>
+  <tr>
+    <td><code>table</code> in <code>package:base</code></td>
+    <td><code><pre>base::table(...,
+            exclude = if (useNA == "no") c(NA, NaN),
+            useNA = c("no", "ifany", "always"),
+            dnn = list.names(...), deparse.level = 1)</pre></code></td>
+  </tr>
+</table>
+
+You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/search.html)
+
