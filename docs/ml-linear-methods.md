@@ -57,77 +57,15 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.classification.LogisticRegression
-
-// Load training data
-val training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
-
-val lr = new LogisticRegression()
-  .setMaxIter(10)
-  .setRegParam(0.3)
-  .setElasticNetParam(0.8)
-
-// Fit the model
-val lrModel = lr.fit(training)
-
-// Print the coefficients and intercept for logistic regression
-println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/LogisticRegressionWithElasticNetExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import org.apache.spark.ml.classification.LogisticRegression;
-import org.apache.spark.ml.classification.LogisticRegressionModel;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
-
-public class LogisticRegressionWithElasticNetExample {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("Logistic Regression with Elastic Net Example");
-
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sql = new SQLContext(sc);
-    String path = "data/mllib/sample_libsvm_data.txt";
-
-    // Load training data
-    DataFrame training = sqlContext.read.format("libsvm").load(path);
-
-    LogisticRegression lr = new LogisticRegression()
-      .setMaxIter(10)
-      .setRegParam(0.3)
-      .setElasticNetParam(0.8);
-
-    // Fit the model
-    LogisticRegressionModel lrModel = lr.fit(training);
-
-    // Print the coefficients and intercept for logistic regression
-    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
-  }
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionWithElasticNetExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.ml.classification import LogisticRegression
-
-# Load training data
-training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
-
-lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
-
-# Fit the model
-lrModel = lr.fit(training)
-
-# Print the coefficients and intercept for logistic regression
-print("Coefficients: " + str(lrModel.coefficients))
-print("Intercept: " + str(lrModel.intercept))
-{% endhighlight %}
+{% include_example python/ml/logistic_regression_with_elastic_net.py %}
 </div>
 
 </div>
@@ -152,33 +90,7 @@ This will likely change when multiclass classification is supported.
 
 Continuing the earlier example:
 
-{% highlight scala %}
-import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary
-
-// Extract the summary from the returned LogisticRegressionModel instance trained in the earlier example
-val trainingSummary = lrModel.summary
-
-// Obtain the objective per iteration.
-val objectiveHistory = trainingSummary.objectiveHistory
-objectiveHistory.foreach(loss => println(loss))
-
-// Obtain the metrics useful to judge performance on test data.
-// We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
-// binary classification problem.
-val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
-
-// Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-val roc = binarySummary.roc
-roc.show()
-println(binarySummary.areaUnderROC)
-
-// Set the model threshold to maximize F-Measure
-val fMeasure = binarySummary.fMeasureByThreshold
-val maxFMeasure = fMeasure.select(max("F-Measure")).head().getDouble(0)
-val bestThreshold = fMeasure.where($"F-Measure" === maxFMeasure).
-  select("threshold").head().getDouble(0)
-lrModel.setThreshold(bestThreshold)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/LogisticRegressionSummaryExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -192,39 +104,7 @@ This will likely change when multiclass classification is supported.
 
 Continuing the earlier example:
 
-{% highlight java %}
-import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
-import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
-import org.apache.spark.sql.functions;
-
-// Extract the summary from the returned LogisticRegressionModel instance trained in the earlier example
-LogisticRegressionTrainingSummary trainingSummary = lrModel.summary();
-
-// Obtain the loss per iteration.
-double[] objectiveHistory = trainingSummary.objectiveHistory();
-for (double lossPerIteration : objectiveHistory) {
-  System.out.println(lossPerIteration);
-}
-
-// Obtain the metrics useful to judge performance on test data.
-// We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
-// binary classification problem.
-BinaryLogisticRegressionSummary binarySummary = (BinaryLogisticRegressionSummary) trainingSummary;
-
-// Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-DataFrame roc = binarySummary.roc();
-roc.show();
-roc.select("FPR").show();
-System.out.println(binarySummary.areaUnderROC());
-
-// Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
-// this selected threshold.
-DataFrame fMeasure = binarySummary.fMeasureByThreshold();
-double maxFMeasure = fMeasure.select(functions.max("F-Measure")).head().getDouble(0);
-double bestThreshold = fMeasure.where(fMeasure.col("F-Measure").equalTo(maxFMeasure)).
-  select("threshold").head().getDouble(0);
-lrModel.setThreshold(bestThreshold);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
 </div>
 
 <!--- TODO: Add python model summaries once implemented -->
@@ -244,98 +124,16 @@ regression model and extracting model summary statistics.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-{% highlight scala %}
-import org.apache.spark.ml.regression.LinearRegression
-
-// Load training data
-val training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
-
-val lr = new LinearRegression()
-  .setMaxIter(10)
-  .setRegParam(0.3)
-  .setElasticNetParam(0.8)
-
-// Fit the model
-val lrModel = lr.fit(training)
-
-// Print the coefficients and intercept for linear regression
-println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
-
-// Summarize the model over the training set and print out some metrics
-val trainingSummary = lrModel.summary
-println(s"numIterations: ${trainingSummary.totalIterations}")
-println(s"objectiveHistory: ${trainingSummary.objectiveHistory.toList}")
-trainingSummary.residuals.show()
-println(s"RMSE: ${trainingSummary.rootMeanSquaredError}")
-println(s"r2: ${trainingSummary.r2}")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% highlight java %}
-import org.apache.spark.ml.regression.LinearRegression;
-import org.apache.spark.ml.regression.LinearRegressionModel;
-import org.apache.spark.ml.regression.LinearRegressionTrainingSummary;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
-
-public class LinearRegressionWithElasticNetExample {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("Linear Regression with Elastic Net Example");
-
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sql = new SQLContext(sc);
-    String path = "data/mllib/sample_libsvm_data.txt";
-
-    // Load training data
-    DataFrame training = sqlContext.read.format("libsvm").load(path);
-
-    LinearRegression lr = new LinearRegression()
-      .setMaxIter(10)
-      .setRegParam(0.3)
-      .setElasticNetParam(0.8);
-
-    // Fit the model
-    LinearRegressionModel lrModel = lr.fit(training);
-
-    // Print the coefficients and intercept for linear regression
-    System.out.println("Coefficients: " + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
-
-    // Summarize the model over the training set and print out some metrics
-    LinearRegressionTrainingSummary trainingSummary = lrModel.summary();
-    System.out.println("numIterations: " + trainingSummary.totalIterations());
-    System.out.println("objectiveHistory: " + Vectors.dense(trainingSummary.objectiveHistory()));
-    trainingSummary.residuals().show();
-    System.out.println("RMSE: " + trainingSummary.rootMeanSquaredError());
-    System.out.println("r2: " + trainingSummary.r2());
-  }
-}
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 <!--- TODO: Add python model summaries once implemented -->
-{% highlight python %}
-from pyspark.ml.regression import LinearRegression
-
-# Load training data
-training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
-
-lr = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
-
-# Fit the model
-lrModel = lr.fit(training)
-
-# Print the coefficients and intercept for linear regression
-print("Coefficients: " + str(lrModel.coefficients))
-print("Intercept: " + str(lrModel.intercept))
-
-# Linear regression model summary is not yet supported in Python.
-{% endhighlight %}
+{% include_example python/ml/linear_regression_with_elastic_net.py %}
 </div>
 
 </div>

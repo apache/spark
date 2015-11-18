@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.language.existentials
+import scala.reflect.ClassTag
+
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.{KryoSerializerInstance, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-
-import scala.language.existentials
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
@@ -113,7 +115,7 @@ case class Invoke(
     arguments: Seq[Expression] = Nil) extends Expression {
 
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = targetObject :: Nil
+  override def children: Seq[Expression] = arguments.+:(targetObject)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -343,33 +345,35 @@ case class MapObjects(
   private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
   private lazy val completeFunction = function(loopAttribute)
 
+  private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case IntegerType => (i: String) => s".getInt($i)"
+    case LongType => (i: String) => s".getLong($i)"
+    case FloatType => (i: String) => s".getFloat($i)"
+    case DoubleType => (i: String) => s".getDouble($i)"
+    case ByteType => (i: String) => s".getByte($i)"
+    case ShortType => (i: String) => s".getShort($i)"
+    case BooleanType => (i: String) => s".getBoolean($i)"
+    case StringType => (i: String) => s".getUTF8String($i)"
+    case s: StructType => (i: String) => s".getStruct($i, ${s.size})"
+    case a: ArrayType => (i: String) => s".getArray($i)"
+    case _: MapType => (i: String) => s".getMap($i)"
+    case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
+  }
+
   private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
       (".length", (i: String) => s"[$i]", false)
-    case ArrayType(s: StructType, _) =>
-      (".numElements()", (i: String) => s".getStruct($i, ${s.size})", false)
-    case ArrayType(a: ArrayType, _) =>
-      (".numElements()", (i: String) => s".getArray($i)", true)
-    case ArrayType(IntegerType, _) =>
-      (".numElements()", (i: String) => s".getInt($i)", true)
-    case ArrayType(LongType, _) =>
-      (".numElements()", (i: String) => s".getLong($i)", true)
-    case ArrayType(FloatType, _) =>
-      (".numElements()", (i: String) => s".getFloat($i)", true)
-    case ArrayType(DoubleType, _) =>
-      (".numElements()", (i: String) => s".getDouble($i)", true)
-    case ArrayType(ByteType, _) =>
-      (".numElements()", (i: String) => s".getByte($i)", true)
-    case ArrayType(ShortType, _) =>
-      (".numElements()", (i: String) => s".getShort($i)", true)
-    case ArrayType(BooleanType, _) =>
-      (".numElements()", (i: String) => s".getBoolean($i)", true)
-    case ArrayType(StringType, _) =>
-      (".numElements()", (i: String) => s".getUTF8String($i)", false)
-    case ArrayType(_: MapType, _) =>
-      (".numElements()", (i: String) => s".getMap($i)", false)
+    case ArrayType(t, _) =>
+      val (sqlType, primitiveElement) = t match {
+        case m: MapType => (m, false)
+        case s: StructType => (s, false)
+        case s: StringType => (s, false)
+        case udt: UserDefinedType[_] => (udt.sqlType, false)
+        case o => (o, true)
+      }
+      (".numElements()", itemAccessorMethod(sqlType), primitiveElement)
   }
 
   override def nullable: Boolean = true
@@ -511,4 +515,65 @@ case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataTy
       }
     """
   }
+}
+
+/** Serializes an input object using Kryo serializer. */
+case class SerializeWithKryo(child: Expression) extends UnaryExpression {
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
+    s"""
+      ${input.code}
+      final boolean ${ev.isNull} = ${input.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $kryo.serialize(${input.value}, null).array();
+      }
+     """
+  }
+
+  override def dataType: DataType = BinaryType
+}
+
+/**
+ * Deserializes an input object using Kryo serializer. Note that the ClassTag is not an implicit
+ * parameter because TreeNode cannot copy implicit parameters.
+ */
+case class DeserializeWithKryo[T](child: Expression, tag: ClassTag[T]) extends UnaryExpression {
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
+    s"""
+      ${input.code}
+      final boolean ${ev.isNull} = ${input.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = (${ctx.javaType(dataType)})
+          $kryo.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
+      }
+     """
+  }
+
+  override def dataType: DataType = ObjectType(tag.runtimeClass)
 }

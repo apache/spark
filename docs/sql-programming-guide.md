@@ -982,7 +982,8 @@ when a table is dropped.
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.
+of the original data. When writing Parquet files, all columns are automatically converted to be nullable for 
+compatibility reasons.
 
 ### Loading Data Programmatically
 
@@ -2049,6 +2050,20 @@ You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 1.5 to 1.6
+
+ - From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
+   connection owns a copy of their own SQL configuration and temporary function registry.  Cached
+   tables are still shared though.  If you prefer to run the Thrift server in the old single-session
+   mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
+   this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
+
+   {% highlight bash %}
+   ./sbin/start-thriftserver.sh \
+     --conf spark.sql.hive.thriftServer.singleSession=true \
+     ...
+   {% endhighlight %}
 
 ## Upgrading From Spark SQL 1.4 to 1.5
 

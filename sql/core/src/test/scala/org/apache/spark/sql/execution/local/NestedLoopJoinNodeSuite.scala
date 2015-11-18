@@ -26,30 +26,21 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 class NestedLoopJoinNodeSuite extends LocalNodeTest {
 
   // Test all combinations of the three dimensions: with/out unsafe, build sides, and join types
-  private val maybeUnsafeAndCodegen = Seq(false, true)
   private val buildSides = Seq(BuildLeft, BuildRight)
   private val joinTypes = Seq(LeftOuter, RightOuter, FullOuter)
-  maybeUnsafeAndCodegen.foreach { unsafeAndCodegen =>
-    buildSides.foreach { buildSide =>
-      joinTypes.foreach { joinType =>
-        testJoin(unsafeAndCodegen, buildSide, joinType)
-      }
+  buildSides.foreach { buildSide =>
+    joinTypes.foreach { joinType =>
+      testJoin(buildSide, joinType)
     }
   }
 
   /**
    * Test outer nested loop joins with varying degrees of matches.
    */
-  private def testJoin(
-      unsafeAndCodegen: Boolean,
-      buildSide: BuildSide,
-      joinType: JoinType): Unit = {
-    val simpleOrUnsafe = if (!unsafeAndCodegen) "simple" else "unsafe"
-    val testNamePrefix = s"$simpleOrUnsafe / $buildSide / $joinType"
+  private def testJoin(buildSide: BuildSide, joinType: JoinType): Unit = {
+    val testNamePrefix = s"$buildSide / $joinType"
     val someData = (1 to 100).map { i => (i, "burger" + i) }.toArray
     val conf = new SQLConf
-    conf.setConf(SQLConf.UNSAFE_ENABLED, unsafeAndCodegen)
-    conf.setConf(SQLConf.CODEGEN_ENABLED, unsafeAndCodegen)
 
     // Actual test body
     def runTest(
@@ -63,12 +54,18 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
         resolveExpressions(
           new NestedLoopJoinNode(conf, node1, node2, buildSide, joinType, Some(cond)))
       }
-      val makeUnsafeNode = if (unsafeAndCodegen) wrapForUnsafe(makeNode) else makeNode
+      val makeUnsafeNode = wrapForUnsafe(makeNode)
       val hashJoinNode = makeUnsafeNode(leftNode, rightNode)
       val expectedOutput = generateExpectedOutput(leftInput, rightInput, joinType)
       val actualOutput = hashJoinNode.collect().map { row =>
-        // (id, name, id, nickname)
-        (row.getInt(0), row.getString(1), row.getInt(2), row.getString(3))
+        // (
+        //   id, name,
+        //   id, nickname
+        // )
+        (
+          Option(row.get(0)).map(_.asInstanceOf[Int]), Option(row.getString(1)),
+          Option(row.get(2)).map(_.asInstanceOf[Int]), Option(row.getString(3))
+        )
       }
       assert(actualOutput.toSet === expectedOutput.toSet)
     }
@@ -104,36 +101,36 @@ class NestedLoopJoinNodeSuite extends LocalNodeTest {
   private def generateExpectedOutput(
       leftInput: Array[(Int, String)],
       rightInput: Array[(Int, String)],
-      joinType: JoinType): Array[(Int, String, Int, String)] = {
+      joinType: JoinType): Array[(Option[Int], Option[String], Option[Int], Option[String])] = {
     joinType match {
       case LeftOuter =>
         val rightInputMap = rightInput.toMap
         leftInput.map { case (k, v) =>
-          val rightKey = rightInputMap.get(k).map { _ => k }.getOrElse(0)
-          val rightValue = rightInputMap.getOrElse(k, null)
-          (k, v, rightKey, rightValue)
+          val rightKey = rightInputMap.get(k).map { _ => k }
+          val rightValue = rightInputMap.get(k)
+          (Some(k), Some(v), rightKey, rightValue)
         }
 
       case RightOuter =>
         val leftInputMap = leftInput.toMap
         rightInput.map { case (k, v) =>
-          val leftKey = leftInputMap.get(k).map { _ => k }.getOrElse(0)
-          val leftValue = leftInputMap.getOrElse(k, null)
-          (leftKey, leftValue, k, v)
+          val leftKey = leftInputMap.get(k).map { _ => k }
+          val leftValue = leftInputMap.get(k)
+          (leftKey, leftValue, Some(k), Some(v))
         }
 
       case FullOuter =>
         val leftInputMap = leftInput.toMap
         val rightInputMap = rightInput.toMap
         val leftOutput = leftInput.map { case (k, v) =>
-          val rightKey = rightInputMap.get(k).map { _ => k }.getOrElse(0)
-          val rightValue = rightInputMap.getOrElse(k, null)
-          (k, v, rightKey, rightValue)
+          val rightKey = rightInputMap.get(k).map { _ => k }
+          val rightValue = rightInputMap.get(k)
+          (Some(k), Some(v), rightKey, rightValue)
         }
         val rightOutput = rightInput.map { case (k, v) =>
-          val leftKey = leftInputMap.get(k).map { _ => k }.getOrElse(0)
-          val leftValue = leftInputMap.getOrElse(k, null)
-          (leftKey, leftValue, k, v)
+          val leftKey = leftInputMap.get(k).map { _ => k }
+          val leftValue = leftInputMap.get(k)
+          (leftKey, leftValue, Some(k), Some(v))
         }
         (leftOutput ++ rightOutput).distinct
 

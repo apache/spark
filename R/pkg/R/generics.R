@@ -88,12 +88,8 @@ setGeneric("flatMap", function(X, FUN) { standardGeneric("flatMap") })
 # @export
 setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
 
-# @rdname foreach
-# @export
 setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
 
-# @rdname foreach
-# @export
 setGeneric("foreachPartition", function(x, func) { standardGeneric("foreachPartition") })
 
 # The jrdd accessor function.
@@ -107,27 +103,17 @@ setGeneric("glom", function(x) { standardGeneric("glom") })
 # @export
 setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
 
-# @rdname lapplyPartition
-# @export
 setGeneric("lapplyPartition", function(X, FUN) { standardGeneric("lapplyPartition") })
 
-# @rdname lapplyPartitionsWithIndex
-# @export
 setGeneric("lapplyPartitionsWithIndex",
            function(X, FUN) {
              standardGeneric("lapplyPartitionsWithIndex")
            })
 
-# @rdname lapply
-# @export
 setGeneric("map", function(X, FUN) { standardGeneric("map") })
 
-# @rdname lapplyPartition
-# @export
 setGeneric("mapPartitions", function(X, FUN) { standardGeneric("mapPartitions") })
 
-# @rdname lapplyPartitionsWithIndex
-# @export
 setGeneric("mapPartitionsWithIndex",
            function(X, FUN) { standardGeneric("mapPartitionsWithIndex") })
 
@@ -561,14 +547,10 @@ setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
-setGeneric("summary", function(x, ...) { standardGeneric("summary") })
+setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
-# @rdname tojson
-# @export
 setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
-#' @rdname DataFrame
-#' @export
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 #' @rdname unionAll
@@ -798,6 +780,10 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 #' @export
 setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
 
+#' @rdname kurtosis
+#' @export
+setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
+
 #' @rdname lag
 #' @export
 setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
@@ -935,6 +921,10 @@ setGeneric("rpad", function(x, len, pad) { standardGeneric("rpad") })
 #' @export
 setGeneric("rtrim", function(x) { standardGeneric("rtrim") })
 
+#' @rdname sd
+#' @export
+setGeneric("sd", function(x, na.rm = FALSE) { standardGeneric("sd") })
+
 #' @rdname second
 #' @export
 setGeneric("second", function(x) { standardGeneric("second") })
@@ -967,9 +957,25 @@ setGeneric("signum", function(x) { standardGeneric("signum") })
 #' @export
 setGeneric("size", function(x) { standardGeneric("size") })
 
+#' @rdname skewness
+#' @export
+setGeneric("skewness", function(x) { standardGeneric("skewness") })
+
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
+
+#' @rdname sd
+#' @export
+setGeneric("stddev", function(x) { standardGeneric("stddev") })
+
+#' @rdname stddev_pop
+#' @export
+setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
+
+#' @rdname stddev_samp
+#' @export
+setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
 
 #' @rdname substring_index
 #' @export
@@ -1019,6 +1025,22 @@ setGeneric("unix_timestamp", function(x, format) { standardGeneric("unix_timesta
 #' @export
 setGeneric("upper", function(x) { standardGeneric("upper") })
 
+#' @rdname var
+#' @export
+setGeneric("var", function(x, y = NULL, na.rm = FALSE, use) { standardGeneric("var") })
+
+#' @rdname var
+#' @export
+setGeneric("variance", function(x) { standardGeneric("variance") })
+
+#' @rdname var_pop
+#' @export
+setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
+
+#' @rdname var_samp
+#' @export
+setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
 #' @rdname weekofyear
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
@@ -1031,6 +1053,10 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname predict
+#' @export
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 
 #' @rdname rbind
 #' @export
@@ -1047,3 +1073,7 @@ setGeneric("attach")
 #' @rdname with
 #' @export
 setGeneric("with")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })

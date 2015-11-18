@@ -31,32 +31,6 @@ import org.apache.spark.{HashPartitioner, SparkEnv}
 
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-
-  override private[sql] lazy val metrics = Map(
-    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-
-  @transient lazy val buildProjection = newMutableProjection(projectList, child.output)
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    val numRows = longMetric("numRows")
-    child.execute().mapPartitions { iter =>
-      val reusableProjection = buildProjection()
-      iter.map { row =>
-        numRows += 1
-        reusableProjection(row)
-      }
-    }
-  }
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-}
-
-
-/**
- * A variant of [[Project]] that returns [[UnsafeRow]]s.
- */
-case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
 
   override private[sql] lazy val metrics = Map(
     "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
@@ -69,8 +43,9 @@ case class TungstenProject(projectList: Seq[NamedExpression], child: SparkPlan) 
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numRows = longMetric("numRows")
-    child.execute().mapPartitions { iter =>
-      val project = UnsafeProjection.create(projectList, child.output)
+    child.execute().mapPartitionsInternal { iter =>
+      val project = UnsafeProjection.create(projectList, child.output,
+        subexpressionEliminationEnabled)
       iter.map { row =>
         numRows += 1
         project(row)
@@ -92,7 +67,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   protected override def doExecute(): RDD[InternalRow] = {
     val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       val predicate = newPredicate(condition, child.output)
       iter.filter { row =>
         numInputRows += 1
@@ -186,11 +161,11 @@ case class Limit(limit: Int, child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val rdd: RDD[_ <: Product2[Boolean, InternalRow]] = if (sortBasedShuffleOn) {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         iter.take(limit).map(row => (false, row.copy()))
       }
     } else {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         val mutablePair = new MutablePair[Boolean, InternalRow]()
         iter.take(limit).map(row => mutablePair.update(false, row))
       }
@@ -198,7 +173,7 @@ case class Limit(limit: Int, child: SparkPlan)
     val part = new HashPartitioner(1)
     val shuffled = new ShuffledRDD[Boolean, InternalRow, InternalRow](rdd, part)
     shuffled.setSerializer(new SparkSqlSerializer(child.sqlContext.sparkContext.getConf))
-    shuffled.mapPartitions(_.take(limit).map(_._2))
+    shuffled.mapPartitionsInternal(_.take(limit).map(_._2))
   }
 }
 
@@ -319,7 +294,7 @@ case class MapPartitions[T, U](
     child: SparkPlan) extends UnaryNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       val tBoundEncoder = tEncoder.bind(child.output)
       func(iter.map(tBoundEncoder.fromRow)).map(uEncoder.toRow)
     }
@@ -336,10 +311,14 @@ case class AppendColumns[T, U](
     newColumns: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
+  // We are using an unsafe combiner.
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+
   override def output: Seq[Attribute] = child.output ++ newColumns
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       val tBoundEncoder = tEncoder.bind(child.output)
       val combiner = GenerateUnsafeRowJoiner.create(tEncoder.schema, uEncoder.schema)
       iter.map { row =>
@@ -371,14 +350,15 @@ case class MapGroups[K, T, U](
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
       val groupKeyEncoder = kEncoder.bind(groupingAttributes)
+      val groupDataEncoder = tEncoder.bind(child.output)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
           groupKeyEncoder.fromRow(key),
-          rowIter.map(tEncoder.fromRow))
+          rowIter.map(groupDataEncoder.fromRow))
         result.map(uEncoder.toRow)
       }
     }
@@ -391,7 +371,7 @@ case class MapGroups[K, T, U](
  * The result of this function is encoded and flattened before being output.
  */
 case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => Iterator[R],
+    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
     kEncoder: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
