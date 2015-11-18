@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.encoders
 
 import java.sql.{Date, Timestamp}
+import org.apache.spark.sql.Encoders
 
 class FlatEncoderSuite extends ExpressionEncoderSuite {
   encodeDecodeTest(false, FlatEncoder[Boolean], "primitive boolean")
@@ -71,4 +72,21 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
   encodeDecodeTest(Map(1 -> "a", 2 -> null), FlatEncoder[Map[Int, String]], "map with null")
   encodeDecodeTest(Map(1 -> Map("a" -> 1), 2 -> Map("b" -> 2)),
     FlatEncoder[Map[Int, Map[String, Int]]], "map of map")
+
+  // Kryo encoders
+  encodeDecodeTest(
+    "hello",
+    Encoders.kryo[String].asInstanceOf[ExpressionEncoder[String]],
+    "kryo string")
+  encodeDecodeTest(
+    new NotJavaSerializable(15),
+    Encoders.kryo[NotJavaSerializable].asInstanceOf[ExpressionEncoder[NotJavaSerializable]],
+    "kryo object serialization")
+}
+
+
+class NotJavaSerializable(val value: Int) {
+  override def equals(other: Any): Boolean = {
+    this.value == other.asInstanceOf[NotJavaSerializable].value
+  }
 }

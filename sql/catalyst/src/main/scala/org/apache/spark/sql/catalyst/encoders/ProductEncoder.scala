@@ -230,7 +230,7 @@ object ProductEncoder {
           Invoke(inputObject, "booleanValue", BooleanType)
 
         case other =>
-          throw new UnsupportedOperationException(s"Extractor for type $other is not supported")
+          throw new UnsupportedOperationException(s"Encoder for type $other is not supported")
       }
     }
   }
