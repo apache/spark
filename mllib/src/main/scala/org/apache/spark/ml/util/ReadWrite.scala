@@ -164,6 +164,8 @@ trait Readable[T] {
 
   /**
    * Reads an ML instance from the input path, a shortcut of `read.load(path)`.
+   *
+   * Note: Implementing classes should override this to be Java-friendly.
    */
   @Since("1.6.0")
   def load(path: String): T = read.load(path)
@@ -190,7 +192,7 @@ private[ml] object DefaultParamsWriter {
    *  - timestamp
    *  - sparkVersion
    *  - uid
-   *  - paramMap
+   *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
   def saveMetadata(instance: Params, path: String, sc: SparkContext): Unit = {
     val uid = instance.uid
@@ -215,6 +217,7 @@ private[ml] object DefaultParamsWriter {
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  * @tparam T ML instance type
+ * TODO: Consider adding check for correct class name.
  */
 private[ml] class DefaultParamsReader[T] extends Reader[T] {
 

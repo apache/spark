@@ -376,11 +376,11 @@ private[serializer] object KryoSerializer {
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
-    classOf[RoaringBitmap] -> new KryoClassSerializer[RoaringBitmap](){
-      override def write(kryo: Kryo, output: KryoOutput, bitmap: RoaringBitmap): Unit =
-       bitmap.serialize(new KryoOutputDataOutputBridge(output))
-      override def read(kryo: Kryo, input: KryoInput, clazz: Class[RoaringBitmap]):
-       RoaringBitmap = {
+    classOf[RoaringBitmap] -> new KryoClassSerializer[RoaringBitmap]() {
+      override def write(kryo: Kryo, output: KryoOutput, bitmap: RoaringBitmap): Unit = {
+        bitmap.serialize(new KryoOutputDataOutputBridge(output))
+      }
+      override def read(kryo: Kryo, input: KryoInput, cls: Class[RoaringBitmap]): RoaringBitmap = {
         val ret = new RoaringBitmap
         ret.deserialize(new KryoInputDataInputBridge(input))
         ret
@@ -389,7 +389,7 @@ private[serializer] object KryoSerializer {
   )
 }
 
-private[serializer] class KryoInputDataInputBridge(input : KryoInput) extends DataInput {
+private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends DataInput {
   override def readLong(): Long = input.readLong()
   override def readChar(): Char = input.readChar()
   override def readFloat(): Float = input.readFloat()
@@ -407,7 +407,7 @@ private[serializer] class KryoInputDataInputBridge(input : KryoInput) extends Da
   override def readDouble(): Double = input.readDouble()
 }
 
-private[serializer] class KryoOutputDataOutputBridge(output : KryoOutput) extends DataOutput {
+private[serializer] class KryoOutputDataOutputBridge(output: KryoOutput) extends DataOutput {
   override def writeFloat(v: Float): Unit = output.writeFloat(v)
   // There is no "readChars" counterpart, except maybe "readLine", which is not supported
   override def writeChars(s: String): Unit = throw new UnsupportedOperationException("writeChars")
