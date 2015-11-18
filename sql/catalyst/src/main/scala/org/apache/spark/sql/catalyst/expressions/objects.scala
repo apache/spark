@@ -197,6 +197,8 @@ object NewInstance {
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
+ * @param outerPointer If the object being constructed is an inner class the outerPointer must
+ *                     for the containing class must be specified.
  */
 case class NewInstance(
     cls: Class[_],

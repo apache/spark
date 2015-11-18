@@ -816,10 +816,7 @@ import org.apache.spark.annotation.DeveloperApi
    *         incomplete code, compilation error, or runtime error
    */
   @DeveloperApi
-  def interpret(line: String): IR.Result = {
-    val fullLine = if (line contains " class ") "" + line else line
-    interpret(fullLine, false)
-  }
+  def interpret(line: String): IR.Result = interpret(line, false)
 
   /**
    * Interpret one line of input. All feedback, including parse errors
@@ -1182,9 +1179,8 @@ import org.apache.spark.annotation.DeveloperApi
     /** Code to import bound names from previous lines - accessPath is code to
      * append to objectName to access anything bound by request.
      */
-    val SparkComputedImports(importsPreamble, importsTrailer, accessPath) = {
-      importsCode(referencedNames.toSet , definedClasses)
-    }
+    val SparkComputedImports(importsPreamble, importsTrailer, accessPath) =
+      importsCode(referencedNames.toSet, definedClasses)
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {
@@ -1227,12 +1223,16 @@ import org.apache.spark.annotation.DeveloperApi
 
       val preamble = """
         |class %s extends Serializable {
-        |  %s%s%s
+        |  %s
+        |  %s
+        |  // If we need to construct any objects defined in the REPL on an executor we will need
+        |  // to pass the outer scope to the appropriate encoder.
+        |  org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)
+        |  %s
       """.stripMargin.format(lineRep.readName, envLines.map("  " + _ + ";\n").mkString, importsPreamble, indentCode(toCompute))
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
-        "  org.apache.spark.sql.OuterScopes.addOuterScope(INSTANCE);\n" +
         "}\n"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 
@@ -1721,15 +1721,10 @@ object SparkIMain {
     def generate: T => String
     def postamble: String
 
-    def apply(contributors: List[T]): String = {
-      val res = stringFromWriter { code =>
-        code println preamble
-        contributors map generate foreach (code println _)
-        code println postamble
-      }
-      System.out.println("============")
-      System.out.println(res.split("\n").zipWithIndex.map{ case (l, i) => s"$i $l" }.mkString("\n"))
-      res
+    def apply(contributors: List[T]): String = stringFromWriter { code =>
+      code println preamble
+      contributors map generate foreach (code println _)
+      code println postamble
     }
   }
 

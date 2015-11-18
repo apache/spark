@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{FlatEncoder, ExpressionEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.encoders.{OuterScopes, FlatEncoder, ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution

@@ -21,6 +21,7 @@ import java.util.Arrays
 import java.util.concurrent.ConcurrentMap
 
 import com.google.common.collect.MapMaker
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
