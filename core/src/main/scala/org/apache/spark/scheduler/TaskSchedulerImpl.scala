@@ -471,6 +471,7 @@ private[spark] class TaskSchedulerImpl(
         executorIdToHost.get(executorId) match {
           case Some(hostPort) =>
             logExecutorLoss(executorId, hostPort, reason)
+            removeExecutor(executorId, reason)
 
           case None =>
             // We may get multiple executorLost() calls with different loss reasons. For example,
