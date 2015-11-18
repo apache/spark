@@ -76,17 +76,34 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
   // Kryo encoders
   encodeDecodeTest(
     "hello",
-    Encoders.kryo[String].asInstanceOf[ExpressionEncoder[String]],
+    encoderFor(Encoders.kryo[String]),
     "kryo string")
   encodeDecodeTest(
-    new NotJavaSerializable(15),
-    Encoders.kryo[NotJavaSerializable].asInstanceOf[ExpressionEncoder[NotJavaSerializable]],
+    new KryoSerializable(15),
+    encoderFor(Encoders.kryo[KryoSerializable]),
     "kryo object serialization")
+
+  // Java encoders
+  encodeDecodeTest(
+    "hello",
+    encoderFor(Encoders.javaSerialization[String]),
+    "java string")
+  encodeDecodeTest(
+    new JavaSerializable(15),
+    encoderFor(Encoders.javaSerialization[JavaSerializable]),
+    "java object serialization")
 }
 
-
-class NotJavaSerializable(val value: Int) {
+/** For testing Kryo serialization based encoder. */
+class KryoSerializable(val value: Int) {
   override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[NotJavaSerializable].value
+    this.value == other.asInstanceOf[KryoSerializable].value
+  }
+}
+
+/** For testing Java serialization based encoder. */
+class JavaSerializable(val value: Int) extends Serializable {
+  override def equals(other: Any): Boolean = {
+    this.value == other.asInstanceOf[JavaSerializable].value
   }
 }
