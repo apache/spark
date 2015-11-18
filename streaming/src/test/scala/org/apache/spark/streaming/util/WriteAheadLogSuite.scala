@@ -30,6 +30,7 @@ import scala.language.{implicitConversions, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -498,35 +499,25 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     }
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
-    // make sure the data is ordered so that the final comparison is valid
-    // in real use cases ordering across threads is not required
-    eventually(timeout(1 second)) {
-      assert(batchedWal.invokePrivate(queueLength()) === 1)
-    }
     writeAsync(batchedWal, event3, 8L)
-    eventually(timeout(1 second)) {
-      assert(batchedWal.invokePrivate(queueLength()) === 2)
-    }
     writeAsync(batchedWal, event4, 12L)
-    eventually(timeout(1 second)) {
-      assert(batchedWal.invokePrivate(queueLength()) === 3)
-    }
     writeAsync(batchedWal, event5, 10L)
-    eventually(timeout(1 second)) {
-      assert(walBatchingThreadPool.getActiveCount === 5)
-      assert(batchedWal.invokePrivate(queueLength()) === 4)
-    }
     blockingWal.allowWrite()
 
     val buffer1 = wrapArrayArrayByte(Array(event1))
-    val buffer2 = wrapArrayArrayByte(Array(event2, event3, event4, event5))
+    val buffer2 = Set(event2, event3, event4, event5)
 
     eventually(timeout(1 second)) {
       assert(batchedWal.invokePrivate(queueLength()) === 0)
       verify(wal, times(1)).write(meq(buffer1), meq(3L))
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
-      verify(wal, times(1)).write(meq(buffer2), meq(10L))
+      val buffer = ArgumentCaptor.forClass(classOf[ByteBuffer])
+      verify(wal, times(1)).write(buffer.capture(), meq(10L))
+      val records = Utils.deserialize[Array[Array[Byte]]](buffer.getValue.array()).map { bytes =>
+        Utils.deserialize[String](bytes)
+      }
+      assert(records.toSet === buffer2)
     }
   }
 
