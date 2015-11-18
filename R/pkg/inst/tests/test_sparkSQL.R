@@ -762,7 +762,7 @@ test_that("subsetting", {
   expect_equal(columns(df6), c("name", "age"))
 
   # Test base::subset is working
-  #expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
+  expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
 })
 
 test_that("selectExpr() on a DataFrame", {
