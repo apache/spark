@@ -1054,6 +1054,10 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("glm")
 
+#' @rdname predict
+#' @export
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
+
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
