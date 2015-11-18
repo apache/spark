@@ -18,7 +18,7 @@
 package org.apache.spark.examples.streaming;
 
 import com.google.common.collect.Lists;
-import com.google.common.io.Closeables
+import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -129,7 +129,7 @@ public class JavaCustomReceiver extends Receiver<String> {
       try {
         // connect to the server
         socket = new Socket(host, port);
-        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         // Until stopped or connection broken continue reading
         while (!isStopped() && (userInput = reader.readLine()) != null) {
           System.out.println("Received data '" + userInput + "'");
