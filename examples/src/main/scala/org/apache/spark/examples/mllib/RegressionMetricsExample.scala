@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 // $example on$
@@ -28,11 +27,9 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
-object RegressionMetrics {
-
-  def main(args: Array[String]) {
-
-    val conf = new SparkConf().setAppName("RegressionMetrics")
+object RegressionMetricsExample {
+  def main(args: Array[String]) : Unit = {
+    val conf = new SparkConf().setAppName("RegressionMetricsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     // $example on$

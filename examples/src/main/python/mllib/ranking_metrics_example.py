@@ -22,7 +22,7 @@ from pyspark.mllib.evaluation import RegressionMetrics, RankingMetrics
 from pyspark import SparkContext
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="Ranking Metrics")
+    sc = SparkContext(appName="Ranking Metrics Example")
 
     # Several of the methods available in scala are currently missing from pyspark
     # $example on$

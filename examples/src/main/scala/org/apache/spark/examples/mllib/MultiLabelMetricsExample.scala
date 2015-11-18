@@ -14,21 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 // scalastyle:off println
 package org.apache.spark.examples.mllib
-
 // $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
 import org.apache.spark.rdd.RDD;
 // $example off$
-
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
 
-object MultiLabelMetrics {
-  def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("MultiLabelMetrics")
+object MultiLabelMetricsExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("MultiLabelMetricsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._

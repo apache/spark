@@ -19,7 +19,6 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
-
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -30,13 +29,15 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.rdd.RDD;
+// $example off$
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 
-public class JavaBinaryClassification {
+public class JavaBinaryClassificationMetricsExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Binary Classification Metrics");
+    SparkConf conf = new SparkConf().setAppName("Binary Classification Metrics Example");
     SparkContext sc = new SparkContext(conf);
+    // $example on$
     String path = "data/mllib/sample_binary_classification_data.txt";
     JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
 
@@ -47,20 +48,20 @@ public class JavaBinaryClassification {
 
     // Run training algorithm to build the model.
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-            .setNumClasses(2)
-            .run(training.rdd());
+      .setNumClasses(2)
+      .run(training.rdd());
 
     // Clear the prediction threshold so the model will return probabilities
     model.clearThreshold();
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
-            new Function<LabeledPoint, Tuple2<Object, Object>>() {
-              public Tuple2<Object, Object> call(LabeledPoint p) {
-                Double prediction = model.predict(p.features());
-                return new Tuple2<Object, Object>(prediction, p.label());
-              }
-            }
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double prediction = model.predict(p.features());
+          return new Tuple2<Object, Object>(prediction, p.label());
+        }
+      }
     );
 
     // Get evaluation metrics.
@@ -87,11 +88,11 @@ public class JavaBinaryClassification {
 
     // Thresholds
     JavaRDD<Double> thresholds = precision.map(
-            new Function<Tuple2<Object, Object>, Double>() {
-              public Double call(Tuple2<Object, Object> t) {
-                return new Double(t._1().toString());
-              }
-            }
+      new Function<Tuple2<Object, Object>, Double>() {
+        public Double call(Tuple2<Object, Object> t) {
+          return new Double(t._1().toString());
+        }
+      }
     );
 
     // ROC Curve
@@ -105,8 +106,9 @@ public class JavaBinaryClassification {
     System.out.println("Area under ROC = " + metrics.areaUnderROC());
 
     // Save and load model
-    model.save(sc, "myModelPath");
-    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
+    model.save(sc, "target/tmp/LogisticRegressionModel");
+    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc,
+            "target/tmp/LogisticRegressionModel");
+    // $example off$
   }
 }
-// $example off$

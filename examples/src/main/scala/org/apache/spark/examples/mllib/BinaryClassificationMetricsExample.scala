@@ -17,8 +17,6 @@
 
 // scalastyle:off println
 package org.apache.spark.examples.mllib
-
-
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -29,11 +27,11 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.sql.SQLContext
 
-object BinaryClassificationMetrics {
+object BinaryClassificationMetricsExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
-    val conf = new SparkConf().setAppName("BinaryClassificationMetrics")
+    val conf = new SparkConf().setAppName("BinaryClassificationMetricsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
@@ -102,10 +100,7 @@ object BinaryClassificationMetrics {
     // AUROC
     val auROC = metrics.areaUnderROC
     println("Area under ROC = " + auROC)
-
     // $example off$
-
   }
 }
-
 // scalastyle:on println

@@ -111,7 +111,7 @@ Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org
 <div data-lang="java" markdown="1">
 Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) and [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaBinaryClassification.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaBinaryClassificationMetricsExample.java %}
 
 </div>
 
@@ -247,7 +247,8 @@ Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.sp
 <div data-lang="java" markdown="1">
 Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaMulticlassClassification.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaMulticlassClassificationMetricsExample
+.java %}
 
 </div>
 
@@ -397,7 +398,7 @@ Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.sp
 <div data-lang="java" markdown="1">
 Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaMultiLabelClassification.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaMultiLabelClassificationMetrics.java %}
 
 </div>
 
@@ -525,7 +526,7 @@ Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.sp
 <div data-lang="java" markdown="1">
 Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaRanking.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRankingMetricsExample.java %}
 
 </div>
 

@@ -20,6 +20,7 @@ package org.apache.spark.examples.mllib;
 
 // $example on$
 import java.util.*;
+
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -29,22 +30,25 @@ import org.apache.spark.mllib.evaluation.RankingMetrics;
 import org.apache.spark.mllib.recommendation.ALS;
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
 import org.apache.spark.mllib.recommendation.Rating;
+// $example off$
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
-// Read in the ratings data
-public class JavaRanking {
+
+public class JavaRankingMetricsExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Ranking Metrics");
+    SparkConf conf = new SparkConf().setAppName("Ranking Metrics Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
+    // $example on$
     String path = "data/mllib/sample_movielens_data.txt";
     JavaRDD<String> data = sc.textFile(path);
     JavaRDD<Rating> ratings = data.map(
-            new Function<String, Rating>() {
-              public Rating call(String line) {
-                String[] parts = line.split("::");
-                return new Rating(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Double.parseDouble(parts[2]) - 2.5);
-              }
-            }
+      new Function<String, Rating>() {
+        public Rating call(String line) {
+          String[] parts = line.split("::");
+            return new Rating(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Double
+                    .parseDouble(parts[2]) - 2.5);
+        }
+      }
     );
     ratings.cache();
 
@@ -54,32 +58,32 @@ public class JavaRanking {
     // Get top 10 recommendations for every user and scale ratings from 0 to 1
     JavaRDD<Tuple2<Object, Rating[]>> userRecs = model.recommendProductsForUsers(10).toJavaRDD();
     JavaRDD<Tuple2<Object, Rating[]>> userRecsScaled = userRecs.map(
-            new Function<Tuple2<Object, Rating[]>, Tuple2<Object, Rating[]>>() {
-              public Tuple2<Object, Rating[]> call(Tuple2<Object, Rating[]> t) {
-                Rating[] scaledRatings = new Rating[t._2().length];
-                for (int i = 0; i < scaledRatings.length; i++) {
-                  double newRating = Math.max(Math.min(t._2()[i].rating(), 1.0), 0.0);
-                  scaledRatings[i] = new Rating(t._2()[i].user(), t._2()[i].product(), newRating);
-                }
-                return new Tuple2<Object, Rating[]>(t._1(), scaledRatings);
-              }
-            }
+      new Function<Tuple2<Object, Rating[]>, Tuple2<Object, Rating[]>>() {
+        public Tuple2<Object, Rating[]> call(Tuple2<Object, Rating[]> t) {
+          Rating[] scaledRatings = new Rating[t._2().length];
+          for (int i = 0; i < scaledRatings.length; i++) {
+            double newRating = Math.max(Math.min(t._2()[i].rating(), 1.0), 0.0);
+            scaledRatings[i] = new Rating(t._2()[i].user(), t._2()[i].product(), newRating);
+          }
+          return new Tuple2<Object, Rating[]>(t._1(), scaledRatings);
+        }
+      }
     );
     JavaPairRDD<Object, Rating[]> userRecommended = JavaPairRDD.fromJavaRDD(userRecsScaled);
 
     // Map ratings to 1 or 0, 1 indicating a movie that should be recommended
     JavaRDD<Rating> binarizedRatings = ratings.map(
-            new Function<Rating, Rating>() {
-              public Rating call(Rating r) {
-                double binaryRating;
-                if (r.rating() > 0.0) {
-                  binaryRating = 1.0;
-                } else {
-                  binaryRating = 0.0;
-                }
-                return new Rating(r.user(), r.product(), binaryRating);
-              }
-            }
+      new Function<Rating, Rating>() {
+        public Rating call(Rating r) {
+          double binaryRating;
+          if (r.rating() > 0.0) {
+              binaryRating = 1.0;
+          } else {
+              binaryRating = 0.0;
+          }
+          return new Rating(r.user(), r.product(), binaryRating);
+        }
+      }
     );
 
     // Group ratings by common user
@@ -93,32 +97,33 @@ public class JavaRanking {
 
     // Get true relevant documents from all user ratings
     JavaPairRDD<Object, List<Integer>> userMoviesList = userMovies.mapValues(
-            new Function<Iterable<Rating>, List<Integer>>() {
-              public List<Integer> call(Iterable<Rating> docs) {
-                List<Integer> products = new ArrayList<Integer>();
-                for (Rating r : docs) {
-                  if (r.rating() > 0.0) {
-                    products.add(r.product());
-                  }
-                }
-                return products;
-              }
+      new Function<Iterable<Rating>, List<Integer>>() {
+        public List<Integer> call(Iterable<Rating> docs) {
+          List<Integer> products = new ArrayList<Integer>();
+          for (Rating r : docs) {
+            if (r.rating() > 0.0) {
+              products.add(r.product());
             }
+          }
+          return products;
+        }
+      }
     );
 
     // Extract the product id from each recommendation
     JavaPairRDD<Object, List<Integer>> userRecommendedList = userRecommended.mapValues(
-            new Function<Rating[], List<Integer>>() {
-              public List<Integer> call(Rating[] docs) {
-                List<Integer> products = new ArrayList<Integer>();
-                for (Rating r : docs) {
-                  products.add(r.product());
-                }
-                return products;
-              }
-            }
+      new Function<Rating[], List<Integer>>() {
+        public List<Integer> call(Rating[] docs) {
+          List<Integer> products = new ArrayList<Integer>();
+          for (Rating r : docs) {
+            products.add(r.product());
+          }
+          return products;
+        }
+      }
     );
-    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join(userRecommendedList).values();
+    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join
+            (userRecommendedList).values();
 
     // Instantiate the metrics object
     RankingMetrics metrics = RankingMetrics.of(relevantDocs);
@@ -135,29 +140,29 @@ public class JavaRanking {
 
     // Evaluate the model using numerical ratings and regression metrics
     JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
-            new Function<Rating, Tuple2<Object, Object>>() {
-              public Tuple2<Object, Object> call(Rating r) {
-                return new Tuple2<Object, Object>(r.user(), r.product());
-              }
-            }
+      new Function<Rating, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(Rating r) {
+          return new Tuple2<Object, Object>(r.user(), r.product());
+        }
+      }
     );
     JavaPairRDD<Tuple2<Integer, Integer>, Object> predictions = JavaPairRDD.fromJavaRDD(
-            model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
-                    new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
-                      public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
-                        return new Tuple2<Tuple2<Integer, Integer>, Object>(
-                                new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-                      }
-                    }
-            ));
+      model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
+            return new Tuple2<Tuple2<Integer, Integer>, Object>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+          }
+        }
+      ));
     JavaRDD<Tuple2<Object, Object>> ratesAndPreds =
             JavaPairRDD.fromJavaRDD(ratings.map(
-                    new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
-                      public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
-                        return new Tuple2<Tuple2<Integer, Integer>, Object>(
-                                new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-                      }
-                    }
+              new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
+                public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
+                  return new Tuple2<Tuple2<Integer, Integer>, Object>(
+                    new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+                }
+              }
             )).join(predictions).values();
 
     // Create regression metrics object
@@ -168,6 +173,6 @@ public class JavaRanking {
 
     // R-squared
     System.out.format("R-squared = %f\n", regressionMetrics.r2());
+    // $example off$
   }
 }
-// $example off$

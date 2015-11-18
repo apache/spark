@@ -14,24 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
-
 // $example on$
-
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
-
 // $example off$
-object RankingMetrics {
 
+object RankingMetricsExample {
   def main(args: Array[String]) {
-
-    val conf = new SparkConf().setAppName("RankingMetrics")
+    val conf = new SparkConf().setAppName("RankingMetricsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
@@ -112,4 +107,3 @@ object RankingMetrics {
   }
 }
 // scalastyle:on println
-

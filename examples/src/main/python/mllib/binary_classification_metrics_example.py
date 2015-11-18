@@ -14,16 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-
 """
 Binary Classification Metrics Example.
 """
 from __future__ import print_function
-
 import sys
-
-
 from pyspark import SparkContext, SQLContext
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -33,14 +28,10 @@ from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="BinaryClassificationMetrics")
+    sc = SparkContext(appName="BinaryClassificationMetricsExample")
     sqlContext = SQLContext(sc)
-
     # $example on$
     # Several of the methods available in scala are currently missing from pyspark
-    # $example off$
-
-    # $example on$
     # Load training data in LIBSVM format
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
 

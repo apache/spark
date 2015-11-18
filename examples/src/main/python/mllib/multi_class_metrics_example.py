@@ -24,7 +24,7 @@ from pyspark.mllib.evaluation import MulticlassMetrics
 from pyspark import SparkContext
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="MultiClassMetrics")
+    sc = SparkContext(appName="MultiClassMetricsExample")
 
     # Several of the methods available in scala are currently missing from pyspark
     # $example on$

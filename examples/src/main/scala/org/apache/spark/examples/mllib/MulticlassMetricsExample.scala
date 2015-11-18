@@ -14,23 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 // scalastyle:off println
 package org.apache.spark.examples.mllib
-
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
-
 import org.apache.spark.{SparkContext, SparkConf}
 
-object MulticlassMetrics {
+object MulticlassMetricsExample {
 
-  def main(args: Array[String]) {
-
+  def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("MulticlassMetrics")
     val sc = new SparkContext(conf)
 
@@ -95,9 +91,7 @@ object MulticlassMetrics {
     println(s"Weighted recall: ${metrics.weightedRecall}")
     println(s"Weighted F1 score: ${metrics.weightedFMeasure}")
     println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
-
     // $example off$
-
   }
 }
 // scalastyle:on println

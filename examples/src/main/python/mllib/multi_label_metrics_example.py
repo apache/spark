@@ -21,9 +21,8 @@ from pyspark.mllib.evaluation import MultilabelMetrics
 from pyspark.mllib.util import MLUtils
 from pyspark import SparkContext
 
-
 if __name__ == "__main__":
-    sc = SparkContext(appName="MultiClassMetrics")
+    sc = SparkContext(appName="MultiLabelMetricsExample")
     # $example on$
     scoreAndLabels = sc.parallelize([
         ([0.0, 1.0], [0.0, 2.0]),

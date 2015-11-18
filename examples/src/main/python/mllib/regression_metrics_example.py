@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 # $example on$
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from pyspark.mllib.evaluation import RegressionMetrics
@@ -24,7 +23,7 @@ from pyspark.mllib.linalg import DenseVector
 from pyspark import SparkContext
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="Regression Metrics")
+    sc = SparkContext(appName="Regression Metrics Example")
     # $example on$
     # Load and parse the data
 
