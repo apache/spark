@@ -17,12 +17,28 @@
 
 package org.apache.spark.sql
 
+import java.io.{ObjectInput, ObjectOutput, Externalizable}
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class ClassData(a: String, b: Int)
+
+/**
+ * A class used to test serialization using encoders. This class throws exceptions when using
+ * Java serialization -- so the only way it can be "serialized" is through our encoders.
+ */
+case class NonSerializableCaseClass(value: String) extends Externalizable {
+  override def readExternal(in: ObjectInput): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    throw new UnsupportedOperationException
+  }
+}
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -39,6 +55,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+  test("collect, first, and take should use encoders for serialization") {
+    val item = NonSerializableCaseClass("abcd")
+    val ds = Seq(item).toDS()
+    assert(ds.collect().head == item)
+    assert(ds.collectAsList().get(0) == item)
+    assert(ds.first() == item)
+    assert(ds.take(1).head == item)
+    assert(ds.takeAsList(1).get(0) == item)
   }
 
   test("as tuple") {
@@ -75,6 +101,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   ignore("Dataset should set the resolved encoders internally for maps") {
     // TODO: Enable this once we fix SPARK-11793.
+    // We inject a group by here to make sure this test case is future proof
+    // when we implement better pipelining and local execution mode.
     val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
         .map(c => ClassData(c.a, c.b + 1))
         .groupBy(p => p).count()
@@ -219,7 +247,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 30), ("b", 3), ("c", 1))
   }
 
-  test("groupBy function, fatMap") {
+  test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
     val agged = grouped.flatMap { case (g, iter) => Iterator(g._1, iter.map(_._2).sum.toString) }
