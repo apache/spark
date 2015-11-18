@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
-    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.

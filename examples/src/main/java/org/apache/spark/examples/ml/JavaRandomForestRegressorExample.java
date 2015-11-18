@@ -43,8 +43,7 @@ public class JavaRandomForestRegressorExample {
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.

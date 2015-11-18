@@ -42,8 +42,7 @@ public class JavaRandomForestClassifierExample {
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.

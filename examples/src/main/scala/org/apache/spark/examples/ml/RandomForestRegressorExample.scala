@@ -33,11 +33,10 @@ object RandomForestRegressorExample {
     val conf = new SparkConf().setAppName("RandomForestRegressorExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
