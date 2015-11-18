@@ -73,6 +73,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 2), ("b", 3), ("c", 4))
   }
 
+  ignore("Dataset should set the resolved encoders internally for maps") {
+    // TODO: Enable this once we fix SPARK-11793.
+    val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
+        .map(c => ClassData(c.a, c.b + 1))
+        .groupBy(p => p).count()
+
+    checkAnswer(
+      ds,
+      (ClassData("one", 1), 1L), (ClassData("two", 2), 1L))
+  }
+
   test("select") {
     val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS()
     checkAnswer(
