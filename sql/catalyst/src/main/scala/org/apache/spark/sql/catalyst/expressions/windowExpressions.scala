@@ -396,7 +396,8 @@ case class NTile(buckets: Expression, n: Expression)
   private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType, false)()
   private val bucketSize = AttributeReference("bucketSize", IntegerType)()
   private val bucketsWithPadding = AttributeReference("bucketsWithPadding", IntegerType)()
-  private def bucketOverflow(e: Expression) = If(GreaterThan(rowNumber, bucketThreshold), e, zero)
+  private def bucketOverflow(e: Expression) =
+    If(GreaterThanOrEqual(rowNumber, bucketThreshold), e, zero)
 
   override val aggBufferAttributes = Seq(
     rowNumber,
@@ -418,7 +419,7 @@ case class NTile(buckets: Expression, n: Expression)
     Add(rowNumber, one),
     Add(bucket, bucketOverflow(one)),
     Add(bucketThreshold, bucketOverflow(
-      Add(bucketSize, If(LessThanOrEqual(bucket, bucketsWithPadding), one, zero)))),
+      Add(bucketSize, If(LessThan(bucket, bucketsWithPadding), one, zero)))),
     bucketSize,
     bucketsWithPadding
   )
