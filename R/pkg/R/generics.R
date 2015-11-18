@@ -396,10 +396,6 @@ setGeneric("attach")
 #' @export
 setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
 
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
-
 #' @rdname schema
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
