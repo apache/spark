@@ -445,13 +445,17 @@ class LinearRegressionModel private[ml] (
    *
    * This also does not save the [[parent]] currently.
    */
-  override def write: Writer = new LinearRegressionModel.LinearRegressionModelWriter(this)  
+  @Since("1.6.0")
+  override def write: Writer = new LinearRegressionModel.LinearRegressionModelWriter(this)
 }
 
+@Since("1.6.0")
 object LinearRegressionModel extends Readable[LinearRegressionModel] {
 
+  @Since("1.6.0")
   override def read: Reader[LinearRegressionModel] = new LinearRegressionModelReader
 
+  @Since("1.6.0")
   override def load(path: String): LinearRegressionModel = read.load(path)
 
   /** [[Writer]] instance for [[LinearRegressionModel]] */
