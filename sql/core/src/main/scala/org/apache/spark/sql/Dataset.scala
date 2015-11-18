@@ -498,13 +498,17 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
+    val joined = sqlContext.executePlan(Join(left, right, Inner, Some(condition.expr)))
+    val leftOutput = joined.analyzed.output.take(left.output.length)
+    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
+
     val leftData = this.unresolvedTEncoder match {
-      case e if e.flat => Alias(left.output.head, "_1")()
-      case _ => Alias(CreateStruct(left.output), "_1")()
+      case e if e.flat => Alias(leftOutput.head, "_1")()
+      case _ => Alias(CreateStruct(leftOutput), "_1")()
     }
     val rightData = other.unresolvedTEncoder match {
-      case e if e.flat => Alias(right.output.head, "_2")()
-      case _ => Alias(CreateStruct(right.output), "_2")()
+      case e if e.flat => Alias(rightOutput.head, "_2")()
+      case _ => Alias(CreateStruct(rightOutput), "_2")()
     }
 
 
@@ -513,7 +517,7 @@ class Dataset[T] private[sql](
     withPlan[(T, U)](other) { (left, right) =>
       Project(
         leftData :: rightData :: Nil,
-        Join(left, right, Inner, Some(condition.expr)))
+        joined.analyzed)
     }
   }
 
