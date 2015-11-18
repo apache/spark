@@ -21,6 +21,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, Synch
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import org.apache.spark.SparkException
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -171,6 +172,14 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       "A successful batch should not set errorMessage")
   }
 
+  test("don't call ssc.stop in listener") {
+    ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    val failureReasons = startStreamingContextAndCallStop(ssc)
+  }
+
   test("onBatchCompleted with failed batch and one failed job") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
@@ -205,6 +214,19 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     assert(failureReasons.contains(1))
     assert(failureReasons(0).contains("This is a failed job"))
     assert(failureReasons(1).contains("This is another failed job"))
+  }
+
+  private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {
+    val contextStoppingCollector = new StreamingContextStoppingCollector(_ssc)
+    _ssc.addStreamingListener(contextStoppingCollector)
+    val batchCounter = new BatchCounter(_ssc)
+    _ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    intercept[SparkException] {
+      _ssc.awaitTerminationOrTimeout(10000)
+    }
+    _ssc.stop()
   }
 
   private def startStreamingContextAndCollectFailureReasons(
@@ -318,5 +340,14 @@ class FailureReasonsCollector extends StreamingListener {
     outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
       failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
     }
+  }
+}
+/**
+ * A StreamingListener that calls StreamingContext.stop().
+ */
+class StreamingContextStoppingCollector(val ssc: StreamingContext) extends StreamingListener {
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
+      ssc.stop()
   }
 }
