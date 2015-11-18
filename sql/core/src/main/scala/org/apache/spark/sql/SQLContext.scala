@@ -1270,13 +1270,13 @@ object SQLContext {
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     val ctx = activeContext.get()
-    if (ctx != null) {
+    if (ctx != null && !ctx.sparkContext.isStopped) {
       return ctx
     }
 
     synchronized {
       val ctx = instantiatedContext.get()
-      if (ctx == null) {
+      if (ctx == null || ctx.sparkContext.isStopped) {
         new SQLContext(sparkContext)
       } else {
         ctx
@@ -1289,7 +1289,12 @@ object SQLContext {
   }
 
   private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    instantiatedContext.compareAndSet(null, sqlContext)
+    synchronized {
+      val ctx = instantiatedContext.get()
+      if (ctx == null || ctx.sparkContext.isStopped) {
+        instantiatedContext.set(sqlContext)
+      }
+    }
   }
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
