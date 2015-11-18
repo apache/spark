@@ -481,7 +481,7 @@ private[spark] class TaskSchedulerImpl(
             // one may be triggered by a dropped connection from the slave while another may be a
             // report of executor termination from Mesos. We produce log messages for both so we
             // eventually report the termination reason.
-            logError("Lost an executor " + executorId + " (already removed): " + reason)
+            logError(s"Lost an executor $executorId (already removed): $reason")
         }
       }
     }
@@ -501,7 +501,7 @@ private[spark] class TaskSchedulerImpl(
     case ExecutorKilled(message) =>
       logInfo(s"Executor $executorId on $hostPort killed by driver ($message)")
     case _ =>
-      logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
+      logError(s"Lost executor $executorId on $hostPort: $reason")
   }
 
   /**
