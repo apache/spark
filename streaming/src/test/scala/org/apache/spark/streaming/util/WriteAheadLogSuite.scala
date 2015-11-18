@@ -502,6 +502,10 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     writeAsync(batchedWal, event3, 8L)
     writeAsync(batchedWal, event4, 12L)
     writeAsync(batchedWal, event5, 10L)
+    eventually(timeout(1 second)) {
+      assert(walBatchingThreadPool.getActiveCount === 5)
+      assert(batchedWal.invokePrivate(queueLength()) === 4)
+    }
     blockingWal.allowWrite()
 
     val buffer1 = wrapArrayArrayByte(Array(event1))
