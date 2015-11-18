@@ -161,7 +161,9 @@ case class ExpressionEncoder[T](
 
   @transient
   private lazy val extractProjection = GenerateUnsafeProjection.generate(toRowExpressions)
-  private val inputRow = new GenericMutableRow(1)
+
+  @transient
+  private lazy val inputRow = new GenericMutableRow(1)
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(fromRowExpression :: Nil)
