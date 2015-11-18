@@ -19,7 +19,10 @@ package org.apache.spark.repl
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
+import java.nio.charset.StandardCharsets
 import java.util
+
+import com.google.common.io.Files
 
 import scala.concurrent.duration._
 import scala.io.Source
@@ -57,7 +60,8 @@ class ExecutorClassLoaderSuite
     url1 = "file://" + tempDir1
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
-    parentResourceNames.foreach(TestUtils.createResource(_, tempDir2, "resource"))
+    parentResourceNames.foreach(x =>
+      Files.write("resource".getBytes(StandardCharsets.UTF_8), new File(tempDir2, x)))
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 

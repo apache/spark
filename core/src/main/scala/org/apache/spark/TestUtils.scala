@@ -159,16 +159,6 @@ private[spark] object TestUtils {
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
-  def createResource(
-      resourceName: String,
-      destDir: File,
-      fileContent: String = "test"): File = {
-    val out: File = new File(destDir, resourceName)
-    Files.write(fileContent.getBytes(StandardCharsets.UTF_8), out)
-    assert(out.exists(), "Resource file is not written: " + out.getAbsolutePath())
-    out
-  }
-
   /**
    * Run some code involving jobs submitted to the given context and assert that the jobs spilled.
    */
