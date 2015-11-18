@@ -120,7 +120,7 @@ public class YarnShuffleService extends AuxiliaryService {
     registeredExecutorFile =
       findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
 
-    TransportConf transportConf = new TransportConf(new HadoopConfigProvider(conf));
+    TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
     // special RPC handler that filters out unauthenticated fetch requests
     boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
