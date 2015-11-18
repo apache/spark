@@ -178,6 +178,15 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     pointTo(buf, Platform.BYTE_ARRAY_OFFSET, numFields, sizeInBytes);
   }
 
+  /**
+   * Updates this UnsafeRow preserving the number of fields.
+   * @param buf byte array to point to
+   * @param sizeInBytes the number of bytes valid in the byte array
+   */
+  public void pointTo(byte[] buf, int sizeInBytes) {
+    pointTo(buf, numFields, sizeInBytes);
+  }
+
   @Override
   public void setNullAt(int i) {
     assertIndexIsValid(i);

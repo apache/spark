@@ -164,6 +164,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         */
       if (enableUnsafeRowParquetReader &&
           format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
+        // TODO: move this class to sql.execution and remove this.
         reader = Utils.classForName(
           "org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader")
           .newInstance().asInstanceOf[RecordReader[Void, V]]

@@ -17,6 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.List;
+
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
+
 import static org.apache.parquet.column.ValuesType.DEFINITION_LEVEL;
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.parquet.column.ValuesType.VALUES;
@@ -26,20 +37,18 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
-import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.Encoding;
+import org.apache.parquet.column.page.DataPage;
+import org.apache.parquet.column.page.DataPageV1;
+import org.apache.parquet.column.page.DataPageV2;
+import org.apache.parquet.column.page.DictionaryPage;
+import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.column.page.PageReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.Platform;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.*;
 
 /**
  * A specialized RecordReader that reads into UnsafeRows directly using the Parquet column APIs.
@@ -59,14 +68,18 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private int numBatched = 0;
 
   /**
-   * Used to write variable lenght columns. Same length as `rows`.
+   * Used to write variable length columns. Same length as `rows`.
    */
-  private RowWriter[] rowWriters = null;
-
+  private UnsafeRowWriter[] rowWriters = null;
   /**
    * True if the row contains variable length fields.
    */
   private boolean containsVarLenFields;
+
+  /**
+   * The number of bytes in the fixed length portion of the row.
+   */
+  private int fixedSizeBytes;
 
   /**
    * For each request column, the reader to read this column.
@@ -87,7 +100,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   /**
    * For each column, the annotated original type.
    */
-  OriginalType[] originalTypes;
+  private OriginalType[] originalTypes;
+
+  /**
+   * The default size for varlen columns. The row grows as necessary to accommodate the
+   * largest column.
+   */
+  private static final int DEFAULT_VAR_LEN_SIZE = 32;
 
   /**
    * Implementation of RecordReader API.
@@ -100,11 +119,17 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     /**
      * Check that the requested schema is supported.
      */
+    if (requestedSchema.getFieldCount() == 0) {
+      // TODO: what does this mean?
+      throw new IOException("Empty request schema not supported.");
+    }
     int numVarLenFields = 0;
     originalTypes = new OriginalType[requestedSchema.getFieldCount()];
     for (int i = 0; i < requestedSchema.getFieldCount(); ++i) {
       Type t = requestedSchema.getFields().get(i);
-      if (!t.isPrimitive()) throw new IOException("Complex types not supported.");
+      if (!t.isPrimitive() || t.isRepetition(Type.Repetition.REPEATED)) {
+        throw new IOException("Complex types not supported.");
+      }
       PrimitiveType primitiveType = t.asPrimitiveType();
 
       originalTypes[i] = t.getOriginalType();
@@ -132,18 +157,23 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       }
     }
 
+    /**
+     * Initialize rows and rowWriters. These objects are reused across all rows in the relation.
+     */
     int rowByteSize = UnsafeRow.calculateBitSetWidthInBytes(requestedSchema.getFieldCount());
     rowByteSize += 8 * requestedSchema.getFieldCount();
+    fixedSizeBytes = rowByteSize;
+    rowByteSize += numVarLenFields * DEFAULT_VAR_LEN_SIZE;
     containsVarLenFields = numVarLenFields > 0;
-    rowWriters = new RowWriter[rows.length];
+    rowWriters = new UnsafeRowWriter[rows.length];
 
     for (int i = 0; i < rows.length; ++i) {
       rows[i] = new UnsafeRow();
-      rowWriters[i] = new RowWriter(
-          rows[i],
-          requestedSchema.getFieldCount(),
-          rowByteSize,
-          numVarLenFields);
+      rowWriters[i] = new UnsafeRowWriter();
+      BufferHolder holder = new BufferHolder(rowByteSize);
+      rowWriters[i].initialize(rows[i], holder, requestedSchema.getFieldCount());
+      rows[i].pointTo(holder.buffer, Platform.BYTE_ARRAY_OFFSET, requestedSchema.getFieldCount(),
+          holder.buffer.length);
     }
   }
 
@@ -179,7 +209,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     if (containsVarLenFields) {
       for (int i = 0; i < rowWriters.length; ++i) {
-        rowWriters[i].reset();
+        rowWriters[i].holder().resetTo(fixedSizeBytes);
       }
     }
 
@@ -288,8 +318,14 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private void decodeBinaryBatch(int col, int num) throws IOException {
     for (int n = 0; n < num; ++n) {
       if (columnReaders[col].next()) {
-        Binary b = columnReaders[col].nextBinary();
-        rowWriters[n].appendBytes(col, b.toByteBuffer());
+        ByteBuffer bytes = columnReaders[col].nextBinary().toByteBuffer();
+        int len = bytes.limit() - bytes.position();
+        if (originalTypes[col] == OriginalType.UTF8) {
+          UTF8String str = UTF8String.fromBytes(bytes.array(), bytes.position(), len);
+          rowWriters[n].write(col, str);
+        } else {
+          rowWriters[n].write(col, bytes.array(), bytes.position(), len);
+        }
       } else {
         rows[n].setNullAt(col);
       }
@@ -312,62 +348,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       } else {
         rows[n].setNullAt(col);
       }
-    }
-  }
-
-  /**
-   * Writer to append variable length data in rows. This should be merged with UnsafeRowWriter.
-   * UnsafeRowWriter currently has a few inefficiencies so this is used instead. In particular
-   * it does not have a reference to an UnsafeRow meaning that there is no good way to reuse
-   * a UnsafeRow object.
-   */
-  private static final class RowWriter {
-    private static final int DEFAULT_VAR_LEN_SIZE = 32;
-    UnsafeRow row;
-    final int fieldCount;
-    final int fixedSize;
-    int variableSize;
-    int variableOffset;
-    byte[] buffer;
-
-    RowWriter(UnsafeRow row, int fieldCount, int rowByteSize, int numVarLenFields) {
-      this.row = row;
-      this.fieldCount = fieldCount;
-      this.fixedSize = rowByteSize;
-      this.variableSize = numVarLenFields * DEFAULT_VAR_LEN_SIZE;
-      this.buffer = new byte[fixedSize + variableSize];
-      row.pointTo(buffer, fieldCount, fixedSize + variableSize);
-    }
-
-    /**
-     * Resets variable state to zero.
-     */
-    void reset() {
-      variableOffset = 0;
-    }
-
-    /**
-     * Appends `bytes` to `col`. This populates the value in the fixed portion for `col` and
-     * appends the var length data.
-     */
-    void appendBytes(int col, ByteBuffer bytes) {
-      // grow the buffer before writing data.
-      int len = bytes.limit() - bytes.position();
-      if (variableOffset + len > variableSize) {
-        int newVariableSize = variableSize * 2;
-        byte[] newBuffer = new byte[fixedSize + newVariableSize];
-        Platform.copyMemory(buffer, Platform.BYTE_ARRAY_OFFSET, newBuffer,
-            Platform.BYTE_ARRAY_OFFSET, buffer.length);
-        buffer = newBuffer;
-        variableSize = newVariableSize;
-        row.pointTo(buffer, fieldCount, fixedSize + variableSize);
-      }
-
-      Platform.copyMemory(bytes.array(), Platform.BYTE_ARRAY_OFFSET + bytes.position(),
-          buffer, Platform.BYTE_ARRAY_OFFSET + fixedSize + variableOffset, len);
-      long offset = (fixedSize + variableOffset);
-      row.setLong(col, offset << 32 | len);
-      variableOffset += len;
     }
   }
 
