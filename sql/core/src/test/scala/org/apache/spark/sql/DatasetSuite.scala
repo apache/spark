@@ -347,7 +347,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(joined, ("2", 2))
   }
 
-  ignore("self join") {
+  test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
     val joined = ds.joinWith(ds, lit(true))
     checkAnswer(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
@@ -360,15 +360,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val ds = sqlContext.createDataset(Seq(KryoData(1), KryoData(2)))
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
     assert(ds.groupBy(p => p).count().collect().toSeq ==
       Seq((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
-  ignore("kryo encoder self join") {
+  test("kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val ds = sqlContext.createDataset(Seq(KryoData(1), KryoData(2)))
+    val ds = Seq(KryoData(1), KryoData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
