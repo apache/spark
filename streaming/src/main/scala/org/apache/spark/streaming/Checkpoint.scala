@@ -244,7 +244,7 @@ class CheckpointWriter(
           val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + checkpointFile +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
-          jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
+            jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
           case ioe: IOException =>
