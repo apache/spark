@@ -77,6 +77,8 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveWindowOrder ::
+      ResolveWindowFrame ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -570,6 +572,8 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
+                // Do not wrap a WindowFunction in an AggregateExpression.
+                case wf: WindowFunction => wf
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
                   AggregateExpression(max, Complete, isDistinct = false)
@@ -595,11 +599,17 @@ class Analyzer(
     }
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
-      exprs.foreach(_.foreach {
-        case agg: AggregateExpression => return true
-        case _ =>
-      })
-      false
+      // Collect all Windowed Aggregate Expressions.
+      val blacklist = exprs.flatMap { expr =>
+        expr.collect {
+          case WindowExpression(ae: AggregateExpression, _) => ae
+        }
+      }.toSet
+
+      // Find the first Aggregate Expression that is not Windowed.
+      exprs.exists(_.collectFirst {
+        case ae: AggregateExpression if !blacklist.contains(ae) => ae
+      }.isDefined)
     }
   }
 
@@ -866,26 +876,37 @@ class Analyzer(
 
       // Now, we extract regular expressions from expressionsWithWindowFunctions
       // by using extractExpr.
+      val seenWindowAggregates = new ArrayBuffer[AggregateExpression]
       val newExpressionsWithWindowFunctions = expressionsWithWindowFunctions.map {
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
           case wf : WindowFunction =>
-            val newChildren = wf.children.map(extractExpr(_))
+            val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 
           // Extracts expressions from the partition spec and order spec.
           case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _) =>
-            val newPartitionSpec = partitionSpec.map(extractExpr(_))
+            val newPartitionSpec = partitionSpec.map(extractExpr)
             val newOrderSpec = orderSpec.map { so =>
               val newChild = extractExpr(so.child)
               so.copy(child = newChild)
             }
             wsc.copy(partitionSpec = newPartitionSpec, orderSpec = newOrderSpec)
 
+          // Extract Windowed AggregateExpression
+          case we @ WindowExpression(
+              AggregateExpression(function, mode, isDistinct),
+              spec: WindowSpecDefinition) =>
+            val newChildren = function.children.map(extractExpr)
+            val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
+            val newAgg = AggregateExpression(newFunction, mode, isTraceEnabled())
+            seenWindowAggregates += newAgg
+            WindowExpression(newAgg, spec)
+
           // Extracts AggregateExpression. For example, for SUM(x) - Sum(y) OVER (...),
           // we need to extract SUM(x).
-          case agg: AggregateExpression =>
+          case agg: AggregateExpression if !seenWindowAggregates.contains(agg) =>
             val withName = Alias(agg, s"_w${extractedExprBuffer.length}")()
             extractedExprBuffer += withName
             withName.toAttribute
@@ -1078,7 +1099,7 @@ class Analyzer(
 
       case plan => plan transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _) =>
+        case udf@ScalaUDF(func, _, inputs, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -1090,6 +1111,42 @@ class Analyzer(
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+      }
+    }
+  }
+
+  /**
+   * Check and add proper window frames for all window functions.
+   */
+  object ResolveWindowFrame extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical transformExpressions {
+        case WindowExpression(wf: WindowFunction,
+        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
+          if wf.frame != UnspecifiedFrame && wf.frame != f =>
+          failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
+        case WindowExpression(wf: WindowFunction,
+        s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+          if wf.frame != UnspecifiedFrame =>
+          WindowExpression(wf, s.copy(frameSpecification = wf.frame))
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame)) =>
+          val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
+          we.copy(windowSpec = s.copy(frameSpecification = frame))
+      }
+    }
+  }
+
+  /**
+    * Check and add order to [[AggregateWindowFunction]]s.
+    */
+  object ResolveWindowOrder extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case logical: LogicalPlan => logical transformExpressions {
+        case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
+          failAnalysis(s"WindowFunction $wf requires window to be ordered")
+        case WindowExpression(rank: RankLike, spec) if spec.resolved =>
+          val order = spec.orderSpec.map(_.child)
+          WindowExpression(rank.withOrder(order), spec)
       }
     }
   }

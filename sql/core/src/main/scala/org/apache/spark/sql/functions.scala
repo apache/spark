@@ -489,7 +489,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def cumeDist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
+  def cumeDist(): Column = withExpr { new CumeDist }
 
   /**
    * Window function: returns the rank of rows within a window partition, without any gaps.
@@ -504,7 +504,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def denseRank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
+  def denseRank(): Column = withExpr { new DenseRank }
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
@@ -555,7 +555,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lag", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lag(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -607,7 +607,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    UnresolvedWindowFunction("lead", e.expr :: Literal(offset) :: Literal(defaultValue) :: Nil)
+    Lead(e.expr, Literal(offset), Literal(defaultValue))
   }
 
   /**
@@ -620,7 +620,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def ntile(n: Int): Column = withExpr { UnresolvedWindowFunction("ntile", lit(n).expr :: Nil) }
+  def ntile(n: Int): Column = withExpr { new NTile(Literal(n)) }
 
   /**
    * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
@@ -635,7 +635,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def percentRank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
+  def percentRank(): Column = withExpr { new PercentRank }
 
   /**
    * Window function: returns the rank of rows within a window partition.
@@ -650,7 +650,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def rank(): Column = withExpr { UnresolvedWindowFunction("rank", Nil) }
+  def rank(): Column = withExpr { new Rank }
 
   /**
    * Window function: returns a sequential number starting at 1 within a window partition.
@@ -660,7 +660,7 @@ object functions extends LegacyFunctions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def rowNumber(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
+  def rowNumber(): Column = withExpr { RowNumber() }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
