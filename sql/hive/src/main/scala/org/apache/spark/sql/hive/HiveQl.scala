@@ -527,7 +527,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       inputFormat = None,
       outputFormat = None,
       serde = None,
-      viewText = Some(originalText))
+      viewText = Some(originalText),
+      isTemporary = false)
 
     // We need to keep the original SQL string so that if `spark.sql.nativeView` is
     // false, we can fall back to use hive native command later.
@@ -724,7 +725,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         inputFormat = None,
         outputFormat = None,
         serde = None,
-        viewText = None)
+        viewText = None,
+        isTemporary = false)
 
       // default storage type abbreviation (e.g. RCFile, ORC, PARQUET etc.)
       val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)

@@ -234,4 +234,15 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "Error in query: Table not found: nonexistent_table;"
     )
   }
+
+  test("Temporary table") {
+    runCliWithin(2.minute)(
+      "USE hive_test_db;"
+        -> "OK",
+      "CREATE TEMPORARY TABLE hive_test_temp(key INT, val STRING);"
+        -> "OK",
+      "SHOW TABLES;"
+        -> "hive_test_temp\ttrue"
+    )
+  }
 }
