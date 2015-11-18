@@ -29,7 +29,7 @@ private[spark] object SparkUncaughtExceptionHandler
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
-      logError("Uncaught exception in thread " + thread, exception)
+      log(thread, exception)
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
@@ -43,6 +43,18 @@ private[spark] object SparkUncaughtExceptionHandler
     } catch {
       case oom: OutOfMemoryError => Runtime.getRuntime.halt(SparkExitCode.OOM)
       case t: Throwable => Runtime.getRuntime.halt(SparkExitCode.UNCAUGHT_EXCEPTION_TWICE)
+    }
+  }
+
+  def log(thread: Thread, exception: Throwable): Unit = {
+    val errMsg = "Uncaught exception in thread "
+    val inShutdownMsg = "[Container in shutdown] "
+    if (ShutdownHookManager.inShutdown())  {
+      // Make it explicit that uncaught exceptions are thrown when container is shutting down.
+      // It will help users when they analyze the executor logs
+      logError(inShutdownMsg + errMsg + thread, exception)
+    } else {
+      logError(errMsg + thread, exception)
     }
   }
 
