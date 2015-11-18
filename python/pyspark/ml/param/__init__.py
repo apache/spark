@@ -257,8 +257,9 @@ class Params(Identifiable):
                         # Try and do "safe" conversions that don't lose information
                         if p.expectedType == float:
                             self._paramMap[getattr(self, param)] = float(value)
-                        elif p.expectedType == long and type(value) == int:
-                            self._paramMap[getattr(self, param)] = long(value)
+                        # Python 3 unified long & int
+                        elif p.expectedType == int and type(value).__name__ == 'long':
+                            self._paramMap[getattr(self, param)] = value
                         else:
                             raise Exception(
                                 "Provided type {0} incompatable with type {1} for param {2}"
