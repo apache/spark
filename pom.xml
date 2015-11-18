@@ -706,13 +706,13 @@
         <groupId>com.sun.jersey</groupId>
         <artifactId>jersey-server</artifactId>
         <version>${jersey.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.sun.jersey</groupId>
         <artifactId>jersey-core</artifactId>
         <version>${jersey.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.sun.jersey</groupId>
@@ -724,6 +724,7 @@
             <artifactId>stax-api</artifactId>
           </exclusion>
         </exclusions>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.scala-lang</groupId>
@@ -2178,6 +2179,9 @@
               <include>org.eclipse.jetty:jetty-security</include>
               <include>org.eclipse.jetty:jetty-util</include>
               <include>org.eclipse.jetty:jetty-server</include>
+              <include>com.sun.jersey:jersey-core</include>
+              <include>com.sun.jersey:jersey-json</include>
+              <include>com.sun.jersey:jersey-server</include>
               <include>com.google.guava:guava</include>
             </includes>
           </artifactSet>
@@ -2203,6 +2207,20 @@
                 <exclude>com/google/common/base/Present*</exclude>
                 <exclude>com/google/common/base/Supplier</exclude>
               </excludes>
+            </relocation>
+            <relocation>
+              <pattern>com.sun.jersey</pattern>
+              <shadedPattern>org.spark-project.jersey</shadedPattern>
+              <includes>
+                <include>com.sun.jersey.**</include>
+              </includes>
+            </relocation>
+            <relocation>
+              <pattern>javax.ws.rs</pattern>
+              <shadedPattern>org.spark-project.javax.ws.rs</shadedPattern>
+              <includes>
+                  <include>javax.ws.rs.**</include>
+              </includes>
             </relocation>
           </relocations>
         </configuration>
