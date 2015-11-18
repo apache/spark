@@ -23,12 +23,14 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.DataFrame
+// $example off$
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -112,6 +114,7 @@ object OneVsRestExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     val inputData = sqlContext.read.format("libsvm").load(params.input)
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
@@ -172,6 +175,7 @@ object OneVsRestExample {
     println("label\tfpr")
 
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
+    // $example off$
 
     sc.stop()
   }
