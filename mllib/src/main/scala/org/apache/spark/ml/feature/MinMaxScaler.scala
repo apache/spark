@@ -128,7 +128,7 @@ object MinMaxScaler extends Readable[MinMaxScaler] {
 
   @Since("1.6.0")
   override def read: Reader[MinMaxScaler] = new DefaultParamsReader
-  
+
   @Since("1.6.0")
   override def load(path: String): MinMaxScaler = super.load(path)
 }
@@ -150,7 +150,7 @@ class MinMaxScalerModel private[ml] (
   extends Model[MinMaxScalerModel] with MinMaxScalerParams with Writable {
 
   import MinMaxScalerModel._
-  
+
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
 
