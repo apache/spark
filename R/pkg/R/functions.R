@@ -357,6 +357,40 @@ setMethod("dayofyear",
             column(jc)
           })
 
+#' decode
+#'
+#' Computes the first argument into a string from a binary using the provided character set
+#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#'
+#' @rdname decode
+#' @name decode
+#' @family string_funcs
+#' @export
+#' @examples \dontrun{decode(df$c, "UTF-8")}
+setMethod("decode",
+          signature(x = "Column", charset = "character"),
+          function(x, charset) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "decode", x@jc, charset)
+            column(jc)
+          })
+
+#' encode
+#'
+#' Computes the first argument into a binary from a string using the provided character set
+#' (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
+#'
+#' @rdname encode
+#' @name encode
+#' @family string_funcs
+#' @export
+#' @examples \dontrun{encode(df$c, "UTF-8")}
+setMethod("encode",
+          signature(x = "Column", charset = "character"),
+          function(x, charset) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "encode", x@jc, charset)
+            column(jc)
+          })
+
 #' exp
 #'
 #' Computes the exponential of the given value.
@@ -1036,6 +1070,31 @@ setMethod("stddev_samp",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "stddev_samp", x@jc)
+            column(jc)
+          })
+
+#' struct
+#'
+#' Creates a new struct column that composes multiple input columns.
+#'
+#' @rdname struct
+#' @name struct
+#' @family normal_funcs
+#' @export
+#' @examples
+#' \dontrun{
+#' struct(df$c, df$d)
+#' struct("col1", "col2")
+#' }
+setMethod("struct",
+          signature(x = "characterOrColumn"),
+          function(x, ...) {
+            if (class(x) == "Column") {
+              jcols <- lapply(list(x, ...), function(x) { x@jc })
+              jc <- callJStatic("org.apache.spark.sql.functions", "struct", jcols)
+            } else {
+              jc <- callJStatic("org.apache.spark.sql.functions", "struct", x, list(...))
+            }
             column(jc)
           })
 
