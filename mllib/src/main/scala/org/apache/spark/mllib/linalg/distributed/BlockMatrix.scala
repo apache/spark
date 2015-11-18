@@ -351,6 +351,41 @@ class BlockMatrix @Since("1.3.0") (
     }
   }
 
+  /**
+   * Subtracts two block matrices together. The matrices must have the same size and matching
+   * `rowsPerBlock` and `colsPerBlock` values. If one of the blocks that are being added are
+   * instances of [[SparseMatrix]], the resulting sub matrix will also be a [[SparseMatrix]], even
+   * if it is being added to a [[DenseMatrix]]. If two dense matrices are added, the output will
+   * also be a [[DenseMatrix]].
+   */
+  @Since("1.6.0")
+  def subtract(other: BlockMatrix): BlockMatrix = {
+    require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
+      s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
+    require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
+      s"A.numCols: ${numCols()}, B.numCols: ${other.numCols()}")
+    if (rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock) {
+      val addedBlocks = blocks.cogroup(other.blocks, createPartitioner())
+        .map { case ((blockRowIndex, blockColIndex), (a, b)) =>
+        if (a.size > 1 || b.size > 1) {
+          throw new SparkException("There are multiple MatrixBlocks with indices: " +
+            s"($blockRowIndex, $blockColIndex). Please remove them.")
+        }
+        if (a.isEmpty) {
+          new MatrixBlock((blockRowIndex, blockColIndex), b.head)
+        } else if (b.isEmpty) {
+          new MatrixBlock((blockRowIndex, blockColIndex), a.head)
+        } else {
+          val result = a.head.toBreeze - b.head.toBreeze
+          new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
+        }
+      }
+      new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
+    } else {
+      throw new SparkException("Cannot add matrices with different block dimensions")
+    }
+  }
+
   /** Block (i,j) --> Set of destination partitions */
   private type BlockDestinations = Map[(Int, Int), Set[Int]]
 
