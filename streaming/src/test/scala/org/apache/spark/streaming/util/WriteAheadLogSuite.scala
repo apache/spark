@@ -518,9 +518,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       // in order of timestamp, and we need the last element.
       val buffer = ArgumentCaptor.forClass(classOf[ByteBuffer])
       verify(wal, times(1)).write(buffer.capture(), meq(10L))
-      val records = Utils.deserialize[Array[Array[Byte]]](buffer.getValue.array()).map { bytes =>
-        Utils.deserialize[String](bytes)
-      }
+      val records = BatchedWriteAheadLog.deaggregate(buffer.getValue).map(byteBufferToString)
       assert(records.toSet === buffer2)
     }
   }
