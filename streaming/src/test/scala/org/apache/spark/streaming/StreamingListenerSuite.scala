@@ -344,7 +344,7 @@ class FailureReasonsCollector extends StreamingListener {
  * A StreamingListener that calls StreamingContext.stop().
  */
 class StreamingContextStoppingCollector(val ssc: StreamingContext) extends StreamingListener {
-  volatile var sparkExSeen = false
+  @volatile var sparkExSeen = false
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
     try {
       ssc.stop()
