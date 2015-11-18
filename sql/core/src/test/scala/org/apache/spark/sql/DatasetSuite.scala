@@ -26,7 +26,10 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 case class ClassData(a: String, b: Int)
 
-/** A class used to test serialization using encoders. */
+/**
+ * A class used to test serialization using encoders. This class throws exceptions when using
+ * Java serialization -- so the only way it can be "serialized" is through our encoders.
+ */
 case class NonSerializableCaseClass(value: String) extends Externalizable {
   override def readExternal(in: ObjectInput): Unit = {
     throw new UnsupportedOperationException
@@ -98,6 +101,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   ignore("Dataset should set the resolved encoders internally for maps") {
     // TODO: Enable this once we fix SPARK-11793.
+    // We inject a group by here to make sure this test case is future proof
+    // when we implement better pipelining and local execution mode.
     val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
         .map(c => ClassData(c.a, c.b + 1))
         .groupBy(p => p).count()

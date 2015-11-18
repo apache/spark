@@ -200,7 +200,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    encoderFor[T].assertUnresolved()
     new Dataset[U](
       sqlContext,
       MapPartitions[T, U](
@@ -532,6 +531,8 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def collect(): Array[T] = {
+    // This is different from Dataset.rdd in that it collects Rows, and then runs the encoders
+    // to convert the rows into objects of type T.
     val tEnc = resolvedTEncoder
     val input = queryExecution.analyzed.output
     val bound = tEnc.bind(input)
