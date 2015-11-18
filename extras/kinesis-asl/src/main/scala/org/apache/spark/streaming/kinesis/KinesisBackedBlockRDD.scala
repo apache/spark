@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.services.kinesis.AmazonKinesisClient
+import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
 
 import org.apache.spark._
@@ -210,7 +211,10 @@ class KinesisSequenceRangeIterator(
       s"getting records using shard iterator") {
         client.getRecords(getRecordsRequest)
       }
-    (getRecordsResult.getRecords.iterator().asScala, getRecordsResult.getNextShardIterator)
+    // De-aggregate records, if KPL was used in producing the records. The KCL automatically
+    // handles de-aggregation during regular operation. This code path is used during recovery
+    val recordIterator = UserRecord.deaggregate(getRecordsResult.getRecords)
+    (recordIterator.iterator().asScala, getRecordsResult.getNextShardIterator)
   }
 
   /**

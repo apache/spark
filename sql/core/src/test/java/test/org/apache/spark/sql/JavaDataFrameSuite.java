@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -65,6 +66,13 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1, df.select("key").collect()[0].get(0));
   }
 
+  @Test
+  public void testCollectAndTake() {
+    DataFrame df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
+    Assert.assertEquals(3, df.select("key").collectAsList().size());
+    Assert.assertEquals(2, df.select("key").takeAsList(2).size());
+  }
+
   /**
    * See SPARK-5904. Abstract vararg methods defined in Scala do not work in Java.
    */
@@ -91,7 +99,6 @@ public class JavaDataFrameSuite {
     df.groupBy().mean("key");
     df.groupBy().max("key");
     df.groupBy().min("key");
-    df.groupBy().stddev("key");
     df.groupBy().sum("key");
 
     // Varargs in column expressions
@@ -203,6 +210,18 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1, result.length);
   }
 
+  @Test
+  public void testCreateStructTypeFromList(){
+    List<StructField> fields1 = new ArrayList<>();
+    fields1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(fields1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(fields2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
+  }
+
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {
     @Override
     public int compare(Row row1, Row row2) {
@@ -258,7 +277,9 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
     Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
-    Row[] expected = {RowFactory.create(0, 5), RowFactory.create(1, 8)};
-    Assert.assertArrayEquals(expected, actual);
+    Assert.assertEquals(0, actual[0].getLong(0));
+    Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
+    Assert.assertEquals(1, actual[1].getLong(0));
+    Assert.assertTrue(2 <= actual[1].getLong(1) && actual[1].getLong(1) <= 13);
   }
 }

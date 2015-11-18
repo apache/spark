@@ -28,7 +28,7 @@ module Jekyll
  
     def render(context)
       site = context.registers[:site]
-      config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
+      config_dir = '../examples/src/main'
       @code_dir = File.join(site.source, config_dir)
 
       clean_markup = @markup.strip
@@ -38,7 +38,12 @@ module Jekyll
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
  
-      Pygments.highlight(code, :lexer => @lang)
+      rendered_code = Pygments.highlight(code, :lexer => @lang)
+
+      hint = "<div><small>Find full example code at " \
+        "\"examples/src/main/#{clean_markup}\" in the Spark repo.</small></div>"
+
+      rendered_code + hint
     end
  
     # Trim the code block so as to have the same indention, regardless of their positions in the
@@ -50,7 +55,7 @@ module Jekyll
         .map { |l| l[/\A */].size }
         .min
 
-      lines.map { |l| l[min_start_spaces .. -1] }
+      lines.map { |l| l.strip.size == 0 ? l : l[min_start_spaces .. -1] }
     end
 
     # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"

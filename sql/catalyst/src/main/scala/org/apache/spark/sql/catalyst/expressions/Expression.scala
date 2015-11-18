@@ -92,12 +92,23 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[GeneratedExpressionCode]]
    */
   def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
-    val isNull = ctx.freshName("isNull")
-    val primitive = ctx.freshName("primitive")
-    val ve = GeneratedExpressionCode("", isNull, primitive)
-    ve.code = genCode(ctx, ve)
-    // Add `this` in the comment.
-    ve.copy(s"/* $this */\n" + ve.code)
+    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+      // This expression is repeated meaning the code to evaluated has already been added
+      // as a function, `subExprState.fnName`. Just call that.
+      val code =
+        s"""
+           |/* $this */
+           |${subExprState.fnName}(${ctx.INPUT_ROW});
+         """.stripMargin.trim
+      GeneratedExpressionCode(code, subExprState.code.isNull, subExprState.code.value)
+    }.getOrElse {
+      val isNull = ctx.freshName("isNull")
+      val primitive = ctx.freshName("primitive")
+      val ve = GeneratedExpressionCode("", isNull, primitive)
+      ve.code = genCode(ctx, ve)
+      // Add `this` in the comment.
+      ve.copy(s"/* $this */\n" + ve.code.trim)
+    }
   }
 
   /**
@@ -145,9 +156,35 @@ abstract class Expression extends TreeNode[Expression] {
         case (i1, i2) => i1 == i2
       }
     }
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
     checkSemantic(elements1, elements2)
+  }
+
+  /**
+   * Returns the hash for this expression. Expressions that compute the same result, even if
+   * they differ cosmetically should return the same hash.
+   */
+  def semanticHash() : Int = {
+    def computeHash(e: Seq[Any]): Int = {
+      // See http://stackoverflow.com/questions/113511/hash-code-implementation
+      var hash: Int = 17
+      e.foreach(i => {
+        val h: Int = i match {
+          case e: Expression => e.semanticHash()
+          case Some(e: Expression) => e.semanticHash()
+          case t: Traversable[_] => computeHash(t.toSeq)
+          case null => 0
+          case other => other.hashCode()
+        }
+        hash = hash * 37 + h
+      })
+      hash
+    }
+
+    computeHash(this.productIterator.toSeq)
   }
 
   /**

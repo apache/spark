@@ -73,6 +73,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The number of pending tasks which is locality required
   protected var localityAwareTasks = 0
 
+  // Executors that have been lost, but for which we don't yet know the real exit reason.
+  protected val executorsPendingLossReason = new HashSet[String]
+
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -184,7 +187,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Filter out executors under killing
-      val activeExecutors = executorDataMap.filterKeys(!executorsPendingToRemove.contains(_))
+      val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
@@ -202,12 +205,17 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on just one executor
     private def makeOffers(executorId: String) {
       // Filter out executors under killing
-      if (!executorsPendingToRemove.contains(executorId)) {
+      if (executorIsAlive(executorId)) {
         val executorData = executorDataMap(executorId)
         val workOffers = Seq(
           new WorkerOffer(executorId, executorData.executorHost, executorData.freeCores))
         launchTasks(scheduler.resourceOffers(workOffers))
       }
+    }
+
+    private def executorIsAlive(executorId: String): Boolean = synchronized {
+      !executorsPendingToRemove.contains(executorId) &&
+        !executorsPendingLossReason.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -246,6 +254,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             addressToExecutorId -= executorInfo.executorAddress
             executorDataMap -= executorId
             executorsPendingToRemove -= executorId
+            executorsPendingLossReason -= executorId
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
@@ -254,6 +263,32 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
             SparkListenerExecutorRemoved(System.currentTimeMillis(), executorId, reason.toString))
         case None => logInfo(s"Asked to remove non-existent executor $executorId")
       }
+    }
+
+    /**
+     * Stop making resource offers for the given executor. The executor is marked as lost with
+     * the loss reason still pending.
+     *
+     * @return Whether executor should be disabled
+     */
+    protected def disableExecutor(executorId: String): Boolean = {
+      val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
+        if (executorIsAlive(executorId)) {
+          executorsPendingLossReason += executorId
+          true
+        } else {
+          // Returns true for explicitly killed executors, we also need to get pending loss reasons;
+          // For others return false.
+          executorsPendingToRemove.contains(executorId)
+        }
+      }
+
+      if (shouldDisable) {
+        logInfo(s"Disabling executor $executorId.")
+        scheduler.executorLost(executorId, LossReasonPending)
+      }
+
+      shouldDisable
     }
 
     override def onStop() {
@@ -418,7 +453,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
-    killExecutors(executorIds, replace = false)
+    killExecutors(executorIds, replace = false, force = false)
   }
 
   /**
@@ -426,9 +461,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    *
    * @param executorIds identifiers of executors to kill
    * @param replace whether to replace the killed executors with new ones
+   * @param force whether to force kill busy executors
    * @return whether the kill request is acknowledged.
    */
-  final def killExecutors(executorIds: Seq[String], replace: Boolean): Boolean = synchronized {
+  final def killExecutors(
+      executorIds: Seq[String],
+      replace: Boolean,
+      force: Boolean): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val (knownExecutors, unknownExecutors) = executorIds.partition(executorDataMap.contains)
     unknownExecutors.foreach { id =>
@@ -436,7 +475,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
-    val executorsToKill = knownExecutors.filter { id => !executorsPendingToRemove.contains(id) }
+    // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
+    val executorsToKill = knownExecutors
+      .filter { id => !executorsPendingToRemove.contains(id) }
+      .filter { id => force || !scheduler.isExecutorBusy(id) }
     executorsPendingToRemove ++= executorsToKill
 
     // If we do not wish to replace the executors we kill, sync the target number of executors
