@@ -31,10 +31,6 @@ object Main extends Logging {
   val tmp = System.getProperty("java.io.tmpdir")
   val rootDir = conf.get("spark.repl.classdir", tmp)
   val outputDir = Utils.createTempDir(rootDir)
-  val s = new Settings()
-  s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-    "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
   // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
   lazy val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
@@ -43,10 +39,20 @@ object Main extends Logging {
 
   def main(args: Array[String]) {
     if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
+    val interpArguments = List(
+      "-Yrepl-class-based",
+      "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
+      "-classpath", getAddedJars.mkString(File.pathSeparator)
+    ) ++ args.toList
+
+    val settings = new Settings()
+    settings.processArguments(interpArguments, true)
+
     // Start the classServer and store its URI in a spark system property
     // (which will be passed to executors so that they can connect to it)
     classServer.start()
-    interp.process(s) // Repl starts and goes in loop of R.E.P.L
+    interp.process(settings) // Repl starts and goes in loop of R.E.P.L
     classServer.stop()
     Option(sparkContext).map(_.stop)
   }
