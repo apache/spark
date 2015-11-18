@@ -258,16 +258,7 @@ object SparkEnv extends Logging {
       if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
         rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
       } else {
-        val actorSystemPort = if (port == 0) {
-          // If `port` is `0`, then we should still use `0` for ActorSystem. Otherwise, assume we
-          // use `0` for RpcEnv and it binds to `12345`, if we use a fixed port `12346` for
-          // ActorSystem, the next service that uses port `0` will still try `12346` and it will
-          // fail and need to retry.
-          0
-        } else {
-          // Use a new port to avoid port conflicts
-          rpcEnv.address.port + 1
-        }
+        val actorSystemPort = if (port == 0) 0 else rpcEnv.address.port + 1
         // Create a ActorSystem for legacy codes
         AkkaUtils.createActorSystem(
           actorSystemName + "ActorSystem",

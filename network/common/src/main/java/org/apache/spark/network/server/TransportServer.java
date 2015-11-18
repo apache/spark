@@ -107,7 +107,6 @@ public class TransportServer implements Closeable {
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(NettyUtils.getServerChannelClass(ioMode))
-      .option(ChannelOption.SO_REUSEADDR, false)
       .option(ChannelOption.ALLOCATOR, allocator)
       .childOption(ChannelOption.ALLOCATOR, allocator);
 

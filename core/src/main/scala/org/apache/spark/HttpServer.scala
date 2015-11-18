@@ -80,7 +80,6 @@ private[spark] class HttpServer(
     connector.setMaxIdleTime(60 * 1000)
     connector.setSoLingerTime(-1)
     connector.setPort(startPort)
-    connector.setReuseAddress(false)
     server.addConnector(connector)
 
     val threadPool = new QueuedThreadPool
