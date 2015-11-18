@@ -35,7 +35,6 @@ private[ml] class FeatureIndex extends Serializable {
   var bigram_templs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var y: ArrayBuffer[String] = ArrayBuffer[String]()
   var templs: String = new String
-  //var dic: Map[String, Map[Int, Int]] = Map[String, Map[Int, Int]]()
   var dic: scala.collection.mutable.Map[String, (Int, Int)] =
     scala.collection.mutable.Map[String, (Int, Int)]()
   val kMaxContextSize: Int = 8
@@ -101,11 +100,11 @@ private[ml] class FeatureIndex extends Serializable {
     }
     i = 0
     while (i < y.size) {
-      while(j < y.size){
-        if(y(i) == y(j)) {
+      while (j < y.size) {
+        if (y(i) == y(j)) {
           y.remove(j)
         }
-        while(y(i) == y(j)){
+        while (y(i) == y(j)) {
           y.remove(j)
         }
         j += 1
@@ -393,43 +392,43 @@ private[ml] class FeatureIndex extends Serializable {
     val bFile = new File(binFile)
     val bStream = new FileOutputStream(bFile)
 
-    while(i < y.size){
+    while (i < y.size) {
       y_str += y(i)
       y_str += '\0'
       i += 1
     }
     i = 0
-    while(i < unigram_templs.size){
+    while (i < unigram_templs.size) {
       templ_str += unigram_templs(i)
       templ_str += "\0"
       i += 1
     }
     i = 0
-    while(i < bigram_templs.size){
+    while (i < bigram_templs.size) {
       templ_str += bigram_templs(i)
       templ_str += "\0"
       i += 1
     }
-    while((y_str.length + templ_str.length)%4 != 0 ){
+    while ((y_str.length + templ_str.length) % 4 != 0) {
       templ_str += "\0"
     }
 
-    dic.foreach{(pair) => keys.append(pair._1)}
-    dic.foreach{(pair) => values.append(pair._2._1)}
+    dic.foreach { (pair) => keys.append(pair._1) }
+    dic.foreach { (pair) => values.append(pair._2._1) }
 
     contents += "maxid_" + maxid + "\n"
     contents += "xsize" + xsize + "\n"
     contents += y_str + "\n"
     contents += templ_str + "\n"
     i = 0
-    while(i < keys.size){
+    while (i < keys.size) {
       contents += keys(i) + " " + values(i) + "\n"
       i += 1
     }
     outputStream.write(contents.toCharArray.map(_.toByte))
     contents = ""
     i = 0
-    while(i < maxid){
+    while (i < maxid) {
       contents += alpha(i) + "\n"
       i += 1
     }
@@ -438,13 +437,13 @@ private[ml] class FeatureIndex extends Serializable {
 
     contents += "a" + "\n"
     i = 0
-    while(i < featureCache.size){
+    while (i < featureCache.size) {
       contents += featureCache(i) + "\n"
       i += 1
     }
     contents += "b" + "\n"
     i = 0
-    while(i < featureCacheH.size){
+    while (i < featureCacheH.size) {
       contents += featureCacheH(i) + "\n"
       i += 1
     }
@@ -458,7 +457,7 @@ private[ml] class FeatureIndex extends Serializable {
     val outStream = new ByteArrayOutputStream
     try {
       var reading = true
-      while ( reading ) {
+      while (reading) {
         inStream.read() match {
           case 'c' => reading = false
           case c => outStream.write(c)
@@ -518,7 +517,3 @@ private[ml] class FeatureIndex extends Serializable {
   }
 }
 
-private[ml] class Allocate extends Serializable {
-  var thread_num: Integer = _
-  var feature_cache: FeatureCache = _
-}

@@ -36,7 +36,7 @@ private[spark] class CRF {
     featureIdx = featureIdx.openTagSet(test)
     tagger.open(featureIdx)
     tagger = tagger.read(test)
-    featureIdx.openFromArray("/home/hujiayin/git/CRFConfig/model_file")
+    featureIdx.openFromArray("./CRFConfig/model_file")
     tagger.parse()
     out = tagger.createOutput()
     tagger.saveTestResult(out, testResult)
@@ -55,11 +55,12 @@ private[spark] class CRF {
     featureIdx.shrink(freq)
     featureIdx.initAlpha(featureIdx.maxid)
     runCRF(taggerList, featureIdx, featureIdx.alpha)
-    featureIdx.save("/home/hujiayin/git/CRFConfig/model_file.txt",
-      "/home/hujiayin/git/CRFConfig/model_file")
+    featureIdx.save("./CRFConfig/model_file.txt",
+      "./CRFConfig/model_file")
   }
 
-  def runCRF(tagger: ArrayBuffer[Tagger], featureIndex: FeatureIndex, alpha: ArrayBuffer[Double]): Unit = {
+  def runCRF(tagger: ArrayBuffer[Tagger], featureIndex: FeatureIndex,
+             alpha: ArrayBuffer[Double]): Unit = {
     var diff: Double = 0.0
     var old_obj: Double = 1e37
     var converge: Int = 0
@@ -83,13 +84,13 @@ private[spark] class CRF {
         threadPool(i).x = tagger
         threadPool(i).start()
         threadPool(i).join()
-        if(i > 0) {
+        if (i > 0) {
           threadPool(0).obj += threadPool(i).obj
           threadPool(0).err += threadPool(i).err
           threadPool(0).zeroOne += threadPool(i).zeroOne
         }
         while (k < featureIndex.maxid) {
-          if(i > 0) {
+          if (i > 0) {
             threadPool(0).expected(k) += threadPool(i).expected(k)
           }
           threadPool(0).obj += alpha(k) * alpha(k) / 2.0 * C
@@ -118,7 +119,7 @@ private[spark] class CRF {
       if (converge == 3) {
         itr = maxiter + 1 // break
       }
-      if (diff == 0){
+      if (diff == 0) {
         itr = maxiter + 1 // break
       }
       lbfgs.lbfgs(featureIndex.maxid, alpha, threadPool(0).obj, threadPool(0).expected, C)
@@ -137,7 +138,7 @@ private[spark] class CRF {
 
     def initExpected(): Unit = {
       var i: Int = 0
-      while(i < featureIdx.maxid){
+      while (i < featureIdx.maxid) {
         expected.append(0.0)
         i += 1
       }
@@ -167,6 +168,6 @@ object CRF {
 
   def verifyCRF(model: String, test: String, testResult: String): Unit = {
     val crf = new CRF()
-    crf.verify(model,test,testResult)
+    crf.verify(model, test, testResult)
   }
 }

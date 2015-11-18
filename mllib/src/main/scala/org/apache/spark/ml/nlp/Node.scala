@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 package org.apache.spark.ml.nlp
+
 import scala.collection.mutable.ArrayBuffer
 
 private[ml] class Node extends Serializable {
@@ -34,6 +35,7 @@ private[ml] class Node extends Serializable {
 
   object Node {
     val node = new Node
+
     def getInstance: Node = {
       node
     }
@@ -70,7 +72,7 @@ private[ml] class Node extends Serializable {
     beta += cost
   }
 
-  def calExpectation(expected:ArrayBuffer[Double], Z: Double, size: Integer,
+  def calExpectation(expected: ArrayBuffer[Double], Z: Double, size: Integer,
                      featureIdx: FeatureIndex): Unit = {
     val c: Double = math.exp(alpha + cost + beta - Z)
     var pathObj: Path = new Path()

@@ -113,7 +113,7 @@ private[ml] class Tagger extends Serializable {
           j += 1
         }
         j = 0
-        i +=1
+        i += 1
       }
     }
   }
@@ -284,7 +284,7 @@ private[ml] class Tagger extends Serializable {
   }
 
   def getFeatureIdx(): FeatureIndex = {
-    if(feature_idx!=null){
+    if (feature_idx != null) {
       return feature_idx
     }
     null
@@ -292,7 +292,7 @@ private[ml] class Tagger extends Serializable {
 
   def parse(): Unit = {
     buildLattice()
-    if(nbest!=0 || vlevel >= 1){
+    if (nbest != 0 || vlevel >= 1) {
       forwardBackward()
     }
     viterbi()
@@ -302,8 +302,8 @@ private[ml] class Tagger extends Serializable {
     var i: Int = 0
     var j: Int = 0
     var content: String = ""
-    while(i < x.size){
-      while(j < x(i).length){
+    while (i < x.size) {
+      while (j < x(i).length) {
         content += x(i)(j) + "|"
         j += 1
       }

@@ -62,7 +62,8 @@ private[ml] class Lbfgs {
   private var stmax: Double = 0.0
 
 
-  def lbfgs(size: Int, x: ArrayBuffer[Double], f: Double, g: ArrayBuffer[Double], C: Float): Unit = {
+  def lbfgs(size: Int, x: ArrayBuffer[Double], f: Double,
+            g: ArrayBuffer[Double], C: Float): Unit = {
     val msize: Int = 5
     var bound: Int = 0
     var ys: Double = 0.0
@@ -76,7 +77,7 @@ private[ml] class Lbfgs {
     var i: Int = 0
     var persist: Boolean = true
 
-    if(w.isEmpty){
+    if (w.isEmpty) {
       iflag = 0
       for (i <- 0 until size) {
         diag.append(1.0)
@@ -251,8 +252,7 @@ private[ml] class Lbfgs {
       val gnorm: Double = math.sqrt(ddot(size, v, 0, v, 0))
       val xnorm: Double = math.max(1.0, math.sqrt(ddot(size, x, 0, x, 0)))
       if (gnorm / xnorm <= eps) {
-        iflag = 0 // OK terminated
-        return
+        iflag = 0
       }
     }
   }
@@ -278,5 +278,4 @@ private[ml] class Lbfgs {
       i += 1
     }
   }
-
 }
