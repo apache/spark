@@ -14,8 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-// scalastyle:off println
 package org.apache.spark.examples.mllib;
 
 

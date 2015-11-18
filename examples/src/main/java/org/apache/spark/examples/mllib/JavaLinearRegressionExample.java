@@ -14,10 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-// scalastyle:off println
 package org.apache.spark.examples.mllib;
-
 // $example on$
 import scala.Tuple2;
 
@@ -30,6 +27,7 @@ import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
 import org.apache.spark.mllib.evaluation.RegressionMetrics;
 import org.apache.spark.SparkConf;
 // $example off$
+
 // Read in the ratings data
 public class JavaLinearRegressionExample {
   public static void main(String[] args) {
@@ -46,7 +44,7 @@ public class JavaLinearRegressionExample {
           double[] v = new double[parts.length - 1];
           for (int i = 1; i < parts.length - 1; i++)
             v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
-            return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
+          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
         }
       }
     );
@@ -54,7 +52,7 @@ public class JavaLinearRegressionExample {
 
     // Building the model
     int numIterations = 100;
-    final LinearRegressionModel model =  LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData),
+    final LinearRegressionModel model = LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData),
             numIterations);
 
     // Evaluate model on training examples and compute training error
@@ -85,7 +83,8 @@ public class JavaLinearRegressionExample {
 
     // Save and load model
     model.save(sc.sc(), "target/tmp/LogisticRegressionModel");
-    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "target/tmp/LogisticRegressionModel");
-    // $example on$
+    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(),
+            "target/tmp/LogisticRegressionModel");
+    // $example off$
   }
 }

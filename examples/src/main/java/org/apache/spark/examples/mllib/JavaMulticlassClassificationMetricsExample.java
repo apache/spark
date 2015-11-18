@@ -14,10 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-// scalastyle:off println
 package org.apache.spark.examples.mllib
-
 // $example on$
 import scala.Tuple2;
 
@@ -50,7 +47,7 @@ public class JavaMulticlassClassificationMetricsExample {
     // Run training algorithm to build the model.
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
       .setNumClasses(3)
-      .run(training.rdd());
+            .run(training.rdd());
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
