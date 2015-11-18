@@ -1083,9 +1083,12 @@ class Analyzer(
           assert(parameterTypes.length == inputs.length)
 
           val inputsNullCheck = parameterTypes.zip(inputs)
-            .filter(_._1.isPrimitive)
-            .map(i => IsNull(i._2))
-            .reduceLeftOption[Expression]((i1, i2) => Or(i1, i2))
+            // TODO: skip null handling for not-nullable primitive inputs after we can completely
+            // trust the `nullable` information.
+            // .filter { case (cls, expr) => cls.isPrimitive && expr.nullable }
+            .filter { case (cls, _) => cls.isPrimitive }
+            .map { case (_, expr) => IsNull(expr) }
+            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
       }
     }
