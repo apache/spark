@@ -2340,6 +2340,8 @@ setMethod("rowNumber",
 #'
 #' Returns true if the array contain the value.
 #'
+#' @param x A Column
+#' @param value A value to be checked if contained in the column
 #' @rdname array_contains
 #' @name array_contains
 #' @family collection_funcs
@@ -2389,6 +2391,10 @@ setMethod("size",
 #' Sorts the input array for the given column in ascending order,
 #' according to the natural ordering of the array elements.
 #'
+#' @param x A Column to sort
+#' @param asc A logical flag indicating the sorting order.
+#'            TRUE, sorting is in ascending order.
+#'            FALSE, sorting is in descending order.
 #' @rdname sort_array
 #' @name sort_array
 #' @family collection_funcs
