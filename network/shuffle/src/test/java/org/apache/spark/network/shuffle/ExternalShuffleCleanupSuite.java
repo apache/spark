@@ -35,7 +35,7 @@ public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
   Executor sameThreadExecutor = MoreExecutors.sameThreadExecutor();
-  TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
   @Test
   public void noCleanupAndCleanup() throws IOException {

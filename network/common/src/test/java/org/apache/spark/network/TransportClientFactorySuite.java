@@ -52,7 +52,7 @@ public class TransportClientFactorySuite {
 
   @Before
   public void setUp() {
-    conf = new TransportConf(new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();
@@ -76,7 +76,7 @@ public class TransportClientFactorySuite {
 
     Map<String, String> configMap = Maps.newHashMap();
     configMap.put("spark.shuffle.io.numConnectionsPerPeer", Integer.toString(maxConnections));
-    TransportConf conf = new TransportConf(new MapConfigProvider(configMap));
+    TransportConf conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 
     RpcHandler rpcHandler = new NoOpRpcHandler();
     TransportContext context = new TransportContext(conf, rpcHandler);
@@ -182,7 +182,7 @@ public class TransportClientFactorySuite {
 
   @Test
   public void closeIdleConnectionForRequestTimeOut() throws IOException, InterruptedException {
-    TransportConf conf = new TransportConf(new ConfigProvider() {
+    TransportConf conf = new TransportConf("shuffle", new ConfigProvider() {
 
       @Override
       public String get(String name) {

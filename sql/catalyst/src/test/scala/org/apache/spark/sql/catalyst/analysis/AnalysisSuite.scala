@@ -174,4 +174,48 @@ class AnalysisSuite extends AnalysisTest {
     )
     assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
   }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val string = testRelation2.output(0)
+    val double = testRelation2.output(2)
+    val short = testRelation2.output(4)
+    val nullResult = Literal.create(null, StringType)
+
+    def checkUDF(udf: Expression, transformed: Expression): Unit = {
+      checkAnalysis(
+        Project(Alias(udf, "")() :: Nil, testRelation2),
+        Project(Alias(transformed, "")() :: Nil, testRelation2)
+      )
+    }
+
+    // non-primitive parameters do not need special null handling
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val expected1 = udf1
+    checkUDF(udf1, expected1)
+
+    // only primitive parameter needs special null handling
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
+    val expected2 = If(IsNull(double), nullResult, udf2)
+    checkUDF(udf2, expected2)
+
+    // special null handling should apply to all primitive parameters
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val expected3 = If(
+      IsNull(short) || IsNull(double),
+      nullResult,
+      udf3)
+    checkUDF(udf3, expected3)
+
+    // we can skip special null handling for primitive parameters that are not nullable
+    // TODO: this is disabled for now as we can not completely trust `nullable`.
+    val udf4 = ScalaUDF(
+      (s: Short, d: Double) => "x",
+      StringType,
+      short :: double.withNullability(false) :: Nil)
+    val expected4 = If(
+      IsNull(short),
+      nullResult,
+      udf4)
+    // checkUDF(udf4, expected4)
+  }
 }

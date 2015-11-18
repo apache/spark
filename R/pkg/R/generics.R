@@ -659,6 +659,10 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 #' @export
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
+#' @rdname array_contains
+#' @export
+setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
+
 #' @rdname ascii
 #' @export
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -976,6 +980,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @export
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
 
+#' @rdname sort_array
+#' @export
+setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
+
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
@@ -1068,6 +1076,26 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("glm")
 
+#' @rdname predict
+#' @export
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
+
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
+
+#' @rdname as.data.frame
+#' @export
+setGeneric("as.data.frame")
+
+#' @rdname attach
+#' @export
+setGeneric("attach")
+
+#' @rdname with
+#' @export
+setGeneric("with")
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
