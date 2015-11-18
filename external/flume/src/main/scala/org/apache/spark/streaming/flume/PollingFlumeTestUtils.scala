@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.flume
 
 import java.util.concurrent._
-import java.util.{Map => JMap, Collections}
+import java.util.{Collections, List => JList, Map => JMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -137,7 +137,8 @@ private[flume] class PollingFlumeTestUtils {
   /**
    * A Python-friendly method to assert the output
    */
-  def assertOutput(outputHeaders: Seq[JMap[String, String]], outputBodies: Seq[String]): Unit = {
+  def assertOutput(
+      outputHeaders: JList[JMap[String, String]], outputBodies: JList[String]): Unit = {
     require(outputHeaders.size == outputBodies.size)
     val eventSize = outputHeaders.size
     if (eventSize != totalEventsPerChannel * channels.size) {
@@ -151,8 +152,8 @@ private[flume] class PollingFlumeTestUtils {
       var found = false
       var j = 0
       while (j < eventSize && !found) {
-        if (eventBodyToVerify == outputBodies(j) &&
-          eventHeaderToVerify == outputHeaders(j)) {
+        if (eventBodyToVerify == outputBodies.get(j) &&
+          eventHeaderToVerify == outputHeaders.get(j)) {
           found = true
           counter += 1
         }

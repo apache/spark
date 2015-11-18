@@ -18,11 +18,14 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.{SparkContext, SparkFunSuite}
 
-class QuantileDiscretizerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class QuantileDiscretizerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
   import org.apache.spark.ml.feature.QuantileDiscretizerSuite._
 
   test("Test quantile discretizer") {
@@ -66,6 +69,14 @@ class QuantileDiscretizerSuite extends SparkFunSuite with MLlibTestSparkContext 
     for ((ori, res) <- splitTestPoints) {
       assert(QuantileDiscretizer.getSplits(ori) === res, "Returned splits are invalid.")
     }
+  }
+
+  test("read/write") {
+    val t = new QuantileDiscretizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setNumBuckets(6)
+    testDefaultReadWrite(t)
   }
 }
 

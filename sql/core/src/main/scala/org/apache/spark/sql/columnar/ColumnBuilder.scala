@@ -73,6 +73,13 @@ private[sql] class BasicColumnBuilder[JvmType](
   }
 
   override def build(): ByteBuffer = {
+    if (buffer.capacity() > buffer.position() * 1.1) {
+      // trim the buffer
+      buffer = ByteBuffer
+        .allocate(buffer.position())
+        .order(ByteOrder.nativeOrder())
+        .put(buffer.array(), 0, buffer.position())
+    }
     buffer.flip().asInstanceOf[ByteBuffer]
   }
 }
@@ -129,7 +136,8 @@ private[sql] class MapColumnBuilder(dataType: MapType)
   extends ComplexColumnBuilder(new ObjectColumnStats(dataType), MAP(dataType))
 
 private[sql] object ColumnBuilder {
-  val DEFAULT_INITIAL_BUFFER_SIZE = 1024 * 1024
+  val DEFAULT_INITIAL_BUFFER_SIZE = 128 * 1024
+  val MAX_BATCH_SIZE_IN_BYTE = 4 * 1024 * 1024L
 
   private[columnar] def ensureFreeSpace(orig: ByteBuffer, size: Int) = {
     if (orig.remaining >= size) {
@@ -137,7 +145,7 @@ private[sql] object ColumnBuilder {
     } else {
       // grow in steps of initial size
       val capacity = orig.capacity()
-      val newSize = capacity + size.max(capacity / 8 + 1)
+      val newSize = capacity + size.max(capacity)
       val pos = orig.position()
 
       ByteBuffer

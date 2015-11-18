@@ -18,10 +18,10 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.param.{ParamMap, Param}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{SQLContext, DataFrame, Row}
 import org.apache.spark.sql.types.StructType
 
@@ -32,24 +32,30 @@ import org.apache.spark.sql.types.StructType
  * where '__THIS__' represents the underlying table of the input dataset.
  */
 @Experimental
-class SQLTransformer (override val uid: String) extends Transformer {
+@Since("1.6.0")
+class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer with Writable {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("sql"))
 
   /**
    * SQL statement parameter. The statement is provided in string form.
    * @group param
    */
+  @Since("1.6.0")
   final val statement: Param[String] = new Param[String](this, "statement", "SQL statement")
 
   /** @group setParam */
+  @Since("1.6.0")
   def setStatement(value: String): this.type = set(statement, value)
 
   /** @group getParam */
+  @Since("1.6.0")
   def getStatement: String = $(statement)
 
   private val tableIdentifier: String = "__THIS__"
 
+  @Since("1.6.0")
   override def transform(dataset: DataFrame): DataFrame = {
     val tableName = Identifiable.randomUID(uid)
     dataset.registerTempTable(tableName)
@@ -58,6 +64,7 @@ class SQLTransformer (override val uid: String) extends Transformer {
     outputDF
   }
 
+  @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -68,5 +75,19 @@ class SQLTransformer (override val uid: String) extends Transformer {
     outputSchema
   }
 
+  @Since("1.6.0")
   override def copy(extra: ParamMap): SQLTransformer = defaultCopy(extra)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object SQLTransformer extends Readable[SQLTransformer] {
+
+  @Since("1.6.0")
+  override def read: Reader[SQLTransformer] = new DefaultParamsReader[SQLTransformer]
+
+  @Since("1.6.0")
+  override def load(path: String): SQLTransformer = read.load(path)
 }
