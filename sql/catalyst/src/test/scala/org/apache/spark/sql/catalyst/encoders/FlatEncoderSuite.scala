@@ -79,8 +79,8 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
     encoderFor(Encoders.kryo[String]),
     "kryo string")
   encodeDecodeTest(
-    new NotJavaSerializable(15),
-    encoderFor(Encoders.kryo[NotJavaSerializable]),
+    new KryoSerializable(15),
+    encoderFor(Encoders.kryo[KryoSerializable]),
     "kryo object serialization")
 
   // Java encoders
@@ -94,14 +94,14 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
     "java object serialization")
 }
 
-
-class NotJavaSerializable(val value: Int) {
+/** For testing Kryo serialization based encoder. */
+class KryoSerializable(val value: Int) {
   override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[NotJavaSerializable].value
+    this.value == other.asInstanceOf[KryoSerializable].value
   }
 }
 
-
+/** For testing Java serialization based encoder. */
 class JavaSerializable(val value: Int) extends Serializable {
   override def equals(other: Any): Boolean = {
     this.value == other.asInstanceOf[JavaSerializable].value
