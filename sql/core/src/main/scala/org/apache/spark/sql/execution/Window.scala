@@ -84,6 +84,15 @@ case class Window(
     child: SparkPlan)
   extends UnaryNode {
 
+  /** A mutable expression buffer. */
+  type ExpressionBuffer = mutable.Buffer[Expression]
+
+  /** A map containing window expressions & functions keyed by their frame and type. */
+  type FunctionMap = mutable.Map[(Char, WindowFrame), (ExpressionBuffer, ExpressionBuffer)]
+
+  /** A factory for a window frame. */
+  type FrameFactory = (MutableRow, MutableLiteral) => WindowFunctionFrame
+
   override def output: Seq[Attribute] = projectList ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -219,6 +228,37 @@ case class Window(
     }
   }
 
+  /** Map of window expressions and functions by their key. */
+  private[this] lazy val windowFunctionMap: FunctionMap = {
+    val functions: FunctionMap = mutable.Map.empty
+
+    // Add a function and its function to the map for a given frame.
+    def collect(tpe: Char, frame: WindowFrame, e: Expression, f: Expression): Unit = {
+      val (es, fs) = functions.getOrElseUpdate(
+        (tpe, frame), (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
+      es.append(e)
+      fs.append(f)
+    }
+
+    // Collect all valid window functions.
+    windowExpression.foreach { x =>
+      x.foreach {
+        case e @ WindowExpression(function, spec) =>
+          val frame = spec.frameSpecification
+          function match {
+            case AggregateExpression(f, _, _) => collect('A', frame, e, f)
+            case f: AggregateWindowFunction => collect('A', frame, e, f)
+            case f: OffsetWindowFunction => collect('O', frame, e, f)
+            case f => sys.error(s"Unsupported window function: $f")
+          }
+        case _ =>
+      }
+    }
+
+    // Done.
+    functions
+  }
+
   /**
    * Create the resulting projection.
    *
@@ -241,45 +281,23 @@ case class Window(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Prepare processing.
-    // Group the window expression by their processing frame.
-    val windowExprs = windowExpression.flatMap {
-      _.collect {
-        case e: WindowExpression => e
-      }
-    }
-
     // Create Frame processor factories and order the unbound window expressions by the frame they
     // are processed in; this is the order in which their results will be written to window
     // function result buffer.
-    val framedWindowExprs = windowExprs.groupBy {
-      case WindowExpression(_: AggregateExpression, spec) => ('A', spec.frameSpecification)
-      case WindowExpression(_: AggregateWindowFunction, spec) => ('A', spec.frameSpecification)
-      case WindowExpression(_: OffsetWindowFunction, spec) => ('O', spec.frameSpecification)
-      case x => sys.error(s"Window function and specification are not supported by Window: $x")
-    }
-    val numFrames = framedWindowExprs.size
-    val factories = Array.ofDim[(MutableRow, MutableLiteral) => WindowFunctionFrame](numFrames)
+    val numFrames = windowFunctionMap.size
+    val factories = Array.ofDim[FrameFactory](numFrames)
     val unboundExpressions = scala.collection.mutable.Buffer.empty[Expression]
-    framedWindowExprs.zipWithIndex.foreach {
-      case ((frame, unboundFrameExpressions), index) =>
+    windowFunctionMap.zipWithIndex.foreach {
+      case ((frame, (expressions, functions)), index) =>
         // Track the ordinal.
         val ordinal = unboundExpressions.size
 
         // Track the unbound expressions
-        unboundExpressions ++= unboundFrameExpressions
-
-        // Extract all AggregateFunctions
-        val functions = unboundFrameExpressions.map {
-          case WindowExpression(AggregateExpression(f, _, _), _) => f
-          case WindowExpression(f: AggregateWindowFunction, _) => f
-          case WindowExpression(f: OffsetWindowFunction, _) => f
-          case f => sys.error(s"Unsupported window expression: $f")
-        }.toArray[Expression]
+        unboundExpressions ++= expressions
 
         // Create the frame processor factory.
         factories(index) = (target: MutableRow, size: MutableLiteral) =>
-          createFrameProcessor(frame, functions, ordinal, target, size)
+          createFrameProcessor(frame, functions.toArray, ordinal, target, size)
     }
 
     // Start processing.
