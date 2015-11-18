@@ -145,6 +145,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the solver algorithm used for optimization.
    * In case of linear regression, this can be "l-bfgs", "normal" and "auto".
+   * "l-bfgs" denotes Limited-memory BFGS which is a limited-memory quasi-Newton
+   * optimization method. "normal" denotes using Normal Equation as an analytical
+   * solution to the linear regression problem.
    * The default value is "auto" which means that the solver algorithm is
    * selected automatically.
    * @group setParam
