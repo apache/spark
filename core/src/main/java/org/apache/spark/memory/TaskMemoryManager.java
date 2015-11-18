@@ -215,6 +215,9 @@ public class TaskMemoryManager {
       logger.info(
         "{} bytes of memory were used by task {} but are not associated with specific consumers",
         memoryNotAccountedFor, taskAttemptId);
+      logger.info(
+        "{} bytes of memory are used for execution and {} bytes of memory are used for storage",
+        memoryManager.executionMemoryUsed(), memoryManager.storageMemoryUsed());
     }
   }
 
