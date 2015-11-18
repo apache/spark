@@ -323,6 +323,10 @@ trait GroupingAnalytics extends UnaryNode {
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
 
+  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
+  // will change in analysis.
+  override lazy val resolved: Boolean = false
+
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
 }
 
