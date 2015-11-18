@@ -16,17 +16,19 @@
  */
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -105,7 +107,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
  */
 @Experimental
 class CountVectorizer(override val uid: String)
-  extends Estimator[CountVectorizerModel] with CountVectorizerParams {
+  extends Estimator[CountVectorizerModel] with CountVectorizerParams with Writable {
 
   def this() = this(Identifiable.randomUID("cntVec"))
 
@@ -169,6 +171,19 @@ class CountVectorizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): CountVectorizer = defaultCopy(extra)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object CountVectorizer extends Readable[CountVectorizer] {
+
+  @Since("1.6.0")
+  override def read: Reader[CountVectorizer] = new DefaultParamsReader
+
+  @Since("1.6.0")
+  override def load(path: String): CountVectorizer = super.load(path)
 }
 
 /**
@@ -178,7 +193,9 @@ class CountVectorizer(override val uid: String)
  */
 @Experimental
 class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
-  extends Model[CountVectorizerModel] with CountVectorizerParams {
+  extends Model[CountVectorizerModel] with CountVectorizerParams with Writable {
+
+  import CountVectorizerModel._
 
   def this(vocabulary: Array[String]) = {
     this(Identifiable.randomUID("cntVecModel"), vocabulary)
@@ -232,4 +249,47 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
     val copied = new CountVectorizerModel(uid, vocabulary).setParent(parent)
     copyValues(copied, extra)
   }
+
+  @Since("1.6.0")
+  override def write: Writer = new CountVectorizerModelWriter(this)
+}
+
+@Since("1.6.0")
+object CountVectorizerModel extends Readable[CountVectorizerModel] {
+
+  private[CountVectorizerModel]
+  class CountVectorizerModelWriter(instance: CountVectorizerModel) extends Writer {
+
+    private case class Data(vocabulary: Seq[String])
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.vocabulary)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class CountVectorizerModelReader extends Reader[CountVectorizerModel] {
+
+    private val className = "org.apache.spark.ml.feature.CountVectorizerModel"
+
+    override def load(path: String): CountVectorizerModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath)
+        .select("vocabulary")
+        .head()
+      val vocabulary = data.getAs[Seq[String]](0).toArray
+      val model = new CountVectorizerModel(metadata.uid, vocabulary)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: Reader[CountVectorizerModel] = new CountVectorizerModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): CountVectorizerModel = super.load(path)
 }
