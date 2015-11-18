@@ -1099,3 +1099,6 @@ setGeneric("with")
 #' @rdname coltypes
 #' @export
 setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
+
++#' @export
++setGeneric("str")
