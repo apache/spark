@@ -508,18 +508,18 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     }
     blockingWal.allowWrite()
 
-    val buffer1 = wrapArrayArrayByte(Array(event1))
-    val buffer2 = Set(event2, event3, event4, event5)
+    val buffer = wrapArrayArrayByte(Array(event1))
+    val queuedEvents = Set(event2, event3, event4, event5)
 
     eventually(timeout(1 second)) {
       assert(batchedWal.invokePrivate(queueLength()) === 0)
-      verify(wal, times(1)).write(meq(buffer1), meq(3L))
+      verify(wal, times(1)).write(meq(buffer), meq(3L))
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
-      val buffer = ArgumentCaptor.forClass(classOf[ByteBuffer])
-      verify(wal, times(1)).write(buffer.capture(), meq(10L))
-      val records = BatchedWriteAheadLog.deaggregate(buffer.getValue).map(byteBufferToString)
-      assert(records.toSet === buffer2)
+      val bufferCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+      verify(wal, times(1)).write(bufferCaptor.capture(), meq(10L))
+      val records = BatchedWriteAheadLog.deaggregate(bufferCaptor.getValue).map(byteBufferToString)
+      assert(records.toSet === queuedEvents)
     }
   }
 
