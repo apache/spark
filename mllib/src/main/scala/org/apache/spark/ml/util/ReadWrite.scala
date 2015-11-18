@@ -194,7 +194,11 @@ private[ml] object DefaultParamsWriter {
    *  - uid
    *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
-  def saveMetadata(instance: Params, path: String, sc: SparkContext): Unit = {
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JValue] = None): Unit = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
@@ -205,7 +209,8 @@ private[ml] object DefaultParamsWriter {
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("extraMetadata" -> extraMetadata)
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = compact(render(metadata))
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -236,6 +241,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    * @param params  paramMap, as a [[JValue]]
+   * @param extraMetadata  Extra metadata saved by [[DefaultParamsWriter.saveMetadata()]]
    * @param metadataStr  Full metadata file String (for debugging)
    */
   case class Metadata(
@@ -244,6 +250,7 @@ private[ml] object DefaultParamsReader {
       timestamp: Long,
       sparkVersion: String,
       params: JValue,
+      extraMetadata: Option[JValue],
       metadataStr: String)
 
   /**
@@ -262,12 +269,13 @@ private[ml] object DefaultParamsReader {
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val params = metadata \ "paramMap"
+    val extraMetadata = (metadata \ "extraMetadata").extract[Option[JValue]]
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
-    Metadata(className, uid, timestamp, sparkVersion, params, metadataStr)
+    Metadata(className, uid, timestamp, sparkVersion, params, extraMetadata, metadataStr)
   }
 
   /**
