@@ -878,6 +878,16 @@ test_that("column functions", {
 
   df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+
+  # Test array_contains() and sort_array()
+  df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
+  result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
+  expect_equal(result, c(TRUE, FALSE))
+
+  result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
+  result <- collect(select(df, sort_array(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 })
 #
 test_that("column binary mathfunctions", {

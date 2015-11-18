@@ -644,6 +644,10 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 #' @export
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
 
+#' @rdname array_contains
+#' @export
+setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
+
 #' @rdname ascii
 #' @export
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
@@ -960,6 +964,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @rdname skewness
 #' @export
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
+
+#' @rdname sort_array
+#' @export
+setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
 
 #' @rdname soundex
 #' @export
