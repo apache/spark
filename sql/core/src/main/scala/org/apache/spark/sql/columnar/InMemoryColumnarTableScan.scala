@@ -125,7 +125,7 @@ private[sql] case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val cached = child.execute().mapPartitions { rowIterator =>
+    val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -133,7 +133,9 @@ private[sql] case class InMemoryRelation(
           }.toArray
 
           var rowCount = 0
-          while (rowIterator.hasNext && rowCount < batchSize) {
+          var totalSize = 0L
+          while (rowIterator.hasNext && rowCount < batchSize
+            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
             val row = rowIterator.next()
 
             // Added for SPARK-6082. This assertion can be useful for scenarios when something
@@ -147,8 +149,10 @@ private[sql] case class InMemoryRelation(
                 s"\nRow content: $row")
 
             var i = 0
+            totalSize = 0
             while (i < row.numFields) {
               columnBuilders(i).appendFrom(row, i)
+              totalSize += columnBuilders(i).columnStats.sizeInBytes
               i += 1
             }
             rowCount += 1
@@ -292,7 +296,7 @@ private[sql] case class InMemoryColumnarTableScan(
     val relOutput = relation.output
     val buffers = relation.cachedColumnBuffers
 
-    buffers.mapPartitions { cachedBatchIterator =>
+    buffers.mapPartitionsInternal { cachedBatchIterator =>
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)
