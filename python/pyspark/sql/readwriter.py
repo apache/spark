@@ -26,7 +26,7 @@ from pyspark import RDD, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
-import utils
+from pyspark.sql import utils
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
