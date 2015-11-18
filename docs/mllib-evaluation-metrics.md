@@ -104,7 +104,7 @@ data, and evaluate the performance of the algorithm by several binary evaluation
 <div data-lang="scala" markdown="1">
 Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`BinaryClassificationMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/BinaryClassificationMetrics.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/BinaryClassificationMetricsExample.scala %}
 
 </div>
 
@@ -118,7 +118,7 @@ Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mll
 <div data-lang="python" markdown="1">
 Refer to the [`BinaryClassificationMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.BinaryClassificationMetrics) and [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) for more details on the API.
 
-{% include_example python/mllib/binary_classification_metrics.py %}
+{% include_example python/mllib/binary_classification_metrics_example.py %}
 </div>
 </div>
 
@@ -240,7 +240,7 @@ the data, and evaluate the performance of the algorithm by several multiclass cl
 <div data-lang="scala" markdown="1">
 Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/MulticlassMetrics.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/MulticlassMetricsExample.scala %}
 
 </div>
 
@@ -255,7 +255,7 @@ Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 <div data-lang="python" markdown="1">
 Refer to the [`MulticlassMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MulticlassMetrics) for more details on the API.
 
-{% include_example python/mllib/multi_class_metrics.py %}
+{% include_example python/mllib/multi_class_metrics_example.py %}
 
 </div>
 </div>
@@ -391,21 +391,22 @@ True classes:
 <div data-lang="scala" markdown="1">
 Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/MultiLabelMetrics.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/MultiLabelMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaMultiLabelClassificationMetrics.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaMultiLabelClassificationMetricsExample
+.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`MultilabelMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MultilabelMetrics) for more details on the API.
 
-{% include_example python/mllib/multi_label_metrics.py %}
+{% include_example python/mllib/multi_label_metrics_example.py %}
 
 </div>
 </div>
@@ -519,7 +520,7 @@ expanded world of non-positive weights are "the same as never having interacted 
 <div data-lang="scala" markdown="1">
 Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/RankingMetrics.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/RankingMetricsExample.scala %}
 
 </div>
 
@@ -533,7 +534,7 @@ Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 <div data-lang="python" markdown="1">
 Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RankingMetrics) for more details on the API.
 
-{% include_example python/mllib/ranking_metrics.py %}
+{% include_example python/mllib/ranking_metrics_example.py %}
 
 </div>
 </div>
@@ -583,21 +584,21 @@ and evaluate the performance of the algorithm by several regression metrics.
 <div data-lang="scala" markdown="1">
 Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/RegressionMetrics.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/RegressionMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaLinearRegression.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaLinearRegressionExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
 
-{% include_example python/mllib/regression_metrics.py %}
+{% include_example python/mllib/regression_metrics_example.py %}
 
 </div>
 </div>
