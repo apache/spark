@@ -16,14 +16,9 @@
  */
 
 .navbar {
-  height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
-  min-width: 1200px
-}
-
-.navbar .navbar-inner {
-  height: 50px;
+  min-width: 485px
 }
 
 .navbar .brand {
