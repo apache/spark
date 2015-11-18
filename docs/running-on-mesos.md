@@ -168,8 +168,8 @@ machine, and dynamically schedule its own "mini-tasks" within it. The benefit is
 overhead, but at the cost of reserving the Mesos resources for the complete duration of the
 application.
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property to true in your
-[SparkConf](configuration.html#spark-properties):
+Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
+to turn it on explictly in [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
