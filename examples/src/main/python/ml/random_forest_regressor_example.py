@@ -28,7 +28,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.regression import RandomForestRegressor
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":

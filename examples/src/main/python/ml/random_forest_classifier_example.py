@@ -28,7 +28,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
