@@ -343,11 +343,18 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object LinearRegression extends Readable[LinearRegression] {
+
+  @Since("1.6.0")
   override def read: Reader[LinearRegression] = new DefaultParamsReader[LinearRegression]
+
+  @Since("1.6.0")
+  override def load(path: String): LinearRegression = read.load(path)
 }
 
 /**
@@ -435,6 +442,8 @@ class LinearRegressionModel private[ml] (
    *
    * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
    */
   override def write: Writer = new LinearRegressionModel.LinearRegressionModelWriter(this)  
 }
@@ -461,26 +470,26 @@ object LinearRegressionModel extends Readable[LinearRegressionModel] {
     }
   }
 
-private[regression] class LinearRegressionReader extends Reader[LinearRegressionModel] {
+  private[regression] class LinearRegressionModelReader extends Reader[LinearRegressionModel] {
 
-  /** Checked against metadata when loading model */
-  private val className = "org.apache.spark.ml.regression.LinearRegressionModel"
+    /** Checked against metadata when loading model */
+    private val className = "org.apache.spark.ml.regression.LinearRegressionModel"
 
-  override def load(path: String): LinearRegressionModel = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+    override def load(path: String): LinearRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-    val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.format("parquet").load(dataPath)
-      .select("intercept", "coefficients").head()
-    val intercept = data.getDouble(0)
-    val coefficients = data.getAs[Vector](1)
-    val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("intercept", "coefficients").head()
+      val intercept = data.getDouble(0)
+      val coefficients = data.getAs[Vector](1)
+      val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
 
-    DefaultParamsReader.getAndSetParams(model, metadata)
-    model
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
-
 
 /**
  * :: Experimental ::

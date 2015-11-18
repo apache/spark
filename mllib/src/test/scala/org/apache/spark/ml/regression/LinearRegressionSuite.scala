@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{Identifiable, DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
@@ -856,14 +856,32 @@ class LinearRegressionSuite
     model.summary.pValues.zip(pValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
   }
 
-  ignore("read/write") { // SPARK-11672
-  // Set some Params to make sure set Params are serialized.
-  val linearRegression = new LinearRegression()
-      .setElasticNetParam(0.1)
-      .setMaxIter(2)
-      .fit(datasetWithDenseFeature)
-    val linearRegression2 = testDefaultReadWrite(linearRegression)
-    assert(linearRegression.intercept === linearRegression2.intercept)
-    assert(linearRegression.coefficients.toArray === linearRegression2.coefficients.toArray)
+  test("read/write") {
+    def checkModelData(model: LinearRegressionModel, model2: LinearRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients === model2.coefficients)
+    }
+    val lr = new LinearRegression()
+    testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
+      checkModelData)
   }
+}
+
+object LinearRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> false,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "solver" -> "l-bfgs"
+  )
 }
