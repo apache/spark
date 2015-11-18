@@ -58,6 +58,12 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     sc = new SparkContext(conf)
   }
 
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
+    }
+  }
+
   test("state - get, exists, update, remove, ") {
     var state: StateImpl[Int] = null
 
