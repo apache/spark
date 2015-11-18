@@ -367,21 +367,8 @@ The following functions are masked by the SparkR package:
            method = c("pearson", "kendall", "spearman"))</pre></code></td>
   </tr>
   <tr>
-    <td><code>filter</code> in <code>package:stats</code></td>
-    <td><code><pre>stats::filter(x, filter, method = c("convolution", "recursive"),
-              sides = 2, circular = FALSE, init)</pre></code></td>
-  </tr>
-  <tr>
-    <td><code>lag</code> in <code>package:stats</code></td>
-    <td><code><pre>stats::lag(x, ...)</pre></code></td>
-  </tr>
-  <tr>
     <td><code>sample</code> in <code>package:base</code></td>
     <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
-  </tr>
-  <tr>
-    <td><code>subset</code> in <code>package:base</code></td>
-    <td><code>base::subset(x, subset, select, drop = FALSE, ...)</code></td>
   </tr>
   <tr>
     <td><code>table</code> in <code>package:base</code></td>

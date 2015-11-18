@@ -1441,7 +1441,7 @@ setMethod("orderBy",
 #' Filter the rows of a DataFrame according to a given condition.
 #'
 #' @param x A DataFrame to be sorted.
-#' @param condition The condition to filter on. This may either be a Column expression
+#' @param filter The condition to filter on. This may either be a Column expression
 #' or a string containing a SQL statement
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @family DataFrame functions
@@ -1459,12 +1459,12 @@ setMethod("orderBy",
 #' filter(df, df$col2 != "abcdefg")
 #' }
 setMethod("filter",
-          signature(x = "DataFrame", condition = "characterOrColumn"),
-          function(x, condition) {
-            if (class(condition) == "Column") {
-              condition <- condition@jc
+          signature(x = "DataFrame", filter = "characterOrColumn"),
+          function(x, filter) {
+            if (class(filter) == "Column") {
+              filter <- filter@jc
             }
-            sdf <- callJMethod(x@sdf, "filter", condition)
+            sdf <- callJMethod(x@sdf, "filter", filter)
             dataFrame(sdf)
           })
 
@@ -2152,7 +2152,7 @@ setMethod("with",
           })
 
 #' Returns the column types of a DataFrame.
-#' 
+#'
 #' @name coltypes
 #' @title Get column types of a DataFrame
 #' @family dataframe_funcs
