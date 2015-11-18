@@ -54,9 +54,9 @@ class GroupedDataset[K, T] private[sql](
   private implicit val unresolvedTEncoder = encoderFor(tEncoder)
 
   private val resolvedKEncoder =
-    unresolvedKEncoder.resolve(groupingAttributes, sqlContext.outerScopes)
+    unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
   private val resolvedTEncoder =
-    unresolvedTEncoder.resolve(dataAttributes, sqlContext.outerScopes)
+    unresolvedTEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext

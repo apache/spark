@@ -817,7 +817,7 @@ import org.apache.spark.annotation.DeveloperApi
    */
   @DeveloperApi
   def interpret(line: String): IR.Result = {
-    val fullLine = if (line contains "class") "sqlContext.addOuterScope(this); " + line else line
+    val fullLine = if (line contains " class ") "" + line else line
     interpret(fullLine, false)
   }
 
@@ -1182,8 +1182,9 @@ import org.apache.spark.annotation.DeveloperApi
     /** Code to import bound names from previous lines - accessPath is code to
      * append to objectName to access anything bound by request.
      */
-    val SparkComputedImports(importsPreamble, importsTrailer, accessPath) =
-      importsCode(referencedNames.toSet, definedClasses)
+    val SparkComputedImports(importsPreamble, importsTrailer, accessPath) = {
+      importsCode(referencedNames.toSet , definedClasses)
+    }
 
     /** Code to access a variable with the specified name */
     def fullPath(vname: String) = {
@@ -1231,6 +1232,7 @@ import org.apache.spark.annotation.DeveloperApi
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
+        "  org.apache.spark.sql.OuterScopes.addOuterScope(INSTANCE);\n" +
         "}\n"
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 
@@ -1719,10 +1721,15 @@ object SparkIMain {
     def generate: T => String
     def postamble: String
 
-    def apply(contributors: List[T]): String = stringFromWriter { code =>
-      code println preamble
-      contributors map generate foreach (code println _)
-      code println postamble
+    def apply(contributors: List[T]): String = {
+      val res = stringFromWriter { code =>
+        code println preamble
+        contributors map generate foreach (code println _)
+        code println postamble
+      }
+      System.out.println("============")
+      System.out.println(res.split("\n").zipWithIndex.map{ case (l, i) => s"$i $l" }.mkString("\n"))
+      res
     }
   }
 
