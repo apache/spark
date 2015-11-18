@@ -269,14 +269,15 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    sc = new SparkContext("local", "SparkListenerSuite")
+    val conf = new SparkConf().set("spark.akka.frameSize", "1")
+    sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
     // Make a task whose result is larger than the akka frame size
-    System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+    assert(akkaFrameSize === 1024 * 1024)
     val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(akkaFrameSize).toArray }
       .reduce { case (x, y) => x }
