@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
@@ -87,10 +87,16 @@ final class Binarizer(override val uid: String)
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
+@Since("1.6.0")
 object Binarizer extends Readable[Binarizer] {
 
+  @Since("1.6.0")
   override def read: Reader[Binarizer] = new DefaultParamsReader[Binarizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Binarizer = read.load(path)
 }

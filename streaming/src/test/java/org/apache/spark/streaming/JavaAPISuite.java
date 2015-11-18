@@ -37,7 +37,9 @@ import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
+import org.apache.spark.Accumulator;
 import org.apache.spark.HashPartitioner;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -45,7 +47,6 @@ import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.util.Utils;
-import org.apache.spark.SparkConf;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -766,6 +767,44 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     assertOrderInvariantEquals(expected, result);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testForeachRDD() {
+    final Accumulator<Integer> accumRdd = ssc.sc().accumulator(0);
+    final Accumulator<Integer> accumEle = ssc.sc().accumulator(0);
+    List<List<Integer>> inputData = Arrays.asList(
+        Arrays.asList(1,1,1),
+        Arrays.asList(1,1,1));
+
+    JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaTestUtils.attachTestOutputStream(stream.count()); // dummy output
+
+    stream.foreachRDD(new VoidFunction<JavaRDD<Integer>>() {
+      @Override
+      public void call(JavaRDD<Integer> rdd) {
+        accumRdd.add(1);
+        rdd.foreach(new VoidFunction<Integer>() {
+          @Override
+          public void call(Integer i) {
+            accumEle.add(1);
+          }
+        });
+      }
+    });
+
+    // This is a test to make sure foreachRDD(VoidFunction2) can be called from Java
+    stream.foreachRDD(new VoidFunction2<JavaRDD<Integer>, Time>() {
+      @Override
+      public void call(JavaRDD<Integer> rdd, Time time) {
+      }
+    });
+
+    JavaTestUtils.runStreams(ssc, 2, 2);
+
+    Assert.assertEquals(2, accumRdd.value().intValue());
+    Assert.assertEquals(6, accumEle.value().intValue());
   }
 
   @SuppressWarnings("unchecked")

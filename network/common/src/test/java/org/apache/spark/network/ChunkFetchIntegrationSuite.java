@@ -83,7 +83,7 @@ public class ChunkFetchIntegrationSuite {
     fp.write(fileContent);
     fp.close();
 
-    final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     fileChunk = new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
 
     streamManager = new StreamManager() {

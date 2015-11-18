@@ -25,7 +25,6 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.Nullable
 
-import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success}
@@ -51,7 +50,8 @@ private[netty] class NettyRpcEnv(
     securityManager: SecurityManager) extends RpcEnv(conf) with Logging {
 
   private[netty] val transportConf = SparkTransportConf.fromSparkConf(
-    conf.clone.set("spark.shuffle.io.numConnectionsPerPeer", "1"),
+    conf.clone.set("spark.rpc.io.numConnectionsPerPeer", "1"),
+    "rpc",
     conf.getInt("spark.rpc.io.threads", 0))
 
   private val dispatcher: Dispatcher = new Dispatcher(this)

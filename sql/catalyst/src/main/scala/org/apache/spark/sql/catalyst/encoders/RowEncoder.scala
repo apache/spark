@@ -50,6 +50,14 @@ object RowEncoder {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => inputObject
 
+    case udt: UserDefinedType[_] =>
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        false,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+
     case TimestampType =>
       StaticInvoke(
         DateTimeUtils,
@@ -109,11 +117,16 @@ object RowEncoder {
 
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
+        val method = if (f.dataType.isInstanceOf[StructType]) {
+          "getStruct"
+        } else {
+          "get"
+        }
         If(
           Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, f.dataType),
           extractorsFor(
-            Invoke(inputObject, "get", externalDataTypeFor(f.dataType), Literal(i) :: Nil),
+            Invoke(inputObject, method, externalDataTypeFor(f.dataType), Literal(i) :: Nil),
             f.dataType))
       }
       CreateStruct(convertedFields)
@@ -137,6 +150,7 @@ object RowEncoder {
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
+    case udt: UserDefinedType[_] => ObjectType(udt.userClass)
   }
 
   private def constructorFor(schema: StructType): Expression = {
@@ -154,6 +168,14 @@ object RowEncoder {
   private def constructorFor(input: Expression): Expression = input.dataType match {
     case BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
+
+    case udt: UserDefinedType[_] =>
+      val obj = NewInstance(
+        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        Nil,
+        false,
+        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+      Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>
       StaticInvoke(
