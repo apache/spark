@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql.catalyst.InternalRow
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -519,7 +520,7 @@ class Dataset[T] private[sql](
    * Returns the first element in this [[Dataset]].
    * @since 1.6.0
    */
-  def first(): T = rdd.first()
+  def first(): T = take(1).head
 
   /**
    * Returns an array that contains all the elements in this [[Dataset]].
@@ -530,7 +531,12 @@ class Dataset[T] private[sql](
    * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
-  def collect(): Array[T] = rdd.collect()
+  def collect(): Array[T] = {
+    val tEnc = resolvedTEncoder
+    val input = queryExecution.analyzed.output
+    val bound = tEnc.bind(input)
+    queryExecution.toRdd.map(_.copy()).collect().map(bound.fromRow)
+  }
 
   /**
    * Returns an array that contains all the elements in this [[Dataset]].
@@ -541,7 +547,7 @@ class Dataset[T] private[sql](
    * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
-  def collectAsList(): java.util.List[T] = rdd.collect().toSeq.asJava
+  def collectAsList(): java.util.List[T] = collect().toSeq.asJava
 
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.
@@ -551,7 +557,7 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def take(num: Int): Array[T] = rdd.take(num)
+  def take(num: Int): Array[T] = withPlan(Limit(Literal(num), _)).collect()
 
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.
