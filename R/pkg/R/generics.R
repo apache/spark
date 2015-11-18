@@ -396,6 +396,10 @@ setGeneric("attach")
 #' @export
 setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
 
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
+
 #' @rdname schema
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
@@ -520,9 +524,16 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
   standardGeneric("saveAsTable")
 })
 
+#' @export
+setGeneric("str")
+
 #' @rdname withColumn
 #' @export
 setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
+
+#' @rdname with
+#' @export
+setGeneric("with")
 
 #' @rdname write.df
 #' @export
@@ -1083,22 +1094,3 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
-
-#' @rdname as.data.frame
-#' @export
-setGeneric("as.data.frame")
-
-#' @rdname attach
-#' @export
-setGeneric("attach")
-
-#' @rdname with
-#' @export
-setGeneric("with")
-
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
-
-+#' @export
-+setGeneric("str")
