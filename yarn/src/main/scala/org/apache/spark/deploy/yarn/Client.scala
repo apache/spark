@@ -225,7 +225,26 @@ private[spark] class Client(
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
-    appContext.setResource(capability)
+
+    val amRequest = Records.newRecord(classOf[ResourceRequest])
+    amRequest.setResourceName(ResourceRequest.ANY)
+    amRequest.setPriority(Priority.newInstance(0))
+    amRequest.setCapability(capability)
+    amRequest.setNumContainers(1)
+    amRequest.setRelaxLocality(true)
+    if (sparkConf.contains("spark.yarn.am.nodeLabelExpression")) {
+      try {
+        val amLabelExpression = sparkConf.get("spark.yarn.am.nodeLabelExpression")
+        val method = amRequest.getClass.getMethod("setNodeLabelExpression", classOf[String])
+        method.invoke(amRequest, amLabelExpression)
+      } catch {
+        case e: NoSuchMethodException =>
+          logWarning("Ignoring spark.yarn.am.nodeLabelExpression because the version " +
+            "of YARN does not support it")
+      }
+    }
+    appContext.setAMContainerResourceRequest(amRequest)
+
     appContext
   }
 
