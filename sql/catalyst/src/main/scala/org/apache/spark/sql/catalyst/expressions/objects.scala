@@ -21,7 +21,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.serializer.{KryoSerializerInstance, KryoSerializer}
+import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
@@ -517,29 +517,39 @@ case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataTy
   }
 }
 
-/** Serializes an input object using Kryo serializer. */
-case class SerializeWithKryo(child: Expression) extends UnaryExpression {
+/**
+ * Serializes an input object using a generic serializer (Kryo or Java).
+ * @param kryo if true, use Kryo. Otherwise, use Java.
+ */
+case class EncodeUsingSerializer(child: Expression, kryo: Boolean) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val input = child.gen(ctx)
-    val kryo = ctx.freshName("kryoSerializer")
-    val kryoClass = classOf[KryoSerializer].getName
-    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
-    val sparkConfClass = classOf[SparkConf].getName
+    // Code to initialize the serializer.
+    val serializer = ctx.freshName("serializer")
+    val (serializerClass, serializerInstanceClass) = {
+      if (kryo) {
+        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+      } else {
+        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val sparkConf = s"new ${classOf[SparkConf].getName}()"
     ctx.addMutableState(
-      kryoInstanceClass,
-      kryo,
-      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+      serializerInstanceClass,
+      serializer,
+      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
 
+    // Code to serialize.
+    val input = child.gen(ctx)
     s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.value} = $kryo.serialize(${input.value}, null).array();
+        ${ev.value} = $serializer.serialize(${input.value}, null).array();
       }
      """
   }
@@ -548,29 +558,38 @@ case class SerializeWithKryo(child: Expression) extends UnaryExpression {
 }
 
 /**
- * Deserializes an input object using Kryo serializer. Note that the ClassTag is not an implicit
- * parameter because TreeNode cannot copy implicit parameters.
+ * Serializes an input object using a generic serializer (Kryo or Java).  Note that the ClassTag
+ * is not an implicit parameter because TreeNode cannot copy implicit parameters.
+ * @param kryo if true, use Kryo. Otherwise, use Java.
  */
-case class DeserializeWithKryo[T](child: Expression, tag: ClassTag[T]) extends UnaryExpression {
+case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
+  extends UnaryExpression {
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val input = child.gen(ctx)
-    val kryo = ctx.freshName("kryoSerializer")
-    val kryoClass = classOf[KryoSerializer].getName
-    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
-    val sparkConfClass = classOf[SparkConf].getName
+    // Code to initialize the serializer.
+    val serializer = ctx.freshName("serializer")
+    val (serializerClass, serializerInstanceClass) = {
+      if (kryo) {
+        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+      } else {
+        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val sparkConf = s"new ${classOf[SparkConf].getName}()"
     ctx.addMutableState(
-      kryoInstanceClass,
-      kryo,
-      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+      serializerInstanceClass,
+      serializer,
+      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
 
+    // Code to serialize.
+    val input = child.gen(ctx)
     s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = (${ctx.javaType(dataType)})
-          $kryo.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
+          $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
       }
      """
   }
