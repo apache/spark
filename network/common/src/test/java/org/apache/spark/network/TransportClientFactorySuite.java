@@ -182,7 +182,7 @@ public class TransportClientFactorySuite {
 
   @Test
   public void closeIdleConnectionForRequestTimeOut() throws IOException, InterruptedException {
-    TransportConf conf = new TransportConf(new ConfigProvider() {
+    TransportConf conf = new TransportConf("shuffle", new ConfigProvider() {
 
       @Override
       public String get(String name) {
