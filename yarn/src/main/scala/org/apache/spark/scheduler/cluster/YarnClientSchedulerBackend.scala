@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.hadoop.yarn.api.records.YarnApplicationState
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
@@ -33,7 +33,6 @@ private[spark] class YarnClientSchedulerBackend(
   with Logging {
 
   private var client: Client = null
-  private var appId: ApplicationId = null
   private var monitorThread: MonitorThread = null
 
   /**
@@ -54,8 +53,7 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
-    appId = client.submitApplication()
-    bindToYarn(appId, None)
+    bindToYarn(client.submitApplication(), None)
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties
@@ -116,8 +114,8 @@ private[spark] class YarnClientSchedulerBackend(
    * This assumes both `client` and `appId` have already been set.
    */
   private def waitForApplication(): Unit = {
-    assert(client != null && appId != null, "Application has not been submitted yet!")
-    val (state, _) = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    assert(client != null && appId.isDefined, "Application has not been submitted yet!")
+    val (state, _) = client.monitorApplication(appId.get, returnOnRunning = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {
@@ -141,7 +139,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     override def run() {
       try {
-        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+        val (state, _) = client.monitorApplication(appId.get, logApplicationReport = false)
         logError(s"Yarn application has already exited with state $state!")
         allowInterrupt = false
         sc.stop()
@@ -163,7 +161,7 @@ private[spark] class YarnClientSchedulerBackend(
    * This assumes both `client` and `appId` have already been set.
    */
   private def asyncMonitorApplication(): MonitorThread = {
-    assert(client != null && appId != null, "Application has not been submitted yet!")
+    assert(client != null && appId.isDefined, "Application has not been submitted yet!")
     val t = new MonitorThread
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
@@ -193,10 +191,4 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def applicationId(): String = {
-    Option(appId).map(_.toString).getOrElse {
-      logWarning("Application ID is not initialized yet.")
-      super.applicationId
-    }
-  }
 }

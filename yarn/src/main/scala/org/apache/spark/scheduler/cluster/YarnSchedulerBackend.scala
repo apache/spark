@@ -52,7 +52,7 @@ private[spark] abstract class YarnSchedulerBackend(
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
   /** Application ID. Must be set by a subclass before starting the service */
-  private var appId: ApplicationId = null
+  protected var appId: Option[ApplicationId] = None
 
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
@@ -67,13 +67,13 @@ private[spark] abstract class YarnSchedulerBackend(
     * @param attemptId Optional YARN attempt ID
     */
   protected def bindToYarn(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
-    this.appId = appId
+    this.appId = Some(appId)
     this.attemptId = attemptId
   }
 
   override def start() {
-    require(appId != null, "application ID unset")
-    val binding = SchedulerExtensionServiceBinding(sc, appId, attemptId)
+    require(appId.isDefined, "application ID unset")
+    val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
     services.start(binding)
     super.start()
   }
@@ -83,6 +83,29 @@ private[spark] abstract class YarnSchedulerBackend(
       super.stop()
     } finally {
       services.stop()
+    }
+  }
+
+  /**
+   * Get the attempt ID for this run, if the cluster manager supports multiple
+   * attempts. Applications run in client mode will not have attempt IDs.
+   *
+   * @return The application attempt id, if available.
+   */
+  override def applicationAttemptId(): Option[String] = {
+    attemptId.map(_.toString)
+  }
+
+  /**
+   * Get an application ID associated with the job.
+   * This returns the string value of [[appId]] if set, otherwise
+   * the locally-generated ID from the superclass.
+   * @return The application ID
+   */
+  override def applicationId(): String = {
+    appId.map(_.toString).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
     }
   }
 
