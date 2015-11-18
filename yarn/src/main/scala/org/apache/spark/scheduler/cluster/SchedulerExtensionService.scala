@@ -55,11 +55,12 @@ trait SchedulerExtensionService {
  *
  * The attempt ID will be set if the service is started within a YARN application master;
  * there is then a different attempt ID for every time that AM is restarted.
- * When the service binding is instantiated on a client, there's no attempt ID, as it lacks
+ * When the service binding is instantiated in client mode, there's no attempt ID, as it lacks
  * this information.
  * @param sparkContext current spark context
  * @param applicationId YARN application ID
- * @param attemptId YARN attemptID -if known.
+ * @param attemptId YARN attemptID. This will always be unset in client mode, and always set in
+ *                  cluster mode.
  */
 case class SchedulerExtensionServiceBinding(
     sparkContext: SparkContext,
@@ -75,7 +76,6 @@ case class SchedulerExtensionServiceBinding(
  *
  * The order in which child extension services are started and stopped
  * is undefined.
- *
  */
 private[spark] class SchedulerExtensionServices extends SchedulerExtensionService
     with Logging {
@@ -101,8 +101,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     val sparkContext = binding.sparkContext
     val appId = binding.applicationId
     val attemptId = binding.attemptId
-    logInfo(s"Starting Yarn extension services with app ${binding.applicationId}" +
-      s" and attemptId $attemptId")
+    logInfo(s"Starting Yarn extension services with app $appId and attemptId $attemptId")
 
     serviceOption = sparkContext.getConf.getOption(SchedulerExtensionServices.SPARK_YARN_SERVICES)
     services = serviceOption
@@ -129,8 +128,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
 
   /**
    * Stop the services; idempotent.
-    *
-    * Any
+   *
    */
   override def stop(): Unit = {
     if (started.getAndSet(false)) {
