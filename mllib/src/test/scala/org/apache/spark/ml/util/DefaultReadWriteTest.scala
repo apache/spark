@@ -22,13 +22,17 @@ import java.io.{File, IOException}
 import org.scalatest.Suite
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.DataFrame
 
 trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
   /**
    * Checks "overwrite" option and params.
+   * This saves to and loads from [[tempDir]], but creates a subdirectory with a random name
+   * in order to avoid conflicts from multiple calls to this method.
    * @param instance ML instance to test saving/loading
    * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
@@ -38,7 +42,10 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       instance: T,
       testParams: Boolean = true): T = {
     val uid = instance.uid
-    val path = new File(tempDir, uid).getPath
+    val subdirName = Identifiable.randomUID("test")
+
+    val subdir = new File(tempDir, subdirName)
+    val path = new File(subdir, uid).getPath
 
     instance.save(path)
     intercept[IOException] {
@@ -68,6 +75,47 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
     val another = load.invoke(instance, path).asInstanceOf[T]
     assert(another.uid === instance.uid)
     another
+  }
+
+  /**
+   * Default test for Estimator, Model pairs:
+   *  - Explicitly set Params, and train model
+   *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
+   *  - Check Params on Estimator and Model
+   *
+   * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
+   * @param estimator  Estimator to test
+   * @param dataset  Dataset to pass to [[Estimator.fit()]]
+   * @param testParams  Set of [[Param]] values to set in estimator
+   * @param checkModelData  Method which takes the original and loaded [[Model]] and compares their
+   *                        data.  This method does not need to check [[Param]] values.
+   * @tparam E  Type of [[Estimator]]
+   * @tparam M  Type of [[Model]] produced by estimator
+   */
+  def testEstimatorAndModelReadWrite[E <: Estimator[M] with Writable, M <: Model[M] with Writable](
+      estimator: E,
+      dataset: DataFrame,
+      testParams: Map[String, Any],
+      checkModelData: (M, M) => Unit): Unit = {
+    // Set some Params to make sure set Params are serialized.
+    testParams.foreach { case (p, v) =>
+      estimator.set(estimator.getParam(p), v)
+    }
+    val model = estimator.fit(dataset)
+
+    // Test Estimator save/load
+    val estimator2 = testDefaultReadWrite(estimator)
+    testParams.foreach { case (p, v) =>
+      val param = estimator.getParam(p)
+      assert(estimator.get(param).get === estimator2.get(param).get)
+    }
+
+    // Test Model save/load
+    val model2 = testDefaultReadWrite(model)
+    testParams.foreach { case (p, v) =>
+      val param = model.getParam(p)
+      assert(model.get(param).get === model2.get(param).get)
+    }
   }
 }
 

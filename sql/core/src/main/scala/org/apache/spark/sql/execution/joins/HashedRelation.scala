@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryLocation
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimation, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.{SparkConf, SparkEnv}
 
@@ -189,7 +189,9 @@ private[execution] object HashedRelation {
  */
 private[joins] final class UnsafeHashedRelation(
     private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
-  extends HashedRelation with Externalizable {
+  extends HashedRelation
+  with SizeEstimation
+  with Externalizable {
 
   private[joins] def this() = this(null)  // Needed for serialization
 
@@ -213,6 +215,10 @@ private[joins] final class UnsafeHashedRelation(
     } else {
       0
     }
+  }
+
+  override def estimatedSize: Option[Long] = {
+    Option(binaryMap).map(_.getTotalMemoryConsumption)
   }
 
   override def get(key: InternalRow): Seq[InternalRow] = {

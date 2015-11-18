@@ -1115,4 +1115,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(df("*")), Row(1, "a"))
     checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
   }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val df = Seq(
+      new java.lang.Integer(22) -> "John",
+      null.asInstanceOf[java.lang.Integer] -> "Lucy").toDF("age", "name")
+
+    val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
+      (i: java.lang.Integer) => if (i == null) null else i * 2
+    }
+    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(null) :: Nil)
+
+    val primitiveUDF = udf((i: Int) => i * 2)
+    checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
+  }
 }
