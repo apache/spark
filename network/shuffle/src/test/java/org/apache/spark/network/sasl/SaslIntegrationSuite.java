@@ -70,7 +70,7 @@ public class SaslIntegrationSuite {
 
   @BeforeClass
   public static void beforeAll() throws IOException {
-    conf = new TransportConf(new SystemPropertyConfigProvider());
+    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     context = new TransportContext(conf, new TestRpcHandler());
 
     secretKeyHolder = mock(SecretKeyHolder.class);
