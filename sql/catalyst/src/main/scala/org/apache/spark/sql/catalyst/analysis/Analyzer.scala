@@ -1082,9 +1082,11 @@ class Analyzer(
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
-          parameterTypes.zip(inputs).filter(_._1.isPrimitive).map(_._2).foldLeft(udf: Expression) {
-            case (result, input) => If(IsNull(input), Literal.create(null, udf.dataType), result)
-          }
+          val inputsNullCheck = parameterTypes.zip(inputs)
+            .filter(_._1.isPrimitive)
+            .map(i => IsNull(i._2))
+            .reduceLeftOption[Expression]((i1, i2) => Or(i1, i2))
+          inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
       }
     }
   }

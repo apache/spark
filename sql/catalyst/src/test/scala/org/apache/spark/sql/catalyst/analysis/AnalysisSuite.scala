@@ -198,9 +198,9 @@ class AnalysisSuite extends AnalysisTest {
 
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
     val expected3 = If(
-      IsNull(double),
+      IsNull(short) || IsNull(double),
       nullResult,
-      If(IsNull(short), nullResult, udf3))
+      udf3)
     checkUDF(udf3, expected3)
   }
 }

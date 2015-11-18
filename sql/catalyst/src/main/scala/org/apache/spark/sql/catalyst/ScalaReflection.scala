@@ -719,6 +719,9 @@ trait ScalaReflection {
     }
   }
 
+  /**
+   * Returns classes of input parameters of scala function object.
+   */
   def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
     val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
     assert(methods.length == 1)
