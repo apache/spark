@@ -60,16 +60,10 @@ class DummyString(val arr: Array[Char]) {
   @transient val hash32: Int = 0
 }
 
-class DummyClass8 extends SizeEstimation {
+class DummyClass8 extends KnownSizeEstimation {
   val x: Int = 0
 
-  override def estimatedSize: Option[Long] = Some(2015)
-}
-
-class DummyClass9 extends SizeEstimation {
-  val x: Int = 0
-
-  override def estimatedSize: Option[Long] = None
+  override def estimatedSize: Long = 2015
 }
 
 class SizeEstimatorSuite
@@ -231,9 +225,5 @@ class SizeEstimatorSuite
     // DummyClass8 provides its size estimation.
     assertResult(2015)(SizeEstimator.estimate(new DummyClass8))
     assertResult(20206)(SizeEstimator.estimate(Array.fill(10)(new DummyClass8)))
-
-    // DummyClass9 does not provide its size estimation.
-    assertResult(16)(SizeEstimator.estimate(new DummyClass9))
-    assertResult(216)(SizeEstimator.estimate(Array.fill(10)(new DummyClass9)))
   }
 }
