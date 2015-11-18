@@ -459,7 +459,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),
       Row("mean", null, null),
-      Row("stddev", "NaN", "NaN"),
+      Row("stddev", null, null),
       Row("min", null, null),
       Row("max", null, null))
 
