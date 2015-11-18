@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{AnalysisException, Encoder}
 import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.expressions._
@@ -231,6 +231,13 @@ case class ExpressionEncoder[T](
     copy(fromRowExpression = analyzedPlan.expressions.head.children.head transform {
       case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
         val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
+        if (outer == null) {
+          throw new AnalysisException(
+            s"Unable to generate an encoder for inner class `${n.cls.getName}` without access " +
+            s"to the scope that this class was defined in. " + "" +
+             "Try moving this class out of its parent class.")
+        }
+
         n.copy(outerPointer = Some(Literal.fromObject(outer)))
     })
   }
