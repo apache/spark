@@ -147,6 +147,12 @@ class Dataset[T] private[sql](
     }
   }
 
+  /**
+   * Returns the number of elements in the [[Dataset]].
+   * @since 1.6.0
+   */
+  def count(): Long = toDF().count()
+
   /* *********************** *
    *  Functional Operations  *
    * *********************** */

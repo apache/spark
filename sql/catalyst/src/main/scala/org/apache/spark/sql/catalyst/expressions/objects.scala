@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.language.existentials
+import scala.reflect.ClassTag
+
+import org.apache.spark.SparkConf
+import org.apache.spark.serializer.{KryoSerializerInstance, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-
-import scala.language.existentials
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
 import org.apache.spark.sql.types._
@@ -513,4 +515,65 @@ case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataTy
       }
     """
   }
+}
+
+/** Serializes an input object using Kryo serializer. */
+case class SerializeWithKryo(child: Expression) extends UnaryExpression {
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
+    s"""
+      ${input.code}
+      final boolean ${ev.isNull} = ${input.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $kryo.serialize(${input.value}, null).array();
+      }
+     """
+  }
+
+  override def dataType: DataType = BinaryType
+}
+
+/**
+ * Deserializes an input object using Kryo serializer. Note that the ClassTag is not an implicit
+ * parameter because TreeNode cannot copy implicit parameters.
+ */
+case class DeserializeWithKryo[T](child: Expression, tag: ClassTag[T]) extends UnaryExpression {
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
+    s"""
+      ${input.code}
+      final boolean ${ev.isNull} = ${input.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = (${ctx.javaType(dataType)})
+          $kryo.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
+      }
+     """
+  }
+
+  override def dataType: DataType = ObjectType(tag.runtimeClass)
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental

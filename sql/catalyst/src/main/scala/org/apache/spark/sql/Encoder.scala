@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
-import scala.reflect.ClassTag
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.{DeserializeWithKryo, BoundReference, SerializeWithKryo}
+import org.apache.spark.sql.types._
 
 /**
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
@@ -37,7 +38,33 @@ trait Encoder[T] extends Serializable {
   def clsTag: ClassTag[T]
 }
 
+/**
+ * Methods for creating encoders.
+ */
 object Encoders {
+
+  /**
+   * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
+   * This encoder maps T into a single byte array (binary) field.
+   */
+  def kryo[T: ClassTag]: Encoder[T] = {
+    val ser = SerializeWithKryo(BoundReference(0, ObjectType(classOf[AnyRef]), nullable = true))
+    val deser = DeserializeWithKryo[T](BoundReference(0, BinaryType, nullable = true), classTag[T])
+    ExpressionEncoder[T](
+      schema = new StructType().add("value", BinaryType),
+      flat = true,
+      toRowExpressions = Seq(ser),
+      fromRowExpression = deser,
+      clsTag = classTag[T]
+    )
+  }
+
+  /**
+   * Creates an encoder that serializes objects of type T using Kryo.
+   * This encoder maps T into a single byte array (binary) field.
+   */
+  def kryo[T](clazz: Class[T]): Encoder[T] = kryo(ClassTag[T](clazz))
+
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
   def SHORT: Encoder[java.lang.Short] = ExpressionEncoder(flat = true)
