@@ -164,20 +164,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private long peakMemoryUsedBytes = 0L;
 
-  private final BlockManager blockManager;
   private volatile MapIterator destructiveIterator = null;
   private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   public BytesToBytesMap(
       TaskMemoryManager taskMemoryManager,
-      BlockManager blockManager,
       int initialCapacity,
       double loadFactor,
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
-    this.blockManager = blockManager;
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
@@ -210,7 +207,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
-      SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
       initialCapacity,
       0.70,
       pageSizeBytes,
@@ -272,7 +268,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
             }
           }
           try {
-            reader = spillWriters.getFirst().getReader(blockManager);
+            reader = spillWriters.getFirst().getReader(SparkEnv.get().blockManager());
             recordsInPage = -1;
           } catch (IOException e) {
             // Scala iterator does not handle exception
@@ -347,6 +343,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           long offset = block.getBaseOffset();
           int numRecords = Platform.getInt(base, offset);
           offset += 4;
+          BlockManager blockManager = SparkEnv.get().blockManager();
           final UnsafeSorterSpillWriter writer =
             new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
           while (numRecords > 0) {
