@@ -79,7 +79,7 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
     )
   }
 
-  //There was a bug in DataFrameFrameReader.table and it has problem for table with schema name,
+  // There was a bug in DataFrameFrameReader.table and it has problem for table with schema name,
   // Before fix, it throw Exceptionorg.apache.spark.sql.catalyst.analysis.NoSuchTableException
   test("table name with schema") {
     hiveContext.read.table("usrdb.test")
