@@ -72,7 +72,7 @@ test_that("infer types and check types", {
   expect_equal(infer_type(e), "map<string,integer>")
 
   expect_error(checkType("map<integer,integer>"), "Key type in a map must be string or character")
-  
+
   expect_equal(infer_type(as.raw(c(1, 2, 3))), "binary")
 })
 
