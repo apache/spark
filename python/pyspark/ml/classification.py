@@ -272,7 +272,7 @@ class GBTParams(TreeEnsembleParams):
 @inherit_doc
 class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                              HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
-                             TreeClassifierParams, HasCheckpointInterval):
+                             TreeClassifierParams, HasCheckpointInterval, HasSeed):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for classification.
@@ -287,7 +287,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
+    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed", seed=42)
     >>> model = dt.fit(td)
     >>> model.numNodes
     3
@@ -312,12 +312,14 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini"):
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
+                 seed=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
+                 maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
+                 seed=None)
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -334,12 +336,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini"):
+                  impurity="gini", seed=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
-                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini")
+                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
+                  seed=None)
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self.setParams._input_kwargs
