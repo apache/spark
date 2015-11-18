@@ -436,7 +436,7 @@ class LinearRegressionModel private[ml] (
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
-  
+
   /**
    * Returns a [[Writer]] instance for this ML instance.
    *
@@ -459,7 +459,7 @@ object LinearRegressionModel extends Readable[LinearRegressionModel] {
   override def load(path: String): LinearRegressionModel = read.load(path)
 
   /** [[Writer]] instance for [[LinearRegressionModel]] */
-  private[regression] class LinearRegressionModelWriter(instance: LinearRegressionModel)
+  private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
     extends Writer with Logging {
 
     private case class Data(intercept: Double, coefficients: Vector)
@@ -474,7 +474,7 @@ object LinearRegressionModel extends Readable[LinearRegressionModel] {
     }
   }
 
-  private[regression] class LinearRegressionModelReader extends Reader[LinearRegressionModel] {
+  private class LinearRegressionModelReader extends Reader[LinearRegressionModel] {
 
     /** Checked against metadata when loading model */
     private val className = "org.apache.spark.ml.regression.LinearRegressionModel"

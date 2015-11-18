@@ -879,7 +879,7 @@ object LinearRegressionSuite {
     "regParam" -> 0.01,
     "elasticNetParam" -> 0.1,
     "maxIter" -> 2,  // intentionally small
-    "fitIntercept" -> false,
+    "fitIntercept" -> true,
     "tol" -> 0.8,
     "standardization" -> false,
     "solver" -> "l-bfgs"
