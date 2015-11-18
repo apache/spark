@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 
 
 class ALSSuite
@@ -505,6 +505,14 @@ class ALSSuite
       val param = model.getParam(p)
       assert(model.get(param).get === model2.get(param).get)
     }
+    assert(model.rank === model2.rank)
+    def getFactors(df: DataFrame): Set[(Int, Array[Float])] = {
+      df.select("id", "features").collect().map { case r =>
+        (r.getInt(0), r.getAs[Array[Float]](1))
+      }.toSet
+    }
+    assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
+    assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
   }
 }
 

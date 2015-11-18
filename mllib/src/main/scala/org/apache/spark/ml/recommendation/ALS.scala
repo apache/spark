@@ -392,6 +392,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams w
 
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 
+  @Since("1.6.0")
   override def write: Writer = new DefaultParamsWriter(this)
 }
 
