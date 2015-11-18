@@ -991,10 +991,8 @@ class Analyzer(
       expressions match {
         case And(cond1, cond2) =>
           splitByPredicates(cond1) ++ splitByPredicates(cond2)
-
         case EqualTo(cond1, cond2) =>
           splitByPredicates(cond1) ++ splitByPredicates(cond2)
-
         case other => other :: Nil
       }
     }
@@ -1035,7 +1033,7 @@ class Analyzer(
         }
         val newLeftChild = Project(j.left.output ++ leftNondeterministic.values, j.left)
         val newRightChild = Project(j.right.output ++ rightNondeterministic.values, j.right)
-        Project(j.output, newJoinPlan.withNewChildren(List(newLeftChild, newRightChild)))
+        newJoinPlan.withNewChildren(List(newLeftChild, newRightChild))
 
       // todo: It's hard to write a general rule to pull out nondeterministic expressions
       // from LogicalPlan, currently we only do it for UnaryNode which has same output
