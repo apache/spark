@@ -98,22 +98,8 @@ trait ScalaReflection {
       val className: String = tpe.erasure.typeSymbol.asClass.fullName
       className match {
         case "scala.Array" =>
-          val TypeRef(_, _, Seq(arrayType)) = tpe
-          val cls = arrayType match {
-            case t if t <:< definitions.IntTpe => classOf[Array[Int]]
-            case t if t <:< definitions.LongTpe => classOf[Array[Long]]
-            case t if t <:< definitions.DoubleTpe => classOf[Array[Double]]
-            case t if t <:< definitions.FloatTpe => classOf[Array[Float]]
-            case t if t <:< definitions.ShortTpe => classOf[Array[Short]]
-            case t if t <:< definitions.ByteTpe => classOf[Array[Byte]]
-            case t if t <:< definitions.BooleanTpe => classOf[Array[Boolean]]
-            case other =>
-              // There is probably a better way to do this, but I couldn't find it...
-              val elementType = dataTypeFor(other).asInstanceOf[ObjectType].cls
-              java.lang.reflect.Array.newInstance(elementType, 1).getClass
-
-          }
-          ObjectType(cls)
+          val TypeRef(_, _, Seq(elementType)) = tpe
+          arrayClassFor(elementType)
         case other => ObjectType(Utils.classForName(className))
       }
   }
@@ -266,8 +252,6 @@ trait ScalaReflection {
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val elementDataType = dataTypeFor(elementType)
-        val Schema(dataType, nullable) = schemaFor(elementType)
 
         val primitiveMethod = elementType match {
           case t if t <:< definitions.IntTpe => Some("toIntArray")
@@ -283,11 +267,10 @@ trait ScalaReflection {
         primitiveMethod.map { method =>
           Invoke(getPath, method, dataTypeFor(t))
         }.getOrElse {
-          val returnType = dataTypeFor(t)
-          Invoke(
-            MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType),
-            "array",
-            returnType)
+          MapCatalystArray(
+            p => constructorFor(elementType, Some(p)),
+            getPath,
+            dataTypeFor(elementType).asInstanceOf[ObjectType].cls)
         }
 
       case t if t <:< localTypeOf[Map[_, _]] =>
@@ -343,12 +326,8 @@ trait ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
-        val elementDataType = dataTypeFor(elementType)
-        val Schema(dataType, nullable) = schemaFor(elementType)
 
-        // Avoid boxing when possible by just wrapping a primitive array.
         val primitiveMethod = elementType match {
-          case _ if nullable => None
           case t if t <:< definitions.IntTpe => Some("toIntArray")
           case t if t <:< definitions.LongTpe => Some("toLongArray")
           case t if t <:< definitions.DoubleTpe => Some("toDoubleArray")
@@ -359,20 +338,20 @@ trait ScalaReflection {
           case _ => None
         }
 
-        val arrayData = primitiveMethod.map { method =>
-          Invoke(getPath, method, arrayClassFor(elementType))
+        val array = primitiveMethod.map { method =>
+          Invoke(getPath, method, dataTypeFor(t))
         }.getOrElse {
-          Invoke(
-            MapObjects(p => constructorFor(elementType, Some(p)), getPath, dataType),
-            "array",
-            arrayClassFor(elementType))
+          MapCatalystArray(
+            p => constructorFor(elementType, Some(p)),
+            getPath,
+            dataTypeFor(elementType).asInstanceOf[ObjectType].cls)
         }
 
         StaticInvoke(
           scala.collection.mutable.WrappedArray,
           ObjectType(classOf[Seq[_]]),
           "make",
-          arrayData :: Nil)
+          array :: Nil)
 
 
       case t if t <:< localTypeOf[Product] =>

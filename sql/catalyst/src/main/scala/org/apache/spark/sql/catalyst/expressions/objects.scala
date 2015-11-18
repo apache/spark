@@ -459,6 +459,82 @@ case class MapObjects(
   }
 }
 
+case class MapCatalystArray(
+    function: AttributeReference => Expression,
+    inputData: Expression,
+    elementClass: Class[_])
+  extends Expression {
+  assert(!elementClass.isPrimitive)
+  assert(inputData.dataType.isInstanceOf[ArrayType])
+
+  private def elementType = inputData.dataType.asInstanceOf[ArrayType].elementType
+
+  private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
+  private lazy val completeFunction = function(loopAttribute)
+
+  override def nullable: Boolean = true
+
+  override def children: Seq[Expression] = completeFunction :: inputData :: Nil
+
+  override def dataType: DataType = {
+    val cls = java.lang.reflect.Array.newInstance(elementClass, 1).getClass
+    ObjectType(cls)
+  }
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val input = inputData.gen(ctx)
+
+    val loopIndex = ctx.freshName("loopIndex")
+    val dataLength = ctx.freshName("dataLength")
+
+    // Variables to hold the element that is currently being processed.
+    val loopIsNull = s"${input.value}.isNullAt($loopIndex)"
+    val loopValue = ctx.getValue(input.value, elementType, loopIndex)
+
+    val loopVariable = LambdaVariable(loopValue, loopIsNull, elementType)
+    val lambdaFunc = completeFunction.transform {
+      case a: AttributeReference if a == loopAttribute => loopVariable
+    }.gen(ctx)
+
+    val convertedType = ctx.javaType(ObjectType(elementClass))
+    // Because of the way Java defines nested arrays, we have to handle the syntax specially.
+    // Specifically, we have to insert the [$dataLength] in between the type and any extra nested
+    // array declarations (i.e. new String[1][]).
+    val arrayConstructor = if (convertedType contains "[]") {
+      val (rawType, arrayPart) = convertedType.span(_ != '[')
+      s"new $rawType[$dataLength]$arrayPart"
+    } else {
+      s"new $convertedType[$dataLength]"
+    }
+
+    ev.isNull = input.isNull
+    s"""
+      ${input.code}
+      $convertedType[] ${ev.value} = null;
+      if (!${ev.isNull}) {
+        final int $dataLength = ${input.value}.numElements();
+        ${ev.value} = $arrayConstructor;
+
+        int $loopIndex = 0;
+        while ($loopIndex < $dataLength) {
+          ${lambdaFunc.code}
+
+          if (${lambdaFunc.isNull}) {
+            ${ev.value}[$loopIndex] = null;
+          } else {
+            ${ev.value}[$loopIndex] = ${lambdaFunc.value};
+          }
+
+          $loopIndex++;
+        }
+      }
+    """
+  }
+}
+
 /**
  * Constructs a new external row, using the result of evaluating the specified expressions
  * as content.
