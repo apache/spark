@@ -24,21 +24,6 @@ import scala.language.postfixOps
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
-case class ClassData(a: String, b: Int)
-
-/**
- * A class used to test serialization using encoders. This class throws exceptions when using
- * Java serialization -- so the only way it can be "serialized" is through our encoders.
- */
-case class NonSerializableCaseClass(value: String) extends Externalizable {
-  override def readExternal(in: ObjectInput): Unit = {
-    throw new UnsupportedOperationException
-  }
-
-  override def writeExternal(out: ObjectOutput): Unit = {
-    throw new UnsupportedOperationException
-  }
-}
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -362,8 +347,63 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(joined, ("2", 2))
   }
 
+  ignore("self join") {
+    val ds = Seq("1", "2").toDS().as("a")
+    val joined = ds.joinWith(ds, lit(true))
+    checkAnswer(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
+  }
+
   test("toString") {
     val ds = Seq((1, 2)).toDS()
     assert(ds.toString == "[_1: int, _2: int]")
   }
+
+  test("kryo encoder") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = sqlContext.createDataset(Seq(KryoData(1), KryoData(2)))
+
+    assert(ds.groupBy(p => p).count().collect().toSeq ==
+      Seq((KryoData(1), 1L), (KryoData(2), 1L)))
+  }
+
+  ignore("kryo encoder self join") {
+    implicit val kryoEncoder = Encoders.kryo[KryoData]
+    val ds = sqlContext.createDataset(Seq(KryoData(1), KryoData(2)))
+    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+      Set(
+        (KryoData(1), KryoData(1)),
+        (KryoData(1), KryoData(2)),
+        (KryoData(2), KryoData(1)),
+        (KryoData(2), KryoData(2))))
+  }
+}
+
+
+case class ClassData(a: String, b: Int)
+
+/**
+ * A class used to test serialization using encoders. This class throws exceptions when using
+ * Java serialization -- so the only way it can be "serialized" is through our encoders.
+ */
+case class NonSerializableCaseClass(value: String) extends Externalizable {
+  override def readExternal(in: ObjectInput): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def writeExternal(out: ObjectOutput): Unit = {
+    throw new UnsupportedOperationException
+  }
+}
+
+/** Used to test Kryo encoder. */
+class KryoData(val a: Int) {
+  override def equals(other: Any): Boolean = {
+    a == other.asInstanceOf[KryoData].a
+  }
+  override def hashCode: Int = a
+  override def toString: String = s"KryoData($a)"
+}
+
+object KryoData {
+  def apply(a: Int): KryoData = new KryoData(a)
 }
