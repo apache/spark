@@ -76,21 +76,21 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
   // Kryo encoders
   encodeDecodeTest(
     "hello",
-    Encoders.kryo[String].asInstanceOf[ExpressionEncoder[String]],
+    encoderFor(Encoders.kryo[String]),
     "kryo string")
   encodeDecodeTest(
     new NotJavaSerializable(15),
-    Encoders.kryo[NotJavaSerializable].asInstanceOf[ExpressionEncoder[NotJavaSerializable]],
+    encoderFor(Encoders.kryo[NotJavaSerializable]),
     "kryo object serialization")
 
   // Java encoders
   encodeDecodeTest(
     "hello",
-    Encoders.genericJava[String].asInstanceOf[ExpressionEncoder[String]],
+    encoderFor(Encoders.javaSerialization[String]),
     "java string")
   encodeDecodeTest(
     new JavaSerializable(15),
-    Encoders.genericJava[JavaSerializable].asInstanceOf[ExpressionEncoder[JavaSerializable]],
+    encoderFor(Encoders.javaSerialization[JavaSerializable]),
     "java object serialization")
 }
 

@@ -377,7 +377,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Java encoder") {
-    implicit val kryoEncoder = Encoders.genericJava[JavaData]
+    implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
     assert(ds.groupBy(p => p).count().collect().toSeq ==
@@ -385,7 +385,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   ignore("Java encoder self join") {
-    implicit val kryoEncoder = Encoders.genericJava[JavaData]
+    implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
       Set(

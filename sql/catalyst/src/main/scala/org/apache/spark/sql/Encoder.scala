@@ -43,6 +43,7 @@ trait Encoder[T] extends Serializable {
  */
 object Encoders {
 
+  /** A way to construct encoders using generic serializers. */
   private def genericSerializer[T: ClassTag](useKryo: Boolean): Encoder[T] = {
     ExpressionEncoder[T](
       schema = new StructType().add("value", BinaryType),
@@ -75,7 +76,7 @@ object Encoders {
    *
    * Note that this is extremely inefficient and should only be used as the last resort.
    */
-  def genericJava[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = false)
+  def javaSerialization[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = false)
 
   /**
    * Creates an encoder that serializes objects of type T using generic Java serialization.
@@ -83,7 +84,7 @@ object Encoders {
    *
    * Note that this is extremely inefficient and should only be used as the last resort.
    */
-  def genericJava[T](clazz: Class[T]): Encoder[T] = genericJava(ClassTag[T](clazz))
+  def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
 
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
