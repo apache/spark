@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -65,6 +66,12 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
         assert(vector1 ~== vector2 absTol 1E-5,
           "The vector value is not correct after standardization.")
     }
+  }
+
+  test("params") {
+    ParamsSuite.checkParams(new StandardScaler)
+    val oldModel = new feature.StandardScalerModel(Vectors.dense(1.0), Vectors.dense(2.0))
+    ParamsSuite.checkParams(new StandardScalerModel("empty", oldModel))
   }
 
   test("Standardization with default parameter") {

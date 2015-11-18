@@ -236,5 +236,3 @@ object MinMaxScalerModel extends Readable[MinMaxScalerModel] {
   @Since("1.6.0")
   override def load(path: String): MinMaxScalerModel = super.load(path)
 }
-
-

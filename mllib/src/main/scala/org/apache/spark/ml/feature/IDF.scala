@@ -160,7 +160,7 @@ object IDFModel extends Readable[IDFModel] {
 
   private class IDFModelReader extends Reader[IDFModel] {
 
-    private val className = "org.apache.spark.ml.feature.StringIndexerModel"
+    private val className = "org.apache.spark.ml.feature.IDFModel"
 
     override def load(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
