@@ -162,6 +162,14 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("don't call ssc.stop in listener") {
+    ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    val failureReasons = startStreamingContextAndCallStop(ssc)
+  }
+
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
@@ -170,14 +178,6 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     val failureReasons = startStreamingContextAndCollectFailureReasons(ssc)
     assert(failureReasons != null && failureReasons.isEmpty,
       "A successful batch should not set errorMessage")
-  }
-
-  test("don't call ssc.stop in listener") {
-    ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
-    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
-    inputStream.foreachRDD(_.count)
-
-    val failureReasons = startStreamingContextAndCallStop(ssc)
   }
 
   test("onBatchCompleted with failed batch and one failed job") {
@@ -223,10 +223,8 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     _ssc.start()
     // Make sure running at least one batch
     batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
-    intercept[SparkException] {
-      _ssc.awaitTerminationOrTimeout(10000)
-    }
     _ssc.stop()
+    assert(contextStoppingCollector.sparkExSeen)
   }
 
   private def startStreamingContextAndCollectFailureReasons(
@@ -346,8 +344,13 @@ class FailureReasonsCollector extends StreamingListener {
  * A StreamingListener that calls StreamingContext.stop().
  */
 class StreamingContextStoppingCollector(val ssc: StreamingContext) extends StreamingListener {
-  override def onOutputOperationStarted(
-      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
+  var sparkExSeen = false
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+    try {
       ssc.stop()
+    } catch {
+      case se: SparkException =>
+        sparkExSeen = true
+    }
   }
 }
