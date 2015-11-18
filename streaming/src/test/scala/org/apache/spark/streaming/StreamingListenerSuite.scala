@@ -167,7 +167,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
 
-    val failureReasons = startStreamingContextAndCallStop(ssc)
+    startStreamingContextAndCallStop(ssc)
   }
 
   test("onBatchCompleted with successful batch") {
