@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.nio.ByteBuffer
-
 import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.{KryoSerializerInstance, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
@@ -526,13 +524,22 @@ case class SerializeWithKryo(child: Expression) extends UnaryExpression {
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val row = child.gen(ctx)
+    val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
     s"""
-      ${row.code}
-      final boolean ${ev.isNull} = ${row.isNull};
+      ${input.code}
+      final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.value} = org.apache.spark.sql.catalyst.expressions.KryoUtils.serialize(${row.value});
+        ${ev.value} = $kryo.serialize(${input.value}, null).array();
       }
      """
   }
@@ -548,30 +555,25 @@ case class DeserializeWithKryo[T](child: Expression, tag: ClassTag[T]) extends U
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val input = child.gen(ctx)
+    val kryo = ctx.freshName("kryoSerializer")
+    val kryoClass = classOf[KryoSerializer].getName
+    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
+    val sparkConfClass = classOf[SparkConf].getName
+    ctx.addMutableState(
+      kryoInstanceClass,
+      kryo,
+      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+
     s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = (${ctx.javaType(dataType)})
-          org.apache.spark.sql.catalyst.expressions.KryoUtils.deserialize(${input.value});
+          $kryo.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
       }
      """
   }
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
-}
-
-
-object KryoUtils {
-  // TODO: This is inefficient because it starts a new Kryo instance for every record.
-  def serialize(t: AnyRef): Array[Byte] = {
-    val kryo = new KryoSerializer(new SparkConf)
-    kryo.newInstance().serialize(t).array()
-  }
-
-  def deserialize(bytes: Array[Byte]): AnyRef = {
-    val kryo = new KryoSerializer(new SparkConf)
-    kryo.newInstance().deserialize[AnyRef](ByteBuffer.wrap(bytes))
-  }
 }
