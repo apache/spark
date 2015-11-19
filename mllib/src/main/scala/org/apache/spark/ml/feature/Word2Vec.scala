@@ -264,11 +264,12 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
     override def load(path: String): Word2VecModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(wordIndex: Map[String, Int], wordVectors: Seq[Float]) =
-        sqlContext.read.parquet(dataPath)
-          .select("wordIndex", "wordVectors")
-          .head()
-      val oldModel = new feature.Word2VecModel(wordIndex, wordVectors.toArray)
+      val data = sqlContext.read.parquet(dataPath)
+        .select("wordIndex", "wordVectors")
+        .head()
+      val wordIndex = data.getAs[Map[String, Int]](0)
+      val wordVectors = data.getAs[Seq[Float]](1).toArray
+      val oldModel = new feature.Word2VecModel(wordIndex, wordVectors)
       val model = new Word2VecModel(metadata.uid, oldModel)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

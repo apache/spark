@@ -444,10 +444,11 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
     override def load(path: String): VectorIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(numFeatures: Int, categoryMaps: Map[Int, Map[Double, Int]]) =
-        sqlContext.read.parquet(dataPath)
-          .select("numFeatures", "categoryMaps")
-          .head()
+      val data = sqlContext.read.parquet(dataPath)
+        .select("numFeatures", "categoryMaps")
+        .head()
+      val numFeatures = data.getAs[Int](0)
+      val categoryMaps = data.getAs[Map[Int, Map[Double, Int]]](1)
       val model = new VectorIndexerModel(metadata.uid, numFeatures, categoryMaps)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
