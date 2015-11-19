@@ -74,24 +74,14 @@ class FlatEncoderSuite extends ExpressionEncoderSuite {
     FlatEncoder[Map[Int, Map[String, Int]]], "map of map")
 
   // Kryo encoders
-  encodeDecodeTest(
-    "hello",
-    encoderFor(Encoders.kryo[String]),
-    "kryo string")
-  encodeDecodeTest(
-    new KryoSerializable(15),
-    encoderFor(Encoders.kryo[KryoSerializable]),
-    "kryo object serialization")
+  encodeDecodeTest("hello", encoderFor(Encoders.kryo[String]), "kryo string")
+  encodeDecodeTest(new KryoSerializable(15),
+    encoderFor(Encoders.kryo[KryoSerializable]), "kryo object")
 
   // Java encoders
-  encodeDecodeTest(
-    "hello",
-    encoderFor(Encoders.javaSerialization[String]),
-    "java string")
-  encodeDecodeTest(
-    new JavaSerializable(15),
-    encoderFor(Encoders.javaSerialization[JavaSerializable]),
-    "java object serialization")
+  encodeDecodeTest("hello", encoderFor(Encoders.javaSerialization[String]), "java string")
+  encodeDecodeTest(new JavaSerializable(15),
+    encoderFor(Encoders.javaSerialization[JavaSerializable]), "java object")
 }
 
 /** For testing Kryo serialization based encoder. */
