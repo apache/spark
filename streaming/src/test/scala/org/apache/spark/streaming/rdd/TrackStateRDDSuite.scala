@@ -283,9 +283,8 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
     val rdd7 = testStateUpdates(                      // should remove k2's state
       rdd6, Seq(("k2", 2), ("k0", 2), ("k3", 1)), Set(("k3", 0, updateTime)))
 
-    val rdd8 = testStateUpdates(
-      rdd7, Seq(("k3", 2)), Set()
-    )
+    val rdd8 = testStateUpdates(                      // should remove k3's state
+      rdd7, Seq(("k3", 2)), Set())
   }
 
   test("checkpointing") {
