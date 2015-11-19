@@ -164,7 +164,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
-    "Distinct window functions are not supported" :: Nil)
+    "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
     "too many generators",

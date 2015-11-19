@@ -128,14 +128,12 @@ class Analyzer(
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
       case WithWindowDefinition(windowDefinitions, child) =>
         child.transform {
-          case plan => plan.transformExpressions {
+          case p => p.transformExpressions {
             case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
               val errorMessage =
                 s"Window specification $windowName is not defined in the WINDOW clause."
               val windowSpecDefinition =
-                windowDefinitions
-                  .get(windowName)
-                  .getOrElse(failAnalysis(errorMessage))
+                windowDefinitions.getOrElse(windowName, failAnalysis(errorMessage))
               WindowExpression(c, windowSpecDefinition)
           }
         }
@@ -900,7 +898,7 @@ class Analyzer(
               spec: WindowSpecDefinition) =>
             val newChildren = function.children.map(extractExpr)
             val newFunction = function.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
-            val newAgg = AggregateExpression(newFunction, mode, isTraceEnabled())
+            val newAgg = AggregateExpression(newFunction, mode, isDistinct)
             seenWindowAggregates += newAgg
             WindowExpression(newAgg, spec)
 
