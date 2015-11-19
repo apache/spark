@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  */
 @Experimental
 class HashingTF(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with Writable {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("hashingTF"))
 
@@ -77,17 +77,11 @@ class HashingTF(override val uid: String)
   }
 
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object HashingTF extends Readable[HashingTF] {
+object HashingTF extends DefaultParamsReadable[HashingTF] {
 
   @Since("1.6.0")
-  override def read: Reader[HashingTF] = new DefaultParamsReader[HashingTF]
-
-  @Since("1.6.0")
-  override def load(path: String): HashingTF = read.load(path)
+  override def load(path: String): HashingTF = super.load(path)
 }

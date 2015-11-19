@@ -45,7 +45,7 @@ import org.apache.spark.sql.types._
 @Since("1.6.0")
 @Experimental
 class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
-  with HasInputCols with HasOutputCol with Writable {
+  with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("interaction"))
@@ -224,19 +224,13 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
     require($(inputCols).length > 0, "Input cols must have non-zero length.")
     require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
   }
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object Interaction extends Readable[Interaction] {
+object Interaction extends DefaultParamsReadable[Interaction] {
 
   @Since("1.6.0")
-  override def read: Reader[Interaction] = new DefaultParamsReader[Interaction]
-
-  @Since("1.6.0")
-  override def load(path: String): Interaction = read.load(path)
+  override def load(path: String): Interaction = super.load(path)
 }
 
 /**

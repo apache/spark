@@ -59,7 +59,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  */
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
-  with StandardScalerParams with Writable {
+  with StandardScalerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stdScal"))
 
@@ -96,16 +96,10 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   }
 
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object StandardScaler extends Readable[StandardScaler] {
-
-  @Since("1.6.0")
-  override def read: Reader[StandardScaler] = new DefaultParamsReader
+object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 
   @Since("1.6.0")
   override def load(path: String): StandardScaler = super.load(path)
@@ -119,7 +113,7 @@ object StandardScaler extends Readable[StandardScaler] {
 class StandardScalerModel private[ml] (
     override val uid: String,
     scaler: feature.StandardScalerModel)
-  extends Model[StandardScalerModel] with StandardScalerParams with Writable {
+  extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
 
   import StandardScalerModel._
 
@@ -165,14 +159,14 @@ class StandardScalerModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: Writer = new StandardScalerModelWriter(this)
+  override def write: MLWriter = new StandardScalerModelWriter(this)
 }
 
 @Since("1.6.0")
-object StandardScalerModel extends Readable[StandardScalerModel] {
+object StandardScalerModel extends MLReadable[StandardScalerModel] {
 
   private[StandardScalerModel]
-  class StandardScalerModelWriter(instance: StandardScalerModel) extends Writer {
+  class StandardScalerModelWriter(instance: StandardScalerModel) extends MLWriter {
 
     private case class Data(std: Vector, mean: Vector, withStd: Boolean, withMean: Boolean)
 
@@ -184,7 +178,7 @@ object StandardScalerModel extends Readable[StandardScalerModel] {
     }
   }
 
-  private class StandardScalerModelReader extends Reader[StandardScalerModel] {
+  private class StandardScalerModelReader extends MLReader[StandardScalerModel] {
 
     private val className = "org.apache.spark.ml.feature.StandardScalerModel"
 
@@ -204,7 +198,7 @@ object StandardScalerModel extends Readable[StandardScalerModel] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[StandardScalerModel] = new StandardScalerModelReader
+  override def read: MLReader[StandardScalerModel] = new StandardScalerModelReader
 
   @Since("1.6.0")
   override def load(path: String): StandardScalerModel = super.load(path)

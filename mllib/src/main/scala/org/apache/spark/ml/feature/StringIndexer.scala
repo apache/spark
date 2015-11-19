@@ -65,7 +65,7 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
  */
 @Experimental
 class StringIndexer(override val uid: String) extends Estimator[StringIndexerModel]
-  with StringIndexerBase with Writable {
+  with StringIndexerBase with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("strIdx"))
 
@@ -93,16 +93,10 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   }
 
   override def copy(extra: ParamMap): StringIndexer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object StringIndexer extends Readable[StringIndexer] {
-
-  @Since("1.6.0")
-  override def read: Reader[StringIndexer] = new DefaultParamsReader
+object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)
@@ -122,7 +116,7 @@ object StringIndexer extends Readable[StringIndexer] {
 class StringIndexerModel (
     override val uid: String,
     val labels: Array[String])
-  extends Model[StringIndexerModel] with StringIndexerBase with Writable {
+  extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
   import StringIndexerModel._
 
@@ -199,10 +193,10 @@ class StringIndexerModel (
 }
 
 @Since("1.6.0")
-object StringIndexerModel extends Readable[StringIndexerModel] {
+object StringIndexerModel extends MLReadable[StringIndexerModel] {
 
   private[StringIndexerModel]
-  class StringIndexModelWriter(instance: StringIndexerModel) extends Writer {
+  class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
     private case class Data(labels: Array[String])
 
@@ -214,7 +208,7 @@ object StringIndexerModel extends Readable[StringIndexerModel] {
     }
   }
 
-  private class StringIndexerModelReader extends Reader[StringIndexerModel] {
+  private class StringIndexerModelReader extends MLReader[StringIndexerModel] {
 
     private val className = "org.apache.spark.ml.feature.StringIndexerModel"
 
@@ -232,7 +226,7 @@ object StringIndexerModel extends Readable[StringIndexerModel] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[StringIndexerModel] = new StringIndexerModelReader
+  override def read: MLReader[StringIndexerModel] = new StringIndexerModelReader
 
   @Since("1.6.0")
   override def load(path: String): StringIndexerModel = super.load(path)
@@ -249,7 +243,7 @@ object StringIndexerModel extends Readable[StringIndexerModel] {
  */
 @Experimental
 class IndexToString private[ml] (override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with Writable {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() =
     this(Identifiable.randomUID("idxToStr"))
@@ -316,17 +310,11 @@ class IndexToString private[ml] (override val uid: String)
   override def copy(extra: ParamMap): IndexToString = {
     defaultCopy(extra)
   }
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object IndexToString extends Readable[IndexToString] {
+object IndexToString extends DefaultParamsReadable[IndexToString] {
 
   @Since("1.6.0")
-  override def read: Reader[IndexToString] = new DefaultParamsReader[IndexToString]
-
-  @Since("1.6.0")
-  override def load(path: String): IndexToString = read.load(path)
+  override def load(path: String): IndexToString = super.load(path)
 }
