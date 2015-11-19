@@ -434,6 +434,11 @@ abstract class HadoopFsRelation private[sql](
 
   private var _partitionSpec: PartitionSpec = _
 
+  protected def fileStatusFilter(status: FileStatus): Boolean = {
+    val name = status.getPath.getName
+    name.toLowerCase == "_temporary" || name.startsWith(".")
+  }
+
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
 
@@ -450,10 +455,7 @@ abstract class HadoopFsRelation private[sql](
 
           logInfo(s"Listing $qualified on driver")
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
-        }.filterNot { status =>
-          val name = status.getPath.getName
-          name.toLowerCase == "_temporary" || name.startsWith(".")
-        }
+        }.filterNot(fileStatusFilter)
 
         val (dirs, files) = statuses.partition(_.isDir)
 

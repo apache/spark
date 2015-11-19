@@ -208,7 +208,15 @@ private[sql] class ParquetRelation(
   // Parquet data source always uses Catalyst internal representations.
   override val needConversion: Boolean = false
 
-  override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
+  override def sizeInBytes: Long =
+    if (shouldMergeSchemas && mergeRespectSummaries) {
+      // If we are going to merge schema and this relation is configured to
+      // respect summaries (i.e., skip part-files), we will assume that the size of
+      // this relation is large and can't be broadcasted.
+      super.sizeInBytes
+    } else {
+      metadataCache.dataStatuses.map(_.getLen).sum
+    }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = {
@@ -362,6 +370,17 @@ private[sql] class ParquetRelation(
           }
         }
       }
+    }
+  }
+
+  override protected def fileStatusFilter(status: FileStatus): Boolean = {
+    // We only load summary files when configured to merge schema and respect summaries
+    if (shouldMergeSchemas && mergeRespectSummaries) {
+      val file = status.getPath
+      !(file.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE ||
+        file.getName == ParquetFileWriter.PARQUET_METADATA_FILE || status.isDir)
+    } else {
+      super[HadoopFsRelation].fileStatusFilter(status)
     }
   }
 
