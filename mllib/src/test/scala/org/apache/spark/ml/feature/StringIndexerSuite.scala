@@ -73,22 +73,6 @@ class StringIndexerSuite
     intercept[SparkException] {
       indexer.transform(df2).collect()
     }
-    val indexerSkipInvalid = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("labelIndex")
-      .setHandleInvalid("skip")
-      .fit(df)
-    // Verify that we skip the c record
-    val transformed = indexerSkipInvalid.transform(df2)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
-      .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("b", "a"))
-    val output = transformed.select("id", "labelIndex").map { r =>
-      (r.getInt(0), r.getDouble(1))
-    }.collect().toSet
-    // a -> 1, b -> 0
-    val expected = Set((0, 1.0), (1, 0.0))
-    assert(output === expected)
   }
 
   test("StringIndexer with a numeric input column") {
@@ -116,23 +100,6 @@ class StringIndexerSuite
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L)
     assert(indexerModel.transform(df).eq(df))
-  }
-
-  test("StringIndexer read/write") {
-    val t = new StringIndexer()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setHandleInvalid("skip")
-    testDefaultReadWrite(t)
-  }
-
-  test("StringIndexerModel read/write") {
-    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setHandleInvalid("skip")
-    val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.labels === instance.labels)
   }
 
   test("IndexToString params") {
@@ -192,7 +159,7 @@ class StringIndexerSuite
     assert(outSchema("output").dataType === StringType)
   }
 
-  test("IndexToString read/write") {
+  test("read/write") {
     val t = new IndexToString()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
@@ -203,16 +170,57 @@ class StringIndexerSuite
   test("StringIndexer with null value (SPARK-11569)") {
     val df = sqlContext.createDataFrame(
       Seq(("asd2s", "1e1e", 1.1, 0, 0.0), ("asd2s", "1e1e", 0.1, 0, 0.0),
-        (null, "1e3e", 1.2, 0, 2.0), ("bd34t", "1e1e", 5.1, 1, 1.0),
+        (null, "1e3e", 1.2, 0, 9.9), (null, "1e1e", 5.1, 1, 9.9),
         ("asd2s", "1e3e", 0.2, 0, 0.0), ("bd34t", "1e2e", 4.3, 1, 1.0))
     ).toDF("x0", "x1", "x2", "x3", "expected")
-    val indexer = new StringIndexer().setInputCol("x0").setOutputCol("actual")
 
-    val transformed = indexer.fit(df).transform(df)
-    // asd2s -> 0, bd24t -> 1, null -> 2
-    transformed.select("expected", "actual").collect().foreach {
+    // setHandleInvalid("skip") after fit
+    val indexer1 = new StringIndexer().setInputCol("x0").setOutputCol("actual").fit(df)
+      .setHandleInvalid("skip")
+    val transformed1 = indexer1.transform(df)
+    // Verify that we skip the null record
+    val attr = Attribute.fromStructField(transformed1.schema("actual"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr.values.get === Array("asd2s", "bd34t"))
+    // asd2s -> 0, bd24t -> 1, null is filterd out
+    transformed1.select("expected", "actual").collect().foreach {
       case Row(actual, expected) =>
         assert(actual === expected)
+    }
+
+    // setHandleInvalid("skip") before fit
+    val indexer2 = new StringIndexer().setInputCol("x0").setOutputCol("actual")
+      .setHandleInvalid("skip").fit(df)
+    val transformed2 = indexer2.transform(df)
+    // Verify that we skip the null record
+    val attr2 = Attribute.fromStructField(transformed2.schema("actual"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr2.values.get === Array("asd2s", "bd34t"))
+    // asd2s -> 0, bd24t -> 1, null is filterd out
+    transformed2.select("expected", "actual").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
+
+    // setHandleInvalid("error") before fit
+    intercept[SparkException] {
+      val indexer3 = new StringIndexer().setInputCol("x0").setOutputCol("actual")
+        .setHandleInvalid("error").fit(df)
+      indexer3.transform(df).collect()
+    }
+
+    // setHandleInvalid("error") after fit
+    intercept[SparkException] {
+      val indexer4 = new StringIndexer().setInputCol("x0").setOutputCol("actual")
+        .fit(df).setHandleInvalid("error")
+      indexer4.transform(df).collect()
+    }
+
+    // default is setHandleInvalid("error")
+    intercept[SparkException] {
+      val indexer5 = new StringIndexer().setInputCol("x0").setOutputCol("actual")
+        .fit(df)
+      indexer5.transform(df).collect()
     }
   }
 }
