@@ -28,20 +28,20 @@ from pyspark.sql import SQLContext
 """
 A simple example demonstrating a logistic regression with elastic net regularization Pipeline.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/logistic_regression.py
+  bin/spark-submit examples/src/main/python/ml/logistic_regression.py <file> <iterations>
 """
 
 if __name__ == "__main__":
 
-    if len(sys.argv) > 1:
-        print("Usage: logistic_regression", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: logistic_regression <file> <iterations>", file=sys.stderr)
         exit(-1)
 
     sc = SparkContext(appName="PythonLogisticRegressionExample")
     sqlContext = SQLContext(sc)
 
     # Load the data stored in LIBSVM format as a DataFrame.
-    df = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    df = sqlContext.read.format("libsvm").load(sys.argv[1])
 
     # Map labels into an indexed column of labels in [0, numLabels)
     stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     td = si_model.transform(df)
     [training, test] = td.randomSplit([0.7, 0.3])
 
-    lr = LogisticRegression(maxIter=100, regParam=0.3).setLabelCol("indexedLabel")
+    lr = LogisticRegression(maxIter=int(sys.argv[2]), regParam=0.3).setLabelCol("indexedLabel")
     lr.setElasticNetParam(0.8)
 
     # Fit the model
