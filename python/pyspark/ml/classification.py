@@ -1148,6 +1148,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[1.0,0.0]|       1.0|
     |[0.0,0.0]|       0.0|
     +---------+----------+
+
     >>> mlp_path = temp_path + "/mlp"
     >>> mlp.save(mlp_path)
     >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
@@ -1291,7 +1292,8 @@ class MultilayerPerceptronClassificationModel(JavaModel, HasFeaturesCol, HasLabe
         return self.getOrDefault(self.initialWeights)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel, HasFeaturesCol, HasLabelCol,
+                                              HasPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 

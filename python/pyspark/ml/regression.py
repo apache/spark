@@ -1730,8 +1730,6 @@ if __name__ == "__main__":
             globs=globs,
             optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
         sc.stop()
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        spark.stop()
     finally:
         from shutil import rmtree
         try:
