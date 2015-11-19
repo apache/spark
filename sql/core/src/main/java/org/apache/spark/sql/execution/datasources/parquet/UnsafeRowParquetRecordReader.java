@@ -109,6 +109,19 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   private static final int DEFAULT_VAR_LEN_SIZE = 32;
 
   /**
+   * Tries to initialize the reader for this split. Returns true if this reader supports reading
+   * this split and false otherwise.
+   */
+  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext) {
+    try {
+      initialize(inputSplit, taskAttemptContext);
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
    * Implementation of RecordReader API.
    */
   @Override
