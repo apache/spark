@@ -48,7 +48,7 @@ private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Seri
 private[sql] sealed trait ColumnStats extends Serializable {
   protected var count = 0
   protected var nullCount = 0
-  protected var sizeInBytes = 0L
+  private[sql] var sizeInBytes = 0L
 
   /**
    * Gathers statistics information from `row(ordinal)`.

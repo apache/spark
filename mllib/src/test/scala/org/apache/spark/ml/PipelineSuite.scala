@@ -149,13 +149,6 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(pipeline2.stages(0).isInstanceOf[WritableStage])
     val writableStage2 = pipeline2.stages(0).asInstanceOf[WritableStage]
     assert(writableStage.getIntParam === writableStage2.getIntParam)
-
-    val path = new File(tempDir, pipeline.uid).getPath
-    val stagesDir = new Path(path, "stages").toString
-    val expectedStagePath = SharedReadWrite.getStagePath(writableStage.uid, 0, 1, stagesDir)
-    assert(FileSystem.get(sc.hadoopConfiguration).exists(new Path(expectedStagePath)),
-      s"Expected stage 0 of 1 with uid ${writableStage.uid} in Pipeline with uid ${pipeline.uid}" +
-        s" to be saved to path: $expectedStagePath")
   }
 
   test("PipelineModel read/write: getStagePath") {
@@ -186,8 +179,8 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 }
 
 
-/** Used to test [[Pipeline]] with [[Writable]] stages */
-class WritableStage(override val uid: String) extends Transformer with Writable {
+/** Used to test [[Pipeline]] with [[MLWritable]] stages */
+class WritableStage(override val uid: String) extends Transformer with MLWritable {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
 
@@ -199,21 +192,21 @@ class WritableStage(override val uid: String) extends Transformer with Writable 
 
   override def copy(extra: ParamMap): WritableStage = defaultCopy(extra)
 
-  override def write: Writer = new DefaultParamsWriter(this)
+  override def write: MLWriter = new DefaultParamsWriter(this)
 
   override def transform(dataset: DataFrame): DataFrame = dataset
 
   override def transformSchema(schema: StructType): StructType = schema
 }
 
-object WritableStage extends Readable[WritableStage] {
+object WritableStage extends MLReadable[WritableStage] {
 
-  override def read: Reader[WritableStage] = new DefaultParamsReader[WritableStage]
+  override def read: MLReader[WritableStage] = new DefaultParamsReader[WritableStage]
 
-  override def load(path: String): WritableStage = read.load(path)
+  override def load(path: String): WritableStage = super.load(path)
 }
 
-/** Used to test [[Pipeline]] with non-[[Writable]] stages */
+/** Used to test [[Pipeline]] with non-[[MLWritable]] stages */
 class UnWritableStage(override val uid: String) extends Transformer {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
