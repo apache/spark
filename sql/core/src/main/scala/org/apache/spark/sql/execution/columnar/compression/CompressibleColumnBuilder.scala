@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar.compression
+package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
+import org.apache.spark.sql.execution.columnar.{ColumnBuilder, NativeColumnBuilder}
 import org.apache.spark.sql.types.AtomicType
 
 /**
@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.AtomicType
  *     header         body
  * }}}
  */
-private[sql] trait CompressibleColumnBuilder[T <: AtomicType]
+private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
   extends ColumnBuilder with Logging {
 
   this: NativeColumnBuilder[T] with WithCompressionSchemes =>

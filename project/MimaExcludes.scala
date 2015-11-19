@@ -44,8 +44,6 @@ object MimaExcludes {
         MimaBuild.excludeSparkPackage("unused"),
         // SQL execution is considered private.
         excludePackage("org.apache.spark.sql.execution"),
-        // SQL columnar is considered private.
-        excludePackage("org.apache.spark.sql.columnar"),
         // The shuffle package is considered private.
         excludePackage("org.apache.spark.shuffle"),
         // The collections utlities are considered pricate.

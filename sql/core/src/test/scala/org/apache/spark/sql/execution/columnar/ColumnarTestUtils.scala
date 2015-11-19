@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import scala.collection.immutable.HashSet
 import scala.util.Random

@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar.compression
+package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.columnar._
-import org.apache.spark.sql.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.AtomicType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
