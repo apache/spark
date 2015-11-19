@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar.compression
+package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.ByteBuffer
 
@@ -23,11 +23,11 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
-import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.types._
 
 
-private[sql] case object PassThrough extends CompressionScheme {
+private[columnar] case object PassThrough extends CompressionScheme {
   override val typeId = 0
 
   override def supports(columnType: ColumnType[_]): Boolean = true
@@ -64,7 +64,7 @@ private[sql] case object PassThrough extends CompressionScheme {
   }
 }
 
-private[sql] case object RunLengthEncoding extends CompressionScheme {
+private[columnar] case object RunLengthEncoding extends CompressionScheme {
   override val typeId = 1
 
   override def encoder[T <: AtomicType](columnType: NativeColumnType[T]): Encoder[T] = {
@@ -172,7 +172,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
   }
 }
 
-private[sql] case object DictionaryEncoding extends CompressionScheme {
+private[columnar] case object DictionaryEncoding extends CompressionScheme {
   override val typeId = 2
 
   // 32K unique values allowed
@@ -281,7 +281,7 @@ private[sql] case object DictionaryEncoding extends CompressionScheme {
   }
 }
 
-private[sql] case object BooleanBitSet extends CompressionScheme {
+private[columnar] case object BooleanBitSet extends CompressionScheme {
   override val typeId = 3
 
   val BITS_PER_LONG = 64
@@ -371,7 +371,7 @@ private[sql] case object BooleanBitSet extends CompressionScheme {
   }
 }
 
-private[sql] case object IntDelta extends CompressionScheme {
+private[columnar] case object IntDelta extends CompressionScheme {
   override def typeId: Int = 4
 
   override def decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
@@ -451,7 +451,7 @@ private[sql] case object IntDelta extends CompressionScheme {
   }
 }
 
-private[sql] case object LongDelta extends CompressionScheme {
+private[columnar] case object LongDelta extends CompressionScheme {
   override def typeId: Int = 5
 
   override def decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])

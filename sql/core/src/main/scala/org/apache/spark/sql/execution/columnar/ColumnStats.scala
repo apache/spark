@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
+private[columnar] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
   val lowerBound = AttributeReference(a.name + ".lowerBound", a.dataType, nullable = true)()
   val nullCount = AttributeReference(a.name + ".nullCount", IntegerType, nullable = false)()
@@ -32,7 +32,7 @@ private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val schema = Seq(lowerBound, upperBound, nullCount, count, sizeInBytes)
 }
 
-private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
+private[columnar] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Serializable {
   val (forAttribute, schema) = {
     val allStats = tableSchema.map(a => a -> new ColumnStatisticsSchema(a))
     (AttributeMap(allStats), allStats.map(_._2.schema).foldLeft(Seq.empty[Attribute])(_ ++ _))
@@ -45,10 +45,10 @@ private[sql] class PartitionStatistics(tableSchema: Seq[Attribute]) extends Seri
  * NOTE: we intentionally avoid using `Ordering[T]` to compare values here because `Ordering[T]`
  * brings significant performance penalty.
  */
-private[sql] sealed trait ColumnStats extends Serializable {
+private[columnar] sealed trait ColumnStats extends Serializable {
   protected var count = 0
   protected var nullCount = 0
-  private[sql] var sizeInBytes = 0L
+  private[columnar] var sizeInBytes = 0L
 
   /**
    * Gathers statistics information from `row(ordinal)`.
@@ -72,14 +72,14 @@ private[sql] sealed trait ColumnStats extends Serializable {
 /**
  * A no-op ColumnStats only used for testing purposes.
  */
-private[sql] class NoopColumnStats extends ColumnStats {
+private[columnar] class NoopColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = super.gatherStats(row, ordinal)
 
   override def collectedStatistics: GenericInternalRow =
     new GenericInternalRow(Array[Any](null, null, nullCount, count, 0L))
 }
 
-private[sql] class BooleanColumnStats extends ColumnStats {
+private[columnar] class BooleanColumnStats extends ColumnStats {
   protected var upper = false
   protected var lower = true
 
@@ -97,7 +97,7 @@ private[sql] class BooleanColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class ByteColumnStats extends ColumnStats {
+private[columnar] class ByteColumnStats extends ColumnStats {
   protected var upper = Byte.MinValue
   protected var lower = Byte.MaxValue
 
@@ -115,7 +115,7 @@ private[sql] class ByteColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class ShortColumnStats extends ColumnStats {
+private[columnar] class ShortColumnStats extends ColumnStats {
   protected var upper = Short.MinValue
   protected var lower = Short.MaxValue
 
@@ -133,7 +133,7 @@ private[sql] class ShortColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class IntColumnStats extends ColumnStats {
+private[columnar] class IntColumnStats extends ColumnStats {
   protected var upper = Int.MinValue
   protected var lower = Int.MaxValue
 
@@ -151,7 +151,7 @@ private[sql] class IntColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class LongColumnStats extends ColumnStats {
+private[columnar] class LongColumnStats extends ColumnStats {
   protected var upper = Long.MinValue
   protected var lower = Long.MaxValue
 
@@ -169,7 +169,7 @@ private[sql] class LongColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class FloatColumnStats extends ColumnStats {
+private[columnar] class FloatColumnStats extends ColumnStats {
   protected var upper = Float.MinValue
   protected var lower = Float.MaxValue
 
@@ -187,7 +187,7 @@ private[sql] class FloatColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class DoubleColumnStats extends ColumnStats {
+private[columnar] class DoubleColumnStats extends ColumnStats {
   protected var upper = Double.MinValue
   protected var lower = Double.MaxValue
 
@@ -205,7 +205,7 @@ private[sql] class DoubleColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class StringColumnStats extends ColumnStats {
+private[columnar] class StringColumnStats extends ColumnStats {
   protected var upper: UTF8String = null
   protected var lower: UTF8String = null
 
@@ -223,7 +223,7 @@ private[sql] class StringColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class BinaryColumnStats extends ColumnStats {
+private[columnar] class BinaryColumnStats extends ColumnStats {
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
@@ -235,7 +235,7 @@ private[sql] class BinaryColumnStats extends ColumnStats {
     new GenericInternalRow(Array[Any](null, null, nullCount, count, sizeInBytes))
 }
 
-private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
+private[columnar] class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
   def this(dt: DecimalType) = this(dt.precision, dt.scale)
 
   protected var upper: Decimal = null
@@ -256,7 +256,7 @@ private[sql] class DecimalColumnStats(precision: Int, scale: Int) extends Column
     new GenericInternalRow(Array[Any](lower, upper, nullCount, count, sizeInBytes))
 }
 
-private[sql] class ObjectColumnStats(dataType: DataType) extends ColumnStats {
+private[columnar] class ObjectColumnStats(dataType: DataType) extends ColumnStats {
   val columnType = ColumnType(dataType)
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {

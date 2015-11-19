@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
@@ -50,7 +50,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
 
     test(s"$columnStatsName: non-empty") {
-      import org.apache.spark.sql.columnar.ColumnarTestUtils._
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
       val columnStats = columnStatsClass.newInstance()
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
@@ -86,7 +86,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
 
     test(s"$columnStatsName: non-empty") {
-      import org.apache.spark.sql.columnar.ColumnarTestUtils._
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
       val columnStats = new DecimalColumnStats(15, 10)
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))

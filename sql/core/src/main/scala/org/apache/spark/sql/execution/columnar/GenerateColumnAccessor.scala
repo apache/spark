@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -121,7 +121,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
-      import org.apache.spark.sql.columnar.MutableUnsafeRow;
+      import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
       public SpecificColumnarIterator generate($exprType[] expr) {
         return new SpecificColumnarIterator();

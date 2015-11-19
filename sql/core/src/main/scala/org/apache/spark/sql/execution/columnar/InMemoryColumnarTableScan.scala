@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -50,7 +50,8 @@ private[sql] object InMemoryRelation {
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
  */
-private[sql] case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+private[columnar]
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 private[sql] case class InMemoryRelation(
     output: Seq[Attribute],

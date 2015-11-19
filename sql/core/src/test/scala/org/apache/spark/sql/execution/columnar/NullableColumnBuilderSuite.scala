@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -36,7 +36,7 @@ object TestNullableColumnBuilder {
 }
 
 class NullableColumnBuilderSuite extends SparkFunSuite {
-  import org.apache.spark.sql.columnar.ColumnarTestUtils._
+  import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 
   Seq(
     BOOLEAN, BYTE, SHORT, INT, LONG, FLOAT, DOUBLE,

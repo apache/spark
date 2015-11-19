@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, GenericMutableRow}
-import org.apache.spark.sql.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.{Logging, SparkFunSuite}
 

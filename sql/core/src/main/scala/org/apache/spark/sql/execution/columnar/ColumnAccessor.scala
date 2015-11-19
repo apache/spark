@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
-import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
 import org.apache.spark.sql.types._
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  * a [[MutableRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
  * for primitive values provided by [[MutableRow]].
  */
-private[sql] trait ColumnAccessor {
+private[columnar] trait ColumnAccessor {
   initialize()
 
   protected def initialize()
@@ -41,7 +41,7 @@ private[sql] trait ColumnAccessor {
   protected def underlyingBuffer: ByteBuffer
 }
 
-private[sql] abstract class BasicColumnAccessor[JvmType](
+private[columnar] abstract class BasicColumnAccessor[JvmType](
     protected val buffer: ByteBuffer,
     protected val columnType: ColumnType[JvmType])
   extends ColumnAccessor {
@@ -61,65 +61,65 @@ private[sql] abstract class BasicColumnAccessor[JvmType](
   protected def underlyingBuffer = buffer
 }
 
-private[sql] class NullColumnAccessor(buffer: ByteBuffer)
+private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Any](buffer, NULL)
   with NullableColumnAccessor
 
-private[sql] abstract class NativeColumnAccessor[T <: AtomicType](
+private[columnar] abstract class NativeColumnAccessor[T <: AtomicType](
     override protected val buffer: ByteBuffer,
     override protected val columnType: NativeColumnType[T])
   extends BasicColumnAccessor(buffer, columnType)
   with NullableColumnAccessor
   with CompressibleColumnAccessor[T]
 
-private[sql] class BooleanColumnAccessor(buffer: ByteBuffer)
+private[columnar] class BooleanColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BOOLEAN)
 
-private[sql] class ByteColumnAccessor(buffer: ByteBuffer)
+private[columnar] class ByteColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, BYTE)
 
-private[sql] class ShortColumnAccessor(buffer: ByteBuffer)
+private[columnar] class ShortColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, SHORT)
 
-private[sql] class IntColumnAccessor(buffer: ByteBuffer)
+private[columnar] class IntColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, INT)
 
-private[sql] class LongColumnAccessor(buffer: ByteBuffer)
+private[columnar] class LongColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, LONG)
 
-private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
+private[columnar] class FloatColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, FLOAT)
 
-private[sql] class DoubleColumnAccessor(buffer: ByteBuffer)
+private[columnar] class DoubleColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, DOUBLE)
 
-private[sql] class StringColumnAccessor(buffer: ByteBuffer)
+private[columnar] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
-private[sql] class BinaryColumnAccessor(buffer: ByteBuffer)
+private[columnar] class BinaryColumnAccessor(buffer: ByteBuffer)
   extends BasicColumnAccessor[Array[Byte]](buffer, BINARY)
   with NullableColumnAccessor
 
-private[sql] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+private[columnar] class CompactDecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
   extends NativeColumnAccessor(buffer, COMPACT_DECIMAL(dataType))
 
-private[sql] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
+private[columnar] class DecimalColumnAccessor(buffer: ByteBuffer, dataType: DecimalType)
   extends BasicColumnAccessor[Decimal](buffer, LARGE_DECIMAL(dataType))
   with NullableColumnAccessor
 
-private[sql] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
+private[columnar] class StructColumnAccessor(buffer: ByteBuffer, dataType: StructType)
   extends BasicColumnAccessor[UnsafeRow](buffer, STRUCT(dataType))
   with NullableColumnAccessor
 
-private[sql] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
+private[columnar] class ArrayColumnAccessor(buffer: ByteBuffer, dataType: ArrayType)
   extends BasicColumnAccessor[UnsafeArrayData](buffer, ARRAY(dataType))
   with NullableColumnAccessor
 
-private[sql] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
+private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
-private[sql] object ColumnAccessor {
+private[columnar] object ColumnAccessor {
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
 

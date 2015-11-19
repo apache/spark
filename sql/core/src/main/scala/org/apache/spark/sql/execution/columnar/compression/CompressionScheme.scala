@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar.compression
+package org.apache.spark.sql.execution.columnar.compression
 
 import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.columnar.{ColumnType, NativeColumnType}
+import org.apache.spark.sql.execution.columnar.{ColumnType, NativeColumnType}
 import org.apache.spark.sql.types.AtomicType
 
-private[sql] trait Encoder[T <: AtomicType] {
+private[columnar] trait Encoder[T <: AtomicType] {
   def gatherCompressibilityStats(row: InternalRow, ordinal: Int): Unit = {}
 
   def compressedSize: Int
@@ -37,13 +37,13 @@ private[sql] trait Encoder[T <: AtomicType] {
   def compress(from: ByteBuffer, to: ByteBuffer): ByteBuffer
 }
 
-private[sql] trait Decoder[T <: AtomicType] {
+private[columnar] trait Decoder[T <: AtomicType] {
   def next(row: MutableRow, ordinal: Int): Unit
 
   def hasNext: Boolean
 }
 
-private[sql] trait CompressionScheme {
+private[columnar] trait CompressionScheme {
   def typeId: Int
 
   def supports(columnType: ColumnType[_]): Boolean
@@ -53,15 +53,15 @@ private[sql] trait CompressionScheme {
   def decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T]): Decoder[T]
 }
 
-private[sql] trait WithCompressionSchemes {
+private[columnar] trait WithCompressionSchemes {
   def schemes: Seq[CompressionScheme]
 }
 
-private[sql] trait AllCompressionSchemes extends WithCompressionSchemes {
+private[columnar] trait AllCompressionSchemes extends WithCompressionSchemes {
   override val schemes: Seq[CompressionScheme] = CompressionScheme.all
 }
 
-private[sql] object CompressionScheme {
+private[columnar] object CompressionScheme {
   val all: Seq[CompressionScheme] =
     Seq(PassThrough, RunLengthEncoding, DictionaryEncoding, BooleanBitSet, IntDelta, LongDelta)
 

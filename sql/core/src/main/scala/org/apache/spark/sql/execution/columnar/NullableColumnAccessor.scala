@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteOrder, ByteBuffer}
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 
-private[sql] trait NullableColumnAccessor extends ColumnAccessor {
+private[columnar] trait NullableColumnAccessor extends ColumnAccessor {
   private var nullsBuffer: ByteBuffer = _
   private var nullCount: Int = _
   private var seenNulls: Int = 0
