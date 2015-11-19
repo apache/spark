@@ -525,9 +525,11 @@ setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
 #' @export
 setGeneric("schema", function(x) { standardGeneric("schema") })
 
+setGeneric("selectInternal", function(x, col, ...) { standardGeneric("selectInternal") } )
+
 #' @rdname select
 #' @export
-setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
+setGeneric("select", function(x, ...) { standardGeneric("select") } )
 
 #' @rdname select
 #' @export

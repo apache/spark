@@ -707,6 +707,10 @@ test_that("select with column", {
   expect_equal(columns(df2), c("age"))
   expect_equal(count(df2), 3)
 
+  df2 <- select(df, age)
+  expect_equal(columns(df2), c("age"))
+  expect_equal(count(df2), 3)
+
   df3 <- select(df, lit("x"))
   expect_equal(columns(df3), c("x"))
   expect_equal(count(df3), 3)
@@ -747,6 +751,37 @@ test_that("subsetting", {
   expect_equal(columns(df5), c("name", "age"))
 
   df6 <- subset(df, df$age %in% c(30), c(1,2))
+  expect_equal(count(df6), 1)
+  expect_equal(columns(df6), c("name", "age"))
+})
+
+test_that("subsetting without $", {
+  # jsonFile returns columns in random order
+  df <- select(jsonFile(sqlContext, jsonPath), "name", "age")
+  filtered <- df[age > 20,]
+  expect_equal(count(filtered), 1)
+  expect_equal(columns(filtered), c("name", "age"))
+  expect_equal(collect(filtered)$name, "Andy")
+  
+  df2 <- df[age == 19, 1]
+  expect_is(df2, "DataFrame")
+  expect_equal(count(df2), 1)
+  expect_equal(columns(df2), c("name"))
+  expect_equal(collect(df2)$name, "Justin")
+  
+  df3 <- df[age > 20, 2]
+  expect_equal(count(df3), 1)
+  expect_equal(columns(df3), c("age"))
+  
+  df4 <- df[age %in% c(19, 30), 1:2]
+  expect_equal(count(df4), 2)
+  expect_equal(columns(df4), c("name", "age"))
+  
+  df5 <- df[age %in% c(19), c(1,2)]
+  expect_equal(count(df5), 1)
+  expect_equal(columns(df5), c("name", "age"))
+  
+  df6 <- subset(df, age %in% c(30), c(1,2))
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 })
