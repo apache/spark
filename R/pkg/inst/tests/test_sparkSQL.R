@@ -433,6 +433,10 @@ test_that("table() returns a new DataFrame", {
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
   dropTempTable(sqlContext, "table1")
+
+  # Test base::table is working
+  #a <- letters[1:3]
+  #expect_equal(class(table(a, sample(a))), "table")
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -673,6 +677,9 @@ test_that("sample on a DataFrame", {
   # Also test sample_frac
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
+
+  # Test base::sample is working
+  #expect_equal(length(sample(1:12)), 12)
 })
 
 test_that("select operators", {
@@ -753,6 +760,9 @@ test_that("subsetting", {
   df6 <- subset(df, df$age %in% c(30), c(1,2))
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
+
+  # Test base::subset is working
+  expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -888,6 +898,9 @@ test_that("column functions", {
   expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
+
+  # Test that stats::lag is working
+  expect_equal(length(lag(ldeaths, 12)), 72)
 })
 #
 test_that("column binary mathfunctions", {
@@ -1086,7 +1099,7 @@ test_that("group by, agg functions", {
   gd3_local <- collect(agg(gd3, var(df8$age)))
   expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
 
-  # make sure base:: or stats::sd, var are working
+  # Test stats::sd, stats::var are working
   expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
   expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
 
@@ -1138,6 +1151,9 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered5), 1)
   filtered6 <- where(df, df$age %in% c(19, 30))
   expect_equal(count(filtered6), 2)
+
+  # Test stats::filter is working
+  #expect_true(is.ts(filter(1:100, rep(1, 3))))
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1284,6 +1300,12 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "DataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")
+
+  # Test base::rbind is working
+  expect_equal(length(rbind(1:4, c = 2, a = 10, 10, deparse.level = 0)), 16)
+
+  # Test base::intersect is working
+  expect_equal(length(intersect(1:20, 3:23)), 18)
 })
 
 test_that("withColumn() and withColumnRenamed()", {
@@ -1365,6 +1387,9 @@ test_that("describe() and summarize() on a DataFrame", {
   stats2 <- summary(df)
   expect_equal(collect(stats2)[4, "name"], "Andy")
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # Test base::summary is working
+  expect_equal(length(summary(attenu, digits = 4)), 35)
 })
 
 test_that("dropna() and na.omit() on a DataFrame", {
@@ -1448,6 +1473,9 @@ test_that("dropna() and na.omit() on a DataFrame", {
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
+
+  # Test stats::na.omit is working
+  expect_equal(nrow(na.omit(data.frame(x = c(0, 10, NA)))), 2)
 })
 
 test_that("fillna() on a DataFrame", {
@@ -1510,6 +1538,9 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
   result <- corr(df, "singles", "doubles", "pearson")
   expect_true(abs(result - 1.0) < 1e-12)
+
+  # Test stats::cov is working
+  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
 })
 
 test_that("freqItems() on a DataFrame", {
