@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.ml;
 
+import java.util.regex.Pattern;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -33,8 +35,6 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.regex.Pattern;
 
 /**
  * An example demonstrating LDA
@@ -61,12 +61,8 @@ public class JavaLDAExample {
   }
 
   public static void main(String[] args) {
-    if (args.length != 2) {
-      System.err.println("Usage: ml.JavaLDAExample <file> <k>");
-      System.exit(1);
-    }
-    String inputFile = args[0];
-    int k = Integer.parseInt(args[1]);
+
+    String inputFile = "data/mllib/sample_lda_data.txt";
 
     // Parses the arguments
     SparkConf conf = new SparkConf().setAppName("JavaLDAExample");
@@ -81,7 +77,7 @@ public class JavaLDAExample {
 
     // Trains a LDA model
     LDA lda = new LDA()
-      .setK(k)
+      .setK(10)
       .setMaxIter(10);
     LDAModel model = lda.fit(dataset);
 
@@ -91,6 +87,7 @@ public class JavaLDAExample {
     // Shows the result
     DataFrame topics = model.describeTopics(3);
     topics.show(false);
+    model.transform(dataset).show(false);
 
     jsc.stop();
   }

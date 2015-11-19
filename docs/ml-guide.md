@@ -40,12 +40,12 @@ Also, some algorithms have additional capabilities in the `spark.ml` API; e.g., 
 provide class probabilities, and linear models provide model summaries.
 
 * [Feature extraction, transformation, and selection](ml-features.html)
+* [Clustering](ml-clustering.html)
 * [Decision Trees for classification and regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)
 * [Survival Regression](ml-survival-regression.html)
-* [Clustering](ml-clustering.html)
 
 
 # Main concepts in Pipelines

@@ -69,11 +69,11 @@ We list major functionality from both below, with links to detailed guides.
 concepts. It also contains sections on using algorithms within the Pipelines API, for example:
 
 * [Feature extraction, transformation, and selection](ml-features.html)
+* [Clustering](ml-clustering.html)
 * [Decision trees for classification and regression](ml-decision-tree.html)
 * [Ensembles](ml-ensembles.html)
 * [Linear methods with elastic net regularization](ml-linear-methods.html)
 * [Multilayer perceptron classifier](ml-ann.html)
-* [Clustering](ml-clustering.html)
 
 # Dependencies
 
