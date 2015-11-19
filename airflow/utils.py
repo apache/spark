@@ -448,6 +448,9 @@ def apply_defaults(func):
         return result
     return wrapper
 
+if 'BUILDING_AIRFLOW_DOCS' in os.environ:
+    # Monkey patch hook to get good function headers while building docs
+    apply_defaults = lambda x: x
 
 def ask_yesno(question):
     yes = set(['yes', 'y'])
