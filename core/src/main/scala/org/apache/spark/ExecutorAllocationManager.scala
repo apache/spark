@@ -408,8 +408,8 @@ private[spark] class ExecutorAllocationManager(
       executorsPendingToRemove.add(executorId)
       true
     } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor $executorId!" +
-        s"Or no executor to kill!")
+      logWarning(s"Unable to reach the cluster manager to kill executor $executorId," +
+        s"or no executor eligible to kill!")
       false
     }
   }
