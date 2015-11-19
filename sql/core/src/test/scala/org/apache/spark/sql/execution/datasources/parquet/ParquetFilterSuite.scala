@@ -294,7 +294,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(path).filter("part = 1"),
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -311,7 +311,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(path).filter("a > 0 and (part = 0 or a > 1)"),
+          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 0 and (part = 0 or a > 1)"),
           (2 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -333,6 +333,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         checkAnswer(
           sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a"),
           (1 to 1).map(i => Row(i, i.toString, null)))
+      }
+    }
+  }
+
+  // Renable when we can toggle custom ParquetRecordReader on/off. The custom reader does
+  // not do row by row filtering (and we probably don't want to push that).
+  ignore("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
+    import testImplicits._
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part=1"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+        val df = sqlContext.read.parquet(path).filter("a = 2")
+
+        // This is the source RDD without Spark-side filtering.
+        val childRDD =
+          df
+            .queryExecution
+            .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+            .child
+            .execute()
+
+        // The result should be single row.
+        // When a filter is pushed to Parquet, Parquet can apply it to every row.
+        // So, we can check the number of rows returned from the Parquet
+        // to make sure our filter pushdown work.
+        assert(childRDD.count == 1)
       }
     }
   }

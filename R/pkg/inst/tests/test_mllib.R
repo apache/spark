@@ -31,6 +31,11 @@ test_that("glm and predict", {
   model <- glm(Sepal_Width ~ Sepal_Length, training, family = "gaussian")
   prediction <- predict(model, test)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+
+  # Test stats::predict is working
+  x <- rnorm(15)
+  y <- x + rnorm(15)
+  expect_equal(length(predict(lm(y ~ x))), 15)
 })
 
 test_that("glm should work with long formula", {
@@ -72,22 +77,17 @@ test_that("feature interaction vs native glm", {
 test_that("summary coefficients match with native glm", {
   training <- createDataFrame(sqlContext, iris)
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, solver = "normal"))
-  coefs <- unlist(stats$Coefficients)
-  devianceResiduals <- unlist(stats$DevianceResiduals)
+  coefs <- unlist(stats$coefficients)
+  devianceResiduals <- unlist(stats$devianceResiduals)
 
-  rCoefs <- as.vector(coef(glm(Sepal.Width ~ Sepal.Length + Species, data = iris)))
-  rStdError <- c(0.23536, 0.04630, 0.07207, 0.09331)
-  rTValue <- c(7.123, 7.557, -13.644, -10.798)
-  rPValue <- c(0.0, 0.0, 0.0, 0.0)
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
+  rCoefs <- unlist(rStats$coefficients)
   rDevianceResiduals <- c(-0.95096, 0.72918)
 
-  expect_true(all(abs(rCoefs - coefs[1:4]) < 1e-6))
-  expect_true(all(abs(rStdError - coefs[5:8]) < 1e-5))
-  expect_true(all(abs(rTValue - coefs[9:12]) < 1e-3))
-  expect_true(all(abs(rPValue - coefs[13:16]) < 1e-6))
+  expect_true(all(abs(rCoefs - coefs) < 1e-5))
   expect_true(all(abs(rDevianceResiduals - devianceResiduals) < 1e-5))
   expect_true(all(
-    rownames(stats$Coefficients) ==
+    rownames(stats$coefficients) ==
     c("(Intercept)", "Sepal_Length", "Species_versicolor", "Species_virginica")))
 })
 
@@ -96,21 +96,15 @@ test_that("summary coefficients match with native glm of family 'binomial'", {
   training <- filter(df, df$Species != "setosa")
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
     family = "binomial"))
-  coefs <- as.vector(stats$Coefficients)
+  coefs <- as.vector(stats$coefficients[,1])
 
   rTraining <- iris[iris$Species %in% c("versicolor","virginica"),]
   rCoefs <- as.vector(coef(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
     family = binomial(link = "logit"))))
-  rStdError <- c(3.0974, 0.5169, 0.8628)
-  rTValue <- c(-4.212, 3.680, 0.469)
-  rPValue <- c(0.000, 0.000, 0.639)
 
-  expect_true(all(abs(rCoefs - coefs[1:3]) < 1e-4))
-  expect_true(all(abs(rStdError - coefs[4:6]) < 1e-4))
-  expect_true(all(abs(rTValue - coefs[7:9]) < 1e-3))
-  expect_true(all(abs(rPValue - coefs[10:12]) < 1e-3))
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
   expect_true(all(
-    rownames(stats$Coefficients) ==
+    rownames(stats$coefficients) ==
     c("(Intercept)", "Sepal_Length", "Sepal_Width")))
 })
 

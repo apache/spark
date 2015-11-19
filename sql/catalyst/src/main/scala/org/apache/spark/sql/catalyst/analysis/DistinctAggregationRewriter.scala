@@ -126,8 +126,8 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
       // When the flag is set to specialize single distinct agg planning,
       // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column and this aggregate operator does have grouping expressions.
-      distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && a.groupingExpressions.isEmpty)
+      // distinct column.
+      distinctAggGroups.size > 1
     } else {
       distinctAggGroups.size >= 1
     }
@@ -151,11 +151,12 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       }
 
       // Setup unique distinct aggregate children.
-      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq
-      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair).toMap
-      val distinctAggChildAttrs = distinctAggChildAttrMap.values.toSeq
+      val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
+      val distinctAggChildAttrMap = distinctAggChildren.map(expressionAttributePair)
+      val distinctAggChildAttrs = distinctAggChildAttrMap.map(_._2)
 
       // Setup expand & aggregate operators for distinct aggregate expressions.
+      val distinctAggChildAttrLookup = distinctAggChildAttrMap.toMap
       val distinctAggOperatorMap = distinctAggGroups.toSeq.zipWithIndex.map {
         case ((group, expressions), i) =>
           val id = Literal(i + 1)
@@ -170,7 +171,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
             val naf = patchAggregateFunctionChildren(af) { x =>
-              evalWithinGroup(id, distinctAggChildAttrMap(x))
+              evalWithinGroup(id, distinctAggChildAttrLookup(x))
             }
             (e, e.copy(aggregateFunction = naf, isDistinct = false))
           }

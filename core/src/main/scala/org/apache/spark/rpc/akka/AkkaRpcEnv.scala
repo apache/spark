@@ -263,7 +263,7 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 
   override def receiveWithLogging: Actor.Receive = {
-    case Error(cause: Throwable, _, _, message: String) => logError(message, cause)
+    case Error(cause: Throwable, _, _, message: String) => logDebug(message, cause)
   }
 }
 

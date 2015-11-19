@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, Encoder}
+import org.apache.spark.sql.catalyst.encoders.FlatEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
@@ -82,9 +82,6 @@ object functions extends LegacyFunctions {
     isDistinct: Boolean = false): Column = {
     Column(func.toAggregateExpression(isDistinct))
   }
-
-  private implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
-
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -269,7 +266,8 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(columnName: String): TypedColumn[Any, Long] = count(Column(columnName)).as[Long]
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(FlatEncoder[Long])
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -399,7 +397,7 @@ object functions extends LegacyFunctions {
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
@@ -2306,6 +2304,18 @@ object functions extends LegacyFunctions {
    * @since 1.3.0
    */
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
+
+  /**
+   * Creates a new row for a json column according to the given field names.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def json_tuple(json: Column, fields: String*): Column = withExpr {
+    require(fields.length > 0, "at least 1 field name should be given.")
+    JsonTuple(json.expr +: fields.map(Literal.apply))
+  }
 
   /**
    * Returns length of array or map.

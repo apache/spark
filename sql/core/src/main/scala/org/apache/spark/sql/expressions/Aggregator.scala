@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
@@ -46,7 +47,7 @@ import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
  * @tparam B The type of the intermediate value of the reduction.
  * @tparam C The type of the final result.
  */
-abstract class Aggregator[-A, B, C] {
+abstract class Aggregator[-A, B, C] extends Serializable {
 
   /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
   def zero: B
@@ -65,7 +66,7 @@ abstract class Aggregator[-A, B, C] {
   /**
    * Transform the output of the reduction.
    */
-  def present(reduction: B): C
+  def finish(reduction: B): C
 
   /**
    * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] or [[DataFrame]]

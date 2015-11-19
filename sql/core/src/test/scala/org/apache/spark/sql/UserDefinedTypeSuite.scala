@@ -23,7 +23,6 @@ import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.OpenHashSetUDT
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -131,15 +130,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
   }
 
-  test("OpenHashSetUDT") {
-    val openHashSetUDT = new OpenHashSetUDT(IntegerType)
-    val set = new OpenHashSet[Int]
-    (1 to 10).foreach(i => set.add(i))
-
-    val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
-    assert(actual.iterator.toSet === set.iterator.toSet)
-  }
-
   test("UDTs with JSON") {
     val data = Seq(
       "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
@@ -163,7 +153,6 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
   test("SPARK-10472 UserDefinedType.typeName") {
     assert(IntegerType.typeName === "integer")
     assert(new MyDenseVectorUDT().typeName === "mydensevector")
-    assert(new OpenHashSetUDT(IntegerType).typeName === "openhashset")
   }
 
   test("Catalyst type converter null handling for UDTs") {

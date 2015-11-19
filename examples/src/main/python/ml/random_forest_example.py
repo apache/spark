@@ -74,8 +74,8 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonRandomForestExample")
     sqlContext = SQLContext(sc)
 
-    # Load and parse the data file into a dataframe.
-    df = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    # Load the data stored in LIBSVM format as a DataFrame.
+    df = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Map labels into an indexed column of labels in [0, numLabels)
     stringIndexer = StringIndexer(inputCol="label", outputCol="indexedLabel")

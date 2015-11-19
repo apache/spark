@@ -32,7 +32,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = resultType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType, NullType))
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function sum")

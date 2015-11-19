@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution.aggregate
 import scala.language.existentials
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -51,10 +52,10 @@ object TypedAggregateExpression {
  */
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
-    aEncoder: Option[ExpressionEncoder[Any]],
-    bEncoder: ExpressionEncoder[Any],
+    aEncoder: Option[ExpressionEncoder[Any]], // Should be bound.
+    bEncoder: ExpressionEncoder[Any], // Should be bound.
     cEncoder: ExpressionEncoder[Any],
-    children: Seq[Expression],
+    children: Seq[Attribute],
     mutableAggBufferOffset: Int,
     inputAggBufferOffset: Int)
   extends ImperativeAggregate with Logging {
@@ -77,8 +78,7 @@ case class TypedAggregateExpression(
 
   override lazy val resolved: Boolean = aEncoder.isDefined
 
-  override lazy val inputTypes: Seq[DataType] =
-    aEncoder.map(_.schema.map(_.dataType)).getOrElse(Nil)
+  override lazy val inputTypes: Seq[DataType] = Nil
 
   override val aggBufferSchema: StructType = bEncoder.schema
 
@@ -89,15 +89,8 @@ case class TypedAggregateExpression(
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  lazy val inputAttributes = aEncoder.get.schema.toAttributes
-  lazy val inputMapping = AttributeMap(inputAttributes.zip(children))
-  lazy val boundA =
-    aEncoder.get.copy(constructExpression = aEncoder.get.constructExpression transform {
-      case a: AttributeReference => inputMapping(a)
-    })
-
-  val bAttributes = bEncoder.schema.toAttributes
-  lazy val boundB = bEncoder.resolve(bAttributes).bind(bAttributes)
+  // We let the dataset do the binding for us.
+  lazy val boundA = aEncoder.get
 
   private def updateBuffer(buffer: MutableRow, value: InternalRow): Unit = {
     // todo: need a more neat way to assign the value.
@@ -118,25 +111,25 @@ case class TypedAggregateExpression(
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val inputA = boundA.fromRow(input)
-    val currentB = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
+    val currentB = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
     val merged = aggregator.reduce(currentB, inputA)
-    val returned = boundB.toRow(merged)
+    val returned = bEncoder.toRow(merged)
 
     updateBuffer(buffer, returned)
   }
 
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val b1 = boundB.shift(mutableAggBufferOffset).fromRow(buffer1)
-    val b2 = boundB.shift(inputAggBufferOffset).fromRow(buffer2)
+    val b1 = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer1)
+    val b2 = bEncoder.shift(inputAggBufferOffset).fromRow(buffer2)
     val merged = aggregator.merge(b1, b2)
-    val returned = boundB.toRow(merged)
+    val returned = bEncoder.toRow(merged)
 
     updateBuffer(buffer1, returned)
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val b = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
-    val result = cEncoder.toRow(aggregator.present(b))
+    val b = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
+    val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
       case _: StructType => result
       case _ => result.get(0, dataType)
