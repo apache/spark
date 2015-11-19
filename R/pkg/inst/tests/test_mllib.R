@@ -35,7 +35,7 @@ test_that("glm and predict", {
   # Test stats::predict is working
   x <- rnorm(15)
   y <- x + rnorm(15)
-  expect_equal(15, predict(lm(y ~ x)))
+  expect_equal(length(predict(lm(y ~ x))), 15)
 })
 
 test_that("glm should work with long formula", {
