@@ -46,6 +46,8 @@ body .container-wrapper {
 }
 
 body #content {
+  position: relative;
+
   line-height: 1.6; /* Inspired by Github's wiki style */
   background-color: white;
   padding-left: 15px;
@@ -168,9 +170,14 @@ a.anchorjs-link:hover { text-decoration: none; }
 /**
  * The left navigation bar.
  */
+.left-menu-wrapper {
+  position: absolute;
+  height: 100%;  
+}
+
 .left-menu {
+  position: fixed;
   max-width: 350px;
-  height: 100%;
 
   padding-right: 9.5px;
   border: 1px solid rgba(0,0,0,0.15);
