@@ -77,7 +77,6 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   test("PCAModel read/write") {
 
     def checkModelData(model1: PCAModel, model2: PCAModel): Unit = {
-      assert(model1.k === model2.k)
       assert(model1.pc === model2.pc)
     }
 
