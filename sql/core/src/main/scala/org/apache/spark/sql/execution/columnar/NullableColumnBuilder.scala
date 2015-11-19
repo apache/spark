@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.columnar
+package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
  *   +---+-----+---------+
  * }}}
  */
-private[sql] trait NullableColumnBuilder extends ColumnBuilder {
+private[columnar] trait NullableColumnBuilder extends ColumnBuilder {
   protected var nulls: ByteBuffer = _
   protected var nullCount: Int = _
   private var pos: Int = _
