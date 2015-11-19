@@ -141,7 +141,7 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     val code =
       s"""
        @Override
-       ${nodeToFunction(root, "apply")}
+       ${nodeToFunction(root, "call")}
        """
     trait CallableVectorDouble {
       def call(v: Vector): Double
