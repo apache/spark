@@ -155,3 +155,18 @@ ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
  * AnchorJS (anchor links when hovering over headers)
  */
 a.anchorjs-link:hover { text-decoration: none; }
+
+
+/**
+ * The left navigation bar.
+ */
+.left-menu {
+  max-width: 350px;
+  z-index: 100;
+  position: fixed;
+}
+
+.left-menu h3 {
+  margin-left: 10px;
+  line-height: 30px;
+}

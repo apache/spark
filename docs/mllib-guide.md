@@ -18,6 +18,8 @@ It divides into two packages:
 * [`spark.ml`](ml-guide.html) provides higher-level API
   built on top of [DataFrames](sql-programming-guide.html#dataframes) for constructing ML pipelines.
 
+
+
 Using `spark.ml` is recommended because with DataFrames the API is more versatile and flexible.
 But we will keep supporting `spark.mllib` along with the development of `spark.ml`.
 Users should be comfortable using `spark.mllib` features and expect more features coming.
