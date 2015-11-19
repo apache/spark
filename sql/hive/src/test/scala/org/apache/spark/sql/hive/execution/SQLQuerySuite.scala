@@ -1482,7 +1482,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       """.stripMargin), Row("value1", "12", 3.14, "hello"))
   }
 
+  // This test case is to verify a bug when making a new instance of LogicalRDD.
   test ("SPARK-11633: HiveContext throws TreeNode Exception : Failed to Copy Node") {
+    // To create LogicalRDD in logical plans, we use case class to create a DataFrame.
     val rdd1 = sparkContext.parallelize(Seq( Individual(1, 3), Individual(2, 1)))
     val df = hiveContext.createDataFrame(rdd1)
     df.registerTempTable("foo")
