@@ -252,7 +252,7 @@ object ALSModel extends MLReadable[ALSModel] {
   private class ALSModelReader extends MLReader[ALSModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.recommendation.ALSModel"
+    private val className = classOf[ALSModel].getName
 
     override def load(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

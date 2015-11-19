@@ -266,7 +266,7 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
 
   private class CountVectorizerModelReader extends MLReader[CountVectorizerModel] {
 
-    private val className = "org.apache.spark.ml.feature.CountVectorizerModel"
+    private val className = classOf[CountVectorizerModel].getName
 
     override def load(path: String): CountVectorizerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

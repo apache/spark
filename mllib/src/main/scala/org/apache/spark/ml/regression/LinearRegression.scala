@@ -474,7 +474,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
   private class LinearRegressionModelReader extends MLReader[LinearRegressionModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.regression.LinearRegressionModel"
+    private val className = classOf[LinearRegressionModel].getName
 
     override def load(path: String): LinearRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

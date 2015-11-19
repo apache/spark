@@ -198,7 +198,7 @@ object Pipeline extends MLReadable[Pipeline] {
   private class PipelineReader extends MLReader[Pipeline] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.Pipeline"
+    private val className = classOf[Pipeline].getName
 
     override def load(path: String): Pipeline = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
@@ -363,7 +363,7 @@ object PipelineModel extends MLReadable[PipelineModel] {
   private class PipelineModelReader extends MLReader[PipelineModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.PipelineModel"
+    private val className = classOf[PipelineModel].getName
 
     override def load(path: String): PipelineModel = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)

@@ -565,7 +565,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
     extends MLReader[LogisticRegressionModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"
+    private val className = classOf[LogisticRegressionModel].getName
 
     override def load(path: String): LogisticRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
@@ -608,7 +608,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
    * @return This MultilabelSummarizer
    */
   def add(label: Double, weight: Double = 1.0): this.type = {
-    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
     if (weight == 0.0) return this
 
@@ -844,7 +844,7 @@ private class LogisticAggregator(
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
