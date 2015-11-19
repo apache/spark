@@ -78,3 +78,4 @@ object DecisionTreeRegressionExample {
     // $example off$
   }
 }
+// scalastyle:on println
