@@ -49,18 +49,18 @@ private[spark] class SqlNewHadoopPartition(
 }
 
 /**
-  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
-  * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
-  * It is based on [[org.apache.spark.rdd.NewHadoopRDD]]. It has three additions.
-  * 1. A shared broadcast Hadoop Configuration.
-  * 2. An optional closure `initDriverSideJobFuncOpt` that set configurations at the driver side
-  *    to the shared Hadoop Configuration.
-  * 3. An optional closure `initLocalJobFuncOpt` that set configurations at both the driver side
-  *    and the executor side to the shared Hadoop Configuration.
-  *
-  * Note: This is RDD is basically a cloned version of [[org.apache.spark.rdd.NewHadoopRDD]] with
-  * changes based on [[org.apache.spark.rdd.HadoopRDD]].
-  */
+ * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
+ * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
+ * It is based on [[org.apache.spark.rdd.NewHadoopRDD]]. It has three additions.
+ * 1. A shared broadcast Hadoop Configuration.
+ * 2. An optional closure `initDriverSideJobFuncOpt` that set configurations at the driver side
+ *    to the shared Hadoop Configuration.
+ * 3. An optional closure `initLocalJobFuncOpt` that set configurations at both the driver side
+ *    and the executor side to the shared Hadoop Configuration.
+ *
+ * Note: This is RDD is basically a cloned version of [[org.apache.spark.rdd.NewHadoopRDD]] with
+ * changes based on [[org.apache.spark.rdd.HadoopRDD]].
+ */
 private[spark] class SqlNewHadoopRDD[V: ClassTag](
   sqlContext: SQLContext,
   broadcastedConf: Broadcast[SerializableConfiguration],
@@ -277,9 +277,9 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   }
 
   /**
-    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
-    * the given function rather than the index of the partition.
-    */
+   * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
+   * the given function rather than the index of the partition.
+   */
   private[spark] class NewHadoopMapPartitionsWithSplitRDD[U: ClassTag, T: ClassTag](
     prev: RDD[T],
     f: (InputSplit, Iterator[T]) => Iterator[U],
