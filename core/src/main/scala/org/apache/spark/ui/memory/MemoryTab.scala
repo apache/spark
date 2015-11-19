@@ -74,12 +74,6 @@ class MemoryListener extends SparkListener {
     removedExecutorIdToMem.getOrElseUpdate(executorId, info.getOrElse(new MemoryUIInfo))
   }
 
-  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
-    val executorId = event.blockManagerId.executorId
-    val info = activeExecutorIdToMem.remove(executorId)
-    removedExecutorIdToMem.getOrElseUpdate(executorId, info.getOrElse(new MemoryUIInfo))
-  }
-
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     val stage = (event.stageInfo.stageId, event.stageInfo.attemptId)
     val memInfoMap = new HashMap[ExecutorId, MemoryUIInfo]
@@ -142,4 +136,4 @@ class TransportMemSize {
   }
 }
 
-case class MemTime(memorySize: Long = System.currentTimeMillis, timeStamp: Long = 0L)
+case class MemTime(memorySize: Long = 0L, timeStamp: Long = System.currentTimeMillis)
