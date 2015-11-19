@@ -288,9 +288,9 @@ class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with Bef
   }
 
   test("checkpointing") {
-    /*
-      This tests whether the TrackStateRDD correctly truncates any references to its parent RDDs -
-      the data RDD and the parent TrackStateRDD.
+    /**
+     * This tests whether the TrackStateRDD correctly truncates any references to its parent RDDs -
+     * the data RDD and the parent TrackStateRDD.
      */
     def rddCollectFunc(rdd: RDD[TrackStateRDDRecord[Int, Int, Int]]) = {
       rdd.map { record => (record.stateMap.getAll().toList, record.emittedRecords.toList) }

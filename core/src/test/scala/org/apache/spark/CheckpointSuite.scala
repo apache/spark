@@ -46,9 +46,9 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    *                    non-comparable types like arrays that we want to convert to something that supports ==
    */
   protected def testRDD[U: ClassTag](
-    op: (RDD[Int]) => RDD[U],
-    reliableCheckpoint: Boolean,
-    collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
+      op: (RDD[Int]) => RDD[U],
+      reliableCheckpoint: Boolean,
+      collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateFatRDD()
     val operatedRDD = op(baseRDD)
@@ -117,9 +117,9 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    *                    that supports ==
    */
   protected def testRDDPartitions[U: ClassTag](
-    op: (RDD[Int]) => RDD[U],
-    reliableCheckpoint: Boolean,
-    collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
+      op: (RDD[Int]) => RDD[U],
+      reliableCheckpoint: Boolean,
+      collectFunc: RDD[U] => Any = defaultCollectFunc[U] _): Unit = {
     // Generate the final RDD using given RDD operation
     val baseRDD = generateFatRDD()
     val operatedRDD = op(baseRDD)
