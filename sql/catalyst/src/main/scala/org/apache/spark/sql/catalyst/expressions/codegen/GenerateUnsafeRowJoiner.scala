@@ -159,7 +159,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val code = s"""
-       |public Object generate($exprType[] exprs) {
+       |public java.lang.Object generate($exprType[] exprs) {
        |  return new SpecificUnsafeRowJoiner();
        |}
        |
@@ -176,9 +176,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |      buf = new byte[sizeInBytes];
        |    }
        |
-       |    final Object obj1 = row1.getBaseObject();
+       |    final java.lang.Object obj1 = row1.getBaseObject();
        |    final long offset1 = row1.getBaseOffset();
-       |    final Object obj2 = row2.getBaseObject();
+       |    final java.lang.Object obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
        |    $copyBitset
