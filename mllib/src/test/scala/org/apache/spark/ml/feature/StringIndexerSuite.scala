@@ -21,12 +21,13 @@ import org.apache.spark.sql.types.{StringType, StructType, StructField, DoubleTy
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
-class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class StringIndexerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new StringIndexer)
@@ -117,6 +118,23 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(indexerModel.transform(df).eq(df))
   }
 
+  test("StringIndexer read/write") {
+    val t = new StringIndexer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+    testDefaultReadWrite(t)
+  }
+
+  test("StringIndexerModel read/write") {
+    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.labels === instance.labels)
+  }
+
   test("IndexToString params") {
     val idxToStr = new IndexToString()
     ParamsSuite.checkParams(idxToStr)
@@ -172,5 +190,13 @@ class StringIndexerSuite extends SparkFunSuite with MLlibTestSparkContext {
     val inSchema = StructType(Seq(StructField("input", DoubleType)))
     val outSchema = idxToStr.transformSchema(inSchema)
     assert(outSchema("output").dataType === StringType)
+  }
+
+  test("IndexToString read/write") {
+    val t = new IndexToString()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setLabels(Array("a", "b", "c"))
+    testDefaultReadWrite(t)
   }
 }

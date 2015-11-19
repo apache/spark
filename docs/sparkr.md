@@ -286,24 +286,37 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', '+', and '-'. The example below shows the use of building a gaussian GLM model using SparkR.
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'. 
+
+The [summary()](api/R/summary.html) function gives the summary of a model produced by [glm()](api/R/glm.html).
+
+* For gaussian GLM model, it returns a list with 'devianceResiduals' and 'coefficients' components. The 'devianceResiduals' gives the min/max deviance residuals of the estimation; the 'coefficients' gives the estimated coefficients and their estimated standard errors, t values and p-values. (It only available when model fitted by normal solver.)
+* For binomial GLM model, it returns a list with 'coefficients' component which gives the estimated coefficients.
+
+The examples below show the use of building gaussian GLM model and binomial GLM model using SparkR.
+
+## Gaussian GLM model
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 # Create the DataFrame
 df <- createDataFrame(sqlContext, iris)
 
-# Fit a linear model over the dataset.
+# Fit a gaussian GLM model over the dataset.
 model <- glm(Sepal_Length ~ Sepal_Width + Species, data = df, family = "gaussian")
 
-# Model coefficients are returned in a similar format to R's native glm().
+# Model summary are returned in a similar format to R's native glm().
 summary(model)
+##$devianceResiduals
+## Min       Max     
+## -1.307112 1.412532
+##
 ##$coefficients
-##                    Estimate
-##(Intercept)        2.2513930
-##Sepal_Width        0.8035609
-##Species_versicolor 1.4587432
-##Species_virginica  1.9468169
+##                   Estimate  Std. Error t value  Pr(>|t|)    
+##(Intercept)        2.251393  0.3697543  6.08889  9.568102e-09
+##Sepal_Width        0.8035609 0.106339   7.556598 4.187317e-12
+##Species_versicolor 1.458743  0.1121079  13.01195 0           
+##Species_virginica  1.946817  0.100015   19.46525 0           
 
 # Make predictions based on the model.
 predictions <- predict(model, newData = df)
@@ -315,5 +328,26 @@ head(select(predictions, "Sepal_Length", "prediction"))
 ##4          4.6   4.742432
 ##5          5.0   5.144212
 ##6          5.4   5.385281
+{% endhighlight %}
+</div>
+
+## Binomial GLM model
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Create the DataFrame
+df <- createDataFrame(sqlContext, iris)
+training <- filter(df, df$Species != "setosa")
+
+# Fit a binomial GLM model over the dataset.
+model <- glm(Species ~ Sepal_Length + Sepal_Width, data = training, family = "binomial")
+
+# Model coefficients are returned in a similar format to R's native glm().
+summary(model)
+##$coefficients
+##               Estimate
+##(Intercept)  -13.046005
+##Sepal_Length   1.902373
+##Sepal_Width    0.404655
 {% endhighlight %}
 </div>

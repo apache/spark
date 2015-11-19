@@ -305,7 +305,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>daily</td>
   <td>
     Set the time interval by which the executor logs will be rolled over.
-    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly<code>, <code>minutely<code> or
+    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly</code>, <code>minutely</code> or
     any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -330,13 +330,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
-    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()<code>,
+    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()</code>,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    <code>sc.dump_profiles(path)<code>. If some of the profile results had been displayed manually,
+    <code>sc.dump_profiles(path)</code>. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
-    By default the <code>pyspark.profiler.BasicProfiler<code> will be used, but this can be overridden by
-    passing a profiler class in as a parameter to the <code>SparkContext<code> constructor.
+    By default the <code>pyspark.profiler.BasicProfiler</code> will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the <code>SparkContext</code> constructor.
   </td>
 </tr>
 <tr>
@@ -722,17 +722,20 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of the heap space used for execution and storage. The lower this is, the more
     frequently spills and cached data eviction occur. The purpose of this config is to set
     aside memory for internal metadata, user data structures, and imprecise size estimation
-    in the case of sparse, unusually large records.
+    in the case of sparse, unusually large records. Leaving this at the default value is
+    recommended. For more detail, see <a href="tuning.html#memory-management-overview">
+    this description</a>.
   </td>
 </tr>
 <tr>
   <td><code>spark.memory.storageFraction</code></td>
   <td>0.5</td>
   <td>
-    T​he size of the storage region within the space set aside by
-    <code>s​park.memory.fraction</code>. This region is not statically reserved, but dynamically
-    allocated as cache requests come in. ​Cached data may be evicted only if total storage exceeds
-    this region.
+    Amount of storage memory immune to eviction, expressed as a fraction of the size of the
+    region set aside by <code>s​park.memory.fraction</code>. The higher this is, the less
+    working memory may be available to execution and tasks may spill to disk more often.
+    Leaving this at the default value is recommended. For more detail, see
+    <a href="tuning.html#memory-management-overview">this description</a>.
   </td>
 </tr>
 <tr>

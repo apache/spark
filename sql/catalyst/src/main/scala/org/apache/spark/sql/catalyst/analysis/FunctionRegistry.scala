@@ -244,6 +244,7 @@ object FunctionRegistry {
     expression[AddMonths]("add_months"),
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
+    expression[CurrentTimestamp]("now"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -281,7 +282,8 @@ object FunctionRegistry {
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id")
   )
 
   val builtin: SimpleFunctionRegistry = {

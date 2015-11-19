@@ -48,8 +48,11 @@ private[util] sealed trait BaseReadWrite {
   /**
    * Returns the user-specified SQL context or the default.
    */
-  protected final def sqlContext: SQLContext = optionSQLContext.getOrElse {
-    SQLContext.getOrCreate(SparkContext.getOrCreate())
+  protected final def sqlContext: SQLContext = {
+    if (optionSQLContext.isEmpty) {
+      optionSQLContext = Some(SQLContext.getOrCreate(SparkContext.getOrCreate()))
+    }
+    optionSQLContext.get
   }
 
   /** Returns the [[SparkContext]] underlying [[sqlContext]] */
@@ -161,6 +164,8 @@ trait Readable[T] {
 
   /**
    * Reads an ML instance from the input path, a shortcut of `read.load(path)`.
+   *
+   * Note: Implementing classes should override this to be Java-friendly.
    */
   @Since("1.6.0")
   def load(path: String): T = read.load(path)
@@ -187,9 +192,13 @@ private[ml] object DefaultParamsWriter {
    *  - timestamp
    *  - sparkVersion
    *  - uid
-   *  - paramMap
+   *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
-  def saveMetadata(instance: Params, path: String, sc: SparkContext): Unit = {
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JValue] = None): Unit = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
@@ -200,7 +209,8 @@ private[ml] object DefaultParamsWriter {
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("extraMetadata" -> extraMetadata)
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = compact(render(metadata))
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -212,6 +222,7 @@ private[ml] object DefaultParamsWriter {
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  * @tparam T ML instance type
+ * TODO: Consider adding check for correct class name.
  */
 private[ml] class DefaultParamsReader[T] extends Reader[T] {
 
@@ -230,6 +241,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    * @param params  paramMap, as a [[JValue]]
+   * @param extraMetadata  Extra metadata saved by [[DefaultParamsWriter.saveMetadata()]]
    * @param metadataStr  Full metadata file String (for debugging)
    */
   case class Metadata(
@@ -238,6 +250,7 @@ private[ml] object DefaultParamsReader {
       timestamp: Long,
       sparkVersion: String,
       params: JValue,
+      extraMetadata: Option[JValue],
       metadataStr: String)
 
   /**
@@ -256,12 +269,13 @@ private[ml] object DefaultParamsReader {
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val params = metadata \ "paramMap"
+    val extraMetadata = (metadata \ "extraMetadata").extract[Option[JValue]]
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
-    Metadata(className, uid, timestamp, sparkVersion, params, metadataStr)
+    Metadata(className, uid, timestamp, sparkVersion, params, extraMetadata, metadataStr)
   }
 
   /**

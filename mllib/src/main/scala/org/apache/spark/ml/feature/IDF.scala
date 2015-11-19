@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -60,7 +62,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
 @Experimental
-final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase {
+final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase with Writable {
 
   def this() = this(Identifiable.randomUID("idf"))
 
@@ -85,6 +87,19 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   }
 
   override def copy(extra: ParamMap): IDF = defaultCopy(extra)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object IDF extends Readable[IDF] {
+
+  @Since("1.6.0")
+  override def read: Reader[IDF] = new DefaultParamsReader
+
+  @Since("1.6.0")
+  override def load(path: String): IDF = super.load(path)
 }
 
 /**
@@ -95,7 +110,9 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
 class IDFModel private[ml] (
     override val uid: String,
     idfModel: feature.IDFModel)
-  extends Model[IDFModel] with IDFBase {
+  extends Model[IDFModel] with IDFBase with Writable {
+
+  import IDFModel._
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -117,4 +134,50 @@ class IDFModel private[ml] (
     val copied = new IDFModel(uid, idfModel)
     copyValues(copied, extra).setParent(parent)
   }
+
+  /** Returns the IDF vector. */
+  @Since("1.6.0")
+  def idf: Vector = idfModel.idf
+
+  @Since("1.6.0")
+  override def write: Writer = new IDFModelWriter(this)
+}
+
+@Since("1.6.0")
+object IDFModel extends Readable[IDFModel] {
+
+  private[IDFModel] class IDFModelWriter(instance: IDFModel) extends Writer {
+
+    private case class Data(idf: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.idf)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class IDFModelReader extends Reader[IDFModel] {
+
+    private val className = "org.apache.spark.ml.feature.IDFModel"
+
+    override def load(path: String): IDFModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath)
+        .select("idf")
+        .head()
+      val idf = data.getAs[Vector](0)
+      val model = new IDFModel(metadata.uid, new feature.IDFModel(idf))
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: Reader[IDFModel] = new IDFModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): IDFModel = super.load(path)
 }
