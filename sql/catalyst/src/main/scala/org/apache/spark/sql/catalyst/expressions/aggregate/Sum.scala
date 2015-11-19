@@ -49,8 +49,6 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
-  private lazy val zero = Cast(Literal(0), sumDataType)
-
   override lazy val aggBufferAttributes = sum :: Nil
 
   override lazy val initialValues: Seq[Expression] = Seq(
@@ -59,14 +57,12 @@ case class Sum(child: Expression) extends DeclarativeAggregate {
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
-    Coalesce(Seq(Add(Coalesce(Seq(sum, zero)), Cast(child, sumDataType)), sum))
+    NullSafeAdd(sum, Cast(child, sumDataType))
   )
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    val add = Add(Coalesce(Seq(sum.left, zero)), Cast(sum.right, sumDataType))
     Seq(
-      /* sum = */
-      Coalesce(Seq(add, sum.left))
+      /* sum = */ NullSafeAdd(sum.left, sum.right)
     )
   }
 

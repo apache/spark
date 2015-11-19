@@ -148,6 +148,49 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
   }
 }
 
+/**
+  * Returns the sum of left and right, or null iff both left and right are null.
+  */
+case class NullSafeAdd(l: Expression, r: Expression) extends Add(l, r) {
+
+  override def eval(input: InternalRow): Any = {
+    val input1 = left.eval(input)
+    val input2 = right.eval(input)
+    if (input1 == null) {
+      input2
+    } else {
+      if (input2 == null) {
+        input1
+      } else {
+        nullSafeEval(input1, input2)
+      }
+    }
+  }
+
+  override protected def nullSafeCodeGen(
+    ctx: CodeGenContext,
+    ev: GeneratedExpressionCode,
+    f: (String, String) => String): String = {
+    val eval1 = left.gen(ctx)
+    val eval2 = right.gen(ctx)
+    val resultCode = f(eval1.value, eval2.value)
+    s"""
+      ${eval1.code}
+      ${eval2.code}
+      boolean ${ev.isNull} = ${eval1.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${eval1.value};
+      if (!${eval2.isNull}) {
+        if (!${eval1.isNull}) {
+          $resultCode
+        } else {
+          ${ev.isNull} = false;
+          ${ev.value} = ${eval2.value};
+        }
+      }
+    """
+  }
+}
+
 case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval

@@ -330,6 +330,21 @@ class CodeGenContext {
   }
 
   /**
+    * Generates code for greater of two expressions.
+    *
+    * @param dataType data type of the expressions
+    * @param c1 name of the variable of expression 1's output
+    * @param c2 name of the variable of expression 2's output
+    */
+  def genGreater(dataType: DataType, c1: String, c2: String): String = {
+    if (isPrimitiveType(dataType)) {
+      s"$c1 > $c2"
+    } else {
+      s"${genComp(dataType, c1, c2)} > 0"
+    }
+  }
+
+  /**
    * List of java data types that have special accessors and setters in [[InternalRow]].
    */
   val primitiveTypes =
@@ -544,7 +559,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
     def formatted = CodeFormatter.format(code)
 
-    logDebug({
+    logError({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
       formatted
