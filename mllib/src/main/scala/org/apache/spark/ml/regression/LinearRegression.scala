@@ -467,14 +467,14 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
   private class LinearRegressionModelReader extends MLReader[LinearRegressionModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.regression.LinearRegressionModel"
+    private val className = classOf[LinearRegressionModel].getName
 
     override def load(path: String): LinearRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

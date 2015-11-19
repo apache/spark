@@ -27,7 +27,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
 import org.apache.spark.ml.util.MLReader
 import org.apache.spark.ml.util.MLWriter
@@ -174,16 +174,20 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
     theStages.foldLeft(schema)((cur, stage) => stage.transformSchema(cur))
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new Pipeline.PipelineWriter(this)
 }
 
+@Since("1.6.0")
 object Pipeline extends MLReadable[Pipeline] {
 
+  @Since("1.6.0")
   override def read: MLReader[Pipeline] = new PipelineReader
 
+  @Since("1.6.0")
   override def load(path: String): Pipeline = super.load(path)
 
-  private[ml] class PipelineWriter(instance: Pipeline) extends MLWriter {
+  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter {
 
     SharedReadWrite.validateStages(instance.getStages)
 
@@ -191,10 +195,10 @@ object Pipeline extends MLReadable[Pipeline] {
       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
   }
 
-  private[ml] class PipelineReader extends MLReader[Pipeline] {
+  private class PipelineReader extends MLReader[Pipeline] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.Pipeline"
+    private val className = classOf[Pipeline].getName
 
     override def load(path: String): Pipeline = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
@@ -333,18 +337,22 @@ class PipelineModel private[ml] (
     new PipelineModel(uid, stages.map(_.copy(extra))).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new PipelineModel.PipelineModelWriter(this)
 }
 
+@Since("1.6.0")
 object PipelineModel extends MLReadable[PipelineModel] {
 
   import Pipeline.SharedReadWrite
 
+  @Since("1.6.0")
   override def read: MLReader[PipelineModel] = new PipelineModelReader
 
+  @Since("1.6.0")
   override def load(path: String): PipelineModel = super.load(path)
 
-  private[ml] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
+  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
 
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
@@ -352,10 +360,10 @@ object PipelineModel extends MLReadable[PipelineModel] {
       instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
   }
 
-  private[ml] class PipelineModelReader extends MLReader[PipelineModel] {
+  private class PipelineModelReader extends MLReader[PipelineModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.PipelineModel"
+    private val className = classOf[PipelineModel].getName
 
     override def load(path: String): PipelineModel = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)

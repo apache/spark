@@ -155,7 +155,7 @@ object IDFModel extends MLReadable[IDFModel] {
 
   private class IDFModelReader extends MLReader[IDFModel] {
 
-    private val className = "org.apache.spark.ml.feature.IDFModel"
+    private val className = classOf[IDFModel].getName
 
     override def load(path: String): IDFModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

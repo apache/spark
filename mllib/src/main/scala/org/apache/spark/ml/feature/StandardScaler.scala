@@ -180,7 +180,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
 
   private class StandardScalerModelReader extends MLReader[StandardScalerModel] {
 
-    private val className = "org.apache.spark.ml.feature.StandardScalerModel"
+    private val className = classOf[StandardScalerModel].getName
 
     override def load(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
