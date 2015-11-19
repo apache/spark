@@ -229,13 +229,14 @@ class AnalysisSuite extends AnalysisTest {
     val max = (System.currentTimeMillis() + 1) * 1000
 
     val lits = new scala.collection.mutable.ArrayBuffer[Long]
-    plan.transformAllExpressions{ case e: Literal =>
+    plan.transformAllExpressions { case e: Literal =>
       lits += e.value.asInstanceOf[Long]
       e
     }
     assert(lits.size == 2)
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
   }
 
   test("analyzer should replace current_date with literals") {
