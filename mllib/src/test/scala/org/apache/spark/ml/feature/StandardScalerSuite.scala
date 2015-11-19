@@ -132,7 +132,5 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.std === instance.std)
     assert(newInstance.mean === instance.mean)
-    assert(newInstance.getWithStd === instance.getWithStd)
-    assert(newInstance.getWithMean === instance.getWithMean)
   }
 }

@@ -36,20 +36,29 @@ import org.apache.spark.sql.types.{StructField, StructType}
 private[feature] trait StandardScalerParams extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * Centers the data with mean before scaling.
+   * Whether to center the data with mean before scaling.
    * It will build a dense output, so this does not work on sparse input
    * and will raise an exception.
    * Default: false
    * @group param
    */
-  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Center data with mean")
+  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Whether to center data with mean")
+
+  /** @group getParam */
+  def getWithMean: Boolean = $(withMean)
 
   /**
-   * Scales the data to unit standard deviation.
+   * Whether to scale the data to unit standard deviation.
    * Default: true
    * @group param
    */
-  val withStd: BooleanParam = new BooleanParam(this, "withStd", "Scale to unit standard deviation")
+  val withStd: BooleanParam = new BooleanParam(this, "withStd",
+    "Whether to scale the data to unit standard deviation")
+
+  /** @group getParam */
+  def getWithStd: Boolean = $(withStd)
+
+  setDefault(withMean -> false, withStd -> true)
 }
 
 /**
@@ -62,8 +71,6 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   with StandardScalerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stdScal"))
-
-  setDefault(withMean -> false, withStd -> true)
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -122,14 +129,6 @@ class StandardScalerModel private[ml] (
 
   /** Mean of the StandardScalerModel */
   val mean: Vector = scaler.mean
-
-  /** Whether to scale to unit standard deviation. */
-  @Since("1.6.0")
-  def getWithStd: Boolean = scaler.withStd
-
-  /** Whether to center data with mean. */
-  @Since("1.6.0")
-  def getWithMean: Boolean = scaler.withMean
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
