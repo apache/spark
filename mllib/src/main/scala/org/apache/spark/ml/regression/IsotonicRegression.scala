@@ -269,7 +269,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
   @Since("1.6.0")
   override def load(path: String): IsotonicRegressionModel = super.load(path)
 
-  /** [[MLWriter]] instance for [[AFTSurvivalRegressionModel]] */
+  /** [[MLWriter]] instance for [[IsotonicRegressionModel]] */
   private[IsotonicRegressionModel] class IsotonicRegressionModelWriter (
       instance: IsotonicRegressionModel
     ) extends MLWriter with Logging {
@@ -282,7 +282,7 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: coefficients, intercept, scale
+      // Save model data: boundaries, predictions, isotonic
       val data = Data(
         instance.oldModel.boundaries, instance.oldModel.predictions, instance.oldModel.isotonic)
       val dataPath = new Path(path, "data").toString
