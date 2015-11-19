@@ -343,6 +343,22 @@ class AFTSurvivalRegressionSuite
       assert(model.scale === model2.scale)
     }
     val aft = new AFTSurvivalRegression()
-    testEstimatorAndModelReadWrite(aft, datasetMultivariate, Map[String, Any](), checkModelData)
+    testEstimatorAndModelReadWrite(aft, datasetMultivariate,
+      AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
   }
+}
+
+object AFTSurvivalRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "fitIntercept" -> true,
+    "maxIter" -> 2,
+    "tol" -> 0.01
+  )
 }

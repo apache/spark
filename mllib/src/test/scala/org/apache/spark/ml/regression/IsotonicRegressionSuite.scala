@@ -177,6 +177,21 @@ class IsotonicRegressionSuite
     }
 
     val ir = new IsotonicRegression()
-    testEstimatorAndModelReadWrite(ir, dataset, Map[String, Any](), checkModelData)
+    testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
+      checkModelData)
   }
+}
+
+object IsotonicRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "isotonic" -> true,
+    "featureIndex" -> 0
+  )
 }
