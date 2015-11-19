@@ -348,21 +348,19 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
     def updateEval(i: Int): String =
       s"""
-        if (!${rest(i).isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, ev.value, rest(i).value)})) {
+        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
+          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} < 0)) {
           ${ev.isNull} = false;
-          ${ev.value} = ${rest(i).value};
+          ${ev.value} = ${evalChildren(i).value};
         }
       """
     s"""
       ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.indices.map(updateEval).mkString("\n")}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }
@@ -405,21 +403,19 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
     def updateEval(i: Int): String =
       s"""
-        if (!${rest(i).isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, rest(i).value, ev.value)})) {
+        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
+          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} > 0)) {
           ${ev.isNull} = false;
-          ${ev.value} = ${rest(i).value};
+          ${ev.value} = ${evalChildren(i).value};
         }
       """
     s"""
       ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.indices.map(updateEval).mkString("\n")}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      ${children.indices.map(updateEval).mkString("\n")}
     """
   }
 }

@@ -41,7 +41,7 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions = Seq(
-    /* count = */ count + 1L
+    /* count = */ If(IsNull(child), count, count + 1L)
   )
 
   override lazy val mergeExpressions = Seq(
