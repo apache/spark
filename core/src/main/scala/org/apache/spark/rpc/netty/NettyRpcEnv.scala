@@ -343,12 +343,20 @@ private[netty] class NettyRpcEnv(
   private def downloadClient(host: String, port: Int): TransportClient = {
     if (fileDownloadFactory == null) synchronized {
       if (fileDownloadFactory == null) {
+        val module = "files"
+        val prefix = "spark.rpc.io."
         val clone = conf.clone()
-        conf.getOption("spark.files.maxDownloadClients").foreach { v =>
-          clone.set("spark.rpc.io.numConnectionsPerPeer", v)
+
+        // Copy any RPC configuration that is not overridden in the spark.files namespace.
+        conf.getAll.foreach { case (key, value) =>
+          if (key.startsWith(prefix)) {
+            val opt = key.substring(prefix.length())
+            clone.setIfMissing(s"spark.$module.io.$opt", value)
+          }
         }
+
         val ioThreads = clone.getInt("spark.files.io.threads", 1)
-        val downloadConf = SparkTransportConf.fromSparkConf(clone, "rpc", ioThreads)
+        val downloadConf = SparkTransportConf.fromSparkConf(clone, module, ioThreads)
         val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
         fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }
