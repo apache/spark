@@ -365,7 +365,7 @@ class StandaloneDynamicAllocationSuite
     val executors = getExecutorIds(sc)
     assert(executors.size === 2)
     assert(sc.killExecutor(executors.head))
-    assert(sc.killExecutor(executors.head) === false)
+    assert(!sc.killExecutor(executors.head))
     val apps = getApplications()
     assert(apps.head.executors.size === 1)
     // The limit should not be lowered twice
@@ -396,7 +396,7 @@ class StandaloneDynamicAllocationSuite
 
     var apps = getApplications()
     // kill executor 1, and actually nothing to kill
-    assert(sc.killExecutor(executors.head) === false)
+    assert(!sc.killExecutor(executors.head))
     apps = getApplications()
     assert(apps.head.executors.size === 2)
     assert(apps.head.getExecutorLimit === 2)
@@ -430,7 +430,7 @@ class StandaloneDynamicAllocationSuite
     val executorIdToTaskCount = taskScheduler invokePrivate getMap()
     executorIdToTaskCount(executors.head) = 1
     // kill the busy executor without force; this should fail
-    assert(killExecutor(sc, executors.head, force = false) === false)
+    assert(!killExecutor(sc, executors.head, force = false))
     apps = getApplications()
     assert(apps.head.executors.size === 2)
 
