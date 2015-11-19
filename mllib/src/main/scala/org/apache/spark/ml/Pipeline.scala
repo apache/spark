@@ -181,7 +181,7 @@ object Pipeline extends Readable[Pipeline] {
 
   override def read: Reader[Pipeline] = new PipelineReader
 
-  override def load(path: String): Pipeline = read.load(path)
+  override def load(path: String): Pipeline = super.load(path)
 
   private[ml] class PipelineWriter(instance: Pipeline) extends Writer {
 
@@ -342,7 +342,7 @@ object PipelineModel extends Readable[PipelineModel] {
 
   override def read: Reader[PipelineModel] = new PipelineModelReader
 
-  override def load(path: String): PipelineModel = read.load(path)
+  override def load(path: String): PipelineModel = super.load(path)
 
   private[ml] class PipelineModelWriter(instance: PipelineModel) extends Writer {
 

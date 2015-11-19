@@ -88,7 +88,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
  */
 @Experimental
 class MinMaxScaler(override val uid: String)
-  extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with Writable {
+  extends Estimator[MinMaxScalerModel] with MinMaxScalerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("minMaxScal"))
 
@@ -118,16 +118,10 @@ class MinMaxScaler(override val uid: String)
   }
 
   override def copy(extra: ParamMap): MinMaxScaler = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object MinMaxScaler extends Readable[MinMaxScaler] {
-
-  @Since("1.6.0")
-  override def read: Reader[MinMaxScaler] = new DefaultParamsReader
+object MinMaxScaler extends DefaultParamsReadable[MinMaxScaler] {
 
   @Since("1.6.0")
   override def load(path: String): MinMaxScaler = super.load(path)

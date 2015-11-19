@@ -62,7 +62,8 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
 @Experimental
-final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase with Writable {
+final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase
+  with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("idf"))
 
@@ -87,16 +88,10 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   }
 
   override def copy(extra: ParamMap): IDF = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object IDF extends Readable[IDF] {
-
-  @Since("1.6.0")
-  override def read: Reader[IDF] = new DefaultParamsReader
+object IDF extends DefaultParamsReadable[IDF] {
 
   @Since("1.6.0")
   override def load(path: String): IDF = super.load(path)

@@ -130,6 +130,11 @@ trait Writable {
   def save(path: String): Unit = write.save(path)
 }
 
+private[ml] trait DefaultParamsWritable extends Writable { self: Params =>
+
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
 /**
  * Abstract class for utility classes that can load ML instances.
  * @tparam T ML instance type
@@ -169,6 +174,11 @@ trait Readable[T] {
    */
   @Since("1.6.0")
   def load(path: String): T = read.load(path)
+}
+
+private[ml] trait DefaultParamsReadable[T] extends Readable[T] {
+
+  override def read: Reader[T] = new DefaultParamsReader
 }
 
 /**

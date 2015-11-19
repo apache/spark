@@ -107,7 +107,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
  */
 @Experimental
 class CountVectorizer(override val uid: String)
-  extends Estimator[CountVectorizerModel] with CountVectorizerParams with Writable {
+  extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("cntVec"))
 
@@ -171,16 +171,10 @@ class CountVectorizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): CountVectorizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object CountVectorizer extends Readable[CountVectorizer] {
-
-  @Since("1.6.0")
-  override def read: Reader[CountVectorizer] = new DefaultParamsReader
+object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 
   @Since("1.6.0")
   override def load(path: String): CountVectorizer = super.load(path)

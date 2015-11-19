@@ -152,7 +152,7 @@ object MyParams extends Readable[MyParams] {
 
   override def read: Reader[MyParams] = new DefaultParamsReader[MyParams]
 
-  override def load(path: String): MyParams = read.load(path)
+  override def load(path: String): MyParams = super.load(path)
 }
 
 class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext

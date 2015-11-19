@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
  */
 @Experimental
 class VectorAssembler(override val uid: String)
-  extends Transformer with HasInputCols with HasOutputCol with Writable {
+  extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("vecAssembler"))
 
@@ -120,19 +120,13 @@ class VectorAssembler(override val uid: String)
   }
 
   override def copy(extra: ParamMap): VectorAssembler = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object VectorAssembler extends Readable[VectorAssembler] {
+object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
 
   @Since("1.6.0")
-  override def read: Reader[VectorAssembler] = new DefaultParamsReader[VectorAssembler]
-
-  @Since("1.6.0")
-  override def load(path: String): VectorAssembler = read.load(path)
+  override def load(path: String): VectorAssembler = super.load(path)
 
   private[feature] def assemble(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]

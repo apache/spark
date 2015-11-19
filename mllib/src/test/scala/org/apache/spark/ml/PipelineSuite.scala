@@ -203,7 +203,7 @@ object WritableStage extends Readable[WritableStage] {
 
   override def read: Reader[WritableStage] = new DefaultParamsReader[WritableStage]
 
-  override def load(path: String): WritableStage = read.load(path)
+  override def load(path: String): WritableStage = super.load(path)
 }
 
 /** Used to test [[Pipeline]] with non-[[Writable]] stages */

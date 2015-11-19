@@ -59,7 +59,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  */
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
-  with StandardScalerParams with Writable {
+  with StandardScalerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stdScal"))
 
@@ -96,16 +96,10 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   }
 
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object StandardScaler extends Readable[StandardScaler] {
-
-  @Since("1.6.0")
-  override def read: Reader[StandardScaler] = new DefaultParamsReader
+object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 
   @Since("1.6.0")
   override def load(path: String): StandardScaler = super.load(path)

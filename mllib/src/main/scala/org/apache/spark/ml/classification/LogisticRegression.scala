@@ -29,9 +29,9 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -157,7 +157,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with Writable with Logging {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -385,12 +385,11 @@ class LogisticRegression(override val uid: String)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
-
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-object LogisticRegression extends Readable[LogisticRegression] {
-  override def read: Reader[LogisticRegression] = new DefaultParamsReader[LogisticRegression]
+object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
+
+  override def load(path: String): LogisticRegression = super.load(path)
 }
 
 /**
@@ -534,7 +533,7 @@ object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
 
   override def read: Reader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
-  override def load(path: String): LogisticRegressionModel = read.load(path)
+  override def load(path: String): LogisticRegressionModel = super.load(path)
 
   /** [[Writer]] instance for [[LogisticRegressionModel]] */
   private[classification] class LogisticRegressionModelWriter(instance: LogisticRegressionModel)

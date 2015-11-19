@@ -66,7 +66,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 @Experimental
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
-  with LinearRegressionParams with Writable with Logging {
+  with LinearRegressionParams with DefaultParamsWritable with Logging {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
@@ -345,19 +345,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): LinearRegression = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object LinearRegression extends Readable[LinearRegression] {
+object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 
   @Since("1.6.0")
-  override def read: Reader[LinearRegression] = new DefaultParamsReader[LinearRegression]
-
-  @Since("1.6.0")
-  override def load(path: String): LinearRegression = read.load(path)
+  override def load(path: String): LinearRegression = super.load(path)
 }
 
 /**
@@ -459,7 +453,7 @@ object LinearRegressionModel extends Readable[LinearRegressionModel] {
   override def read: Reader[LinearRegressionModel] = new LinearRegressionModelReader
 
   @Since("1.6.0")
-  override def load(path: String): LinearRegressionModel = read.load(path)
+  override def load(path: String): LinearRegressionModel = super.load(path)
 
   /** [[Writer]] instance for [[LinearRegressionModel]] */
   private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
