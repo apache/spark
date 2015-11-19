@@ -167,13 +167,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = sc.parallelize(Seq(
-      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 1, 0)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
-      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
-    ))
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
 

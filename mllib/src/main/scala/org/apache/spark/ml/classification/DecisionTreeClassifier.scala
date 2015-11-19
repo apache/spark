@@ -169,6 +169,8 @@ final class DecisionTreeClassificationModel private[ml] (
     s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
+  lazy val featureImportances: Vector = RandomForest.featureImportances(Array(this), numFeatures)
+
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldDecisionTreeModel = {
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)

@@ -17,6 +17,9 @@
 
 package org.apache.spark.ml.impl
 
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
@@ -26,8 +29,10 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.SparkContext
 
-private[ml] object TreeTests extends SparkFunSuite {
+
+private[ml] object TreeTests extends SparkFunSuite with MLlibTestSparkContext {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
@@ -141,4 +146,13 @@ private[ml] object TreeTests extends SparkFunSuite {
     val pred = parentImp.predict
     new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
   }
+
+  // In this data, feature 1 is very important.
+  def featureImportanceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
+    new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
+    new LabeledPoint(1, Vectors.dense(1, 1, 0, 1, 0)),
+    new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
+    new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
+    new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
+  ))
 }
