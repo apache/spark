@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -525,18 +525,23 @@ class LogisticRegressionModel private[ml] (
    *
    * This also does not save the [[parent]] currently.
    */
+  @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
 
 
+@Since("1.6.0")
 object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
+  @Since("1.6.0")
   override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
+  @Since("1.6.0")
   override def load(path: String): LogisticRegressionModel = super.load(path)
 
   /** [[MLWriter]] instance for [[LogisticRegressionModel]] */
-  private[classification] class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
+  private[LogisticRegressionModel]
+  class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
     extends MLWriter with Logging {
 
     private case class Data(
@@ -552,15 +557,15 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
         instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
-  private[classification] class LogisticRegressionModelReader
+  private class LogisticRegressionModelReader
     extends MLReader[LogisticRegressionModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"
+    private val className = classOf[LogisticRegressionModel].getName
 
     override def load(path: String): LogisticRegressionModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
@@ -603,7 +608,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
    * @return This MultilabelSummarizer
    */
   def add(label: Double, weight: Double = 1.0): this.type = {
-    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
     if (weight == 0.0) return this
 
@@ -839,7 +844,7 @@ private class LogisticAggregator(
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
