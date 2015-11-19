@@ -586,6 +586,12 @@ class Dataset[T] private[sql](
    */
   def explain(extended: Boolean): Unit = toDF().explain(extended)
 
+  /**
+   * Only prints the physical plan to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  def explain(): Unit = explain(extended = false)
+
   /* ******************** *
    *  Internal Functions  *
    * ******************** */
