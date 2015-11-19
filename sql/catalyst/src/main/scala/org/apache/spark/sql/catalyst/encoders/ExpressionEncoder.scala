@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
 
 /**
- * A factory for constructing encoders that convert objects and primitves to and from the
+ * A factory for constructing encoders that convert objects and primitives to and from the
  * internal row format using catalyst expressions and code generation.  By default, the
  * expressions used to retrieve values from an input row when producing an object will be created as
  * follows:
@@ -44,20 +44,21 @@ import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T : TypeTag](flat: Boolean = false): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
+    val flat = !classOf[Product].isAssignableFrom(cls)
 
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
-    val constructExpression = ScalaReflection.constructorFor[T]
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
+    val fromRowExpression = ScalaReflection.constructorFor[T]
 
     new ExpressionEncoder[T](
-      extractExpression.dataType,
+      toRowExpression.dataType,
       flat,
-      extractExpression.flatten,
-      constructExpression,
+      toRowExpression.flatten,
+      fromRowExpression,
       ClassTag[T](cls))
   }
 

@@ -45,14 +45,14 @@ trait Encoder[T] extends Serializable {
  */
 object Encoders {
 
-  def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder(flat = true)
-  def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder(flat = true)
-  def SHORT: Encoder[java.lang.Short] = ExpressionEncoder(flat = true)
-  def INT: Encoder[java.lang.Integer] = ExpressionEncoder(flat = true)
-  def LONG: Encoder[java.lang.Long] = ExpressionEncoder(flat = true)
-  def FLOAT: Encoder[java.lang.Float] = ExpressionEncoder(flat = true)
-  def DOUBLE: Encoder[java.lang.Double] = ExpressionEncoder(flat = true)
-  def STRING: Encoder[java.lang.String] = ExpressionEncoder(flat = true)
+  def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder()
+  def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder()
+  def SHORT: Encoder[java.lang.Short] = ExpressionEncoder()
+  def INT: Encoder[java.lang.Integer] = ExpressionEncoder()
+  def LONG: Encoder[java.lang.Long] = ExpressionEncoder()
+  def FLOAT: Encoder[java.lang.Float] = ExpressionEncoder()
+  def DOUBLE: Encoder[java.lang.Double] = ExpressionEncoder()
+  def STRING: Encoder[java.lang.String] = ExpressionEncoder()
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
