@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.regression
 
-import scala.collection.mutable
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.Logging
@@ -299,10 +297,10 @@ object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.format("parquet").load(dataPath)
+      val data = sqlContext.read.parquet(dataPath)
         .select("boundaries", "predictions", "isotonic").head()
-      val boundaries = data.getAs[mutable.WrappedArray[Double]](0).toArray
-      val predictions = data.getAs[mutable.WrappedArray[Double]](1).toArray
+      val boundaries = data.getAs[Seq[Double]](0).toArray
+      val predictions = data.getAs[Seq[Double]](1).toArray
       val isotonic = data.getBoolean(2)
       val model = new IsotonicRegressionModel(
         metadata.uid, new MLlibIsotonicRegressionModel(boundaries, predictions, isotonic))
