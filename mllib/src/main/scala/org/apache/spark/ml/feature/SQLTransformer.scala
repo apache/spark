@@ -33,7 +33,8 @@ import org.apache.spark.sql.types.StructType
  */
 @Experimental
 @Since("1.6.0")
-class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer with Writable {
+class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer
+  with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("sql"))
@@ -77,17 +78,11 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): SQLTransformer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object SQLTransformer extends Readable[SQLTransformer] {
+object SQLTransformer extends DefaultParamsReadable[SQLTransformer] {
 
   @Since("1.6.0")
-  override def read: Reader[SQLTransformer] = new DefaultParamsReader[SQLTransformer]
-
-  @Since("1.6.0")
-  override def load(path: String): SQLTransformer = read.load(path)
+  override def load(path: String): SQLTransformer = super.load(path)
 }

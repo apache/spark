@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class DCT(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, DCT] with Writable {
+  extends UnaryTransformer[Vector, Vector, DCT] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("dct"))
 
@@ -69,17 +69,11 @@ class DCT(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object DCT extends Readable[DCT] {
+object DCT extends DefaultParamsReadable[DCT] {
 
   @Since("1.6.0")
-  override def read: Reader[DCT] = new DefaultParamsReader[DCT]
-
-  @Since("1.6.0")
-  override def load(path: String): DCT = read.load(path)
+  override def load(path: String): DCT = super.load(path)
 }

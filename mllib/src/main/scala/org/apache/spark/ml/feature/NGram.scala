@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Experimental
 class NGram(override val uid: String)
-  extends UnaryTransformer[Seq[String], Seq[String], NGram] with Writable {
+  extends UnaryTransformer[Seq[String], Seq[String], NGram] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("ngram"))
 
@@ -66,17 +66,11 @@ class NGram(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new ArrayType(StringType, false)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object NGram extends Readable[NGram] {
+object NGram extends DefaultParamsReadable[NGram] {
 
   @Since("1.6.0")
-  override def read: Reader[NGram] = new DefaultParamsReader[NGram]
-
-  @Since("1.6.0")
-  override def load(path: String): NGram = read.load(path)
+  override def load(path: String): NGram = super.load(path)
 }

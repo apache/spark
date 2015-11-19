@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Experimental
 class Tokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], Tokenizer] with Writable {
+  extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("tok"))
 
@@ -46,19 +46,13 @@ class Tokenizer(override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object Tokenizer extends Readable[Tokenizer] {
+object Tokenizer extends DefaultParamsReadable[Tokenizer] {
 
   @Since("1.6.0")
-  override def read: Reader[Tokenizer] = new DefaultParamsReader[Tokenizer]
-
-  @Since("1.6.0")
-  override def load(path: String): Tokenizer = read.load(path)
+  override def load(path: String): Tokenizer = super.load(path)
 }
 
 /**
@@ -70,7 +64,7 @@ object Tokenizer extends Readable[Tokenizer] {
  */
 @Experimental
 class RegexTokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], RegexTokenizer] with Writable {
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("regexTok"))
 
@@ -145,17 +139,11 @@ class RegexTokenizer(override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object RegexTokenizer extends Readable[RegexTokenizer] {
+object RegexTokenizer extends DefaultParamsReadable[RegexTokenizer] {
 
   @Since("1.6.0")
-  override def read: Reader[RegexTokenizer] = new DefaultParamsReader[RegexTokenizer]
-
-  @Since("1.6.0")
-  override def load(path: String): RegexTokenizer = read.load(path)
+  override def load(path: String): RegexTokenizer = super.load(path)
 }
