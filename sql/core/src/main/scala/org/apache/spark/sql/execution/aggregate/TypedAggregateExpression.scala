@@ -52,8 +52,8 @@ object TypedAggregateExpression {
  */
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
-    aEncoder: Option[ExpressionEncoder[Any]],
-    bEncoder: ExpressionEncoder[Any],
+    aEncoder: Option[ExpressionEncoder[Any]], // Should be bound.
+    bEncoder: ExpressionEncoder[Any], // Should be bound.
     cEncoder: ExpressionEncoder[Any],
     children: Seq[Attribute],
     mutableAggBufferOffset: Int,
@@ -92,9 +92,6 @@ case class TypedAggregateExpression(
   // We let the dataset do the binding for us.
   lazy val boundA = aEncoder.get
 
-  val bAttributes = bEncoder.schema.toAttributes
-  lazy val boundB = bEncoder.resolve(bAttributes).bind(bAttributes)
-
   private def updateBuffer(buffer: MutableRow, value: InternalRow): Unit = {
     // todo: need a more neat way to assign the value.
     var i = 0
@@ -114,24 +111,24 @@ case class TypedAggregateExpression(
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val inputA = boundA.fromRow(input)
-    val currentB = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
+    val currentB = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
     val merged = aggregator.reduce(currentB, inputA)
-    val returned = boundB.toRow(merged)
+    val returned = bEncoder.toRow(merged)
 
     updateBuffer(buffer, returned)
   }
 
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val b1 = boundB.shift(mutableAggBufferOffset).fromRow(buffer1)
-    val b2 = boundB.shift(inputAggBufferOffset).fromRow(buffer2)
+    val b1 = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer1)
+    val b2 = bEncoder.shift(inputAggBufferOffset).fromRow(buffer2)
     val merged = aggregator.merge(b1, b2)
-    val returned = boundB.toRow(merged)
+    val returned = bEncoder.toRow(merged)
 
     updateBuffer(buffer1, returned)
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val b = boundB.shift(mutableAggBufferOffset).fromRow(buffer)
+    val b = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
     val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
       case _: StructType => result
