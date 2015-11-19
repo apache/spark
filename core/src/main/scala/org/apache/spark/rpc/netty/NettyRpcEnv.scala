@@ -25,14 +25,10 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.Nullable
 
-import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
-
-import io.netty.channel.{ChannelHandlerContext, ChannelInboundHandlerAdapter}
-import io.netty.handler.timeout.IdleStateEvent
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
@@ -62,33 +58,28 @@ private[netty] class NettyRpcEnv(
   private val transportContext = new TransportContext(transportConf,
     new NettyRpcHandler(dispatcher, this, streamManager))
 
-  private val clientFactory = {
-    val bootstraps: java.util.List[TransportClientBootstrap] =
-      if (securityManager.isAuthenticationEnabled()) {
-        java.util.Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager,
-          securityManager.isSaslEncryptionEnabled()))
-      } else {
-        java.util.Collections.emptyList[TransportClientBootstrap]
-      }
-    transportContext.createClientFactory(bootstraps)
+  private def createClientBootstraps(): java.util.List[TransportClientBootstrap] = {
+    if (securityManager.isAuthenticationEnabled()) {
+      java.util.Arrays.asList(new SaslClientBootstrap(transportConf, "", securityManager,
+        securityManager.isSaslEncryptionEnabled()))
+    } else {
+      java.util.Collections.emptyList[TransportClientBootstrap]
+    }
   }
 
-  val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
+  private val clientFactory = transportContext.createClientFactory(createClientBootstraps())
 
   /**
-   * A collection of cached clients used for downloading files, to avoid the cost of connection
-   * establishment when multiple files are downloaded in a short period of time. The clients are
-   * closed after an inactivity timeout.
+   * A separate client factory for file downloads. This avoids using the same RPC handler as
+   * the main RPC context, so that events caused by these clients are kept isolated from the
+   * main RPC traffic.
    *
-   * Clients are cached for each remote host, although in most cases there will be a single remote
-   * host serving files.
-   *
-   * These TransportClient instances are not used for RPC, so they're never registered with the
-   * NettyRpcHandler instance. The outcome is that connection / disconnection events are not
-   * sent for these clients, which is desirable since otherwise other parts of the code might
-   * think the driver (for example) is disconnecting when that's not the case.
+   * It also allows for different configuration of certain properties, such as the number of
+   * connections per peer.
    */
-  private val fileClients = new mutable.HashMap[RpcAddress, TransportClient]()
+  @volatile private var fileDownloadFactory: TransportClientFactory = _
+
+  val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
 
   // Because TransportClientFactory.createClient is blocking, we need to run it in this thread pool
   // to implement non-blocking send/ask.
@@ -314,9 +305,8 @@ private[netty] class NettyRpcEnv(
     if (clientConnectionExecutor != null) {
       clientConnectionExecutor.shutdownNow()
     }
-    synchronized {
-      fileClients.values.foreach(_.close())
-      fileClients.clear()
+    if (fileDownloadFactory != null) {
+      fileDownloadFactory.close()
     }
   }
 
@@ -337,7 +327,7 @@ private[netty] class NettyRpcEnv(
     val pipe = Pipe.open()
     val source = new FileDownloadChannel(pipe.source())
     try {
-      val client = fileDownloadClient(parsedUri.getHost(), parsedUri.getPort())
+      val client = downloadClient(parsedUri.getHost(), parsedUri.getPort())
       val callback = new FileDownloadCallback(pipe.sink(), source, client)
       client.stream(parsedUri.getPath(), callback)
     } catch {
@@ -350,65 +340,20 @@ private[netty] class NettyRpcEnv(
     source
   }
 
-  private def fileDownloadClient(host: String, port: Int): TransportClient = synchronized {
-    if (stopped.get()) {
-      throw new IllegalStateException("RpcEnv already stopped.")
-    }
-
-    val address = RpcAddress(host, port)
-    val client = fileClients.get(address).filter(_.isActive()).getOrElse(newDownloadClient(address))
-
-    // Tell the timeout handler this client is in use. This will prevent the handler from
-    // closing the client if the timeout even triggers before data starts flowing for this
-    // download.
-    client.synchronized {
-      val timeoutHandler = client.getChannel().pipeline().get(classOf[TimeoutHandler])
-      timeoutHandler.setInUse(true)
-
-      // After notifying the timeout handler, check that the client is really active, and if not,
-      // create a new one.
-      if (client.isActive()) client else newDownloadClient(address)
-    }
-  }
-
-  /**
-   * Create a new client and install a handler that will respond to IdleStateEvent. The events
-   * are generated by the IdleStateHandler installed by the TransportContext when creating
-   * clients, and the timeout value is controlled by the transport configuration.
-   */
-  private def newDownloadClient(addr: RpcAddress): TransportClient = {
-    val c = clientFactory.createUnmanagedClient(addr.host, addr.port)
-    c.getChannel().pipeline().addLast("rpcEnvTimeoutHandler", new TimeoutHandler(c))
-    fileClients.put(addr, c)
-    c
-  }
-
-  private class TimeoutHandler(client: TransportClient) extends ChannelInboundHandlerAdapter {
-
-    @volatile private var inUse = true
-
-    def setInUse(inUse: Boolean): Unit = this.inUse = inUse
-
-    override def userEventTriggered(ctx: ChannelHandlerContext, evt: Object): Unit = {
-      val timedOut = client.synchronized {
-        if (!inUse && evt.isInstanceOf[IdleStateEvent] && client.isActive()) {
-          logDebug(s"Closing transport client $client after idle timeout.")
-          val socketAddr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
-          val address = RpcAddress(socketAddr.getHostName(), socketAddr.getPort())
-          ctx.close()
-          true
-        } else {
-          false
+  private def downloadClient(host: String, port: Int): TransportClient = {
+    if (fileDownloadFactory == null) synchronized {
+      if (fileDownloadFactory == null) {
+        val clone = conf.clone()
+        conf.getOption("spark.files.maxDownloadClients").foreach { v =>
+          clone.set("spark.rpc.io.numConnectionsPerPeer", v)
         }
-      }
-      ctx.fireUserEventTriggered(evt)
-      if (timedOut) {
-        NettyRpcEnv.this.synchronized {
-          fileClients.remove(address)
-        }
+        val ioThreads = clone.getInt("spark.files.io.threads", 1)
+        val downloadConf = SparkTransportConf.fromSparkConf(clone, "rpc", ioThreads)
+        val downloadContext = new TransportContext(downloadConf, new NoOpRpcHandler(), true)
+        fileDownloadFactory = downloadContext.createClientFactory(createClientBootstraps())
       }
     }
-
+    fileDownloadFactory.createClient(host, port)
   }
 
   private class FileDownloadChannel(source: ReadableByteChannel) extends ReadableByteChannel {
@@ -443,22 +388,12 @@ private[netty] class NettyRpcEnv(
 
     override def onComplete(streamId: String): Unit = {
       sink.close()
-      releaseClient()
     }
 
     override def onFailure(streamId: String, cause: Throwable): Unit = {
       logError(s"Error downloading stream $streamId.", cause)
-      try {
-        source.setError(cause)
-        sink.close()
-      } finally {
-        releaseClient()
-      }
-    }
-
-    private def releaseClient(): Unit = client.synchronized {
-      val timeoutHandler = client.getChannel().pipeline().get(classOf[TimeoutHandler])
-      timeoutHandler.setInUse(false)
+      source.setError(cause)
+      sink.close()
     }
 
   }
@@ -669,10 +604,8 @@ private[netty] class NettyRpcHandler(
   override def exceptionCaught(cause: Throwable, client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      if (clients.containsKey(client)) {
-        val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
-        dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
-      }
+      val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+      dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null.
       // See java.net.Socket.getRemoteSocketAddress
@@ -684,11 +617,10 @@ private[netty] class NettyRpcHandler(
   override def connectionTerminated(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      if (clients.remove(client) != null) {
-        val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
-        nettyEnv.removeOutbox(clientAddr)
-        dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
-      }
+      clients.remove(client)
+      val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+      nettyEnv.removeOutbox(clientAddr)
+      dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
     } else {
       // If the channel is closed before connecting, its remoteAddress will be null. In this case,
       // we can ignore it since we don't fire "Associated".
