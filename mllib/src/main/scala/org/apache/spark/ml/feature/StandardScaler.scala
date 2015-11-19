@@ -189,7 +189,6 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
         sqlContext.read.parquet(dataPath)
           .select("std", "mean", "withStd", "withMean")
           .head()
-      // This is very likely to change in the future because withStd and withMean should be params.
       val oldModel = new feature.StandardScalerModel(std, mean, withStd, withMean)
       val model = new StandardScalerModel(metadata.uid, oldModel)
       DefaultParamsReader.getAndSetParams(model, metadata)
