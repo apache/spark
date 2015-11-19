@@ -336,6 +336,11 @@ class Params(Identifiable):
             return isinstance(p, Param)
         else:
             raise TypeError("hasParam(): paramName must be a string")
+        try:
+            param = self._resolveParam(paramName)
+            return param in self.params
+        except:
+            return False
 
     @since("1.4.0")
     def getOrDefault(self, param):

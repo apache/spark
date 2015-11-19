@@ -211,6 +211,14 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     ...    ["label", "raw"])
     >>> cv = CountVectorizer(inputCol="raw", outputCol="vectors")
     >>> model = cv.fit(df)
+    >>> emap = cv.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(cv, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).show(truncate=False)
     +-----+---------------+-------------------------+
     |label|raw            |vectors                  |
@@ -348,7 +356,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class CountVectorizerModel(JavaModel, HasInputCol, HasOutputCol,
+                           JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -587,6 +596,14 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> model = idf.fit(df)
+    >>> emap = idf.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(idf, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -651,7 +668,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class IDFModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -674,6 +691,14 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
     >>> model = maScaler.fit(df)
+    >>> emap = maScaler.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(maScaler, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).show()
     +-----+------+
     |    a|scaled|
@@ -723,7 +748,7 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return MaxAbsScalerModel(java_model)
 
 
-class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MaxAbsScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -761,6 +786,14 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
+    >>> emap = mmScaler.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(mmScaler, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.originalMin
     DenseVector([0.0])
     >>> model.originalMax
@@ -849,7 +882,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return MinMaxScalerModel(java_model)
 
 
-class MinMaxScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MinMaxScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1463,6 +1496,14 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
     >>> model = standardScaler.fit(df)
+    >>> emap = standardScaler.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(standardScaler, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.mean
     DenseVector([1.0])
     >>> model.std
@@ -1545,7 +1586,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         return StandardScalerModel(java_model)
 
 
-class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StandardScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1584,6 +1625,14 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
 
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid='error')
     >>> model = stringIndexer.fit(stringIndDf)
+    >>> emap = stringIndexer.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(stringIndexer, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['handleInvalid', 'inputCol', 'outputCol']
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
@@ -1637,7 +1686,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         return StringIndexerModel(java_model)
 
 
-class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StringIndexerModel(JavaModel, HasInputCol, HasOutputCol, HasHandleInvalid,
+                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1941,6 +1991,14 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
     >>> model = indexer.fit(df)
+    >>> emap = indexer.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(indexer, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).head().indexed
     DenseVector([1.0, 0.0])
     >>> model.numFeatures
@@ -2013,7 +2071,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         return VectorIndexerModel(java_model)
 
 
-class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class VectorIndexerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2147,6 +2205,14 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     >>> doc = sqlContext.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
     >>> model = word2Vec.fit(doc)
+    >>> emap = word2Vec.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(word2Vec, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'maxIter', 'outputCol', 'seed', 'stepSize']
     >>> model.getVectors().show()
     +----+--------------------+
     |word|              vector|
@@ -2286,7 +2352,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return Word2VecModel(java_model)
 
 
-class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class Word2VecModel(JavaModel, HasStepSize, HasMaxIter, HasSeed, HasInputCol,
+                    HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2330,6 +2397,14 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     >>> df = sqlContext.createDataFrame(data,["features"])
     >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
     >>> model = pca.fit(df)
+    >>> emap = pca.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(pca, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).collect()[0].pca_features
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
@@ -2391,7 +2466,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         return PCAModel(java_model)
 
 
-class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class PCAModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2437,6 +2512,14 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     ... ], ["y", "x", "s"])
     >>> rf = RFormula(formula="y ~ x + s")
     >>> model = rf.fit(df)
+    >>> emap = rf.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(rf, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol']
     >>> model.transform(df).show()
     +---+---+---+---------+-----+
     |  y|  x|  s| features|label|
@@ -2523,7 +2606,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         return RFormulaModel(java_model)
 
 
-class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class RFormulaModel(JavaModel, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2550,6 +2633,14 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     ...    ["features", "label"])
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
+    >>> emap = selector.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(selector, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'outputCol']
     >>> model.transform(df).head().selectedFeatures
     DenseVector([1.0])
     >>> model.selectedFeatures
@@ -2615,7 +2706,8 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         return ChiSqSelectorModel(java_model)
 
 
-class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class ChiSqSelectorModel(JavaModel, HasFeaturesCol, HasOutputCol, HasLabelCol,
+                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 

@@ -59,6 +59,16 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
     >>> model = lr.fit(df)
+    >>> emap = lr.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(lr, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
+    ['elasticNetParam', 'featuresCol', 'fitIntercept', 'labelCol', 'maxIter',
+    'predictionCol', 'probabilityCol', 'rawPredictionCol', 'regParam',
+    'standardization', 'thresholds', 'tol']
     >>> model.coefficients
     DenseVector([5.5...])
     >>> model.intercept
@@ -206,7 +216,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                              HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
+                              HasElasticNetParam, HasFitIntercept, HasStandardization,
+                              HasThresholds, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -504,6 +517,16 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
     >>> model = dt.fit(td)
+    >>> emap = dt.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(dt, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
+    ['cacheNodeIds', 'checkpointInterval', 'featuresCol', 'impurity', 'labelCol',
+    'maxBins', 'maxDepth', 'maxMemoryInMB', 'minInfoGain', 'minInstancesPerNode',
+    'predictionCol', 'probabilityCol', 'rawPredictionCol', 'seed']
     >>> model.numNodes
     3
     >>> model.depth
@@ -581,7 +604,11 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(DecisionTreeModel, HasFeaturesCol, HasLabelCol,
+                                      HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
+                                      DecisionTreeParams, TreeClassifierParams,
+                                      HasCheckpointInterval, HasSeed, JavaMLWritable,
+                                      JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -633,6 +660,14 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
+    >>> emap = rf.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(rf, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol', 'probabilityCol', 'rawPredictionCol']
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
@@ -706,7 +741,9 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModels, HasFeaturesCol, HasLabelCol,
+                                      HasPredictionCol, HasRawPredictionCol, HasProbabilityCol,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -750,6 +787,14 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> td = si_model.transform(df)
     >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = gbt.fit(td)
+    >>> emap = gbt.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(gbt, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol']
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
@@ -835,7 +880,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTClassificationModel(TreeEnsembleModels, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                             JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
@@ -879,6 +925,14 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
     >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
     >>> model = nb.fit(df)
+    >>> emap = nb.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(nb, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol', 'probabilityCol', 'rawPredictionCol']
     >>> model.pi
     DenseVector([-0.51..., -0.91...])
     >>> model.theta
@@ -978,7 +1032,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
+                      HasRawPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1019,6 +1074,14 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
     >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 5, 2], blockSize=1, seed=123)
     >>> model = mlp.fit(df)
+    >>> emap = mlp.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(mlp, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol']
     >>> model.layers
     [2, 5, 2]
     >>> model.weights.size
@@ -1033,7 +1096,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[1.0,0.0]|       1.0|
     |[0.0,0.0]|       0.0|
     +---------+----------+
-    ...
+
     >>> mlp_path = temp_path + "/mlp"
     >>> mlp.save(mlp_path)
     >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
@@ -1118,7 +1181,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel, HasFeaturesCol, HasLabelCol,
+                                              HasPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
@@ -1184,6 +1248,14 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
+    >>> emap = ovr.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(ovr, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['classifier', 'featuresCol', 'labelCol', 'predictionCol']
     >>> [x.coefficients for x in model.models]
     [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
     >>> [x.intercept for x in model.models]
@@ -1463,7 +1535,9 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        (failure_count, test_count) = doctest.testmod(
+            globs=globs,
+            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
         sc.stop()
     finally:
         from shutil import rmtree

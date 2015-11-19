@@ -26,8 +26,8 @@ __all__ = ['ALS', 'ALSModel']
 
 
 @inherit_doc
-class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, HasRegParam, HasSeed,
-          JavaMLWritable, JavaMLReadable):
+class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol,
+          HasRegParam, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     Alternating Least Squares (ALS) matrix factorization.
 
@@ -70,6 +70,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     ...     ["user", "item", "rating"])
     >>> als = ALS(rank=10, maxIter=5)
     >>> model = als.fit(df)
+    >>> emap = als.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(als, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['predictionCol']
     >>> model.rank
     10
     >>> model.userFactors.orderBy("id").collect()
@@ -335,7 +343,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         return self.getOrDefault(self.finalStorageLevel)
 
 
-class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class ALSModel(JavaModel, HasPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by ALS.
 

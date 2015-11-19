@@ -27,7 +27,8 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'LDA', 'LDAModel', 'LocalLDAModel', 'DistributedLDAModel']
 
 
-class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GaussianMixtureModel(JavaModel, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
+                           HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -77,6 +78,14 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> gm = GaussianMixture(k=3, tol=0.0001,
     ...                      maxIter=10, seed=10)
     >>> model = gm.fit(df)
+    >>> emap = gm.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(gm, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'maxIter', 'predictionCol', 'probabilityCol', 'seed', 'tol']
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -166,7 +175,8 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         return self.getOrDefault(self.k)
 
 
-class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable, HasFeaturesCol,
+                  HasPredictionCol, HasMaxIter, HasTol, HasSeed):
     """
     Model fitted by KMeans.
 
@@ -200,6 +210,14 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> df = sqlContext.createDataFrame(data, ["features"])
     >>> kmeans = KMeans(k=2, seed=1)
     >>> model = kmeans.fit(df)
+    >>> emap = kmeans.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(kmeans, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'maxIter', 'predictionCol', 'seed', 'tol']
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
@@ -309,7 +327,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class BisectingKMeansModel(JavaModel, HasFeaturesCol, HasPredictionCol, HasMaxIter,
+                           HasSeed, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -353,6 +372,14 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> df = sqlContext.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> model = bkm.fit(df)
+    >>> emap = bkm.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(bkm, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'maxIter', 'predictionCol', 'seed']
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
