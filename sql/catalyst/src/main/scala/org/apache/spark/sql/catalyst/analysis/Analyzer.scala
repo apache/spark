@@ -222,8 +222,12 @@ class Analyzer(
         }
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map {
-          // Don't transform AggregateExpressions see SPARK-11275
+          // If an expression is an aggregate (contains a AggregateExpression) then we dont change
+          // it so that the aggregation is computed on the unmodified value of its argument
+          // expressions.
           case expr if expr.find(_.isInstanceOf[AggregateExpression]).nonEmpty => expr
+          // If not then its a grouping expression and we need to use the modified (with nulls from
+          // Expand) value of the expression.
           case expr => expr.transformDown {
             case e => groupByAliases.find(_.child.semanticEquals(e)).map(_.toAttribute).getOrElse(e)
           }.asInstanceOf[NamedExpression]
