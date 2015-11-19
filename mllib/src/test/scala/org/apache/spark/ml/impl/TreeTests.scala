@@ -17,9 +17,6 @@
 
 package org.apache.spark.ml.impl
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
@@ -27,12 +24,13 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.SparkContext
 
 
-private[ml] object TreeTests extends SparkFunSuite with MLlibTestSparkContext {
+private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.

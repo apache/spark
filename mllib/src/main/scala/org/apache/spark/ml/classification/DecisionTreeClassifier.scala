@@ -169,7 +169,19 @@ final class DecisionTreeClassificationModel private[ml] (
     s"DecisionTreeClassificationModel (uid=$uid) of depth $depth with $numNodes nodes"
   }
 
-  lazy val featureImportances: Vector = RandomForest.featureImportances(Array(this), numFeatures)
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * This generalizes the idea of "Gini" importance to other losses,
+   * following the explanation of Gini importance from "Random Forests" documentation
+   * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
+   *
+   * This feature importance is calculated as follows:
+   *   - importance(feature j) = sum (over nodes which split on feature j) of the gain,
+   *     where gain is scaled by the number of instances passing through node
+   *   - Normalize importances for tree to sum to 1.
+   */
+  lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldDecisionTreeModel = {
