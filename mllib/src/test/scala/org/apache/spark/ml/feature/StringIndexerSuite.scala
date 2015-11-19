@@ -199,4 +199,20 @@ class StringIndexerSuite
       .setLabels(Array("a", "b", "c"))
     testDefaultReadWrite(t)
   }
+
+  test("StringIndexer with null value (SPARK-11569)") {
+    val df = sqlContext.createDataFrame(
+      Seq(("asd2s", "1e1e", 1.1, 0, 0.0), ("asd2s", "1e1e", 0.1, 0, 0.0),
+        (null, "1e3e", 1.2, 0, 2.0), ("bd34t", "1e1e", 5.1, 1, 1.0),
+        ("asd2s", "1e3e", 0.2, 0, 0.0), ("bd34t", "1e2e", 4.3, 1, 1.0))
+    ).toDF("x0", "x1", "x2", "x3", "expected")
+    val indexer = new StringIndexer().setInputCol("x0").setOutputCol("actual")
+
+    val transformed = indexer.fit(df).transform(df)
+    // asd2s -> 0, bd24t -> 1, null -> 2
+    transformed.select("expected", "actual").collect().foreach {
+      case Row(actual, expected) =>
+        assert(actual === expected)
+    }
+  }
 }

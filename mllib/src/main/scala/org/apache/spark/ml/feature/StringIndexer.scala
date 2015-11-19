@@ -84,7 +84,12 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .map(_.getString(0))
       .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+    val labels = counts.toSeq.sortBy(-_._2).map{ case (v, c) =>
+      v match {
+        case null => "null"
+        case _ => v
+      }
+    }.toArray
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
@@ -153,6 +158,8 @@ class StringIndexerModel (
     val indexer = udf { label: String =>
       if (labelToIndex.contains(label)) {
         labelToIndex(label)
+      } else if (label == null) {
+        labelToIndex("null")
       } else {
         throw new SparkException(s"Unseen label: $label.")
       }
