@@ -130,11 +130,6 @@ private[spark] object SparkUI {
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_RETAINED_JOBS = 1000
 
-  val listenerRegisters: Iterable[SparkListenerRegister] = {
-    val loader = Utils.getContextOrSparkClassLoader
-    ServiceLoader.load(classOf[SparkListenerRegister], loader).asScala
-  }
-
   def getUIPort(conf: SparkConf): Int = {
     conf.getInt("spark.ui.port", SparkUI.DEFAULT_PORT)
   }
@@ -160,9 +155,12 @@ private[spark] object SparkUI {
       startTime: Long): SparkUI = {
     val sparkUI = create(
       None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
-    listenerRegisters.foreach { listenRegister =>
-      val listener = listenRegister.getListener(conf, sparkUI)
-      listenerBus.addListener(listener)
+
+    val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
+      Utils.getContextOrSparkClassLoader).asScala
+    listenerFactories.foreach { listenerFactory =>
+      val listeners = listenerFactory.createListeners(conf, sparkUI)
+      listeners.foreach(listenerBus.addListener)
     }
     sparkUI
   }

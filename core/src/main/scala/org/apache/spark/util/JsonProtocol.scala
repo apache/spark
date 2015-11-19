@@ -19,11 +19,11 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-
 import scala.collection.JavaConverters._
 import scala.collection.Map
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -57,7 +57,7 @@ private[spark] object JsonProtocol {
 
   private implicit val format = DefaultFormats
 
-  val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
+  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
 
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |

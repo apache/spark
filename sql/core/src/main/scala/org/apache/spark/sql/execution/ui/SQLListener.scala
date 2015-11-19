@@ -41,10 +41,10 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
-private[sql] class SQLListenerRegister extends SparkListenerRegister {
+private[sql] class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
 
-  override def getListener(conf: SparkConf, sparkUI: SparkUI): SparkListener = {
-    new SQLHistoryListener(conf, sparkUI)
+  override def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener] = {
+    List(new SQLHistoryListener(conf, sparkUI))
   }
 }
 
@@ -314,7 +314,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
   extends SQLListener(conf) {
 
-  var sqlTabAttached = false
+  private var sqlTabAttached = false
 
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
@@ -333,7 +333,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case executionStart: SparkListenerSQLExecutionStart =>
+    case _: SparkListenerSQLExecutionStart =>
       if (!sqlTabAttached) {
         new SQLTab(this, sparkUI)
         sqlTabAttached = true

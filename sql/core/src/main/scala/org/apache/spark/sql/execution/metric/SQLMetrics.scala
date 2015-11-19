@@ -154,8 +154,8 @@ private[sql] object SQLMetrics {
     val longSQLMetricParam = Utils.getFormattedClassName(LongSQLMetricParam)
     val staticsSQLMetricParam = Utils.getFormattedClassName(StaticsLongSQLMetricParam)
     val metricParam = metricParamName match {
-        case `longSQLMetricParam` => LongSQLMetricParam
-        case `staticsSQLMetricParam` => StaticsLongSQLMetricParam
+      case `longSQLMetricParam` => LongSQLMetricParam
+      case `staticsSQLMetricParam` => StaticsLongSQLMetricParam
     }
     metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]]
   }
