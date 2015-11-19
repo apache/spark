@@ -66,42 +66,74 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
 
   /**
    * Convert the tree starting at the provided root node into a code generated
-   * series of if/else statements.
+   * series of if/else statements. If the tree is too large to fit in a single
+   * in-line method breaks it up into multiple methods.
+   * Returns a string for the current function body and a string of any additional
+   * functions.
    */
-  def NodeToTree(root: Node): String = {
+  def nodeToTree(root: Node, depth: Int): (String, String) = {
+    // Handle the different types of nodes
     root match {
       case node: InternalNode => {
-        val nodeSplit = node.split
-        nodeSplit match {
-          case split: CategoricalSplit => {
-            val isLeft = split.isLeft
-            isLeft match {
-              case true => s"""
-                              if (categories.contains(input.apply(${split.featureIndex}))) {
-                                ${NodeToTree(node.leftChild)}
-                              } else {
-                                ${NodeToTree(node.rightChild)}
-                              }"""
-              case false => s"""
-                               if (categories.contains(input.apply(${split.featureIndex}))) {
-                                 ${NodeToTree(node.leftChild)}
-                               } else {
-                                 ${NodeToTree(node.rightChild)}
-                               }"""
-            }
+            // Handle trees that get too large
+        depth match {
+          case 9 => {
+            val newFunctionName = freshName()
+            val newFunction = nodeToFunction(root, newFunctionName)
+            ("${newFunctionName()", newFunction)
           }
-          case split: ContinuousSplit => {
-            s"""
+          case _ => {
+            val nodeSplit = node.split
+            val (leftSubCode, leftSubFunction) = nodeToTree(node.leftChild, depth + 1)
+            val (rightSubCode, rightSubFunction) = nodeToTree(node.rightChild, depth + 1)
+            val subCode = nodeSplit match {
+              case split: CategoricalSplit => {
+                val isLeft = split.isLeft
+                isLeft match {
+                  case true => s"""
+                              if (categories.contains(input.apply(${split.featureIndex}))) {
+                                ${leftSubCode}
+                              } else {
+                                ${rightSubCode}
+                              }"""
+                  case false => s"""
+                               if (categories.contains(input.apply(${split.featureIndex}))) {
+                                 ${leftSubCode}
+                               } else {
+                                 ${rightSubCode}
+                               }"""
+                }
+              }
+              case split: ContinuousSplit => {
+                s"""
                if (input.apply(${split.featureIndex}) <= ${split.threshold}) {
-                 ${NodeToTree(node.leftChild)}
+                 ${leftSubCode}
                 } else {
-                 ${NodeToTree(node.rightChild)}
+                 ${rightSubCode}
                 }"""
+              }
+            }
+            (subCode, leftSubFunction + rightSubFunction)
           }
         }
       }
-      case node: LeafNode => s"return ${node.prediction};"
+      case node: LeafNode => (s"return ${node.prediction};", "")
     }
+  }
+
+  /**
+   * Convert the tree starting at the provided root node into a code generated
+   * series of if/else statements. If the tree is too large to fit in a single
+   * in-line method breaks it up into multiple methods.
+   */
+  def nodeToFunction(node: Node, name: String): String = {
+    val (code, function) = nodeToTree(node, 0)
+    s"""
+     public double ${name}(Vector input) throws Exception {
+       ${code}
+     }
+     ${function}
+     """
   }
 
   // Create a codegened scorer for a given node
@@ -109,9 +141,7 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     val code =
       s"""
        @Override
-       public double call(Vector input) throws Exception {
-         ${NodeToTree(root)}
-       }
+       ${nodeToFunction(root, "apply")}
        """
     trait CallableVectorDouble {
       def call(v: Vector): Double
