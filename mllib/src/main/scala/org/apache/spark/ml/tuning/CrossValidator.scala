@@ -18,16 +18,21 @@
 package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
+import org.apache.hadoop.fs.Path
+import org.json4s.JsonAST.JObject
+import org.json4s.{JValue, DefaultFormats}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
+
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
@@ -53,7 +58,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
  */
 @Experimental
 class CrossValidator(override val uid: String) extends Estimator[CrossValidatorModel]
-  with CrossValidatorParams with Logging {
+  with CrossValidatorParams with MLWritable with Logging {
 
   def this() = this(Identifiable.randomUID("cv"))
 
@@ -131,6 +136,164 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
     }
     copied
   }
+
+  // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
+  // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
+  // However, this case should be unusual.
+  @Since("1.6.0")
+  override def write: MLWriter = new CrossValidator.CrossValidatorWriter(this)
+}
+
+@Since("1.6.0")
+object CrossValidator extends MLReadable[CrossValidator] {
+
+  @Since("1.6.0")
+  override def read: MLReader[CrossValidator] = new CrossValidatorReader
+
+  @Since("1.6.0")
+  override def load(path: String): CrossValidator = super.load(path)
+
+  private[CrossValidator] class CrossValidatorWriter(instance: CrossValidator) extends MLWriter {
+
+    import org.json4s.JsonDSL._
+
+    SharedReadWrite.validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit = {
+      val uid = instance.uid
+      val cls = instance.getClass.getName
+      val estimatorParamMapsJson = compact(render(
+        instance.getEstimatorParamMaps.map { case paramMap =>
+          paramMap.toSeq.map { case ParamPair(p, v) =>
+            Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+          }
+        }.toSeq
+      ))
+      val jsonParams = List(
+        "numFolds" -> parse(instance.numFolds.jsonEncode(instance.getNumFolds)),
+        "estimatorParamMaps" -> parse(estimatorParamMapsJson)
+      )
+      val metadata = ("class" -> cls) ~
+        ("timestamp" -> System.currentTimeMillis()) ~
+        ("sparkVersion" -> sc.version) ~
+        ("uid" -> uid) ~
+        ("paramMap" -> jsonParams)
+      val metadataPath = new Path(path, "metadata").toString
+      val metadataJson = compact(render(metadata))
+      sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+
+      val evaluatorPath = new Path(path, "evaluator").toString
+      instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
+      val estimatorPath = new Path(path, "estimator").toString
+      instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
+    }
+  }
+
+  private class CrossValidatorReader extends MLReader[CrossValidator] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[CrossValidator].getName
+
+    override def load(path: String): CrossValidator = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      implicit val format = DefaultFormats
+      val evaluatorPath = new Path(path, "evaluator").toString
+      val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
+      val estimatorPath = new Path(path, "estimator").toString
+      val estimator = DefaultParamsReader.loadParamsInstance[Estimator[_]](estimatorPath, sc)
+
+      val uidToParams = Map(evaluator.uid -> evaluator) ++ CrossValidatorReader.getUidMap(estimator)
+
+      val (numFolds: Int, estimatorParamMaps: Array[ParamMap]) = metadata.params match {
+        case JObject(pairs) =>
+          if (pairs.length != 2) {
+            // Should not happen unless file is corrupted or we have a bug.
+            throw new RuntimeException(s"CrossValidator read expected 2 Params (numFolds," +
+              s" estimatorParamMaps), but found ${pairs.length}.")
+          }
+          val numFolds = pairs.head match {
+            case ("numFolds", jsonValue) =>
+              jsonValue.extract[Int]
+            case (paramName, _) =>
+              // Should not happen unless file is corrupted or we have a bug.
+              throw new RuntimeException(s"CrossValidator read expected numFolds but encountered" +
+                s" unexpected Param $paramName in metadata: ${metadata.metadataStr}")
+          }
+          val estimatorParamMaps: Array[ParamMap] = pairs(1) match {
+            case ("estimatorParamMaps", epmJsonValue: JValue) =>
+              epmJsonValue.extract[Seq[Seq[Map[String, String]]]].map { pMap =>
+                val paramPairs = pMap.map { case pInfo: Map[String, String] =>
+                  val est = uidToParams(pInfo("parent"))
+                  val param = est.getParam(pInfo("name"))
+                  val value = param.jsonDecode(pInfo("value"))
+                  param -> value
+                }
+                ParamMap(paramPairs: _*)
+              }.toArray
+            case (paramName, _) =>
+              // Should not happen unless file is corrupted or we have a bug.
+              throw new RuntimeException(s"CrossValidator read expected estimatorParamMaps but" +
+                s" encountered unexpected Param $paramName in metadata: ${metadata.metadataStr}")
+          }
+          (numFolds, estimatorParamMaps)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
+      }
+      new CrossValidator(metadata.uid)
+        .setEstimator(estimator)
+        .setEvaluator(evaluator)
+        .setEstimatorParamMaps(estimatorParamMaps)
+        .setNumFolds(numFolds)
+    }
+  }
+
+  private object CrossValidatorReader {
+    /**
+     * Examine the given estimator (which may be a compound estimator) and extract a mapping
+     * from UIDs to corresponding [[Params]] instances.
+     */
+    def getUidMap(instance: Params): Map[String, Params] = {
+      val subStages: Array[Params] = instance match {
+        case p: Pipeline => p.getStages.asInstanceOf[Array[Params]]
+        case pm: PipelineModel => pm.stages.asInstanceOf[Array[Params]]
+        case v: ValidatorParams => Array(v.getEstimator, v.getEvaluator)
+        case _: Params => Array()
+      }
+      val subStageMaps = subStages.map(getUidMap).foldLeft(Map.empty[String, Params])(_ ++ _)
+      Map(instance.uid -> instance) ++ subStageMaps
+    }
+  }
+
+  private[tuning] object SharedReadWrite {
+
+    /**
+     * Check that [[CrossValidator.evaluator]] and [[CrossValidator.estimator]] are Writable.
+     * This does not check [[CrossValidator.estimatorParamMaps]].
+     */
+    def validateParams(instance: ValidatorParams): Unit = {
+      def checkElement(elem: Params, name: String): Unit = elem match {
+        case stage: MLWritable => // good
+        case other =>
+          throw new UnsupportedOperationException("CrossValidator write will fail " +
+            s" because it contains $name which does not implement Writable." +
+            s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
+      }
+      checkElement(instance.getEvaluator, "evaluator")
+      checkElement(instance.getEstimator, "estimator")
+      // Check to make sure all Params apply to this estimator.  Throw an error if any do not.
+      // Extraneous Params would cause problems when loading the estimatorParamMaps.
+      val uidToInstance: Map[String, Params] = CrossValidatorReader.getUidMap(instance)
+      instance.getEstimatorParamMaps.foreach { case pMap: ParamMap =>
+        pMap.toSeq.foreach { case ParamPair(p, v) =>
+          require(uidToInstance.contains(p.parent), s"CrossValidator save requires all Params in" +
+            s" estimatorParamMaps to apply to this CrossValidator, its Estimator, or its" +
+            s" Evaluator.  An extraneous Param was found: $p")
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -139,7 +302,7 @@ class CrossValidator(override val uid: String) extends Estimator[CrossValidatorM
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in
- *                   [[estimatorParamMaps]], in the corresponding order.
+ *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
  */
 @Experimental
 class CrossValidatorModel private[ml] (

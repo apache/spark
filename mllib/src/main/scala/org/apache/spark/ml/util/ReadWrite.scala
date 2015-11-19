@@ -306,4 +306,10 @@ private[ml] object DefaultParamsReader {
           s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
     }
   }
+
+  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
+    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+    val cls = Utils.classForName(metadata.className)
+    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+  }
 }
