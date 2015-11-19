@@ -309,7 +309,7 @@ abstract class OffsetWindowFunction
     val offsetValue = offset.eval() match {
       case o: Int => o
       case x => throw new AnalysisException(
-        "Offset expression must be a foldable integer expression: $x")
+        s"Offset expression must be a foldable integer expression: $x")
     }
     val boundary = ValueFollowing(offsetSign * offsetValue)
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
@@ -402,7 +402,7 @@ case class NTile(buckets: Expression, n: Expression)
 
   // Validate buckets.
   buckets.eval() match {
-    case b: Int if b > 1 => // Ok
+    case b: Int if b > 0 => // Ok
     case x => throw new AnalysisException(
       "Buckets expression must be a foldable positive integer expression: $x")
   }

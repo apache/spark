@@ -225,7 +225,8 @@ trait CheckAnalysis {
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
                  |in operator ${operator.simpleString}
              """.stripMargin)

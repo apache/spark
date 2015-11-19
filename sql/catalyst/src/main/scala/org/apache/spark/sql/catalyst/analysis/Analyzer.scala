@@ -1097,7 +1097,7 @@ class Analyzer(
 
       case plan => plan transformExpressionsUp {
 
-        case udf@ScalaUDF(func, _, inputs, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
