@@ -218,7 +218,7 @@ private object IDFModel {
           newValues(k) = values(k) * idf(indices(k))
           k += 1
         }
-        Vectors.sparse(n, indices, newValues)
+        Vectors.sparse(n, indices, newValues).toSparse
       case DenseVector(values) =>
         val newValues = new Array[Double](n)
         var j = 0
