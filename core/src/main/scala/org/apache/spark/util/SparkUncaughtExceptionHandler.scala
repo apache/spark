@@ -29,7 +29,11 @@ private[spark] object SparkUncaughtExceptionHandler
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
-      logError("Uncaught exception in thread " + thread, exception)
+      // Make it explicit that uncaught exceptions are thrown when container is shutting down.
+      // It will help users when they analyze the executor logs
+      val inShutdownMsg = if (ShutdownHookManager.inShutdown()) "[Container in shutdown] " else ""
+      val errMsg = "Uncaught exception in thread "
+      logError(inShutdownMsg + errMsg + thread, exception)
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
