@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{Queryable, QueryExecution}
+import org.apache.spark.sql.execution.{ExplainCommand, Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -579,6 +579,12 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  def explain(extended: Boolean): Unit = toDF().explain(extended)
 
   /* ******************** *
    *  Internal Functions  *
