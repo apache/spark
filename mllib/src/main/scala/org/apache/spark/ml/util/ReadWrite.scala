@@ -307,6 +307,10 @@ private[ml] object DefaultParamsReader {
     }
   }
 
+  /**
+   * Load a [[Params]] instance from the given path, and return it.
+   * This assumes the instance implements [[MLReadable]].
+   */
   def loadParamsInstance[T](path: String, sc: SparkContext): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
