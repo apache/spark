@@ -17,18 +17,24 @@
 
 package org.apache.spark.ml.regression
 
+import scala.collection.mutable
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.regression.IsotonicRegressionModel.IsotonicRegressionModelWriter
+import org.apache.spark.ml.util._
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT, Vectors}
-import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression, IsotonicRegressionModel => MLlibIsotonicRegressionModel}
+import org.apache.spark.mllib.regression.{IsotonicRegression => MLlibIsotonicRegression}
+import org.apache.spark.mllib.regression.{IsotonicRegressionModel => MLlibIsotonicRegressionModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, StructType}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -127,7 +133,8 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
 @Since("1.5.0")
 @Experimental
 class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Estimator[IsotonicRegressionModel] with IsotonicRegressionBase {
+  extends Estimator[IsotonicRegressionModel]
+  with IsotonicRegressionBase with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("isoReg"))
@@ -179,6 +186,13 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   }
 }
 
+@Since("1.6.0")
+object IsotonicRegression extends DefaultParamsReadable[IsotonicRegression] {
+
+  @Since("1.6.0")
+  override def load(path: String): IsotonicRegression = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model fitted by IsotonicRegression.
@@ -194,7 +208,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 class IsotonicRegressionModel private[ml] (
     override val uid: String,
     private val oldModel: MLlibIsotonicRegressionModel)
-  extends Model[IsotonicRegressionModel] with IsotonicRegressionBase {
+  extends Model[IsotonicRegressionModel] with IsotonicRegressionBase with MLWritable {
 
   /** @group setParam */
   @Since("1.5.0")
@@ -239,5 +253,62 @@ class IsotonicRegressionModel private[ml] (
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false)
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter =
+    new IsotonicRegressionModelWriter(this)
+}
+
+@Since("1.6.0")
+object IsotonicRegressionModel extends MLReadable[IsotonicRegressionModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[IsotonicRegressionModel] = new IsotonicRegressionModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): IsotonicRegressionModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[AFTSurvivalRegressionModel]] */
+  private[IsotonicRegressionModel] class IsotonicRegressionModelWriter (
+      instance: IsotonicRegressionModel
+    ) extends MLWriter with Logging {
+
+    private case class Data(
+        boundaries: Array[Double],
+        predictions: Array[Double],
+        isotonic: Boolean)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: coefficients, intercept, scale
+      val data = Data(
+        instance.oldModel.boundaries, instance.oldModel.predictions, instance.oldModel.isotonic)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class IsotonicRegressionModelReader extends MLReader[IsotonicRegressionModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[IsotonicRegressionModel].getName
+
+    override def load(path: String): IsotonicRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("boundaries", "predictions", "isotonic").head()
+      val boundaries = data.getAs[mutable.WrappedArray[Double]](0).toArray
+      val predictions = data.getAs[mutable.WrappedArray[Double]](1).toArray
+      val isotonic = data.getBoolean(2)
+      val model = new IsotonicRegressionModel(
+        metadata.uid, new MLlibIsotonicRegressionModel(boundaries, predictions, isotonic))
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
