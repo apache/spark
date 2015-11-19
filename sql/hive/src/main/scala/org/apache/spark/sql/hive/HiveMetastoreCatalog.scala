@@ -719,6 +719,8 @@ private[hive] case class MetastoreRelation
     (@transient private val sqlContext: HiveContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
+  private[hive] var pruningPredicates: Seq[Expression] = null
+
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
       databaseName == relation.databaseName &&
@@ -782,7 +784,8 @@ private[hive] case class MetastoreRelation
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+          .getOrElse(Option(calculateInput().getLength).filter(_ > 0)
+          .getOrElse(sqlContext.conf.defaultSizeInBytes))))
     }
   )
 
@@ -839,38 +842,6 @@ private[hive] case class MetastoreRelation
     }
   }
 
-  def prepareStats(partitionPruningPred: Seq[Expression]) {
-    val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-    val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
-    if (!hiveQlTable.isNonNative && hiveQlTable.getDataLocation != null &&
-        (partitionPruningPred.isEmpty && hiveQlTable.isPartitioned) ||
-        Option(totalSize).map(_.toLong).filter(_ > 0).isEmpty &&
-        Option(rawDataSize).map(_.toLong).filter(_ > 0).isEmpty) {
-
-      val dummy: MapWork = new MapWork
-      val alias: String = "_dummy"
-      val operator: Operator[_ <: OperatorDesc] = new TableScanOperator
-
-      dummy.getAliasToWork.put(alias, operator)
-      val pathToAliases = dummy.getPathToAliases
-      val pathToPartition = dummy.getPathToPartitionInfo
-      if (hiveQlTable.isPartitioned) {
-        for (partition <- getHiveQlPartitions(partitionPruningPred)) {
-          val partPath = getDnsPath(partition.getDataLocation, sqlContext.hiveconf).toString
-          pathToAliases.put(partPath, new util.ArrayList(util.Arrays.asList(alias)))
-          pathToPartition.put(partPath, new PartitionDesc(partition, tableDesc))
-        }
-      } else {
-        val tablePath = getDnsPath(hiveQlTable.getDataLocation, sqlContext.hiveconf).toString
-        pathToAliases.put(tablePath, new util.ArrayList(util.Arrays.asList(alias)))
-        pathToPartition.put(tablePath, new PartitionDesc(tableDesc, null))
-      }
-      // update
-      hiveQlTable.getParameters.put(StatsSetupConst.TOTAL_SIZE,
-        Utilities.getInputSummary(new Context(sqlContext.hiveconf), dummy, null).getLength.toString)
-    }
-  }
-
   // moved from org.apache.spark.sql.hive.execution.HiveTableScan
   private[hive] def prunePartitions(partitions: Seq[HivePartition], pruner: Option[Expression]) = {
     pruner match {
@@ -887,6 +858,30 @@ private[hive] case class MetastoreRelation
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
+  }
+
+  private def calculateInput(): ContentSummary = {
+    // create dummy mapwork
+    val dummy: MapWork = new MapWork
+    val alias: String = "_dummy"
+    val operator: Operator[_ <: OperatorDesc] = new TableScanOperator
+
+    dummy.getAliasToWork.put(alias, operator)
+    val pathToAliases = dummy.getPathToAliases
+    val pathToPartition = dummy.getPathToPartitionInfo
+    if (hiveQlTable.isPartitioned) {
+      for (partition <- getHiveQlPartitions(pruningPredicates)) {
+        val partPath = getDnsPath(partition.getDataLocation, sqlContext.hiveconf).toString
+        pathToAliases.put(partPath, new util.ArrayList(util.Arrays.asList(alias)))
+        pathToPartition.put(partPath, new PartitionDesc(partition, tableDesc))
+      }
+    } else {
+      val tablePath = getDnsPath(hiveQlTable.getDataLocation, sqlContext.hiveconf).toString
+      pathToAliases.put(tablePath, new util.ArrayList(util.Arrays.asList(alias)))
+      pathToPartition.put(tablePath, new PartitionDesc(tableDesc, null))
+    }
+    // calculate summary
+    Utilities.getInputSummary(new Context(sqlContext.hiveconf), dummy, null)
   }
 
   private[this] def castFromString(value: String, dataType: DataType) = {

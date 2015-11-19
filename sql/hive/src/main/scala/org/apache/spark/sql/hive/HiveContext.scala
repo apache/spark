@@ -573,7 +573,7 @@ class HiveContext private[hive](
     }
   }
 
-  override protected[sql] def newOptimizer: Optimizer = new Optimizer {
+  override protected[sql] lazy val optimizer: Optimizer = new Optimizer {
     override protected val batches =
       DefaultOptimizer.batches.asInstanceOf[Seq[Batch]] ++
       Seq(Batch("Hive Table Stats", Once, new HiveTableStats))
@@ -586,10 +586,10 @@ class HiveContext private[hive](
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val (pruningPredicates, _) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
+          predicate.references.nonEmpty &&
           predicate.references.subsetOf(partitionKeyIds)
         }
-        relation.prepareStats(pruningPredicates)
+        relation.pruningPredicates = pruningPredicates
         plan
       case u: UnaryNode => apply(u.child); plan
       case b: BinaryNode => apply(b.left); apply(b.right); plan
