@@ -43,7 +43,8 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
    * @param op an operation to run on the RDD
    * @param reliableCheckpoint if true, use reliable checkpoints, otherwise use local checkpoints
    * @param collectFunc a function for collecting the values in the RDD, in case there are
-   *                    non-comparable types like arrays that we want to convert to something that supports ==
+   *                    non-comparable types like arrays that we want to convert to something
+   *                    that supports ==
    */
   protected def testRDD[U: ClassTag](
       op: (RDD[Int]) => RDD[U],
