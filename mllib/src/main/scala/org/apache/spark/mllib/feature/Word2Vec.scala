@@ -432,9 +432,9 @@ class Word2Vec extends Serializable with Logging {
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Since("1.1.0")
-class Word2VecModel private[mllib] (
-    private val wordIndex: Map[String, Int],
-    private val wordVectors: Array[Float]) extends Serializable with Saveable {
+class Word2VecModel private[spark] (
+    val wordIndex: Map[String, Int],
+    val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.

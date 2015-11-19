@@ -19,14 +19,14 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.mllib.feature.{Word2VecModel => OldWord2VecModel}
 
-class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new Word2Vec)
@@ -142,6 +142,32 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       case (expected, actual) => assert(math.abs((expected - actual) / expected) < 1E-5)
     }
 
+  }
+
+  test("Word2Vec read/write") {
+    val t = new Word2Vec()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMaxIter(5)
+      .setMinCount(10)
+      .setNumPartitions(2)
+      .setSeed(42L)
+      .setStepSize(0.015)
+      .setVectorSize(200)
+    testDefaultReadWrite(t)
+  }
+
+  test("Word2VecModel read/write") {
+    val word2VecMap = Map(
+      ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
+    )
+    val oldModel = new OldWord2VecModel(word2VecMap)
+    val instance = new Word2VecModel("myWord2VecModel", oldModel)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.getVectors.collect() === instance.getVectors.collect())
   }
 }
 
