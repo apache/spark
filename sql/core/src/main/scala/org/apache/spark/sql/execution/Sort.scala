@@ -17,68 +17,22 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.CompletionIterator
-import org.apache.spark.util.collection.ExternalSorter
-import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// This file defines various sort operators.
-////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Performs a sort, spilling to disk as needed.
- * @param global when true performs a global sort of all partitions by shuffling the data first
- *               if necessary.
- */
-case class Sort(
-    sortOrder: Seq[SortOrder],
-    global: Boolean,
-    child: SparkPlan)
-  extends UnaryNode {
-
-  override def requiredChildDistribution: Seq[Distribution] =
-    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
-    child.execute().mapPartitions( { iterator =>
-      val ordering = newOrdering(sortOrder, child.output)
-      val sorter = new ExternalSorter[InternalRow, Null, InternalRow](
-        TaskContext.get(), ordering = Some(ordering))
-      sorter.insertAll(iterator.map(r => (r.copy(), null)))
-      val baseIterator = sorter.iterator.map(_._1)
-      val context = TaskContext.get()
-      context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
-      context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-      context.internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(sorter.peakMemoryUsedBytes)
-      // TODO(marmbrus): The complex type signature below thwarts inference for no reason.
-      CompletionIterator[InternalRow, Iterator[InternalRow]](baseIterator, sorter.stop())
-    }, preservesPartitioning = true)
-  }
-
-  override def output: Seq[Attribute] = child.output
-
-  override def outputOrdering: Seq[SortOrder] = sortOrder
-}
-
-/**
- * Optimized version of [[Sort]] that operates on binary data (implemented as part of
- * Project Tungsten).
+ * Performs (external) sorting.
  *
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
  * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
  *                           spill every `frequency` records.
  */
-
-case class TungstenSort(
+case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,
@@ -107,7 +61,7 @@ case class TungstenSort(
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsInternal { iter =>
       val ordering = newOrdering(sortOrder, childOutput)
 
       // The comparator for comparing prefix
@@ -143,5 +97,4 @@ case class TungstenSort(
       sortedIterator
     }
   }
-
 }

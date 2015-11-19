@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql
 
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.encoders.{FlatEncoder, ExpressionEncoder, encoderFor, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 
@@ -53,11 +52,10 @@ class GroupedDataset[K, T] private[sql](
   private implicit val unresolvedKEncoder = encoderFor(kEncoder)
   private implicit val unresolvedTEncoder = encoderFor(tEncoder)
 
-  private val resolvedKEncoder = unresolvedKEncoder.resolve(groupingAttributes)
-  private val resolvedTEncoder = unresolvedTEncoder.resolve(dataAttributes)
-
-  /** Encoders for built in aggregations. */
-  private implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder[Long](flat = true)
+  private val resolvedKEncoder =
+    unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
+  private val resolvedTEncoder =
+    unresolvedTEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
@@ -89,7 +87,7 @@ class GroupedDataset[K, T] private[sql](
   }
 
   /**
-   * Applies the given function to each group of data.  For each unique group, the function  will
+   * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
    * as a new [[Dataset]].
@@ -148,9 +146,37 @@ class GroupedDataset[K, T] private[sql](
     reduce(f.call _)
   }
 
-  // To ensure valid overloading.
-  protected def agg(expr: Column, exprs: Column*): DataFrame =
-    groupedData.agg(expr, exprs: _*)
+  /**
+   * Compute aggregates by specifying a series of aggregate columns, and return a [[DataFrame]].
+   * We can call `as[T : Encoder]` to turn the returned [[DataFrame]] to [[Dataset]] again.
+   *
+   * The available aggregate methods are defined in [[org.apache.spark.sql.functions]].
+   *
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *
+   *   // Scala:
+   *   import org.apache.spark.sql.functions._
+   *   df.groupBy("department").agg(max("age"), sum("expense"))
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.groupBy("department").agg(max("age"), sum("expense"));
+   * }}}
+   *
+   * We can also use `Aggregator.toColumn` to pass in typed aggregate functions.
+   *
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def agg(expr: Column, exprs: Column*): DataFrame =
+    groupedData.agg(withEncoder(expr), exprs.map(withEncoder): _*)
+
+  private def withEncoder(c: Column): Column = c match {
+    case tc: TypedColumn[_, _] =>
+      tc.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes)
+    case _ => c
+  }
 
   /**
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
@@ -162,8 +188,13 @@ class GroupedDataset[K, T] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
-        _.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes).named)
-    val aggregate = Aggregate(groupingAttributes, groupingAttributes ++ namedColumns, logicalPlan)
+        _.withInputType(resolvedTEncoder, dataAttributes).named)
+    val keyColumn = if (groupingAttributes.length > 1) {
+      Alias(CreateStruct(groupingAttributes), "key")()
+    } else {
+      groupingAttributes.head
+    }
+    val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)
 
     new Dataset(
@@ -211,7 +242,7 @@ class GroupedDataset[K, T] private[sql](
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
    * for that key.
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as[Long])
+  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(FlatEncoder[Long]))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will

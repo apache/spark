@@ -47,7 +47,7 @@ import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
  * @tparam B The type of the intermediate value of the reduction.
  * @tparam C The type of the final result.
  */
-abstract class Aggregator[-A, B, C] {
+abstract class Aggregator[-A, B, C] extends Serializable {
 
   /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
   def zero: B

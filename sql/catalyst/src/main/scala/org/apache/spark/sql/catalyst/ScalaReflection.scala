@@ -35,47 +35,12 @@ object ScalaReflection extends ScalaReflection {
   // class loader of the current thread.
   override def mirror: universe.Mirror =
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
-}
-
-/**
- * Support for generating catalyst schemas for scala objects.
- */
-trait ScalaReflection {
-  /** The universe we work in (runtime or macro) */
-  val universe: scala.reflect.api.Universe
-
-  /** The mirror used to access types in the universe */
-  def mirror: universe.Mirror
 
   import universe._
 
   // The Predef.Map is scala.collection.immutable.Map.
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
-
-  case class Schema(dataType: DataType, nullable: Boolean)
-
-  /** Returns a Sequence of attributes for the given case class type. */
-  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
-    case Schema(s: StructType, _) =>
-      s.toAttributes
-  }
-
-  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
-  def schemaFor[T: TypeTag]: Schema =
-    ScalaReflectionLock.synchronized { schemaFor(localTypeOf[T]) }
-
-  /**
-   * Return the Scala Type for `T` in the current classloader mirror.
-   *
-   * Use this method instead of the convenience method `universe.typeOf`, which
-   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
-   * That's not necessarily the case when running using Eclipse launchers or even
-   * Sbt console or test (without `fork := true`).
-   *
-   * @see SPARK-5281
-   */
-  private def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /**
    * Returns the Spark SQL DataType for a given scala type.  Where this is not an exact mapping
@@ -114,7 +79,9 @@ trait ScalaReflection {
 
           }
           ObjectType(cls)
-        case other => ObjectType(Utils.classForName(className))
+        case other =>
+          val clazz = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
+          ObjectType(clazz)
       }
   }
 
@@ -640,6 +607,48 @@ trait ScalaReflection {
       }
     }
   }
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
+ * object, this trait able to work in both the runtime and the compile time (macro) universe.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  /** The mirror used to access types in the universe */
+  def mirror: universe.Mirror
+
+  import universe._
+
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
+
+  case class Schema(dataType: DataType, nullable: Boolean)
+
+  /** Returns a Sequence of attributes for the given case class type. */
+  def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
+    case Schema(s: StructType, _) =>
+      s.toAttributes
+  }
+
+  /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
+  def schemaFor[T: TypeTag]: Schema =
+    ScalaReflectionLock.synchronized { schemaFor(localTypeOf[T]) }
+
+  /**
+   * Return the Scala Type for `T` in the current classloader mirror.
+   *
+   * Use this method instead of the convenience method `universe.typeOf`, which
+   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
+   * That's not necessarily the case when running using Eclipse launchers or even
+   * Sbt console or test (without `fork := true`).
+   *
+   * @see SPARK-5281
+   */
+  def localTypeOf[T: TypeTag]: `Type` = typeTag[T].in(mirror).tpe
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
@@ -717,6 +726,15 @@ trait ScalaReflection {
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
+  }
+
+  /**
+   * Returns classes of input parameters of scala function object.
+   */
+  def getParameterTypes(func: AnyRef): Seq[Class[_]] = {
+    val methods = func.getClass.getMethods.filter(m => m.getName == "apply" && !m.isBridge)
+    assert(methods.length == 1)
+    methods.head.getParameterTypes
   }
 
   def typeOfObject: PartialFunction[Any, DataType] = {

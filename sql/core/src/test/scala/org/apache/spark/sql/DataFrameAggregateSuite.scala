@@ -205,7 +205,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
     emptyTableData.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
-    Row(Double.NaN, Double.NaN, Double.NaN))
+    Row(null, null, null))
   }
 
   test("zero sum") {
@@ -244,17 +244,23 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   test("zero moments") {
     val input = Seq((1, 2)).toDF("a", "b")
     checkAnswer(
-      input.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
+      input.agg(stddev('a), stddev_samp('a), stddev_pop('a), variance('a),
+        var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+        Double.NaN, Double.NaN))
 
     checkAnswer(
       input.agg(
+        expr("stddev(a)"),
+        expr("stddev_samp(a)"),
+        expr("stddev_pop(a)"),
         expr("variance(a)"),
         expr("var_samp(a)"),
         expr("var_pop(a)"),
         expr("skewness(a)"),
         expr("kurtosis(a)")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN))
+      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+        Double.NaN, Double.NaN))
   }
 
   test("null moments") {
@@ -262,7 +268,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       emptyTableData.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
-      Row(Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN))
+      Row(null, null, null, null, null))
 
     checkAnswer(
       emptyTableData.agg(
@@ -271,6 +277,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         expr("var_pop(a)"),
         expr("skewness(a)"),
         expr("kurtosis(a)")),
-      Row(Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN))
+      Row(null, null, null, null, null))
   }
 }

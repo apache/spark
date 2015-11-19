@@ -145,8 +145,8 @@ class Word2Vec extends Serializable with Logging {
 
   private var trainWordsCount = 0
   private var vocabSize = 0
-  private var vocab: Array[VocabWord] = null
-  private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private var vocab: Array[VocabWord] = null
+  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))

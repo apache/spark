@@ -132,6 +132,22 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
+    val data3 = Seq[(Seq[Integer], Integer, Integer)](
+      (Seq[Integer](1, 1), 10, -10),
+      (Seq[Integer](null), -60, 60),
+      (Seq[Integer](1, 1), 30, -30),
+      (Seq[Integer](1), 30, 30),
+      (Seq[Integer](2), 1, 1),
+      (null, -10, 10),
+      (Seq[Integer](2, 3), -1, null),
+      (Seq[Integer](2, 3), 1, 1),
+      (Seq[Integer](2, 3, 4), null, 1),
+      (Seq[Integer](null), 100, -10),
+      (Seq[Integer](3), null, 3),
+      (null, null, null),
+      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
+    data3.write.saveAsTable("agg3")
+
     val emptyDF = sqlContext.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
@@ -146,6 +162,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   override def afterAll(): Unit = {
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
+    sqlContext.sql("DROP TABLE IF EXISTS agg3")
     sqlContext.dropTempTable("emptyTable")
   }
 
@@ -265,6 +282,41 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, 2) ::
         Row(100, null) ::
         Row(null, 3) ::
+        Row(null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT DISTINCT key
+          |FROM agg3
+        """.stripMargin),
+      Row(Seq[Integer](1, 1)) ::
+        Row(Seq[Integer](null)) ::
+        Row(Seq[Integer](1)) ::
+        Row(Seq[Integer](2)) ::
+        Row(null) ::
+        Row(Seq[Integer](2, 3)) ::
+        Row(Seq[Integer](2, 3, 4)) ::
+        Row(Seq[Integer](3)) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT value1, key
+          |FROM agg3
+          |GROUP BY value1, key
+        """.stripMargin),
+      Row(10, Seq[Integer](1, 1)) ::
+        Row(-60, Seq[Integer](null)) ::
+        Row(30, Seq[Integer](1, 1)) ::
+        Row(30, Seq[Integer](1)) ::
+        Row(1, Seq[Integer](2)) ::
+        Row(-10, null) ::
+        Row(-1, Seq[Integer](2, 3)) ::
+        Row(1, Seq[Integer](2, 3)) ::
+        Row(null, Seq[Integer](2, 3, 4)) ::
+        Row(100, Seq[Integer](null)) ::
+        Row(null, Seq[Integer](3)) ::
         Row(null, null) :: Nil)
   }
 

@@ -160,6 +160,20 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      testData.write.parquet(path)
+      val df = sqlContext.read.parquet(path)
+      sqlContext.registerDataFrameAsTable(df, "testPushed")
+
+      withTempTable("testPushed") {
+        val exp = sql("select * from testPushed where key = 15").queryExecution.executedPlan
+        assert(exp.toString.contains("PushedFilter: [EqualTo(key,15)]"))
+      }
+    }
+  }
+
   test("efficient limit -> project -> sort") {
     {
       val query =
@@ -365,7 +379,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }
@@ -381,7 +395,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.nonEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.nonEmpty) {
       fail(s"No sorts should have been added:\n$outputPlan")
     }
   }
@@ -398,7 +412,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: TungstenSort => true; case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }

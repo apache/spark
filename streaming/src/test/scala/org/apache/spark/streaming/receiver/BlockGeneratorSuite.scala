@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.receiver
 
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._

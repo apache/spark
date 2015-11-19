@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -57,7 +59,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  */
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
-  with StandardScalerParams {
+  with StandardScalerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stdScal"))
 
@@ -96,6 +98,13 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
+@Since("1.6.0")
+object StandardScaler extends DefaultParamsReadable[StandardScaler] {
+
+  @Since("1.6.0")
+  override def load(path: String): StandardScaler = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model fitted by [[StandardScaler]].
@@ -104,13 +113,23 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
 class StandardScalerModel private[ml] (
     override val uid: String,
     scaler: feature.StandardScalerModel)
-  extends Model[StandardScalerModel] with StandardScalerParams {
+  extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
+
+  import StandardScalerModel._
 
   /** Standard deviation of the StandardScalerModel */
   val std: Vector = scaler.std
 
   /** Mean of the StandardScalerModel */
   val mean: Vector = scaler.mean
+
+  /** Whether to scale to unit standard deviation. */
+  @Since("1.6.0")
+  def getWithStd: Boolean = scaler.withStd
+
+  /** Whether to center data with mean. */
+  @Since("1.6.0")
+  def getWithMean: Boolean = scaler.withMean
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -138,4 +157,49 @@ class StandardScalerModel private[ml] (
     val copied = new StandardScalerModel(uid, scaler)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new StandardScalerModelWriter(this)
+}
+
+@Since("1.6.0")
+object StandardScalerModel extends MLReadable[StandardScalerModel] {
+
+  private[StandardScalerModel]
+  class StandardScalerModelWriter(instance: StandardScalerModel) extends MLWriter {
+
+    private case class Data(std: Vector, mean: Vector, withStd: Boolean, withMean: Boolean)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.std, instance.mean, instance.getWithStd, instance.getWithMean)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class StandardScalerModelReader extends MLReader[StandardScalerModel] {
+
+    private val className = "org.apache.spark.ml.feature.StandardScalerModel"
+
+    override def load(path: String): StandardScalerModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val Row(std: Vector, mean: Vector, withStd: Boolean, withMean: Boolean) =
+        sqlContext.read.parquet(dataPath)
+          .select("std", "mean", "withStd", "withMean")
+          .head()
+      // This is very likely to change in the future because withStd and withMean should be params.
+      val oldModel = new feature.StandardScalerModel(std, mean, withStd, withMean)
+      val model = new StandardScalerModel(metadata.uid, oldModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[StandardScalerModel] = new StandardScalerModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): StandardScalerModel = super.load(path)
 }

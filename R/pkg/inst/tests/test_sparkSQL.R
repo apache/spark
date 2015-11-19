@@ -229,7 +229,7 @@ test_that("create DataFrame from list or data.frame", {
   df <- createDataFrame(sqlContext, l, c("a", "b"))
   expect_equal(columns(df), c("a", "b"))
 
-  l <- list(list(a=1, b=2), list(a=3, b=4))
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(sqlContext, l)
   expect_equal(columns(df), c("a", "b"))
 
@@ -242,6 +242,14 @@ test_that("create DataFrame from list or data.frame", {
   expect_equal(count(df), 3)
   ldf2 <- collect(df)
   expect_equal(ldf$a, ldf2$a)
+
+  irisdf <- createDataFrame(sqlContext, iris)
+  iris_collected <- collect(irisdf)
+  expect_equivalent(iris_collected[,-5], iris[,-5])
+  expect_equal(iris_collected$Species, as.character(iris$Species))
+
+  mtcarsdf <- createDataFrame(sqlContext, mtcars)
+  expect_equivalent(collect(mtcarsdf), mtcars)
 })
 
 test_that("create DataFrame with different data types", {
@@ -281,6 +289,18 @@ test_that("create DataFrame with complex types", {
   expect_equal(class(s), "struct")
   expect_equal(s$a, "aa")
   expect_equal(s$b, 3L)
+})
+
+test_that("create DataFrame from a data.frame with complex types", {
+  ldf <- data.frame(row.names = 1:2)
+  ldf$a_list <- list(list(1, 2), list(3, 4))
+  ldf$an_envir <- c(as.environment(list(a = 1, b = 2)), as.environment(list(c = 3)))
+
+  sdf <- createDataFrame(sqlContext, ldf)
+  collected <- collect(sdf)
+
+  expect_identical(ldf[, 1, FALSE], collected[, 1, FALSE])
+  expect_equal(ldf$an_envir, collected$an_envir)
 })
 
 # For test map type and struct type in DataFrame
@@ -858,6 +878,16 @@ test_that("column functions", {
 
   df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+
+  # Test array_contains() and sort_array()
+  df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
+  result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
+  expect_equal(result, c(TRUE, FALSE))
+
+  result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
+  result <- collect(select(df, sort_array(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 })
 #
 test_that("column binary mathfunctions", {

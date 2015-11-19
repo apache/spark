@@ -88,12 +88,8 @@ setGeneric("flatMap", function(X, FUN) { standardGeneric("flatMap") })
 # @export
 setGeneric("fold", function(x, zeroValue, op) { standardGeneric("fold") })
 
-# @rdname foreach
-# @export
 setGeneric("foreach", function(x, func) { standardGeneric("foreach") })
 
-# @rdname foreach
-# @export
 setGeneric("foreachPartition", function(x, func) { standardGeneric("foreachPartition") })
 
 # The jrdd accessor function.
@@ -107,27 +103,17 @@ setGeneric("glom", function(x) { standardGeneric("glom") })
 # @export
 setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
 
-# @rdname lapplyPartition
-# @export
 setGeneric("lapplyPartition", function(X, FUN) { standardGeneric("lapplyPartition") })
 
-# @rdname lapplyPartitionsWithIndex
-# @export
 setGeneric("lapplyPartitionsWithIndex",
            function(X, FUN) {
              standardGeneric("lapplyPartitionsWithIndex")
            })
 
-# @rdname lapply
-# @export
 setGeneric("map", function(X, FUN) { standardGeneric("map") })
 
-# @rdname lapplyPartition
-# @export
 setGeneric("mapPartitions", function(X, FUN) { standardGeneric("mapPartitions") })
 
-# @rdname lapplyPartitionsWithIndex
-# @export
 setGeneric("mapPartitionsWithIndex",
            function(X, FUN) { standardGeneric("mapPartitionsWithIndex") })
 
@@ -563,12 +549,8 @@ setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
 #' @export
 setGeneric("summary", function(object, ...) { standardGeneric("summary") })
 
-# @rdname tojson
-# @export
 setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
-#' @rdname DataFrame
-#' @export
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
 #' @rdname unionAll
@@ -661,6 +643,10 @@ setGeneric("add_months", function(y, x) { standardGeneric("add_months") })
 #' @rdname approxCountDistinct
 #' @export
 setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCountDistinct") })
+
+#' @rdname array_contains
+#' @export
+setGeneric("array_contains", function(x, value) { standardGeneric("array_contains") })
 
 #' @rdname ascii
 #' @export
@@ -979,6 +965,10 @@ setGeneric("size", function(x) { standardGeneric("size") })
 #' @export
 setGeneric("skewness", function(x) { standardGeneric("skewness") })
 
+#' @rdname sort_array
+#' @export
+setGeneric("sort_array", function(x, asc = TRUE) { standardGeneric("sort_array") })
+
 #' @rdname soundex
 #' @export
 setGeneric("soundex", function(x) { standardGeneric("soundex") })
@@ -1071,6 +1061,10 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @rdname glm
 #' @export
 setGeneric("glm")
+
+#' @rdname predict
+#' @export
+setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 
 #' @rdname rbind
 #' @export
