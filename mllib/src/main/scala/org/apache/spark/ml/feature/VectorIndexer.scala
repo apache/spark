@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
@@ -138,8 +138,10 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   override def copy(extra: ParamMap): VectorIndexer = defaultCopy(extra)
 }
 
+@Since("1.6.0")
 object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
 
+  @Since("1.6.0")
   override def load(path: String): VectorIndexer = super.load(path)
 
   /**
@@ -415,9 +417,11 @@ class VectorIndexerModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new VectorIndexerModelWriter(this)
 }
 
+@Since("1.6.0")
 object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
 
   private[VectorIndexerModel]
@@ -450,7 +454,9 @@ object VectorIndexerModel extends MLReadable[VectorIndexerModel] {
     }
   }
 
+  @Since("1.6.0")
   override def read: MLReader[VectorIndexerModel] = new VectorIndexerModelReader
 
+  @Since("1.6.0")
   override def load(path: String): VectorIndexerModel = super.load(path)
 }

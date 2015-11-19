@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.param._
@@ -96,8 +96,10 @@ final class ChiSqSelector(override val uid: String)
   override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
 }
 
+@Since("1.6.0")
 object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
 
+  @Since("1.6.0")
   override def load(path: String): ChiSqSelector = super.load(path)
 }
 
@@ -159,9 +161,11 @@ final class ChiSqSelectorModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new ChiSqSelectorModelWriter(this)
 }
 
+@Since("1.6.0")
 object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
 
   private[ChiSqSelectorModel]
@@ -193,7 +197,9 @@ object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
     }
   }
 
+  @Since("1.6.0")
   override def read: MLReader[ChiSqSelectorModel] = new ChiSqSelectorModelReader
 
+  @Since("1.6.0")
   override def load(path: String): ChiSqSelectorModel = super.load(path)
 }

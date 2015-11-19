@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -142,8 +142,10 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   override def copy(extra: ParamMap): Word2Vec = defaultCopy(extra)
 }
 
+@Since("1.6.0")
 object Word2Vec extends DefaultParamsReadable[Word2Vec] {
 
+  @Since("1.6.0")
   override def load(path: String): Word2Vec = super.load(path)
 }
 
@@ -235,9 +237,11 @@ class Word2VecModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new Word2VecModelWriter(this)
 }
 
+@Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
   private[Word2VecModel]
@@ -271,7 +275,9 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
     }
   }
 
+  @Since("1.6.0")
   override def read: MLReader[Word2VecModel] = new Word2VecModelReader
 
+  @Since("1.6.0")
   override def load(path: String): Word2VecModel = super.load(path)
 }

@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -89,8 +89,10 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   override def copy(extra: ParamMap): PCA = defaultCopy(extra)
 }
 
+@Since("1.6.0")
 object PCA extends DefaultParamsReadable[PCA] {
 
+  @Since("1.6.0")
   override def load(path: String): PCA = super.load(path)
 }
 
@@ -141,9 +143,11 @@ class PCAModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
+  @Since("1.6.0")
   override def write: MLWriter = new PCAModelWriter(this)
 }
 
+@Since("1.6.0")
 object PCAModel extends MLReadable[PCAModel] {
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
@@ -175,7 +179,9 @@ object PCAModel extends MLReadable[PCAModel] {
     }
   }
 
+  @Since("1.6.0")
   override def read: MLReader[PCAModel] = new PCAModelReader
 
+  @Since("1.6.0")
   override def load(path: String): PCAModel = super.load(path)
 }
