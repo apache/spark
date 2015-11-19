@@ -16,8 +16,6 @@ from airflow import configuration
 
 import logging
 
-DEFAULT_USERNAME = 'airflow'
-
 login_manager = flask_login.LoginManager()
 login_manager.login_view = 'airflow.login'  # Calls login() bellow
 login_manager.login_message = None
@@ -93,6 +91,10 @@ class LdapUser(models.User):
         '''Required by flask_login'''
         return False
 
+    def get_id(self):
+        '''Returns the current user id as required by flask_login'''
+        return self.user.get_id()
+
     def data_profiling(self):
         '''Provides access to data profiling tools'''
         return True
@@ -104,6 +106,7 @@ class LdapUser(models.User):
 
 @login_manager.user_loader
 def load_user(userid):
+    LOG.debug("Loading user %s", userid)
     if not userid or userid == 'None':
         return None
 

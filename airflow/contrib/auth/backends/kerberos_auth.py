@@ -18,8 +18,6 @@ from airflow import configuration
 
 import logging
 
-DEFAULT_USERNAME = 'airflow'
-
 login_manager = flask_login.LoginManager()
 login_manager.login_view = 'airflow.login'  # Calls login() bellow
 login_manager.login_message = None
@@ -60,6 +58,10 @@ class KerberosUser(models.User):
     def is_anonymous(self):
         '''Required by flask_login'''
         return False
+
+    def get_id(self):
+        '''Returns the current user id as required by flask_login'''
+        return self.user.get_id()
 
     def data_profiling(self):
         '''Provides access to data profiling tools'''
