@@ -129,7 +129,10 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, JavaPredictionModel, HasFeaturesCol, HasLabelCol,
+                            HasPredictionCol, HasMaxIter, HasRegParam, HasTol,
+                            HasElasticNetParam, HasFitIntercept, HasStandardization,
+                            HasSolver, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -502,7 +505,9 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable,
+                              HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                              HasWeightCol):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -560,6 +565,7 @@ class TreeRegressorParams(Params):
     """
 
     supportedImpurities = ["variance"]
+    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -724,9 +730,9 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, JavaPredictionModel):
-    """
-    Abstraction for Decision Tree models.
+class DecisionTreeModel(JavaModel, JavaPredictionModel,
+                        HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
@@ -916,8 +922,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
-                                  JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModel, JavaPredictionModel, HasFeaturesCol,
+                                  HasLabelCol, HasPredictionCol,
+                                  JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -1057,7 +1064,10 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(TreeEnsembleModel, JavaPredictionModel,
+                         HasFeaturesCol, HasLabelCol,
+                         HasPredictionCol, JavaMLWritable, JavaMLReadable):
+
     """
     Model fitted by :class:`GBTRegressor`.
 
@@ -1231,7 +1241,9 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaModel, HasFeaturesCol, HasLabelCol,
+                                 HasPredictionCol, HasFitIntercept, HasMaxIter,
+                                 HasTol, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1425,8 +1437,10 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.link)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
-                                       JavaMLReadable):
+class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, HasLabelCol, HasFeaturesCol,
+                                       HasPredictionCol, HasFitIntercept, HasMaxIter, HasTol,
+                                       HasRegParam, HasWeightCol, HasSolver,
+                                       JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 

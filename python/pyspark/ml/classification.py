@@ -264,7 +264,12 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.family)
 
 
-class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaClassificationModel, HasFeaturesCol,
+                              HasLabelCol, HasPredictionCol, HasMaxIter,
+                              HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
+                              HasElasticNetParam, HasFitIntercept, HasStandardization,
+                              HasThresholds, HasWeightCol, HasAggregationDepth,
+                              JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -669,8 +674,11 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel, HasFeaturesCol,
+                                      HasLabelCol, HasPredictionCol, HasProbabilityCol,
+                                      HasRawPredictionCol, DecisionTreeParams,
+                                      TreeClassifierParams, HasCheckpointInterval, HasSeed,
+                                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by DecisionTreeClassifier.
 
@@ -798,8 +806,9 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
-                                      JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel, HasFeaturesCol,
+                                      HasLabelCol, HasPredictionCol, HasRawPredictionCol,
+                                      HasProbabilityCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -950,7 +959,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWritable,
+class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, HasFeaturesCol,
+                             HasLabelCol, HasPredictionCol, JavaMLWritable,
                              JavaMLReadable):
     """
     Model fitted by GBTClassifier.
@@ -1105,7 +1115,9 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, JavaClassificationModel, HasFeaturesCol, HasLabelCol,
+                      HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
+                      JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1304,8 +1316,9 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.initialWeights)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, JavaMLWritable,
-                                              JavaMLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel,
+                                              HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                                              JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 

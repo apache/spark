@@ -340,7 +340,8 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class CountVectorizerModel(JavaModel, HasInputCol, HasOutputCol,
+                           JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`CountVectorizer`.
 
@@ -635,7 +636,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class IDFModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`IDF`.
 
@@ -713,7 +714,7 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return MaxAbsScalerModel(java_model)
 
 
-class MaxAbsScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MaxAbsScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -837,7 +838,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return MinMaxScalerModel(java_model)
 
 
-class MinMaxScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class MinMaxScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`MinMaxScaler`.
 
@@ -1538,7 +1539,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         return StandardScalerModel(java_model)
 
 
-class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StandardScalerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StandardScaler`.
 
@@ -1626,7 +1627,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
         return StringIndexerModel(java_model)
 
 
-class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class StringIndexerModel(JavaModel, HasInputCol, HasOutputCol, HasHandleInvalid,
+                         JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`StringIndexer`.
 
@@ -1996,7 +1998,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         return VectorIndexerModel(java_model)
 
 
-class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class VectorIndexerModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`VectorIndexer`.
 
@@ -2134,6 +2136,15 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
     >>> model = word2Vec.fit(doc)
+    >>> estimator_paramMap = word2Vec.extractParamMap()
+    >>> model_paramMap = model.extractParamMap()
+    >>> all([estimator_paramMap[getattr(word2Vec, param.name)] == value
+    ...     for param, value in model_paramMap.items()])
+    True
+    >>> all([param.parent == model.uid for param in model_paramMap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'maxIter', 'outputCol', 'seed', 'stepSize']
     >>> model.getVectors().show()
     +----+--------------------+
     |word|              vector|
@@ -2292,7 +2303,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return Word2VecModel(java_model)
 
 
-class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class Word2VecModel(JavaModel, HasStepSize, HasMaxIter, HasSeed, HasInputCol,
+                    HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`Word2Vec`.
 
@@ -2333,6 +2345,15 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     >>> df = spark.createDataFrame(data,["features"])
     >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
     >>> model = pca.fit(df)
+    >>> estimator_paramMap = pca.extractParamMap()
+    >>> model_paramMap = model.extractParamMap()
+    >>> all([estimator_paramMap[getattr(pca, param.name)] == value
+    ...     for param, value in model_paramMap.items()])
+    True
+    >>> all([param.parent == model.uid for param in model_paramMap])
+    True
+    >>> [param.name for param in model.params]
+    ['inputCol', 'outputCol']
     >>> model.transform(df).collect()[0].pca_features
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
@@ -2394,7 +2415,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         return PCAModel(java_model)
 
 
-class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class PCAModel(JavaModel, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
@@ -2437,6 +2458,15 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     ... ], ["y", "x", "s"])
     >>> rf = RFormula(formula="y ~ x + s")
     >>> model = rf.fit(df)
+    >>> estimator_paramMap = rf.extractParamMap()
+    >>> model_paramMap = model.extractParamMap()
+    >>> all([estimator_paramMap[getattr(rf, param.name)] == value
+    ...     for param, value in model_paramMap.items()])
+    True
+    >>> all([param.parent == model.uid for param in model_paramMap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol']
     >>> model.transform(df).show()
     +---+---+---+---------+-----+
     |  y|  x|  s| features|label|
@@ -2554,7 +2584,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
-class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class RFormulaModel(JavaModel, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2586,6 +2616,15 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     ...    ["features", "label"])
     >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
     >>> model = selector.fit(df)
+    >>> estimator_paramMap = selector.extractParamMap()
+    >>> model_paramMap = model.extractParamMap()
+    >>> all([estimator_paramMap[getattr(selector, param.name)] == value
+    ...     for param, value in model_paramMap.items()])
+    True
+    >>> all([param.parent == model.uid for param in model_paramMap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'outputCol']
     >>> model.transform(df).head().selectedFeatures
     DenseVector([18.0])
     >>> model.selectedFeatures
@@ -2710,7 +2749,8 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         return ChiSqSelectorModel(java_model)
 
 
-class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
+class ChiSqSelectorModel(JavaModel, HasFeaturesCol, HasOutputCol, HasLabelCol,
+                         JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 

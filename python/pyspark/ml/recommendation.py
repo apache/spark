@@ -26,8 +26,8 @@ __all__ = ['ALS', 'ALSModel']
 
 
 @inherit_doc
-class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, HasRegParam, HasSeed,
-          JavaMLWritable, JavaMLReadable):
+class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol,
+          HasRegParam, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     Alternating Least Squares (ALS) matrix factorization.
 
@@ -333,7 +333,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         return self.getOrDefault(self.finalStorageLevel)
 
 
-class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class ALSModel(JavaModel, HasPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by ALS.
 
