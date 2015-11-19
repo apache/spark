@@ -365,7 +365,7 @@ class LinearRegressionModel private[ml] (
     val coefficients: Vector,
     val intercept: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
-  with LinearRegressionParams with Writable {
+  with LinearRegressionParams with MLWritable {
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
@@ -435,7 +435,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[Writer]] instance for this ML instance.
+   * Returns a [[MLWriter]] instance for this ML instance.
    *
    * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
@@ -443,21 +443,21 @@ class LinearRegressionModel private[ml] (
    * This also does not save the [[parent]] currently.
    */
   @Since("1.6.0")
-  override def write: Writer = new LinearRegressionModel.LinearRegressionModelWriter(this)
+  override def write: MLWriter = new LinearRegressionModel.LinearRegressionModelWriter(this)
 }
 
 @Since("1.6.0")
-object LinearRegressionModel extends Readable[LinearRegressionModel] {
+object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 
   @Since("1.6.0")
-  override def read: Reader[LinearRegressionModel] = new LinearRegressionModelReader
+  override def read: MLReader[LinearRegressionModel] = new LinearRegressionModelReader
 
   @Since("1.6.0")
   override def load(path: String): LinearRegressionModel = super.load(path)
 
-  /** [[Writer]] instance for [[LinearRegressionModel]] */
+  /** [[MLWriter]] instance for [[LinearRegressionModel]] */
   private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
-    extends Writer with Logging {
+    extends MLWriter with Logging {
 
     private case class Data(intercept: Double, coefficients: Vector)
 
@@ -471,7 +471,7 @@ object LinearRegressionModel extends Readable[LinearRegressionModel] {
     }
   }
 
-  private class LinearRegressionModelReader extends Reader[LinearRegressionModel] {
+  private class LinearRegressionModelReader extends MLReader[LinearRegressionModel] {
 
     /** Checked against metadata when loading model */
     private val className = "org.apache.spark.ml.regression.LinearRegressionModel"

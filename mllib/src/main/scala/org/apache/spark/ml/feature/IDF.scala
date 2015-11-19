@@ -105,7 +105,7 @@ object IDF extends DefaultParamsReadable[IDF] {
 class IDFModel private[ml] (
     override val uid: String,
     idfModel: feature.IDFModel)
-  extends Model[IDFModel] with IDFBase with Writable {
+  extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
 
@@ -135,13 +135,13 @@ class IDFModel private[ml] (
   def idf: Vector = idfModel.idf
 
   @Since("1.6.0")
-  override def write: Writer = new IDFModelWriter(this)
+  override def write: MLWriter = new IDFModelWriter(this)
 }
 
 @Since("1.6.0")
-object IDFModel extends Readable[IDFModel] {
+object IDFModel extends MLReadable[IDFModel] {
 
-  private[IDFModel] class IDFModelWriter(instance: IDFModel) extends Writer {
+  private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
 
     private case class Data(idf: Vector)
 
@@ -153,7 +153,7 @@ object IDFModel extends Readable[IDFModel] {
     }
   }
 
-  private class IDFModelReader extends Reader[IDFModel] {
+  private class IDFModelReader extends MLReader[IDFModel] {
 
     private val className = "org.apache.spark.ml.feature.IDFModel"
 
@@ -171,7 +171,7 @@ object IDFModel extends Readable[IDFModel] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[IDFModel] = new IDFModelReader
+  override def read: MLReader[IDFModel] = new IDFModelReader
 
   @Since("1.6.0")
   override def load(path: String): IDFModel = super.load(path)

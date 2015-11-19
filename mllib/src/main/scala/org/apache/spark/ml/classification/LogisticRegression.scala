@@ -402,7 +402,7 @@ class LogisticRegressionModel private[ml] (
     val coefficients: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-  with LogisticRegressionParams with Writable {
+  with LogisticRegressionParams with MLWritable {
 
   @deprecated("Use coefficients instead.", "1.6.0")
   def weights: Vector = coefficients
@@ -518,26 +518,26 @@ class LogisticRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[Writer]] instance for this ML instance.
+   * Returns a [[MLWriter]] instance for this ML instance.
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
    *
    * This also does not save the [[parent]] currently.
    */
-  override def write: Writer = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+  override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
 
 
-object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
+object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
-  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionModelReader
+  override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
   override def load(path: String): LogisticRegressionModel = super.load(path)
 
-  /** [[Writer]] instance for [[LogisticRegressionModel]] */
+  /** [[MLWriter]] instance for [[LogisticRegressionModel]] */
   private[classification] class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
-    extends Writer with Logging {
+    extends MLWriter with Logging {
 
     private case class Data(
         numClasses: Int,
@@ -557,7 +557,7 @@ object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
   }
 
   private[classification] class LogisticRegressionModelReader
-    extends Reader[LogisticRegressionModel] {
+    extends MLReader[LogisticRegressionModel] {
 
     /** Checked against metadata when loading model */
     private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"

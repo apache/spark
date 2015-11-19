@@ -116,7 +116,7 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 class StringIndexerModel (
     override val uid: String,
     val labels: Array[String])
-  extends Model[StringIndexerModel] with StringIndexerBase with Writable {
+  extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
   import StringIndexerModel._
 
@@ -193,10 +193,10 @@ class StringIndexerModel (
 }
 
 @Since("1.6.0")
-object StringIndexerModel extends Readable[StringIndexerModel] {
+object StringIndexerModel extends MLReadable[StringIndexerModel] {
 
   private[StringIndexerModel]
-  class StringIndexModelWriter(instance: StringIndexerModel) extends Writer {
+  class StringIndexModelWriter(instance: StringIndexerModel) extends MLWriter {
 
     private case class Data(labels: Array[String])
 
@@ -208,7 +208,7 @@ object StringIndexerModel extends Readable[StringIndexerModel] {
     }
   }
 
-  private class StringIndexerModelReader extends Reader[StringIndexerModel] {
+  private class StringIndexerModelReader extends MLReader[StringIndexerModel] {
 
     private val className = "org.apache.spark.ml.feature.StringIndexerModel"
 
@@ -226,7 +226,7 @@ object StringIndexerModel extends Readable[StringIndexerModel] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[StringIndexerModel] = new StringIndexerModelReader
+  override def read: MLReader[StringIndexerModel] = new StringIndexerModelReader
 
   @Since("1.6.0")
   override def load(path: String): StringIndexerModel = super.load(path)

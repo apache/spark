@@ -185,7 +185,7 @@ class ALSModel private[ml] (
     val rank: Int,
     @transient val userFactors: DataFrame,
     @transient val itemFactors: DataFrame)
-  extends Model[ALSModel] with ALSModelParams with Writable {
+  extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   /** @group setParam */
   def setUserCol(value: String): this.type = set(userCol, value)
@@ -225,19 +225,19 @@ class ALSModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: Writer = new ALSModel.ALSModelWriter(this)
+  override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 }
 
 @Since("1.6.0")
-object ALSModel extends Readable[ALSModel] {
+object ALSModel extends MLReadable[ALSModel] {
 
   @Since("1.6.0")
-  override def read: Reader[ALSModel] = new ALSModelReader
+  override def read: MLReader[ALSModel] = new ALSModelReader
 
   @Since("1.6.0")
   override def load(path: String): ALSModel = super.load(path)
 
-  private[recommendation] class ALSModelWriter(instance: ALSModel) extends Writer {
+  private[recommendation] class ALSModelWriter(instance: ALSModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata = render("rank" -> instance.rank)
@@ -249,7 +249,7 @@ object ALSModel extends Readable[ALSModel] {
     }
   }
 
-  private[recommendation] class ALSModelReader extends Reader[ALSModel] {
+  private[recommendation] class ALSModelReader extends MLReader[ALSModel] {
 
     /** Checked against metadata when loading model */
     private val className = "org.apache.spark.ml.recommendation.ALSModel"
