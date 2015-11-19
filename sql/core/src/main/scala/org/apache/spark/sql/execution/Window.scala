@@ -90,9 +90,6 @@ case class Window(
   /** A map containing window expressions & functions keyed by their frame and type. */
   type FunctionMap = mutable.Map[(Char, WindowFrame), (ExpressionBuffer, ExpressionBuffer)]
 
-  /** A factory for a window frame. */
-  type FrameFactory = (MutableRow, MutableLiteral) => WindowFunctionFrame
-
   override def output: Seq[Attribute] = projectList ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -169,22 +166,17 @@ case class Window(
     * @param functions to process in the frame.
     * @param ordinal at which the processor starts writing to the output.
     * @param target to which the processor will write.
-    * @param size literal used to propagate
     * @return a frame processor.
     */
   private[this] def createFrameProcessor(
     frame: (Char, WindowFrame),
     functions: Array[Expression],
     ordinal: Int,
-    target: MutableRow,
-    size: MutableLiteral): WindowFunctionFrame = {
+    target: MutableRow): WindowFunctionFrame = {
 
     // Construct an aggregate processor if we have to.
     def processor = {
-      val prepared = functions.collect {
-        case f: SizeBasedWindowFunction => f.withSize(size)
-        case f: AggregateFunction => f
-      }
+      val prepared = functions.map(_.asInstanceOf[AggregateFunction])
       AggregateProcessor(prepared, ordinal, child.output, newMutableProjection)
     }
 
@@ -285,7 +277,7 @@ case class Window(
     // are processed in; this is the order in which their results will be written to window
     // function result buffer.
     val numFrames = windowFunctionMap.size
-    val factories = Array.ofDim[FrameFactory](numFrames)
+    val factories = Array.ofDim[MutableRow => WindowFunctionFrame](numFrames)
     val unboundExpressions = scala.collection.mutable.Buffer.empty[Expression]
     windowFunctionMap.zipWithIndex.foreach {
       case ((frame, (expressions, functions)), index) =>
@@ -296,8 +288,8 @@ case class Window(
         unboundExpressions ++= expressions
 
         // Create the frame processor factory.
-        factories(index) = (target: MutableRow, size: MutableLiteral) =>
-          createFrameProcessor(frame, functions.toArray, ordinal, target, size)
+        factories(index) = (target: MutableRow) =>
+          createFrameProcessor(frame, functions.toArray, ordinal, target)
     }
 
     // Start processing.
@@ -327,10 +319,7 @@ case class Window(
         // Manage the current partition.
         val rows = ArrayBuffer.empty[InternalRow]
         val windowFunctionResult = new SpecificMutableRow(unboundExpressions.map(_.dataType))
-        val partitionSize = MutableLiteral(0, IntegerType, nullable = false)
-        val frames: Array[WindowFunctionFrame] = factories.map { factory =>
-          factory(windowFunctionResult, partitionSize)
-        }
+        val frames: Array[WindowFunctionFrame] = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
@@ -341,9 +330,6 @@ case class Window(
             rows += nextRow.copy()
             fetchNextRow()
           }
-
-          // Propagate partition size.
-          partitionSize.value = rows.size
 
           // Setup the frames.
           var i = 0
@@ -572,7 +558,7 @@ private[execution] final class SlidingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      processor.initialize()
+      processor.initialize(input.size)
       processor.update(input, inputLowIndex, inputHighIndex)
       processor.evaluate(target)
     }
@@ -599,7 +585,7 @@ private[execution] final class UnboundedWindowFunctionFrame(
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: ArrayBuffer[InternalRow]): Unit = {
-    processor.initialize()
+    processor.initialize(rows.size)
     processor.update(rows, 0, rows.size)
   }
 
@@ -645,7 +631,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     input = rows
     inputIndex = 0
     outputIndex = 0
-    processor.initialize()
+    processor.initialize(input.size)
   }
 
   /** Write the frame columns for the current row to the given target row. */
@@ -721,7 +707,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
-      processor.initialize()
+      processor.initialize(input.size)
       processor.update(input, inputIndex, input.size)
       processor.evaluate(target)
     }
@@ -757,8 +743,24 @@ private[execution] object AggregateProcessor {
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
 
-    // Add functions.
-    functions.foreach {
+    // Create and add a size reference to SizeBasedWindowFunction.
+    var sizeOrdinal = -1
+    var size: BoundReference = null
+    val addSize = (f: AggregateFunction) => f match {
+      case wf: SizeBasedWindowFunction =>
+        if (size == null) {
+          sizeOrdinal = aggBufferAttributes.size
+          size = BoundReference(sizeOrdinal, IntegerType, false)
+          aggBufferAttributes += wf.size
+          initialValues += NoOp
+          updateExpressions += NoOp
+        }
+        wf.withSize(size)
+      case wf => wf
+    }
+
+    // Add an AggregateFunction to the AggregateProcessor.
+    val addToProcessor = (f: AggregateFunction) => f match {
       case agg: DeclarativeAggregate =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         initialValues ++= agg.initialValues
@@ -778,6 +780,9 @@ private[execution] object AggregateProcessor {
         evaluateExpressions += imperative
     }
 
+    // Process the functions.
+    functions.iterator.map(addSize).foreach(addToProcessor)
+
     // Create the projections.
     val initialProjection = newMutableProjection(initialValues, Nil)()
     val updateProjection = newMutableProjection(
@@ -793,7 +798,8 @@ private[execution] object AggregateProcessor {
       initialProjection,
       updateProjection,
       evaluateProjection,
-      imperatives.toArray)
+      imperatives.toArray,
+      sizeOrdinal)
   }
 }
 
@@ -806,7 +812,8 @@ private[execution] final class AggregateProcessor(
     private[this] val initialProjection: MutableProjection,
     private[this] val updateProjection: MutableProjection,
     private[this] val evaluateProjection: MutableProjection,
-    private[this] val imperatives: Array[ImperativeAggregate]) {
+    private[this] val imperatives: Array[ImperativeAggregate],
+    private[this] val sizeOrdinal: Int) {
 
   private[this] val join = new JoinedRow
   private[this] val numImperatives = imperatives.length
@@ -815,8 +822,14 @@ private[execution] final class AggregateProcessor(
   updateProjection.target(buffer)
 
   /** Create the initial state. */
-  def initialize(): Unit = {
-    initialProjection(EmptyRow)
+  def initialize(size: Int): Unit = {
+    // Some initialization expressions are dependent on the partition size so we have to
+    // initialize the size before initializing all other fields, and we have to pass the buffer to
+    // the initialization projection.
+    if (sizeOrdinal >= 0) {
+      buffer.setInt(sizeOrdinal, size)
+    }
+    initialProjection(buffer)
     var i = 0
     while (i < numImperatives) {
       imperatives(i).initialize(buffer)
