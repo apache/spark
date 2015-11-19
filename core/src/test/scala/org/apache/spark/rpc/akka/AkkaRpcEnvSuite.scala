@@ -37,7 +37,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     })
     val conf = new SparkConf()
     val newRpcEnv = new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
+      RpcEnvConfig(conf, "test", "localhost", 0, new SecurityManager(conf)))
     try {
       val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_endpoint")
       assert(s"akka.tcp://local@${env.address}/user/test_endpoint" ===
@@ -56,7 +56,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     val conf = SSLSampleConfigs.sparkSSLConfig()
     val securityManager = new SecurityManager(conf)
     val rpcEnv = new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, "test", "localhost", 12346, securityManager))
+      RpcEnvConfig(conf, "test", "localhost", 0, securityManager))
     try {
       val uri = rpcEnv.uriOf("local", RpcAddress("1.2.3.4", 12345), "test_endpoint")
       assert("akka.ssl.tcp://local@1.2.3.4:12345/user/test_endpoint" === uri)
