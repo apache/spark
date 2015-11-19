@@ -79,7 +79,7 @@ object LDAExample {
    * @return (corpus, vocabulary as array)
    */
   private def preprocess(sc: SparkContext,
-      path: String): (DataFrame, Array[String]) = {
+                         path: String): (DataFrame, Array[String]) = {
 
     val sqlContext = SQLContext.getOrCreate(sc)
     import sqlContext.implicits._
