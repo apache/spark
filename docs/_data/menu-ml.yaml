@@ -4,7 +4,7 @@
   url: ml-decision-tree.html
 - text: Ensembles
   url: ml-ensembles.html
-- text: Linear methods with elastic net regularization
+- text: Linear methods with elastic-net regularization
   url: ml-linear-methods.html
 - text: Multilayer perceptron classifier
   url: ml-ann.html

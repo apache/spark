@@ -39,8 +39,16 @@
   margin-left: 10px;
 }
 
+body .container-wrapper {
+  position: absolute;
+  width: 100%;
+  display: flex;
+}
+
 body #content {
   line-height: 1.6; /* Inspired by Github's wiki style */
+  background-color: white;
+  padding-left: 15px;
 }
 
 .title {
@@ -162,8 +170,12 @@ a.anchorjs-link:hover { text-decoration: none; }
  */
 .left-menu {
   max-width: 350px;
-  z-index: 100;
-  position: fixed;
+  height: 100%;
+
+  padding-right: 9.5px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background-color: #e2f1f8;
+  border-radius: 4px;
 }
 
 .left-menu h3 {

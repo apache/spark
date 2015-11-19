@@ -1,7 +1,7 @@
 - text: Data types
-  url: /mllib-data-types.html
+  url: mllib-data-types.html
 - text: Basic statistics
-  url: /mllib-statistics.html
+  url: mllib-statistics.html
   subitems:
     - text: Summary statistics
       url: mllib-statistics.html#summary-statistics
