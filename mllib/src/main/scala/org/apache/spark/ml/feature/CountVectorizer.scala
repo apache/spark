@@ -107,7 +107,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
  */
 @Experimental
 class CountVectorizer(override val uid: String)
-  extends Estimator[CountVectorizerModel] with CountVectorizerParams with Writable {
+  extends Estimator[CountVectorizerModel] with CountVectorizerParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("cntVec"))
 
@@ -171,16 +171,10 @@ class CountVectorizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): CountVectorizer = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object CountVectorizer extends Readable[CountVectorizer] {
-
-  @Since("1.6.0")
-  override def read: Reader[CountVectorizer] = new DefaultParamsReader
+object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 
   @Since("1.6.0")
   override def load(path: String): CountVectorizer = super.load(path)
@@ -193,7 +187,7 @@ object CountVectorizer extends Readable[CountVectorizer] {
  */
 @Experimental
 class CountVectorizerModel(override val uid: String, val vocabulary: Array[String])
-  extends Model[CountVectorizerModel] with CountVectorizerParams with Writable {
+  extends Model[CountVectorizerModel] with CountVectorizerParams with MLWritable {
 
   import CountVectorizerModel._
 
@@ -251,14 +245,14 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   }
 
   @Since("1.6.0")
-  override def write: Writer = new CountVectorizerModelWriter(this)
+  override def write: MLWriter = new CountVectorizerModelWriter(this)
 }
 
 @Since("1.6.0")
-object CountVectorizerModel extends Readable[CountVectorizerModel] {
+object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
 
   private[CountVectorizerModel]
-  class CountVectorizerModelWriter(instance: CountVectorizerModel) extends Writer {
+  class CountVectorizerModelWriter(instance: CountVectorizerModel) extends MLWriter {
 
     private case class Data(vocabulary: Seq[String])
 
@@ -270,7 +264,7 @@ object CountVectorizerModel extends Readable[CountVectorizerModel] {
     }
   }
 
-  private class CountVectorizerModelReader extends Reader[CountVectorizerModel] {
+  private class CountVectorizerModelReader extends MLReader[CountVectorizerModel] {
 
     private val className = "org.apache.spark.ml.feature.CountVectorizerModel"
 
@@ -288,7 +282,7 @@ object CountVectorizerModel extends Readable[CountVectorizerModel] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[CountVectorizerModel] = new CountVectorizerModelReader
+  override def read: MLReader[CountVectorizerModel] = new CountVectorizerModelReader
 
   @Since("1.6.0")
   override def load(path: String): CountVectorizerModel = super.load(path)

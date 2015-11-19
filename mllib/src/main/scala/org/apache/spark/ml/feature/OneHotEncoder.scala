@@ -44,7 +44,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 class OneHotEncoder(override val uid: String) extends Transformer
-  with HasInputCol with HasOutputCol with Writable {
+  with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("oneHot"))
 
@@ -165,17 +165,11 @@ class OneHotEncoder(override val uid: String) extends Transformer
   }
 
   override def copy(extra: ParamMap): OneHotEncoder = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object OneHotEncoder extends Readable[OneHotEncoder] {
+object OneHotEncoder extends DefaultParamsReadable[OneHotEncoder] {
 
   @Since("1.6.0")
-  override def read: Reader[OneHotEncoder] = new DefaultParamsReader[OneHotEncoder]
-
-  @Since("1.6.0")
-  override def load(path: String): OneHotEncoder = read.load(path)
+  override def load(path: String): OneHotEncoder = super.load(path)
 }
