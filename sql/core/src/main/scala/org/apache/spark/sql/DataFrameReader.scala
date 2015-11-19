@@ -313,7 +313,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
+    DataFrame(sqlContext,
+      sqlContext.catalog.lookupRelation(SqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
