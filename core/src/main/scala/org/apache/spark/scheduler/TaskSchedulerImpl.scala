@@ -498,8 +498,8 @@ private[spark] class TaskSchedulerImpl(
       reason: ExecutorLossReason): Unit = reason match {
     case LossReasonPending =>
       logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
-    case ExecutorKilled(message) =>
-      logInfo(s"Executor $executorId on $hostPort killed by driver ($message)")
+    case ExecutorKilled =>
+      logInfo(s"Executor $executorId on $hostPort killed by driver.")
     case _ =>
       logError(s"Lost executor $executorId on $hostPort: $reason")
   }
