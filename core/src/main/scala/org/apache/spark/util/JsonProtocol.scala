@@ -294,7 +294,7 @@ private[spark] object JsonProtocol {
   }
 
   def transportMetricsToJson(transportMetrics: TransportMetrics): JValue = {
-    ("TimeStamep" -> transportMetrics.timeStamp) ~
+    ("TimeStamp" -> transportMetrics.timeStamp) ~
     ("OnHeapSize" -> transportMetrics.onHeapSize) ~
     ("OffHeapSize" -> transportMetrics.offHeapSize)
   }
@@ -725,7 +725,7 @@ private[spark] object JsonProtocol {
 
   def transportMetricsFromJson(json: JValue): TransportMetrics = {
     val metrics = new TransportMetrics(
-      (json \ "TimeStamep").extract[Long],
+      (json \ "TimeStamp").extract[Long],
       (json \ "OnHeapSize").extract[Long],
       (json \ "OffHeapSize").extract[Long])
     metrics

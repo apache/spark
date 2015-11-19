@@ -107,7 +107,7 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     val mapForStage1 = listener.completedStagesToMem.get((1, 0)).get
     // no metrics for stage 1 since no metrics update for stage 1
     assert(mapForStage1.get(execId1).get.transportInfo == None)
-    val mapForStage2 = listener.completedStagesToMem.get((2,0)).get
+    val mapForStage2 = listener.completedStagesToMem.get((2, 0)).get
     assert(mapForStage2.size == 1)
     val memInfo = mapForStage2.get(execId1).get
     assert(memInfo.transportInfo.isDefined)
@@ -118,7 +118,7 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     listener.onExecutorRemoved(SparkListenerExecutorRemoved(0L, execId1, ""))
   }
 
-  test("test multiple executors metrics updated in one stage") {
+  test("test multiple metrics updated in one stage") {
     val listener = new MemoryListener
     val execId1 = "exec-1"
 
@@ -216,7 +216,7 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     val exec2Metrics = createExecutorMetrics("host-2", 1446337000L, 15, 5)
     listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(
       execId2, exec2Metrics))
-    // on more executor added when stage is running
+    // one more executor added when stage is running
     listener.onExecutorAdded(
       SparkListenerExecutorAdded(0L, execId3, new ExecutorInfo("host3", 1, Map.empty)))
     val exec3Metrics = createExecutorMetrics("host-3", 1446338000L, 30, 15)
@@ -230,7 +230,7 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext with Matc
     listener.onExecutorRemoved(SparkListenerExecutorRemoved(0L, execId3, ""))
 
     // the completedStagesToMem will maintain the metrics of both the removed executors and new
-    // add executors
+    // added executors
     val mapForStage1 = listener.completedStagesToMem.get((1, 0)).get
     assert(mapForStage1.size == 3)
     val memInfo1 = mapForStage1.get(execId1).get
