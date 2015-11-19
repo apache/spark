@@ -286,7 +286,7 @@ head(teenagers)
 
 # Machine Learning
 
-SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'. 
+SparkR allows the fitting of generalized linear models over DataFrames using the [glm()](api/R/glm.html) function. Under the hood, SparkR uses MLlib to train a model of the specified family. Currently the gaussian and binomial families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
 
 The [summary()](api/R/summary.html) function gives the summary of a model produced by [glm()](api/R/glm.html).
 
@@ -365,6 +365,11 @@ The following functions are masked by the SparkR package:
     <td><code>cov</code> in <code>package:stats</code></td>
     <td><code><pre>stats::cov(x, y = NULL, use = "everything",
            method = c("pearson", "kendall", "spearman"))</pre></code></td>
+  </tr>
+  <tr>
+    <td><code>filter</code> in <code>package:stats</code></td>
+    <td><code><pre>stats::filter(x, filter, method = c("convolution", "recursive"),
+              sides = 2, circular = FALSE, init)</pre></code></td>
   </tr>
   <tr>
     <td><code>sample</code> in <code>package:base</code></td>

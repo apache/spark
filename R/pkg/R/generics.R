@@ -433,11 +433,7 @@ setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna")
 
 #' @rdname filter
 #' @export
-setGeneric("filter",
-           function(x, filter, method = c("convolution", "recursive"), sides = 2,
-            circular = FALSE, init) {
-              standardGeneric("filter")
-            })
+setGeneric("filter", function(x, condition) { standardGeneric("filter") })
 
 #' @rdname groupBy
 #' @export
