@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType;
  * An example demonstrating a k-means clustering.
  * Run with
  * <pre>
- * bin/run-example ml.JavaSimpleParamsExample <file> <k>
+ * bin/run-example ml.JavaKMeansExample <file> <k>
  * </pre>
  */
 public class JavaKMeansExample {
