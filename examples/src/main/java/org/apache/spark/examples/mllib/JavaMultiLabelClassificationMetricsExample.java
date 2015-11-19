@@ -14,12 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.examples.mllib;
 
-
+// $example on$
 import java.util.Arrays;
 import java.util.List;
-// $example on$
+
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
@@ -57,11 +58,11 @@ public class JavaMultiLabelClassificationMetricsExample {
     // Stats by labels
     for (int i = 0; i < metrics.labels().length - 1; i++) {
       System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision
-              (metrics.labels()[i]));
+        (metrics.labels()[i]));
       System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(metrics
-              .labels()[i]));
+        .labels()[i]));
       System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure
-              (metrics.labels()[i]));
+        (metrics.labels()[i]));
     }
 
     // Micro stats

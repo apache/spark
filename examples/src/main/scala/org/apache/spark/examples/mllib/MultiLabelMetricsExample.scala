@@ -14,26 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 // scalastyle:off println
 package org.apache.spark.examples.mllib
+
 // $example on$
 import org.apache.spark.mllib.evaluation.MultilabelMetrics
-import org.apache.spark.rdd.RDD;
+import org.apache.spark.rdd.RDD
 // $example off$
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkContext, SparkConf}
 
 object MultiLabelMetricsExample {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("MultiLabelMetricsExample")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
     // $example on$
     val scoreAndLabels: RDD[(Array[Double], Array[Double])] = sc.parallelize(
       Seq((Array(0.0, 1.0), Array(0.0, 2.0)),
         (Array(0.0, 2.0), Array(0.0, 1.0)),
-        (Array(), Array(0.0)),
+        (Array.empty[Double], Array(0.0)),
         (Array(2.0), Array(2.0)),
         (Array(2.0, 0.0), Array(2.0, 0.0)),
         (Array(0.0, 1.0, 2.0), Array(0.0, 1.0)),

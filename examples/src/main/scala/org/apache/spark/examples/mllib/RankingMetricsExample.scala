@@ -14,15 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
 // $example on$
 import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
 // $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkContext, SparkConf}
 
 object RankingMetricsExample {
   def main(args: Array[String]) {

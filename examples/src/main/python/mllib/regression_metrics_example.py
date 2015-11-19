@@ -26,7 +26,6 @@ if __name__ == "__main__":
     sc = SparkContext(appName="Regression Metrics Example")
     # $example on$
     # Load and parse the data
-
     def parsePoint(line):
         values = line.split()
         return LabeledPoint(float(values[0]),

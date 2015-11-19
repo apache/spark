@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 // scalastyle:off println
+
 package org.apache.spark.examples.mllib
+
 // $example on$
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.regression.LinearRegressionModel
+// $example on$
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
 // $example off$

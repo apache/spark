@@ -18,7 +18,6 @@
 # $example on$
 from pyspark.mllib.evaluation import MultilabelMetrics
 # $example off$
-from pyspark.mllib.util import MLUtils
 from pyspark import SparkContext
 
 if __name__ == "__main__":

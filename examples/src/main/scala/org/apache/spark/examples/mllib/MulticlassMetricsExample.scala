@@ -14,8 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 // scalastyle:off println
 package org.apache.spark.examples.mllib
+
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
@@ -27,7 +29,7 @@ import org.apache.spark.{SparkContext, SparkConf}
 object MulticlassMetricsExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("MulticlassMetrics")
+    val conf = new SparkConf().setAppName("MulticlassMetricsExample")
     val sc = new SparkContext(conf)
 
     // $example on$

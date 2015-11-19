@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
     # Several of the methods available in scala are currently missing from pyspark
     # $example on$
-    #  Read in the ratings data
+    # Read in the ratings data
     lines = sc.textFile("data/mllib/sample_movielens_data.txt")
 
     def parseLine(line):

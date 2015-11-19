@@ -589,7 +589,7 @@ Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.sp
 <div data-lang="java" markdown="1">
 Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaLinearRegressionExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRegressionMetricsExample.java %}
 
 </div>
 

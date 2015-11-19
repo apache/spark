@@ -17,15 +17,14 @@
 
 // scalastyle:off println
 package org.apache.spark.examples.mllib
+
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
-
 import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.sql.SQLContext
 
 object BinaryClassificationMetricsExample {
 
@@ -33,8 +32,6 @@ object BinaryClassificationMetricsExample {
 
     val conf = new SparkConf().setAppName("BinaryClassificationMetricsExample")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
     // $example on$
     // Load training data in LIBSVM format
     val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")

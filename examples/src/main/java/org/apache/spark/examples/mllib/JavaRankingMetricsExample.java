@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.mllib;
 
 // $example on$
@@ -31,12 +30,11 @@ import org.apache.spark.mllib.recommendation.ALS;
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
 import org.apache.spark.mllib.recommendation.Rating;
 // $example off$
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 
 public class JavaRankingMetricsExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Ranking Metrics Example");
+    SparkConf conf = new SparkConf().setAppName("Java Ranking Metrics Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
     // $example on$
     String path = "data/mllib/sample_movielens_data.txt";
@@ -46,7 +44,7 @@ public class JavaRankingMetricsExample {
         public Rating call(String line) {
           String[] parts = line.split("::");
             return new Rating(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Double
-                    .parseDouble(parts[2]) - 2.5);
+              .parseDouble(parts[2]) - 2.5);
         }
       }
     );
@@ -77,9 +75,9 @@ public class JavaRankingMetricsExample {
         public Rating call(Rating r) {
           double binaryRating;
           if (r.rating() > 0.0) {
-              binaryRating = 1.0;
+            binaryRating = 1.0;
           } else {
-              binaryRating = 0.0;
+            binaryRating = 0.0;
           }
           return new Rating(r.user(), r.product(), binaryRating);
         }
@@ -88,11 +86,11 @@ public class JavaRankingMetricsExample {
 
     // Group ratings by common user
     JavaPairRDD<Object, Iterable<Rating>> userMovies = binarizedRatings.groupBy(
-            new Function<Rating, Object>() {
-              public Object call(Rating r) {
-                return r.user();
-              }
-            }
+      new Function<Rating, Object>() {
+        public Object call(Rating r) {
+          return r.user();
+        }
+      }
     );
 
     // Get true relevant documents from all user ratings
@@ -123,7 +121,7 @@ public class JavaRankingMetricsExample {
       }
     );
     JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join
-            (userRecommendedList).values();
+      (userRecommendedList).values();
 
     // Instantiate the metrics object
     RankingMetrics metrics = RankingMetrics.of(relevantDocs);
@@ -156,14 +154,14 @@ public class JavaRankingMetricsExample {
         }
       ));
     JavaRDD<Tuple2<Object, Object>> ratesAndPreds =
-            JavaPairRDD.fromJavaRDD(ratings.map(
-              new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
-                public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
-                  return new Tuple2<Tuple2<Integer, Integer>, Object>(
-                    new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-                }
-              }
-            )).join(predictions).values();
+      JavaPairRDD.fromJavaRDD(ratings.map(
+        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
+          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r) {
+            return new Tuple2<Tuple2<Integer, Integer>, Object>(
+              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
+          }
+        }
+      )).join(predictions).values();
 
     // Create regression metrics object
     RegressionMetrics regressionMetrics = new RegressionMetrics(ratesAndPreds.rdd());

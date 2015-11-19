@@ -14,7 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.examples.mllib;
+
 // $example on$
 import scala.Tuple2;
 
@@ -28,10 +30,9 @@ import org.apache.spark.mllib.evaluation.RegressionMetrics;
 import org.apache.spark.SparkConf;
 // $example off$
 
-// Read in the ratings data
-public class JavaLinearRegressionExample {
+public class JavaRegressionMetricsExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
+    SparkConf conf = new SparkConf().setAppName("Java Regression Metrics Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
     // $example on$
     // Load and parse the data
@@ -53,7 +54,7 @@ public class JavaLinearRegressionExample {
     // Building the model
     int numIterations = 100;
     final LinearRegressionModel model = LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData),
-            numIterations);
+      numIterations);
 
     // Evaluate model on training examples and compute training error
     JavaRDD<Tuple2<Object, Object>> valuesAndPreds = parsedData.map(
@@ -84,7 +85,7 @@ public class JavaLinearRegressionExample {
     // Save and load model
     model.save(sc.sc(), "target/tmp/LogisticRegressionModel");
     LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(),
-            "target/tmp/LogisticRegressionModel");
+      "target/tmp/LogisticRegressionModel");
     // $example off$
   }
 }

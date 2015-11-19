@@ -14,7 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.examples.mllib;
+
 // $example on$
 import scala.Tuple2;
 
@@ -27,7 +29,6 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.mllib.linalg.Matrix;
 // $example off$
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 
@@ -47,7 +48,7 @@ public class JavaMulticlassClassificationMetricsExample {
     // Run training algorithm to build the model.
     final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
       .setNumClasses(3)
-            .run(training.rdd());
+      .run(training.rdd());
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
@@ -74,11 +75,11 @@ public class JavaMulticlassClassificationMetricsExample {
     // Stats by labels
     for (int i = 0; i < metrics.labels().length; i++) {
       System.out.format("Class %f precision = %f\n", metrics.labels()[i],metrics.precision
-              (metrics.labels()[i]));
+        (metrics.labels()[i]));
       System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics
-              .labels()[i]));
+        .labels()[i]));
       System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure
-              (metrics.labels()[i]));
+        (metrics.labels()[i]));
     }
 
     //Weighted stats
@@ -90,7 +91,7 @@ public class JavaMulticlassClassificationMetricsExample {
     // Save and load model
     model.save(sc, "target/tmp/LogisticRegressionModel");
     LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc,
-            "target/tmp/LogisticRegressionModel");
+      "target/tmp/LogisticRegressionModel");
     // $example off$
   }
 }
