@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, DataFrame}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
 
 import scala.util.control.NonFatal
@@ -43,7 +43,7 @@ private[sql] trait Queryable {
    */
   def explain(extended: Boolean): Unit = {
     val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    DataFrame(sqlContext, explain).queryExecution.executedPlan.executeCollect().foreach {
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
       // scalastyle:on println
