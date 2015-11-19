@@ -25,6 +25,7 @@ import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.rdd.{TrackStateRDD, TrackStateRDDRecord}
+import org.apache.spark.streaming.dstream.InternalTrackStateDStream._
 
 /**
  * :: Experimental ::
@@ -120,6 +121,14 @@ class InternalTrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassT
   /** Enable automatic checkpointing */
   override val mustCheckpoint = true
 
+  /** Override the default checkpoint duration */
+  override def initialize(time: Time): Unit = {
+    if (checkpointDuration == null) {
+      checkpointDuration = slideDuration * DEFAULT_CHECKPOINT_DURATION_MULTIPLIER
+    }
+    super.initialize(time)
+  }
+
   /** Method that generates a RDD for the given time */
   override def compute(validTime: Time): Option[RDD[TrackStateRDDRecord[K, S, E]]] = {
     // Get the previous state or create a new empty state RDD
@@ -140,4 +149,8 @@ class InternalTrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassT
         prevStateRDD, partitionedDataRDD, trackingFunction, validTime, timeoutThresholdTime)
     }
   }
+}
+
+private[streaming] object InternalTrackStateDStream {
+  private val DEFAULT_CHECKPOINT_DURATION_MULTIPLIER = 10
 }
