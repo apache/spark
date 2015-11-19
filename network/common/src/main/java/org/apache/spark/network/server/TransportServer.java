@@ -57,7 +57,7 @@ public class TransportServer implements Closeable {
 
   /**
    * Creates a TransportServer that binds to the given host and the given port, or to any available
-   * if 0.
+   * if 0. If you don't want to bind to any special host, set "hostToBind" to null.
    * */
   public TransportServer(
       TransportContext context,
@@ -76,15 +76,6 @@ public class TransportServer implements Closeable {
       JavaUtils.closeQuietly(this);
       throw e;
     }
-  }
-
-  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
-  public TransportServer(
-      TransportContext context,
-      int portToBind,
-      RpcHandler appRpcHandler,
-      List<TransportServerBootstrap> bootstraps) {
-    this(context, null, portToBind, appRpcHandler, bootstraps);
   }
 
   public int getPort() {

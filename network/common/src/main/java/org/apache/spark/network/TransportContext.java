@@ -94,7 +94,7 @@ public class TransportContext {
 
   /** Create a server which will attempt to bind to a specific port. */
   public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
-    return new TransportServer(this, port, rpcHandler, bootstraps);
+    return new TransportServer(this, null, port, rpcHandler, bootstraps);
   }
 
   /** Create a server which will attempt to bind to a specific host and port. */
