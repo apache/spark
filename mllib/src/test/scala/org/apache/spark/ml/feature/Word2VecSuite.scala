@@ -148,12 +148,12 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val t = new Word2Vec()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
-      .setMaxIter(5)
-      .setMinCount(10)
-      .setNumPartitions(2)
+      .setMaxIter(2)
+      .setMinCount(8)
+      .setNumPartitions(1)
       .setSeed(42L)
-      .setStepSize(0.015)
-      .setVectorSize(200)
+      .setStepSize(0.01)
+      .setVectorSize(100)
     testDefaultReadWrite(t)
   }
 
