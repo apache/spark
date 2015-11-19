@@ -63,6 +63,16 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> emap = lr.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(lr, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
+    ['elasticNetParam', 'featuresCol', 'fitIntercept', 'labelCol', 'maxIter',
+    'predictionCol', 'regParam', 'solver', 'standardization', 'tol']
+    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
@@ -126,7 +136,9 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LinearRegressionModel(JavaModel, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                            HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
+                            HasStandardization, HasSolver, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`LinearRegression`.
 
@@ -417,6 +429,15 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> emap = ir.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(ir, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol', 'weightCol']
+    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
     >>> model.boundaries
@@ -499,7 +520,9 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable,
+                              HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                              HasWeightCol):
     """
     Model fitted by :class:`IsotonicRegression`.
 
@@ -557,6 +580,7 @@ class TreeRegressorParams(Params):
     """
 
     supportedImpurities = ["variance"]
+    # a placeholder to make it appear in the generated doc
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
@@ -648,6 +672,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
+    >>> emap = dt.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(dt, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol']
     >>> model.depth
     1
     >>> model.numNodes
@@ -719,9 +751,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel):
-    """
-    Abstraction for Decision Tree models.
+class DecisionTreeModel(JavaModel, HasFeaturesCol, HasLabelCol, HasPredictionCol):
+    """Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
@@ -836,6 +867,14 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
+    >>> emap = rf.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(rf, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol']
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
@@ -909,7 +948,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModels, HasFeaturesCol, HasLabelCol,
+                                  HasPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by :class:`RandomForestRegressor`.
 
@@ -956,6 +996,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> print(gbt.getImpurity())
     variance
     >>> model = gbt.fit(df)
+    >>> emap = gbt.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(gbt, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'labelCol', 'predictionCol']
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
@@ -1047,7 +1095,9 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(TreeEnsembleModels, HasFeaturesCol, HasLabelCol,
+                         HasPredictionCol, JavaMLWritable, JavaMLReadable):
+
     """
     Model fitted by :class:`GBTRegressor`.
 
@@ -1095,6 +1145,14 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
+    >>> emap = aftsr.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(aftsr, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params]
+    ['featuresCol', 'fitIntercept', 'labelCol', 'maxIter', 'predictionCol', 'tol']
     >>> model.predict(Vectors.dense(6.3))
     1.0
     >>> model.predictQuantiles(Vectors.dense(6.3))
@@ -1106,7 +1164,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     |  1.0|    [1.0]|   1.0|       1.0|
     |  0.0|(1,[],[])|   0.0|       1.0|
     +-----+---------+------+----------+
-    ...
+
     >>> aftsr_path = temp_path + "/aftsr"
     >>> aftsr.save(aftsr_path)
     >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
@@ -1220,7 +1278,9 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class AFTSurvivalRegressionModel(JavaModel, HasFeaturesCol, HasLabelCol,
+                                 HasPredictionCol, HasFitIntercept, HasMaxIter,
+                                 HasTol, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1300,6 +1360,16 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
+    >>> emap = glr.extractParamMap()
+    >>> mmap = model.extractParamMap()
+    >>> all([emap[getattr(glr, param.name)] == value for (param, value) in mmap.items()])
+    True
+    >>> all([param.parent == model.uid for param in mmap])
+    True
+    >>> [param.name for param in model.params] # doctest: +NORMALIZE_WHITESPACE
+    ['featuresCol', 'fitIntercept', 'labelCol', 'maxIter', 'predictionCol',
+     'regParam', 'solver', 'tol', 'weightCol']
+    >>> abs(model.transform(df).head().prediction - 1.5) < 0.001
     >>> transformed = model.transform(df)
     >>> abs(transformed.head().prediction - 1.5) < 0.001
     True
@@ -1412,7 +1482,9 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.link)
 
 
-class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class GeneralizedLinearRegressionModel(JavaModel, HasLabelCol, HasFeaturesCol, HasPredictionCol,
+                                       HasFitIntercept, HasMaxIter, HasTol, HasRegParam,
+                                       HasWeightCol, HasSolver, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1654,6 +1726,10 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
+        (failure_count, test_count) = doctest.testmod(
+            globs=globs,
+            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+        sc.stop()
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
