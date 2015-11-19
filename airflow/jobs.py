@@ -348,6 +348,7 @@ class SchedulerJob(BaseJob):
         """
         This method checks whether a new DagRun needs to be created
         for a DAG based on scheduling interval
+        Returns DagRun if one is scheduled. Otherwise returns None. 
         """
         if dag.schedule_interval:
             DagRun = models.DagRun
@@ -385,9 +386,13 @@ class SchedulerJob(BaseJob):
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
                 next_run_date = datetime.now()
 
-            schedule_end = dag.following_schedule(next_run_date)
+            # this structure is necessary to avoid a TypeError from concatenating
+            # NoneType
             if dag.schedule_interval == '@once':
                 schedule_end = next_run_date
+            elif next_run_date:
+                schedule_end = dag.following_schedule(next_run_date)
+ 
             if next_run_date and schedule_end and schedule_end <= datetime.now():
                 next_run = DagRun(
                     dag_id=dag.dag_id,
@@ -398,6 +403,7 @@ class SchedulerJob(BaseJob):
                 )
                 session.add(next_run)
                 session.commit()
+                return next_run
 
     def process_dag(self, dag, executor):
         """
