@@ -24,6 +24,7 @@ from pyspark import SparkContext
 
 if __name__ == "__main__":
     sc = SparkContext(appName="Regression Metrics Example")
+
     # $example on$
     # Load and parse the data
     def parsePoint(line):

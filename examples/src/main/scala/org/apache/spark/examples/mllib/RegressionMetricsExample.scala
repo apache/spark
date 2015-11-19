@@ -19,7 +19,6 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
-// $example on$
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.mllib.evaluation.RegressionMetrics
 import org.apache.spark.mllib.util.MLUtils
