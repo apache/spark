@@ -246,12 +246,13 @@ class AnalysisSuite extends AnalysisTest {
     val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
 
     val lits = new scala.collection.mutable.ArrayBuffer[Int]
-    plan.transformAllExpressions{ case e: Literal =>
+    plan.transformAllExpressions { case e: Literal =>
       lits += e.value.asInstanceOf[Int]
       e
     }
     assert(lits.size == 2)
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
   }
 }
