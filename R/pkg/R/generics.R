@@ -523,18 +523,6 @@ setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
 #' @export
 setGeneric("str")
 
-#' @rdname withColumn
-#' @export
-setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
-
-#' @rdname with
-#' @export
-setGeneric("with")
-
-#' @rdname write.df
-#' @export
-setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
-
 #' @rdname write.df
 #' @export
 setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
@@ -571,6 +559,10 @@ setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
+#' @rdname withColumn
+#' @export
+setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
+
 #' @rdname unionAll
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
@@ -592,6 +584,9 @@ setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
 
+#' @rdname write.df
+#' @export
+setGeneric("write.df", function(df, path, ...) { standardGeneric("write.df") })
 
 ###################### Column Methods ##########################
 
