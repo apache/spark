@@ -215,30 +215,31 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case executionStart: SparkListenerSQLExecutionStart =>
-      val physicalPlanGraph = SparkPlanGraph(executionStart.sparkPlanInfo)
+    case SparkListenerSQLExecutionStart(executionId, description, details,
+      physicalPlanDescription, sparkPlanInfo, time) =>
+      val physicalPlanGraph = SparkPlanGraph(sparkPlanInfo)
       val sqlPlanMetrics = physicalPlanGraph.nodes.flatMap { node =>
         node.metrics.map(metric => metric.accumulatorId -> metric)
       }
       val executionUIData = new SQLExecutionUIData(
-        executionStart.executionId,
-        executionStart.description,
-        executionStart.details,
-        executionStart.physicalPlanDescription,
+        executionId,
+        description,
+        details,
+        physicalPlanDescription,
         physicalPlanGraph,
         sqlPlanMetrics.toMap,
-        executionStart.time)
+        time)
       synchronized {
-        activeExecutions(executionStart.executionId) = executionUIData
-        _executionIdToData(executionStart.executionId) = executionUIData
+        activeExecutions(executionId) = executionUIData
+        _executionIdToData(executionId) = executionUIData
       }
-    case executionEnd: SparkListenerSQLExecutionEnd => synchronized {
-      _executionIdToData.get(executionEnd.executionId).foreach { executionUIData =>
-        executionUIData.completionTime = Some(executionEnd.time)
+    case SparkListenerSQLExecutionEnd(executionId, time) => synchronized {
+      _executionIdToData.get(executionId).foreach { executionUIData =>
+        executionUIData.completionTime = Some(time)
         if (!executionUIData.hasRunningJobs) {
           // onExecutionEnd happens after all "onJobEnd"s
           // So we should update the execution lists.
-          markExecutionFinished(executionEnd.executionId)
+          markExecutionFinished(executionId)
         } else {
           // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
           // Then we don't if the execution is successful, so let the last onJobEnd updates the

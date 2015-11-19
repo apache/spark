@@ -91,7 +91,7 @@ private[sql] class LongSQLMetric private[metric](name: String, param: LongSQLMet
   }
 }
 
-private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
+private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialValue: Long)
   extends SQLMetricParam[LongSQLMetricValue, Long] {
 
   override def addAccumulator(r: LongSQLMetricValue, t: Long): LongSQLMetricValue = r.add(t)
@@ -104,9 +104,9 @@ private[sql] class LongSQLMetricParam(val stringValue: Seq[Long] => String, init
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private[sql] object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
+private object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
 
-private[sql] object StaticsLongSQLMetricParam extends LongSQLMetricParam(
+private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {
     // This is a workaround for SPARK-11013.
     // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
