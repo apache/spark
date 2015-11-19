@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.examples.mllib
+package org.apache.spark.examples.mllib;
 // $example on$
 import scala.Tuple2;
 
