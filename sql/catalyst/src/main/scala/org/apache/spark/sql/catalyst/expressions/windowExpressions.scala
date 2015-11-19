@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.types._
@@ -291,12 +292,11 @@ trait WindowFunction extends Expression {
 
 abstract class OffsetWindowFunction
   extends Expression with WindowFunction with Unevaluable with ImplicitCastInputTypes {
-  self: Product =>
   val input: Expression
   val default: Expression
   val offset: Expression
   val offsetSign: Int
-  def offsetValue: Int = offset.eval().asInstanceOf[Int]
+
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -305,6 +305,12 @@ abstract class OffsetWindowFunction
   override def nullable: Boolean = input.nullable && (default == null || default.nullable)
 
   override lazy val frame = {
+    // This will be triggered by the Analyzer.
+    val offsetValue = offset.eval() match {
+      case o: Int => o
+      case x => throw new AnalysisException(
+        "Offset expression must be a foldable integer expression: $x")
+    }
     val boundary = ValueFollowing(offsetSign * offsetValue)
     SpecifiedWindowFrame(RowFrame, boundary, boundary)
   }
@@ -368,6 +374,10 @@ abstract class RowNumberLike extends AggregateWindowFunction {
   * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
   */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
+  /** The partition size attribute, this is here to prevent us from creating an attribute on the
+    * executor side. */
+  val size = AttributeReference("size", IntegerType, false)()
+
   /** Set the window size expression. */
   def withSize(n: Expression): SizeBasedWindowFunction
 }
@@ -385,17 +395,23 @@ case class CumeDist(n: Expression)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
 }
 
-// TODO check if the updates are correct! This used to be the case!
 case class NTile(buckets: Expression, n: Expression)
     extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1), Literal(0))
   def this(buckets: Expression) = this(buckets, Literal(0))
-  override def withSize(n: Expression): NTile = NTile(buckets, n)
 
+  // Validate buckets.
+  buckets.eval() match {
+    case b: Int if b > 1 => // Ok
+    case x => throw new AnalysisException(
+      "Buckets expression must be a foldable positive integer expression: $x")
+  }
+
+  override def withSize(n: Expression): NTile = NTile(buckets, n)
   private val bucket = AttributeReference("bucket", IntegerType, false)()
   private val bucketThreshold = AttributeReference("bucketThreshold", IntegerType, false)()
-  private val bucketSize = AttributeReference("bucketSize", IntegerType)()
-  private val bucketsWithPadding = AttributeReference("bucketsWithPadding", IntegerType)()
+  private val bucketSize = AttributeReference("bucketSize", IntegerType, false)()
+  private val bucketsWithPadding = AttributeReference("bucketsWithPadding", IntegerType, false)()
   private def bucketOverflow(e: Expression) =
     If(GreaterThanOrEqual(rowNumber, bucketThreshold), e, zero)
 
@@ -432,8 +448,8 @@ abstract class RankLike extends AggregateWindowFunction {
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   val order: Seq[Expression]
-  protected val orderAttrs = order.zipWithIndex.map{ case (expr, i) =>
-    AttributeReference(i.toString, expr.dataType)()
+  protected val orderAttrs = order.map{ expr =>
+    AttributeReference(expr.prettyString, expr.dataType)()
   }
 
   protected val orderEquals = order.zip(orderAttrs)
@@ -445,17 +461,17 @@ abstract class RankLike extends AggregateWindowFunction {
   protected val rowNumber = AttributeReference("rowNumber", IntegerType, false)()
   protected val zero = Literal(0)
   protected val one = Literal(1)
+  protected val increaseRowNumber = Add(rowNumber, one)
 
-  /** Increase the source of the rank value (the row number). */
-  protected def increaseRankSource = Add(rowNumber, one)
+  /** Source of the rank value. */
+  protected def rankSource: Expression = rowNumber
 
   /** Increase the rank when the current rank == 0 or when the one of order attributes changes. */
-  protected val increaseRank =
-    If(And(orderEquals, Not(EqualTo(rank, zero))), rank, increaseRankSource)
+  protected val increaseRank = If(And(orderEquals, Not(EqualTo(rank, zero))), rank, rankSource)
 
   override val aggBufferAttributes: Seq[AttributeReference] = rank +: rowNumber +: orderAttrs
-  override val initialValues = Literal(0) +: Literal(0) +: orderInit
-  override val updateExpressions = increaseRank +: increaseRankSource +: order
+  override val initialValues = zero +: one +: orderInit
+  override val updateExpressions = increaseRank +: increaseRowNumber +: order
   override val evaluateExpression: Expression = rank
 
   def withOrder(order: Seq[Expression]): RankLike
@@ -469,19 +485,19 @@ case class Rank(order: Seq[Expression]) extends RankLike {
 case class DenseRank(order: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): DenseRank = DenseRank(order)
-  override protected def increaseRankSource = Add(rank, one)
+  override protected def rankSource = Add(rank, one)
   override val updateExpressions = increaseRank +: order
   override val aggBufferAttributes = rank +: orderAttrs
-  override val initialValues = Literal(0) +: orderInit
+  override val initialValues = zero +: orderInit
 }
 
 case class PercentRank(order: Seq[Expression], n: Expression) extends RankLike
 with SizeBasedWindowFunction {
-  def this() = this(Nil, MutableLiteral(0, IntegerType))
+  def this() = this(Nil, Literal(0))
   override def withOrder(order: Seq[Expression]): PercentRank = PercentRank(order, n)
   override def withSize(n: Expression): PercentRank = PercentRank(order, n)
   override def dataType: DataType = DoubleType
   override val evaluateExpression = If(GreaterThan(n, one),
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
-      Literal.create(0.0d, DoubleType))
+      Literal(0.0d))
 }
