@@ -2204,7 +2204,7 @@ setMethod("denseRank",
 #' @export
 #' @examples \dontrun{lag(df$c)}
 setMethod("lag",
-          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          signature(x = "characterOrColumn"),
           function(x, offset, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc

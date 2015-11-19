@@ -31,6 +31,11 @@ test_that("glm and predict", {
   model <- glm(Sepal_Width ~ Sepal_Length, training, family = "gaussian")
   prediction <- predict(model, test)
   expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+
+  # Test stats::predict is working
+  x <- rnorm(15)
+  y <- x + rnorm(15)
+  expect_equal(length(predict(lm(y ~ x))), 15)
 })
 
 test_that("glm should work with long formula", {
