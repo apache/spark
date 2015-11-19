@@ -42,7 +42,8 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
    * Default: false
    * @group param
    */
-  val withMean: BooleanParam = new BooleanParam(this, "withMean", "Whether to center data with mean")
+  val withMean: BooleanParam = new BooleanParam(this, "withMean",
+    "Whether to center data with mean")
 
   /** @group getParam */
   def getWithMean: Boolean = $(withMean)
