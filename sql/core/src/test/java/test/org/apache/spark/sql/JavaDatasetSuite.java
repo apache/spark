@@ -24,6 +24,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
+
 import org.junit.*;
 
 import org.apache.spark.Accumulator;
@@ -410,8 +411,8 @@ public class JavaDatasetSuite implements Serializable {
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT(), Encoders.LONG(), Encoders.LONG()));
     Assert.assertEquals(
       Arrays.asList(
-        new Tuple4<String, Integer, Long, Long>("a", 3, 3L, 2L),
-        new Tuple4<String, Integer, Long, Long>("b", 3, 3L, 1L)),
+        new Tuple4<>("a", 3, 3L, 2L),
+        new Tuple4<>("b", 3, 3L, 1L)),
       agged2.collectAsList());
   }
 
@@ -436,5 +437,75 @@ public class JavaDatasetSuite implements Serializable {
     public Integer finish(Integer reduction) {
       return reduction;
     }
+  }
+
+  public static class KryoSerializable {
+    String value;
+
+    KryoSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((KryoSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  public static class JavaSerializable implements Serializable {
+    String value;
+
+    JavaSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((JavaSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  @Test
+  public void testKryoEncoder() {
+    Encoder<KryoSerializable> encoder = Encoders.kryo(KryoSerializable.class);
+    List<KryoSerializable> data = Arrays.asList(
+      new KryoSerializable("hello"), new KryoSerializable("world"));
+    Dataset<KryoSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testJavaEncoder() {
+    Encoder<JavaSerializable> encoder = Encoders.javaSerialization(JavaSerializable.class);
+    List<JavaSerializable> data = Arrays.asList(
+      new JavaSerializable("hello"), new JavaSerializable("world"));
+    Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  /**
+   * For testing error messages when creating an encoder on a private class. This is done
+   * here since we cannot create truly private classes in Scala.
+   */
+  private static class PrivateClassTest { }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testJavaEncoderErrorMessageForPrivateClass() {
+    Encoders.javaSerialization(PrivateClassTest.class);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testKryoEncoderErrorMessageForPrivateClass() {
+    Encoders.kryo(PrivateClassTest.class);
   }
 }
