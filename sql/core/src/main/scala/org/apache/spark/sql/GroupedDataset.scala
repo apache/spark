@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{FlatEncoder, ExpressionEncoder, encoderFor, OuterScopes}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
@@ -242,7 +242,7 @@ class GroupedDataset[K, T] private[sql](
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
    * for that key.
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(FlatEncoder[Long]))
+  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
