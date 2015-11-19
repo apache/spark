@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.{SQLContext, DataFrame}
 import org.apache.spark.sql.types.StructType
 
 import scala.util.control.NonFatal
@@ -25,6 +26,7 @@ import scala.util.control.NonFatal
 private[sql] trait Queryable {
   def schema: StructType
   def queryExecution: QueryExecution
+  def sqlContext: SQLContext
 
   override def toString: String = {
     try {
@@ -34,4 +36,23 @@ private[sql] trait Queryable {
         s"Invalid tree; ${e.getMessage}:\n$queryExecution"
     }
   }
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @since 1.3.0
+   */
+  def explain(extended: Boolean): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    DataFrame(sqlContext, explain).queryExecution.executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
+
+  /**
+   * Only prints the physical plan to the console for debugging purposes.
+   * @since 1.3.0
+   */
+  def explain(): Unit = explain(extended = false)
 }

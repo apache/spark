@@ -580,18 +580,6 @@ class Dataset[T] private[sql](
    */
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
 
-  /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
-   * @since 1.6.0
-   */
-  def explain(extended: Boolean): Unit = toDF().explain(extended)
-
-  /**
-   * Only prints the physical plan to the console for debugging purposes.
-   * @since 1.6.0
-   */
-  def explain(): Unit = explain(extended = false)
-
   /* ******************** *
    *  Internal Functions  *
    * ******************** */
