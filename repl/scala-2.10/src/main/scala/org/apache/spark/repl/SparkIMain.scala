@@ -1231,14 +1231,10 @@ import org.apache.spark.annotation.DeveloperApi
         |  org.apache.spark.sql.catalyst.encoders.OuterScopes.addOuterScope(this)
         |  ${indentCode(toCompute)}
       """.stripMargin
-
       val postamble = importsTrailer + "\n}" + "\n" +
         "object " + lineRep.readName + " {\n" +
         "  val INSTANCE = new " + lineRep.readName + "();\n" +
         "}\n"
-
-      System.out.println(preamble + postamble)
-
       val generate = (m: MemberHandler) => m extraCodeToEvaluate Request.this
 
       /*
