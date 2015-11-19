@@ -34,7 +34,7 @@ trait CodegenFallback extends Expression {
     val objectTerm = ctx.freshName("obj")
     s"""
       /* expression: ${this} */
-      Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
+      java.lang.Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
       boolean ${ev.isNull} = $objectTerm == null;
       ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
       if (!${ev.isNull}) {

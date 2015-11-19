@@ -24,6 +24,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.encoders.ProductEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
@@ -178,6 +179,15 @@ case class Invoke(
   }
 }
 
+object NewInstance {
+  def apply(
+      cls: Class[_],
+      arguments: Seq[Expression],
+      propagateNull: Boolean = false,
+      dataType: DataType): NewInstance =
+    new NewInstance(cls, arguments, propagateNull, dataType, None)
+}
+
 /**
  * Constructs a new instance of the given class, using the result of evaluating the specified
  * expressions as arguments.
@@ -189,12 +199,15 @@ case class Invoke(
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
+ * @param outerPointer If the object being constructed is an inner class the outerPointer must
+ *                     for the containing class must be specified.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
-    propagateNull: Boolean = true,
-    dataType: DataType) extends Expression {
+    propagateNull: Boolean,
+    dataType: DataType,
+    outerPointer: Option[Literal]) extends Expression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -209,30 +222,43 @@ case class NewInstance(
     val argGen = arguments.map(_.gen(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
+    val outer = outerPointer.map(_.gen(ctx))
+
+    val setup =
+      s"""
+         ${argGen.map(_.code).mkString("\n")}
+         ${outer.map(_.code.mkString("")).getOrElse("")}
+       """.stripMargin
+
+    val constructorCall = outer.map { gen =>
+      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+    }.getOrElse {
+      s"new $className($argString)"
+    }
+
     if (propagateNull) {
       val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
         s"${ev.isNull} = ${ev.value} == null;"
       } else {
         ""
       }
-
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
+
       s"""
-        ${argGen.map(_.code).mkString("\n")}
+        $setup
 
         boolean ${ev.isNull} = true;
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-
         if ($argsNonNull) {
-          ${ev.value} = new $className($argString);
+          ${ev.value} = $constructorCall;
           ${ev.isNull} = false;
         }
        """
     } else {
       s"""
-        ${argGen.map(_.code).mkString("\n")}
+        $setup
 
-        $javaType ${ev.value} = new $className($argString);
+        $javaType ${ev.value} = $constructorCall;
         final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }

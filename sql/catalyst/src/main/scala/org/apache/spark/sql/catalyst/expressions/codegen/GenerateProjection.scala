@@ -167,7 +167,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         ${initMutableStates(ctx)}
       }
 
-      public Object apply(Object r) {
+      public java.lang.Object apply(java.lang.Object r) {
         // GenerateProjection does not work with UnsafeRows.
         assert(!(r instanceof ${classOf[UnsafeRow].getName}));
         return new SpecificRow((InternalRow) r);
@@ -186,14 +186,14 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         public void setNullAt(int i) { nullBits[i] = true; }
         public boolean isNullAt(int i) { return nullBits[i]; }
 
-        public Object genericGet(int i) {
+        public java.lang.Object genericGet(int i) {
           if (isNullAt(i)) return null;
           switch (i) {
           $getCases
           }
           return null;
         }
-        public void update(int i, Object value) {
+        public void update(int i, java.lang.Object value) {
           if (value == null) {
             setNullAt(i);
             return;
@@ -212,7 +212,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
           return result;
         }
 
-        public boolean equals(Object other) {
+        public boolean equals(java.lang.Object other) {
           if (other instanceof SpecificRow) {
             SpecificRow row = (SpecificRow) other;
             $columnChecks
@@ -222,7 +222,7 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         }
 
         public InternalRow copy() {
-          Object[] arr = new Object[${expressions.length}];
+          java.lang.Object[] arr = new java.lang.Object[${expressions.length}];
           ${copyColumns}
           return new ${classOf[GenericInternalRow].getName}(arr);
         }

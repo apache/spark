@@ -31,6 +31,7 @@ import scala.reflect.ClassTag
 
 object ProductEncoder {
   import ScalaReflection.universe._
+  import ScalaReflection.mirror
   import ScalaReflection.localTypeOf
   import ScalaReflection.dataTypeFor
   import ScalaReflection.Schema
@@ -420,8 +421,7 @@ object ProductEncoder {
           }
         }
 
-        val className: String = t.erasure.typeSymbol.asClass.fullName
-        val cls = Utils.classForName(className)
+        val cls = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 
         val arguments = params.head.zipWithIndex.map { case (p, i) =>
           val fieldName = p.name.toString
@@ -429,7 +429,7 @@ object ProductEncoder {
           val dataType = schemaFor(fieldType).dataType
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          if (className startsWith "scala.Tuple") {
+          if (cls.getName startsWith "scala.Tuple") {
             constructorFor(fieldType, Some(addToPathOrdinal(i, dataType)))
           } else {
             constructorFor(fieldType, Some(addToPath(fieldName)))

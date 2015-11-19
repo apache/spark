@@ -74,7 +74,7 @@ class Dataset[T] private[sql](
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(queryExecution.analyzed.output)
+    unresolvedTEncoder.resolve(queryExecution.analyzed.output, OuterScopes.outerScopes)
 
   private implicit def classTag = resolvedTEncoder.clsTag
 
@@ -375,7 +375,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          resolvedTEncoder,
+          resolvedTEncoder.bind(queryExecution.analyzed.output),
           queryExecution.analyzed.output).named :: Nil,
         logicalPlan))
   }

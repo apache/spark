@@ -53,6 +53,10 @@ case class RepeatedData(
 case class SpecificCollection(l: List[Int])
 
 class ProductEncoderSuite extends ExpressionEncoderSuite {
+  outers.put(getClass.getName, this)
+
+  case class InnerClass(i: Int)
+  productTest(InnerClass(1))
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
