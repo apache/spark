@@ -350,19 +350,20 @@ case class Least(children: Seq[Expression]) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(i: Int): String =
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${rest(i).isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, ev.value, rest(i).value)})) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
           ${ev.isNull} = false;
-          ${ev.value} = ${rest(i).value};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
+      ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.indices.map(updateEval).mkString("\n")}
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
@@ -407,19 +408,20 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     val evalChildren = children.map(_.gen(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
-    def updateEval(i: Int): String =
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${rest(i).isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, rest(i).value, ev.value)})) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
           ${ev.isNull} = false;
-          ${ev.value} = ${rest(i).value};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
+      ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.indices.map(updateEval).mkString("\n")}
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
