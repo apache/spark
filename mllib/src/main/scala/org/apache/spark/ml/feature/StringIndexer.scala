@@ -210,7 +210,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
 
   private class StringIndexerModelReader extends MLReader[StringIndexerModel] {
 
-    private val className = "org.apache.spark.ml.feature.StringIndexerModel"
+    private val className = classOf[StringIndexerModel].getName
 
     override def load(path: String): StringIndexerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

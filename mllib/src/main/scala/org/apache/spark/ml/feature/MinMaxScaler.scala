@@ -210,7 +210,7 @@ object MinMaxScalerModel extends MLReadable[MinMaxScalerModel] {
 
   private class MinMaxScalerModelReader extends MLReader[MinMaxScalerModel] {
 
-    private val className = "org.apache.spark.ml.feature.MinMaxScalerModel"
+    private val className = classOf[MinMaxScalerModel].getName
 
     override def load(path: String): MinMaxScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)

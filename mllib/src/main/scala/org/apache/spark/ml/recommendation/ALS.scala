@@ -237,7 +237,7 @@ object ALSModel extends MLReadable[ALSModel] {
   @Since("1.6.0")
   override def load(path: String): ALSModel = super.load(path)
 
-  private[recommendation] class ALSModelWriter(instance: ALSModel) extends MLWriter {
+  private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata = render("rank" -> instance.rank)
@@ -249,10 +249,10 @@ object ALSModel extends MLReadable[ALSModel] {
     }
   }
 
-  private[recommendation] class ALSModelReader extends MLReader[ALSModel] {
+  private class ALSModelReader extends MLReader[ALSModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.recommendation.ALSModel"
+    private val className = classOf[ALSModel].getName
 
     override def load(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
