@@ -569,7 +569,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
-        Some(new ContextCleaner(this))
+        val cleaner = new ContextCleaner(this)
+        cleaner.attachListener(dagScheduler)
+        Some(cleaner)
       } else {
         None
       }

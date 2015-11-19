@@ -116,7 +116,7 @@ class DAGScheduler(
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv,
     clock: Clock = new SystemClock())
-  extends Logging {
+  extends Logging with CleanerListener {
 
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
@@ -506,9 +506,6 @@ class DAGScheduler(
                   logDebug("Removing running stage %d".format(stageId))
                   runningStages -= stage
                 }
-                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
-                  shuffleToMapStage.remove(k)
-                }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
                   waitingStages -= stage
@@ -519,9 +516,12 @@ class DAGScheduler(
                 }
               }
               // data structures based on StageId
-              stageIdToStage -= stageId
-              logDebug("After removal of stage %d, remaining stages = %d"
-                .format(stageId, stageIdToStage.size))
+              // ShuffleMapStages aren't removed until the shuffle is cleaned
+              if (stage.isInstanceOf[ResultStage]) {
+                stageIdToStage -= stageId
+                logDebug("After removal of stage %d, remaining stages = %d"
+                  .format(stageId, stageIdToStage.size))
+              }
             }
 
             jobSet -= job.jobId
@@ -1579,6 +1579,21 @@ class DAGScheduler(
     eventProcessLoop.stop()
     taskScheduler.stop()
   }
+
+  /**
+   * Called by the context cleaner when a shuffle is removed
+   * @param shuffleId
+   */
+  override def shuffleCleaned(shuffleId: Int): Unit = {
+    val stageOpt = shuffleToMapStage.remove(shuffleId)
+    stageOpt.foreach { stage => stageIdToStage -= stage.id}
+  }
+
+  // These are all called by the context cleaner but we don't need them
+  override def accumCleaned(accId: Long): Unit = {}
+  override def broadcastCleaned(broadcastId: Long): Unit = {}
+  override def checkpointCleaned(rddId: Long): Unit = {}
+  override def rddCleaned(rddId: Int): Unit = {}
 
   // Start the event thread and register the metrics source at the end of the constructor
   env.metricsSystem.registerSource(metricsSource)
