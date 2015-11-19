@@ -573,6 +573,7 @@ class HiveContext private[hive](
     }
   }
 
+  @transient
   override protected[sql] lazy val optimizer: Optimizer = new Optimizer {
     override protected val batches =
       DefaultOptimizer.batches.asInstanceOf[Seq[Batch]] ++
