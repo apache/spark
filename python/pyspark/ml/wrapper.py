@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
+from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
@@ -138,9 +138,7 @@ class JavaParams(JavaWrapper, Params):
         """
         Transfer this instance's Params to the wrapped Java object, and return the Java object.
         Used for ML persistence.
-
         Meta-algorithms such as Pipeline should override this method.
-
         :return: Java object equivalent to this instance.
         """
         self._transfer_params_to_java()
@@ -151,7 +149,6 @@ class JavaParams(JavaWrapper, Params):
         """
         Given a Java object, create and return a Python wrapper of it.
         Used for ML persistence.
-
         Meta-algorithms such as Pipeline should override this method as a classmethod.
         """
         def __get_class(clazz):
@@ -200,7 +197,6 @@ class JavaEstimator(JavaParams, Estimator):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
-
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -211,7 +207,8 @@ class JavaEstimator(JavaParams, Estimator):
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
-        return self._create_model(java_model)
+        model = self._create_model(java_model)
+        return self._copyValues(model)
 
 
 @inherit_doc
@@ -243,7 +240,7 @@ class JavaModel(JavaTransformer, Model):
         """
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
-        and then call _transfer_params_from_java.
+        and then call _transformer_params.
 
         This instance can be instantiated without specifying java_model,
         it will be assigned after that, but this scenario only used by
