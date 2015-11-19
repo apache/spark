@@ -17,232 +17,27 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.runtime.universe._
+import java.util.Arrays
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{StructField, ArrayType}
+import org.apache.spark.sql.types.ArrayType
 
-case class RepeatedStruct(s: Seq[PrimitiveData])
-
-case class NestedArray(a: Array[Array[Int]])
-
-case class BoxedData(
-    intField: java.lang.Integer,
-    longField: java.lang.Long,
-    doubleField: java.lang.Double,
-    floatField: java.lang.Float,
-    shortField: java.lang.Short,
-    byteField: java.lang.Byte,
-    booleanField: java.lang.Boolean)
-
-case class RepeatedData(
-    arrayField: Seq[Int],
-    arrayFieldContainsNull: Seq[java.lang.Integer],
-    mapField: scala.collection.Map[Int, Long],
-    mapFieldNull: scala.collection.Map[Int, java.lang.Long],
-    structField: PrimitiveData)
-
-case class SpecificCollection(l: List[Int])
-
-class ExpressionEncoderSuite extends SparkFunSuite {
-
-  encodeDecodeTest(1)
-  encodeDecodeTest(1L)
-  encodeDecodeTest(1.toDouble)
-  encodeDecodeTest(1.toFloat)
-  encodeDecodeTest(true)
-  encodeDecodeTest(false)
-  encodeDecodeTest(1.toShort)
-  encodeDecodeTest(1.toByte)
-  encodeDecodeTest("hello")
-
-  encodeDecodeTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
-
-  // TODO: Support creating specific subclasses of Seq.
-  ignore("Specific collection types") { encodeDecodeTest(SpecificCollection(1 :: Nil)) }
-
-  encodeDecodeTest(
-    OptionalData(
-      Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
-
-  encodeDecodeTest(OptionalData(None, None, None, None, None, None, None, None))
-
-  encodeDecodeTest(
-    BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
-
-  encodeDecodeTest(
-    BoxedData(null, null, null, null, null, null, null))
-
-  encodeDecodeTest(
-    RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true) :: Nil))
-
-  encodeDecodeTest(
-    RepeatedData(
-      Seq(1, 2),
-      Seq(new Integer(1), null, new Integer(2)),
-      Map(1 -> 2L),
-      Map(1 -> null),
-      PrimitiveData(1, 1, 1, 1, 1, 1, true)))
-
-  encodeDecodeTest(("nullable Seq[Integer]", Seq[Integer](1, null)))
-
-  encodeDecodeTest(("Seq[(String, String)]",
-    Seq(("a", "b"))))
-  encodeDecodeTest(("Seq[(Int, Int)]",
-    Seq((1, 2))))
-  encodeDecodeTest(("Seq[(Long, Long)]",
-    Seq((1L, 2L))))
-  encodeDecodeTest(("Seq[(Float, Float)]",
-    Seq((1.toFloat, 2.toFloat))))
-  encodeDecodeTest(("Seq[(Double, Double)]",
-    Seq((1.toDouble, 2.toDouble))))
-  encodeDecodeTest(("Seq[(Short, Short)]",
-    Seq((1.toShort, 2.toShort))))
-  encodeDecodeTest(("Seq[(Byte, Byte)]",
-    Seq((1.toByte, 2.toByte))))
-  encodeDecodeTest(("Seq[(Boolean, Boolean)]",
-    Seq((true, false))))
-
-  // TODO: Decoding/encoding of complex maps.
-  ignore("complex maps") {
-    encodeDecodeTest(("Map[Int, (String, String)]",
-      Map(1 ->("a", "b"))))
-  }
-
-  encodeDecodeTest(("ArrayBuffer[(String, String)]",
-    ArrayBuffer(("a", "b"))))
-  encodeDecodeTest(("ArrayBuffer[(Int, Int)]",
-    ArrayBuffer((1, 2))))
-  encodeDecodeTest(("ArrayBuffer[(Long, Long)]",
-    ArrayBuffer((1L, 2L))))
-  encodeDecodeTest(("ArrayBuffer[(Float, Float)]",
-    ArrayBuffer((1.toFloat, 2.toFloat))))
-  encodeDecodeTest(("ArrayBuffer[(Double, Double)]",
-    ArrayBuffer((1.toDouble, 2.toDouble))))
-  encodeDecodeTest(("ArrayBuffer[(Short, Short)]",
-    ArrayBuffer((1.toShort, 2.toShort))))
-  encodeDecodeTest(("ArrayBuffer[(Byte, Byte)]",
-    ArrayBuffer((1.toByte, 2.toByte))))
-  encodeDecodeTest(("ArrayBuffer[(Boolean, Boolean)]",
-    ArrayBuffer((true, false))))
-
-  encodeDecodeTest(("Seq[Seq[(Int, Int)]]",
-    Seq(Seq((1, 2)))))
-
-  encodeDecodeTestCustom(("Array[Array[(Int, Int)]]",
-    Array(Array((1, 2)))))
-  { (l, r) => l._2(0)(0) == r._2(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[(Int, Int)]]",
-    Array(Array(Array((1, 2))))))
-  { (l, r) => l._2(0)(0)(0) == r._2(0)(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Array[(Int, Int)]]]",
-    Array(Array(Array(Array((1, 2)))))))
-  { (l, r) => l._2(0)(0)(0)(0) == r._2(0)(0)(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Array[Array[(Int, Int)]]]]",
-    Array(Array(Array(Array(Array((1, 2))))))))
-  { (l, r) => l._2(0)(0)(0)(0)(0) == r._2(0)(0)(0)(0)(0) }
-
-
-  encodeDecodeTestCustom(("Array[Array[Integer]]",
-    Array(Array[Integer](1))))
-  { (l, r) => l._2(0)(0) == r._2(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Int]]",
-    Array(Array(1))))
-  { (l, r) => l._2(0)(0) == r._2(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Int]]",
-    Array(Array(Array(1)))))
-  { (l, r) => l._2(0)(0)(0) == r._2(0)(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Array[Int]]]",
-    Array(Array(Array(Array(1))))))
-  { (l, r) => l._2(0)(0)(0)(0) == r._2(0)(0)(0)(0) }
-
-  encodeDecodeTestCustom(("Array[Array[Array[Array[Int]]]]",
-    Array(Array(Array(Array(Array(1)))))))
-  { (l, r) => l._2(0)(0)(0)(0)(0) == r._2(0)(0)(0)(0)(0) }
-
-  encodeDecodeTest(("Array[Byte] null",
-    null: Array[Byte]))
-  encodeDecodeTestCustom(("Array[Byte]",
-    Array[Byte](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Int] null",
-    null: Array[Int]))
-  encodeDecodeTestCustom(("Array[Int]",
-    Array[Int](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Long] null",
-    null: Array[Long]))
-  encodeDecodeTestCustom(("Array[Long]",
-    Array[Long](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Double] null",
-    null: Array[Double]))
-  encodeDecodeTestCustom(("Array[Double]",
-    Array[Double](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Float] null",
-    null: Array[Float]))
-  encodeDecodeTestCustom(("Array[Float]",
-    Array[Float](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Boolean] null",
-    null: Array[Boolean]))
-  encodeDecodeTestCustom(("Array[Boolean]",
-    Array[Boolean](true, false)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTest(("Array[Short] null",
-    null: Array[Short]))
-  encodeDecodeTestCustom(("Array[Short]",
-    Array[Short](1, 2, 3)))
-    { (l, r) => java.util.Arrays.equals(l._2, r._2) }
-
-  encodeDecodeTestCustom(("java.sql.Timestamp",
-    new java.sql.Timestamp(1)))
-    { (l, r) => l._2.toString == r._2.toString }
-
-  encodeDecodeTestCustom(("java.sql.Date", new java.sql.Date(1)))
-    { (l, r) => l._2.toString == r._2.toString }
-
-  /** Simplified encodeDecodeTestCustom, where the comparison function can be `Object.equals`. */
-  protected def encodeDecodeTest[T : TypeTag](inputData: T) =
-    encodeDecodeTestCustom[T](inputData)((l, r) => l == r)
-
-  /**
-   * Constructs a test that round-trips `t` through an encoder, checking the results to ensure it
-   * matches the original.
-   */
-  protected def encodeDecodeTestCustom[T : TypeTag](
-      inputData: T)(
-      c: (T, T) => Boolean) = {
-    test(s"encode/decode: $inputData - ${inputData.getClass.getName}") {
-      val encoder = try ExpressionEncoder[T]() catch {
-        case e: Exception =>
-          fail(s"Exception thrown generating encoder", e)
-      }
-      val convertedData = encoder.toRow(inputData)
+abstract class ExpressionEncoderSuite extends SparkFunSuite {
+  protected def encodeDecodeTest[T](
+      input: T,
+      encoder: ExpressionEncoder[T],
+      testName: String): Unit = {
+    test(s"encode/decode for $testName: $input") {
+      val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
       val boundEncoder = encoder.resolve(schema).bind(schema)
-      val convertedBack = try boundEncoder.fromRow(convertedData) catch {
+      val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
            s"""Exception thrown while decoding
-              |Converted: $convertedData
+              |Converted: $row
               |Schema: ${schema.mkString(",")}
               |${encoder.schema.treeString}
               |
@@ -252,18 +47,27 @@ class ExpressionEncoderSuite extends SparkFunSuite {
             """.stripMargin, e)
       }
 
-      if (!c(inputData, convertedBack)) {
+      val isCorrect = (input, convertedBack) match {
+        case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
+        case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
+        case (b1: Array[Array[_]], b2: Array[Array[_]]) =>
+          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+        case (b1: Array[_], b2: Array[_]) =>
+          Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+        case _ => input == convertedBack
+      }
+
+      if (!isCorrect) {
         val types = convertedBack match {
           case c: Product =>
             c.productIterator.filter(_ != null).map(_.getClass.getName).mkString(",")
           case other => other.getClass.getName
         }
 
-
         val encodedData = try {
-          convertedData.toSeq(encoder.schema).zip(encoder.schema).map {
-            case (a: ArrayData, StructField(_, at: ArrayType, _, _)) =>
-              a.toArray[Any](at.elementType).toSeq
+          row.toSeq(encoder.schema).zip(schema).map {
+            case (a: ArrayData, AttributeReference(_, ArrayType(et, _), _, _)) =>
+              a.toArray[Any](et).toSeq
             case (other, _) =>
               other
           }.mkString("[", ",", "]")
@@ -274,7 +78,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
         fail(
           s"""Encoded/Decoded data does not match input data
              |
-             |in:  $inputData
+             |in:  $input
              |out: $convertedBack
              |types: $types
              |
@@ -282,11 +86,10 @@ class ExpressionEncoderSuite extends SparkFunSuite {
              |Schema: ${schema.mkString(",")}
              |${encoder.schema.treeString}
              |
-             |Extract Expressions:
-             |$boundEncoder
+             |fromRow Expressions:
+             |${boundEncoder.fromRowExpression.treeString}
          """.stripMargin)
-        }
       }
-
+    }
   }
 }

@@ -56,36 +56,32 @@ provide another approach to share RDDs.
 
 ## Dynamic Resource Allocation
 
-Spark 1.2 introduces the ability to dynamically scale the set of cluster resources allocated to
-your application up and down based on the workload. This means that your application may give
-resources back to the cluster if they are no longer used and request them again later when there
-is demand. This feature is particularly useful if multiple applications share resources in your
-Spark cluster. If a subset of the resources allocated to an application becomes idle, it can be
-returned to the cluster's pool of resources and acquired by other applications. In Spark, dynamic
-resource allocation is performed on the granularity of the executor and can be enabled through
-`spark.dynamicAllocation.enabled`.
+Spark provides a mechanism to dynamically adjust the resources your application occupies based
+on the workload. This means that your application may give resources back to the cluster if they
+are no longer used and request them again later when there is demand. This feature is particularly
+useful if multiple applications share resources in your Spark cluster.
 
-This feature is currently disabled by default and available only on [YARN](running-on-yarn.html).
-A future release will extend this to [standalone mode](spark-standalone.html) and
-[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes). Note that although Spark on
-Mesos already has a similar notion of dynamic resource sharing in fine-grained mode, enabling
-dynamic allocation allows your Mesos application to take advantage of coarse-grained low-latency
-scheduling while sharing cluster resources efficiently.
+This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
+[standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html), and
+[Mesos coarse-grained mode](running-on-mesos.html#mesos-run-modes).
 
 ### Configuration and Setup
 
-All configurations used by this feature live under the `spark.dynamicAllocation.*` namespace.
-To enable this feature, your application must set `spark.dynamicAllocation.enabled` to `true`.
-Other relevant configurations are described on the
-[configurations page](configuration.html#dynamic-allocation) and in the subsequent sections in
-detail.
+There are two requirements for using this feature. First, your application must set
+`spark.dynamicAllocation.enabled` to `true`. Second, you must set up an *external shuffle service*
+on each worker node in the same cluster and set `spark.shuffle.service.enabled` to true in your
+application. The purpose of the external shuffle service is to allow executors to be removed
+without deleting shuffle files written by them (more detail described
+[below](job-scheduling.html#graceful-decommission-of-executors)). The way to set up this service
+varies across cluster managers:
 
-Additionally, your application must use an external shuffle service. The purpose of the service is
-to preserve the shuffle files written by executors so the executors can be safely removed (more
-detail described [below](job-scheduling.html#graceful-decommission-of-executors)). To enable
-this service, set `spark.shuffle.service.enabled` to `true`. In YARN, this external shuffle service
-is implemented in `org.apache.spark.yarn.network.YarnShuffleService` that runs in each `NodeManager`
-in your cluster. To start this service, follow these steps:
+In standalone mode, simply start your workers with `spark.shuffle.service.enabled` set to `true`.
+
+In Mesos coarse-grained mode, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all
+slave nodes with `spark.shuffle.service.enabled` set to `true`. For instance, you may do so
+through Marathon.
+
+In YARN mode, start the shuffle service on each `NodeManager` as follows:
 
 1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
 pre-packaged distribution.
@@ -95,9 +91,12 @@ pre-packaged distribution.
 2. Add this jar to the classpath of all `NodeManager`s in your cluster.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
-`org.apache.spark.network.yarn.YarnShuffleService`. Additionally, set all relevant
-`spark.shuffle.service.*` [configurations](configuration.html).
+`org.apache.spark.network.yarn.YarnShuffleService` and `spark.shuffle.service.enabled` to true.
 4. Restart all `NodeManager`s in your cluster.
+
+All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
+`spark.shuffle.service.*` namespaces. For more detail, see the
+[configurations page](configuration.html#dynamic-allocation).
 
 ### Resource Allocation Policy
 

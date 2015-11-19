@@ -32,6 +32,16 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
+ * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
+ * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
+ * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+ * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
+ */
+private[spark] trait SizeEstimation {
+  def estimatedSize: Option[Long]
+}
+
+/**
  * :: DeveloperApi ::
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
  * memory-aware caches.
@@ -199,10 +209,18 @@ object SizeEstimator extends Logging {
       // the size estimator since it references the whole REPL. Do nothing in this case. In
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
-      val classInfo = getClassInfo(cls)
-      state.size += alignSize(classInfo.shellSize)
-      for (field <- classInfo.pointerFields) {
-        state.enqueue(field.get(obj))
+      val estimatedSize = obj match {
+        case s: SizeEstimation => s.estimatedSize
+        case _ => None
+      }
+      if (estimatedSize.isDefined) {
+        state.size += estimatedSize.get
+      } else {
+        val classInfo = getClassInfo(cls)
+        state.size += alignSize(classInfo.shellSize)
+        for (field <- classInfo.pointerFields) {
+          state.enqueue(field.get(obj))
+        }
       }
     }
   }

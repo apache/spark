@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * @see [[RegexTokenizer]]
  */
 @Experimental
-class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[String], Tokenizer] {
+class Tokenizer(override val uid: String)
+  extends UnaryTransformer[String, Seq[String], Tokenizer] with Writable {
 
   def this() = this(Identifiable.randomUID("tok"))
 
@@ -45,6 +46,19 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): Tokenizer = defaultCopy(extra)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object Tokenizer extends Readable[Tokenizer] {
+
+  @Since("1.6.0")
+  override def read: Reader[Tokenizer] = new DefaultParamsReader[Tokenizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Tokenizer = read.load(path)
 }
 
 /**
@@ -56,7 +70,7 @@ class Tokenizer(override val uid: String) extends UnaryTransformer[String, Seq[S
  */
 @Experimental
 class RegexTokenizer(override val uid: String)
-  extends UnaryTransformer[String, Seq[String], RegexTokenizer] {
+  extends UnaryTransformer[String, Seq[String], RegexTokenizer] with Writable {
 
   def this() = this(Identifiable.randomUID("regexTok"))
 
@@ -100,10 +114,25 @@ class RegexTokenizer(override val uid: String)
   /** @group getParam */
   def getPattern: String = $(pattern)
 
-  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+")
+  /**
+   * Indicates whether to convert all characters to lowercase before tokenizing.
+   * Default: true
+   * @group param
+   */
+  final val toLowercase: BooleanParam = new BooleanParam(this, "toLowercase",
+    "whether to convert all characters to lowercase before tokenizing.")
 
-  override protected def createTransformFunc: String => Seq[String] = { str =>
+  /** @group setParam */
+  def setToLowercase(value: Boolean): this.type = set(toLowercase, value)
+
+  /** @group getParam */
+  def getToLowercase: Boolean = $(toLowercase)
+
+  setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
+
+  override protected def createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
+    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
     val minLength = $(minTokenLength)
     tokens.filter(_.length >= minLength)
@@ -116,4 +145,17 @@ class RegexTokenizer(override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): RegexTokenizer = defaultCopy(extra)
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object RegexTokenizer extends Readable[RegexTokenizer] {
+
+  @Since("1.6.0")
+  override def read: Reader[RegexTokenizer] = new DefaultParamsReader[RegexTokenizer]
+
+  @Since("1.6.0")
+  override def load(path: String): RegexTokenizer = read.load(path)
 }

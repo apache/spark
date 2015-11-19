@@ -157,7 +157,7 @@ private[sql] class OrcRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec)
+  extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
   private[sql] def this(

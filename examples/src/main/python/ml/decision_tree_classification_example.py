@@ -28,7 +28,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.classification import DecisionTreeClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
-from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
@@ -36,8 +35,8 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    # Load and parse the data file, converting it to a DataFrame.
-    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    # Load the data stored in LIBSVM format as a DataFrame.
+    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Index labels, adding metadata to the label column.
     # Fit on whole dataset to include all labels in index.

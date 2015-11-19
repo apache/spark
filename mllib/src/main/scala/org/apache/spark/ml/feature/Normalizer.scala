@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.DataType
  * Normalize a vector to have unit norm using the given p-norm.
  */
 @Experimental
-class Normalizer(override val uid: String) extends UnaryTransformer[Vector, Vector, Normalizer] {
+class Normalizer(override val uid: String)
+  extends UnaryTransformer[Vector, Vector, Normalizer] with Writable {
 
   def this() = this(Identifiable.randomUID("normalizer"))
 
@@ -55,4 +56,17 @@ class Normalizer(override val uid: String) extends UnaryTransformer[Vector, Vect
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+
+  @Since("1.6.0")
+  override def write: Writer = new DefaultParamsWriter(this)
+}
+
+@Since("1.6.0")
+object Normalizer extends Readable[Normalizer] {
+
+  @Since("1.6.0")
+  override def read: Reader[Normalizer] = new DefaultParamsReader[Normalizer]
+
+  @Since("1.6.0")
+  override def load(path: String): Normalizer = read.load(path)
 }

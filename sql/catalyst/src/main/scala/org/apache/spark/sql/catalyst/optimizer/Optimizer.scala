@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
 import org.apache.spark.sql.catalyst.plans.LeftOuter
@@ -201,8 +202,8 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(_, _, e @ Expand(_, _, child))
-      if (child.outputSet -- AttributeSet(e.output) -- a.references).nonEmpty =>
-      a.copy(child = e.copy(child = prunedChild(child, AttributeSet(e.output) ++ a.references)))
+      if (child.outputSet -- e.references -- a.references).nonEmpty =>
+      a.copy(child = e.copy(child = prunedChild(child, e.references ++ a.references)))
 
     // Eliminate attributes that are not needed to calculate the specified aggregates.
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
@@ -363,7 +364,8 @@ object LikeSimplification extends Rule[LogicalPlan] {
 object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
+      case e @ AggregateExpression(Count(Literal(null, _)), _, _) =>
+        Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
       case e @ GetArrayItem(Literal(null, _), _) => Literal.create(null, e.dataType)
@@ -375,7 +377,9 @@ object NullPropagation extends Rule[LogicalPlan] {
         Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
-      case e @ Count(expr) if !expr.nullable => Count(Literal(1))
+      case e @ AggregateExpression(Count(expr), mode, false) if !expr.nullable =>
+        // This rule should be only triggered when isDistinct field is false.
+        AggregateExpression(Count(Literal(1)), mode, isDistinct = false)
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
@@ -857,12 +861,15 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   private val MAX_DOUBLE_DIGITS = 15
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
-      MakeDecimal(Sum(UnscaledValue(e)), prec + 10, scale)
+    case AggregateExpression(Sum(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+      if prec + 10 <= MAX_LONG_DIGITS =>
+      MakeDecimal(AggregateExpression(Sum(UnscaledValue(e)), mode, isDistinct), prec + 10, scale)
 
-    case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+    case AggregateExpression(Average(e @ DecimalType.Expression(prec, scale)), mode, isDistinct)
+      if prec + 4 <= MAX_DOUBLE_DIGITS =>
+      val newAggExpr = AggregateExpression(Average(UnscaledValue(e)), mode, isDistinct)
       Cast(
-        Divide(Average(UnscaledValue(e)), Literal.create(math.pow(10.0, scale), DoubleType)),
+        Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
         DecimalType(prec + 4, scale + 4))
   }
 }

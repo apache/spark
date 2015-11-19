@@ -74,3 +74,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# For R session data
+.RHistory
+.RData

@@ -38,6 +38,8 @@ private[streaming] object WriteAheadLogUtils extends Logging {
   val DRIVER_WAL_ROLLING_INTERVAL_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.rollingIntervalSecs"
   val DRIVER_WAL_MAX_FAILURES_CONF_KEY = "spark.streaming.driver.writeAheadLog.maxFailures"
+  val DRIVER_WAL_BATCHING_CONF_KEY = "spark.streaming.driver.writeAheadLog.allowBatching"
+  val DRIVER_WAL_BATCHING_TIMEOUT_CONF_KEY = "spark.streaming.driver.writeAheadLog.batchingTimeout"
   val DRIVER_WAL_CLOSE_AFTER_WRITE_CONF_KEY =
     "spark.streaming.driver.writeAheadLog.closeFileAfterWrite"
 
@@ -62,6 +64,18 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     } else {
       conf.getInt(RECEIVER_WAL_MAX_FAILURES_CONF_KEY, DEFAULT_MAX_FAILURES)
     }
+  }
+
+  def isBatchingEnabled(conf: SparkConf, isDriver: Boolean): Boolean = {
+    isDriver && conf.getBoolean(DRIVER_WAL_BATCHING_CONF_KEY, defaultValue = true)
+  }
+
+  /**
+   * How long we will wait for the wrappedLog in the BatchedWriteAheadLog to write the records
+   * before we fail the write attempt to unblock receivers.
+   */
+  def getBatchingTimeout(conf: SparkConf): Long = {
+    conf.getLong(DRIVER_WAL_BATCHING_TIMEOUT_CONF_KEY, defaultValue = 5000)
   }
 
   def shouldCloseFileAfterWrite(conf: SparkConf, isDriver: Boolean): Boolean = {
@@ -115,7 +129,7 @@ private[streaming] object WriteAheadLogUtils extends Logging {
     } else {
       sparkConf.getOption(RECEIVER_WAL_CLASS_CONF_KEY)
     }
-    classNameOption.map { className =>
+    val wal = classNameOption.map { className =>
       try {
         instantiateClass(
           Utils.classForName(className).asInstanceOf[Class[_ <: WriteAheadLog]], sparkConf)
@@ -127,6 +141,11 @@ private[streaming] object WriteAheadLogUtils extends Logging {
       new FileBasedWriteAheadLog(sparkConf, fileWalLogDirectory, fileWalHadoopConf,
         getRollingIntervalSecs(sparkConf, isDriver), getMaxFailures(sparkConf, isDriver),
         shouldCloseFileAfterWrite(sparkConf, isDriver))
+    }
+    if (isBatchingEnabled(sparkConf, isDriver)) {
+      new BatchedWriteAheadLog(wal, sparkConf)
+    } else {
+      wal
     }
   }
 

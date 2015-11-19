@@ -54,12 +54,7 @@ object MimaExcludes {
       MimaBuild.excludeSparkClass("streaming.flume.FlumeTestUtils") ++
       MimaBuild.excludeSparkClass("streaming.flume.PollingFlumeTestUtils") ++
       Seq(
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticCostFun.this"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.add"),
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.ml.classification.LogisticAggregator.count"),
+        // MiMa does not deal properly with sealed traits
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
       ) ++ Seq(
@@ -137,6 +132,16 @@ object MimaExcludes {
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationInfo.this")
+      ) ++ Seq(
+        // SPARK-11766 add toJson to Vector
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.mllib.linalg.Vector.toJson")
+      ) ++ Seq(
+        // SPARK-9065 Support message handler in Kafka Python API
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
       )
     case v if v.startsWith("1.5") =>
       Seq(

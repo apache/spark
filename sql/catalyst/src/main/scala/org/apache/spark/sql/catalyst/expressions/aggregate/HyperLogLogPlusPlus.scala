@@ -22,6 +22,7 @@ import java.util
 
 import com.clearspring.analytics.hash.MurmurHash
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -54,6 +55,22 @@ case class HyperLogLogPlusPlus(
     inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate {
   import HyperLogLogPlusPlus._
+
+  def this(child: Expression) = {
+    this(child = child, relativeSD = 0.05, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+  }
+
+  def this(child: Expression, relativeSD: Expression) = {
+    this(
+      child = child,
+      relativeSD = relativeSD match {
+        case Literal(d: Double, DoubleType) => d
+        case _ =>
+          throw new AnalysisException("The second argument should be a double literal.")
+      },
+      mutableAggBufferOffset = 0,
+      inputAggBufferOffset = 0)
+  }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

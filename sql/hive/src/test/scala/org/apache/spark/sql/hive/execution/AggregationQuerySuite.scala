@@ -66,14 +66,40 @@ class ScalaAggregateFunction(schema: StructType) extends UserDefinedAggregateFun
   }
 }
 
+class LongProductSum extends UserDefinedAggregateFunction {
+  def inputSchema: StructType = new StructType()
+    .add("a", LongType)
+    .add("b", LongType)
+
+  def bufferSchema: StructType = new StructType()
+    .add("product", LongType)
+
+  def dataType: DataType = LongType
+
+  def deterministic: Boolean = true
+
+  def initialize(buffer: MutableAggregationBuffer): Unit = {
+    buffer(0) = 0L
+  }
+
+  def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
+    if (!(input.isNullAt(0) || input.isNullAt(1))) {
+      buffer(0) = buffer.getLong(0) + input.getLong(0) * input.getLong(1)
+    }
+  }
+
+  def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
+    buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
+  }
+
+  def evaluate(buffer: Row): Any =
+    buffer.getLong(0)
+}
+
 abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
-  var originalUseAggregate2: Boolean = _
-
   override def beforeAll(): Unit = {
-    originalUseAggregate2 = sqlContext.conf.useSqlAggregate2
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, "true")
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -106,6 +132,22 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
+    val data3 = Seq[(Seq[Integer], Integer, Integer)](
+      (Seq[Integer](1, 1), 10, -10),
+      (Seq[Integer](null), -60, 60),
+      (Seq[Integer](1, 1), 30, -30),
+      (Seq[Integer](1), 30, 30),
+      (Seq[Integer](2), 1, 1),
+      (null, -10, 10),
+      (Seq[Integer](2, 3), -1, null),
+      (Seq[Integer](2, 3), 1, 1),
+      (Seq[Integer](2, 3, 4), null, 1),
+      (Seq[Integer](null), 100, -10),
+      (Seq[Integer](3), null, 3),
+      (null, null, null),
+      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
+    data3.write.saveAsTable("agg3")
+
     val emptyDF = sqlContext.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
@@ -114,13 +156,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     // Register UDAFs
     sqlContext.udf.register("mydoublesum", new MyDoubleSum)
     sqlContext.udf.register("mydoubleavg", new MyDoubleAvg)
+    sqlContext.udf.register("longProductSum", new LongProductSum)
   }
 
   override def afterAll(): Unit = {
     sqlContext.sql("DROP TABLE IF EXISTS agg1")
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
+    sqlContext.sql("DROP TABLE IF EXISTS agg3")
     sqlContext.dropTempTable("emptyTable")
-    sqlContext.setConf(SQLConf.USE_SQL_AGGREGATE2.key, originalUseAggregate2.toString)
   }
 
   test("empty table") {
@@ -239,6 +282,41 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(null, 2) ::
         Row(100, null) ::
         Row(null, 3) ::
+        Row(null, null) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT DISTINCT key
+          |FROM agg3
+        """.stripMargin),
+      Row(Seq[Integer](1, 1)) ::
+        Row(Seq[Integer](null)) ::
+        Row(Seq[Integer](1)) ::
+        Row(Seq[Integer](2)) ::
+        Row(null) ::
+        Row(Seq[Integer](2, 3)) ::
+        Row(Seq[Integer](2, 3, 4)) ::
+        Row(Seq[Integer](3)) :: Nil)
+
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |SELECT value1, key
+          |FROM agg3
+          |GROUP BY value1, key
+        """.stripMargin),
+      Row(10, Seq[Integer](1, 1)) ::
+        Row(-60, Seq[Integer](null)) ::
+        Row(30, Seq[Integer](1, 1)) ::
+        Row(30, Seq[Integer](1)) ::
+        Row(1, Seq[Integer](2)) ::
+        Row(-10, null) ::
+        Row(-1, Seq[Integer](2, 3)) ::
+        Row(1, Seq[Integer](2, 3)) ::
+        Row(null, Seq[Integer](2, 3, 4)) ::
+        Row(100, Seq[Integer](null)) ::
+        Row(null, Seq[Integer](3)) ::
         Row(null, null) :: Nil)
   }
 
@@ -447,73 +525,80 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("single distinct column set") {
-    // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  min(distinct value1),
-          |  sum(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  max(distinct value1)
-          |FROM agg2
-        """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+    Seq(true, false).foreach { specializeSingleDistinctAgg =>
+      val conf =
+        (SQLConf.SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING.key,
+          specializeSingleDistinctAgg.toString)
+      withSQLConf(conf) {
+        // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  min(distinct value1),
+              |  sum(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  max(distinct value1)
+              |FROM agg2
+            """.stripMargin),
+          Row(-60, 70.0, 101.0/9.0, 5.6, 100))
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  mydoubleavg(distinct value1),
-          |  avg(value1),
-          |  avg(value2),
-          |  key,
-          |  mydoubleavg(value1 - 1),
-          |  mydoubleavg(distinct value1) * 0.1,
-          |  avg(value1 + value2)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
-        Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
-        Row(null, null, 3.0, 3, null, null, null) ::
-        Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  mydoubleavg(distinct value1),
+              |  avg(value1),
+              |  avg(value2),
+              |  key,
+              |  mydoubleavg(value1 - 1),
+              |  mydoubleavg(distinct value1) * 0.1,
+              |  avg(value1 + value2)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(120.0, 70.0/3.0, -10.0/3.0, 1, 67.0/3.0 + 100.0, 12.0, 20.0) ::
+            Row(100.0, 1.0/3.0, 1.0, 2, -2.0/3.0 + 100.0, 10.0, 2.0) ::
+            Row(null, null, 3.0, 3, null, null, null) ::
+            Row(110.0, 10.0, 20.0, null, 109.0, 11.0, 30.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  key,
-          |  mydoubleavg(distinct value1),
-          |  mydoublesum(value2),
-          |  mydoublesum(distinct value1),
-          |  mydoubleavg(distinct value1),
-          |  mydoubleavg(value1)
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
-        Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
-        Row(3, null, 3.0, null, null, null) ::
-        Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  key,
+              |  mydoubleavg(distinct value1),
+              |  mydoublesum(value2),
+              |  mydoublesum(distinct value1),
+              |  mydoubleavg(distinct value1),
+              |  mydoubleavg(value1)
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(1, 120.0, -10.0, 40.0, 120.0, 70.0/3.0 + 100.0) ::
+            Row(2, 100.0, 3.0, 0.0, 100.0, 1.0/3.0 + 100.0) ::
+            Row(3, null, 3.0, null, null, null) ::
+            Row(null, 110.0, 60.0, 30.0, 110.0, 110.0) :: Nil)
 
-    checkAnswer(
-      sqlContext.sql(
-        """
-          |SELECT
-          |  count(value1),
-          |  count(*),
-          |  count(1),
-          |  count(DISTINCT value1),
-          |  key
-          |FROM agg2
-          |GROUP BY key
-        """.stripMargin),
-      Row(3, 3, 3, 2, 1) ::
-        Row(3, 4, 4, 2, 2) ::
-        Row(0, 2, 2, 0, 3) ::
-        Row(3, 4, 4, 3, null) :: Nil)
+        checkAnswer(
+          sqlContext.sql(
+            """
+              |SELECT
+              |  count(value1),
+              |  count(*),
+              |  count(1),
+              |  count(DISTINCT value1),
+              |  key
+              |FROM agg2
+              |GROUP BY key
+            """.stripMargin),
+          Row(3, 3, 3, 2, 1) ::
+            Row(3, 4, 4, 2, 2) ::
+            Row(0, 2, 2, 0, 3) ::
+            Row(3, 4, 4, 3, null) :: Nil)
+      }
+    }
   }
 
   test("single distinct multiple columns set") {
@@ -543,19 +628,21 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |  count(distinct value2),
           |  sum(distinct value2),
           |  count(distinct value1, value2),
+          |  longProductSum(distinct value1, value2),
           |  count(value1),
           |  sum(value1),
           |  count(value2),
           |  sum(value2),
+          |  longProductSum(value1, value2),
           |  count(*),
           |  count(1)
           |FROM agg2
           |GROUP BY key
         """.stripMargin),
-      Row(null, 3, 30, 3, 60, 3, 3, 30, 3, 60, 4, 4) ::
-        Row(1, 2, 40, 3, -10, 3, 3, 70, 3, -10, 3, 3) ::
-        Row(2, 2, 0, 1, 1, 1, 3, 1, 3, 3, 4, 4) ::
-        Row(3, 0, null, 1, 3, 0, 0, null, 1, 3, 2, 2) :: Nil)
+      Row(null, 3, 30, 3, 60, 3, -4700, 3, 30, 3, 60, -4700, 4, 4) ::
+        Row(1, 2, 40, 3, -10, 3, -100, 3, 70, 3, -10, -100, 3, 3) ::
+        Row(2, 2, 0, 1, 1, 1, 1, 3, 1, 3, 3, 2, 4, 4) ::
+        Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
   }
 
   test("test count") {
@@ -699,48 +786,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
-
-    withSQLConf(SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-      val errorMessage = intercept[SparkException] {
-        val df = Seq.tabulate(10)(i => (1.0 * i, 2.0 * i, i * -1.0)).toDF("a", "b", "c")
-        val corr1 = df.repartition(2).groupBy().agg(corr("a", "b")).collect()(0).getDouble(0)
-      }.getMessage
-      assert(errorMessage.contains("java.lang.UnsupportedOperationException: " +
-        "Corr only supports the new AggregateExpression2"))
-    }
-  }
-
-  test("test Last implemented based on AggregateExpression1") {
-    // TODO: Remove this test once we remove AggregateExpression1.
-    import org.apache.spark.sql.functions._
-    val df = Seq((1, 1), (2, 2), (3, 3)).toDF("i", "j").repartition(1)
-    withSQLConf(
-      SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-      SQLConf.USE_SQL_AGGREGATE2.key -> "false") {
-
-      checkAnswer(
-        df.groupBy("i").agg(last("j")),
-        df
-      )
-    }
-  }
-
-  test("error handling") {
-    withSQLConf("spark.sql.useAggregate2" -> "false") {
-      val errorMessage = intercept[AnalysisException] {
-        sqlContext.sql(
-          """
-            |SELECT
-            |  key,
-            |  sum(value + 1.5 * key),
-            |  mydoublesum(value),
-            |  mydoubleavg(value)
-            |FROM agg1
-            |GROUP BY key
-          """.stripMargin).collect()
-      }.getMessage
-      assert(errorMessage.contains("implemented based on the new Aggregate Function interface"))
-    }
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -802,66 +847,24 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       val df = sqlContext.createDataFrame(rdd, schema)
 
       val allColumns = df.schema.fields.map(f => col(f.name))
-      val expectedAnaswer =
+      val expectedAnswer =
         data
           .find(r => r.getInt(0) == 50)
           .getOrElse(fail("A row with id 50 should be the expected answer."))
       checkAnswer(
         df.groupBy().agg(udaf(allColumns: _*)),
         // udaf returns a Row as the output value.
-        Row(expectedAnaswer)
+        Row(expectedAnswer)
       )
     }
   }
 }
 
-class SortBasedAggregationQuerySuite extends AggregationQuerySuite {
 
-  var originalUnsafeEnabled: Boolean = _
+class TungstenAggregationQuerySuite extends AggregationQuerySuite
 
-  override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "false")
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-  }
-}
-
-class TungstenAggregationQuerySuite extends AggregationQuerySuite {
-
-  var originalUnsafeEnabled: Boolean = _
-
-  override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-  }
-}
 
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
-
-  var originalUnsafeEnabled: Boolean = _
-
-  override def beforeAll(): Unit = {
-    originalUnsafeEnabled = sqlContext.conf.unsafeEnabled
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, "true")
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED.key, originalUnsafeEnabled.toString)
-    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
-  }
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>

@@ -98,144 +98,19 @@ The test error is calculated to measure the algorithm accuracy.
 <div data-lang="scala" markdown="1">
 Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.tree.RandomForest
-import org.apache.spark.mllib.tree.model.RandomForestModel
-import org.apache.spark.mllib.util.MLUtils
-
-// Load and parse the data file.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
-
-// Train a RandomForest model.
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-val numClasses = 2
-val categoricalFeaturesInfo = Map[Int, Int]()
-val numTrees = 3 // Use more in practice.
-val featureSubsetStrategy = "auto" // Let the algorithm choose.
-val impurity = "gini"
-val maxDepth = 4
-val maxBins = 32
-
-val model = RandomForest.trainClassifier(trainingData, numClasses, categoricalFeaturesInfo,
-  numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
-
-// Evaluate model on test instances and compute test error
-val labelAndPreds = testData.map { point =>
-  val prediction = model.predict(point.features)
-  (point.label, prediction)
-}
-val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
-println("Test Error = " + testErr)
-println("Learned classification forest model:\n" + model.toDebugString)
-
-// Save and load model
-model.save(sc, "myModelPath")
-val sameModel = RandomForestModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/RandomForestClassificationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-import java.util.HashMap;
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.RandomForest;
-import org.apache.spark.mllib.tree.model.RandomForestModel;
-import org.apache.spark.mllib.util.MLUtils;
-
-SparkConf sparkConf = new SparkConf().setAppName("JavaRandomForestClassification");
-JavaSparkContext sc = new JavaSparkContext(sparkConf);
-
-// Load and parse the data file.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
-// Split the data into training and test sets (30% held out for testing)
-JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
-JavaRDD<LabeledPoint> trainingData = splits[0];
-JavaRDD<LabeledPoint> testData = splits[1];
-
-// Train a RandomForest model.
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-Integer numClasses = 2;
-HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
-Integer numTrees = 3; // Use more in practice.
-String featureSubsetStrategy = "auto"; // Let the algorithm choose.
-String impurity = "gini";
-Integer maxDepth = 5;
-Integer maxBins = 32;
-Integer seed = 12345;
-
-final RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
-  categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
-  seed);
-
-// Evaluate model on test instances and compute test error
-JavaPairRDD<Double, Double> predictionAndLabel =
-  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override
-    public Tuple2<Double, Double> call(LabeledPoint p) {
-      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-    }
-  });
-Double testErr =
-  1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-    @Override
-    public Boolean call(Tuple2<Double, Double> pl) {
-      return !pl._1().equals(pl._2());
-    }
-  }).count() / testData.count();
-System.out.println("Test Error: " + testErr);
-System.out.println("Learned classification forest model:\n" + model.toDebugString());
-
-// Save and load model
-model.save(sc.sc(), "myModelPath");
-RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRandomForestClassificationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.tree import RandomForest, RandomForestModel
-from pyspark.mllib.util import MLUtils
-
-# Load and parse the data file into an RDD of LabeledPoint.
-data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
-# Split the data into training and test sets (30% held out for testing)
-(trainingData, testData) = data.randomSplit([0.7, 0.3])
-
-# Train a RandomForest model.
-#  Empty categoricalFeaturesInfo indicates all features are continuous.
-#  Note: Use larger numTrees in practice.
-#  Setting featureSubsetStrategy="auto" lets the algorithm choose.
-model = RandomForest.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},
-                                     numTrees=3, featureSubsetStrategy="auto",
-                                     impurity='gini', maxDepth=4, maxBins=32)
-
-# Evaluate model on test instances and compute test error
-predictions = model.predict(testData.map(lambda x: x.features))
-labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
-print('Test Error = ' + str(testErr))
-print('Learned classification forest model:')
-print(model.toDebugString())
-
-# Save and load model
-model.save(sc, "myModelPath")
-sameModel = RandomForestModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example python/mllib/random_forest_classification_example.py %}
 </div>
 
 </div>
@@ -254,147 +129,19 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div data-lang="scala" markdown="1">
 Refer to the [`RandomForest` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.RandomForest) and [`RandomForestModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.RandomForestModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.tree.RandomForest
-import org.apache.spark.mllib.tree.model.RandomForestModel
-import org.apache.spark.mllib.util.MLUtils
-
-// Load and parse the data file.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
-
-// Train a RandomForest model.
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-val numClasses = 2
-val categoricalFeaturesInfo = Map[Int, Int]()
-val numTrees = 3 // Use more in practice.
-val featureSubsetStrategy = "auto" // Let the algorithm choose.
-val impurity = "variance"
-val maxDepth = 4
-val maxBins = 32
-
-val model = RandomForest.trainRegressor(trainingData, categoricalFeaturesInfo,
-  numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
-
-// Evaluate model on test instances and compute test error
-val labelsAndPredictions = testData.map { point =>
-  val prediction = model.predict(point.features)
-  (point.label, prediction)
-}
-val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-println("Test Mean Squared Error = " + testMSE)
-println("Learned regression forest model:\n" + model.toDebugString)
-
-// Save and load model
-model.save(sc, "myModelPath")
-val sameModel = RandomForestModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/RandomForestRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/RandomForest.html) and [`RandomForestModel` Java docs](api/java/org/apache/spark/mllib/tree/model/RandomForestModel.html) for details on the API.
 
-{% highlight java %}
-import java.util.HashMap;
-import scala.Tuple2;
-import org.apache.spark.api.java.function.Function2;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.RandomForest;
-import org.apache.spark.mllib.tree.model.RandomForestModel;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
-
-SparkConf sparkConf = new SparkConf().setAppName("JavaRandomForest");
-JavaSparkContext sc = new JavaSparkContext(sparkConf);
-
-// Load and parse the data file.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
-// Split the data into training and test sets (30% held out for testing)
-JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
-JavaRDD<LabeledPoint> trainingData = splits[0];
-JavaRDD<LabeledPoint> testData = splits[1];
-
-// Set parameters.
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
-String impurity = "variance";
-Integer maxDepth = 4;
-Integer maxBins = 32;
-
-// Train a RandomForest model.
-final RandomForestModel model = RandomForest.trainRegressor(trainingData,
-  categoricalFeaturesInfo, impurity, maxDepth, maxBins);
-
-// Evaluate model on test instances and compute test error
-JavaPairRDD<Double, Double> predictionAndLabel =
-  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override
-    public Tuple2<Double, Double> call(LabeledPoint p) {
-      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-    }
-  });
-Double testMSE =
-  predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-    @Override
-    public Double call(Tuple2<Double, Double> pl) {
-      Double diff = pl._1() - pl._2();
-      return diff * diff;
-    }
-  }).reduce(new Function2<Double, Double, Double>() {
-    @Override
-    public Double call(Double a, Double b) {
-      return a + b;
-    }
-  }) / testData.count();
-System.out.println("Test Mean Squared Error: " + testMSE);
-System.out.println("Learned regression forest model:\n" + model.toDebugString());
-
-// Save and load model
-model.save(sc.sc(), "myModelPath");
-RandomForestModel sameModel = RandomForestModel.load(sc.sc(), "myModelPath");
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRandomForestRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.tree import RandomForest, RandomForestModel
-from pyspark.mllib.util import MLUtils
-
-# Load and parse the data file into an RDD of LabeledPoint.
-data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
-# Split the data into training and test sets (30% held out for testing)
-(trainingData, testData) = data.randomSplit([0.7, 0.3])
-
-# Train a RandomForest model.
-#  Empty categoricalFeaturesInfo indicates all features are continuous.
-#  Note: Use larger numTrees in practice.
-#  Setting featureSubsetStrategy="auto" lets the algorithm choose.
-model = RandomForest.trainRegressor(trainingData, categoricalFeaturesInfo={},
-                                    numTrees=3, featureSubsetStrategy="auto",
-                                    impurity='variance', maxDepth=4, maxBins=32)
-
-# Evaluate model on test instances and compute test error
-predictions = model.predict(testData.map(lambda x: x.features))
-labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
-print('Test Mean Squared Error = ' + str(testMSE))
-print('Learned regression forest model:')
-print(model.toDebugString())
-
-# Save and load model
-model.save(sc, "myModelPath")
-sameModel = RandomForestModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example python/mllib/random_forest_regression_example.py %}
 </div>
 
 </div>
@@ -492,141 +239,19 @@ The test error is calculated to measure the algorithm accuracy.
 <div data-lang="scala" markdown="1">
 Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.tree.GradientBoostedTrees
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
-import org.apache.spark.mllib.util.MLUtils
-
-// Load and parse the data file.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
-
-// Train a GradientBoostedTrees model.
-//  The defaultParams for Classification use LogLoss by default.
-val boostingStrategy = BoostingStrategy.defaultParams("Classification")
-boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
-boostingStrategy.treeStrategy.numClasses = 2
-boostingStrategy.treeStrategy.maxDepth = 5
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
-
-val model = GradientBoostedTrees.train(trainingData, boostingStrategy)
-
-// Evaluate model on test instances and compute test error
-val labelAndPreds = testData.map { point =>
-  val prediction = model.predict(point.features)
-  (point.label, prediction)
-}
-val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
-println("Test Error = " + testErr)
-println("Learned classification GBT model:\n" + model.toDebugString)
-
-// Save and load model
-model.save(sc, "myModelPath")
-val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/GradientBoostingClassificationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.GradientBoostedTrees;
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel;
-import org.apache.spark.mllib.util.MLUtils;
-
-SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTrees");
-JavaSparkContext sc = new JavaSparkContext(sparkConf);
-
-// Load and parse the data file.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
-// Split the data into training and test sets (30% held out for testing)
-JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
-JavaRDD<LabeledPoint> trainingData = splits[0];
-JavaRDD<LabeledPoint> testData = splits[1];
-
-// Train a GradientBoostedTrees model.
-//  The defaultParams for Classification use LogLoss by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams("Classification");
-boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
-boostingStrategy.getTreeStrategy().setNumClassesForClassification(2);
-boostingStrategy.getTreeStrategy().setMaxDepth(5);
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
-boostingStrategy.treeStrategy().setCategoricalFeaturesInfo(categoricalFeaturesInfo);
-
-final GradientBoostedTreesModel model =
-  GradientBoostedTrees.train(trainingData, boostingStrategy);
-
-// Evaluate model on test instances and compute test error
-JavaPairRDD<Double, Double> predictionAndLabel =
-  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override
-    public Tuple2<Double, Double> call(LabeledPoint p) {
-      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-    }
-  });
-Double testErr =
-  1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-    @Override
-    public Boolean call(Tuple2<Double, Double> pl) {
-      return !pl._1().equals(pl._2());
-    }
-  }).count() / testData.count();
-System.out.println("Test Error: " + testErr);
-System.out.println("Learned classification GBT model:\n" + model.toDebugString());
-
-// Save and load model
-model.save(sc.sc(), "myModelPath");
-GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaGradientBoostingClassificationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
-from pyspark.mllib.util import MLUtils
-
-# Load and parse the data file.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-# Split the data into training and test sets (30% held out for testing)
-(trainingData, testData) = data.randomSplit([0.7, 0.3])
-
-# Train a GradientBoostedTrees model.
-#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
-#         (b) Use more iterations in practice.
-model = GradientBoostedTrees.trainClassifier(trainingData,
-    categoricalFeaturesInfo={}, numIterations=3)
-
-# Evaluate model on test instances and compute test error
-predictions = model.predict(testData.map(lambda x: x.features))
-labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
-print('Test Error = ' + str(testErr))
-print('Learned classification GBT model:')
-print(model.toDebugString())
-
-# Save and load model
-model.save(sc, "myModelPath")
-sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example python/mllib/gradient_boosting_classification_example.py %}
 </div>
 
 </div>
@@ -645,146 +270,19 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 <div data-lang="scala" markdown="1">
 Refer to the [`GradientBoostedTrees` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.tree.model.GradientBoostedTreesModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.tree.GradientBoostedTrees
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
-import org.apache.spark.mllib.util.MLUtils
-
-// Load and parse the data file.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-// Split the data into training and test sets (30% held out for testing)
-val splits = data.randomSplit(Array(0.7, 0.3))
-val (trainingData, testData) = (splits(0), splits(1))
-
-// Train a GradientBoostedTrees model.
-//  The defaultParams for Regression use SquaredError by default.
-val boostingStrategy = BoostingStrategy.defaultParams("Regression")
-boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
-boostingStrategy.treeStrategy.maxDepth = 5
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-boostingStrategy.treeStrategy.categoricalFeaturesInfo = Map[Int, Int]()
-
-val model = GradientBoostedTrees.train(trainingData, boostingStrategy)
-
-// Evaluate model on test instances and compute test error
-val labelsAndPredictions = testData.map { point =>
-  val prediction = model.predict(point.features)
-  (point.label, prediction)
-}
-val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-println("Test Mean Squared Error = " + testMSE)
-println("Learned regression GBT model:\n" + model.toDebugString)
-
-// Save and load model
-model.save(sc, "myModelPath")
-val sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/GradientBoostingRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/tree/GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Java docs](api/java/org/apache/spark/mllib/tree/model/GradientBoostedTreesModel.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-import java.util.HashMap;
-import java.util.Map;
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.Function2;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.GradientBoostedTrees;
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
-import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel;
-import org.apache.spark.mllib.util.MLUtils;
-
-SparkConf sparkConf = new SparkConf().setAppName("JavaGradientBoostedTrees");
-JavaSparkContext sc = new JavaSparkContext(sparkConf);
-
-// Load and parse the data file.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
-// Split the data into training and test sets (30% held out for testing)
-JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
-JavaRDD<LabeledPoint> trainingData = splits[0];
-JavaRDD<LabeledPoint> testData = splits[1];
-
-// Train a GradientBoostedTrees model.
-//  The defaultParams for Regression use SquaredError by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams("Regression");
-boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
-boostingStrategy.getTreeStrategy().setMaxDepth(5);
-//  Empty categoricalFeaturesInfo indicates all features are continuous.
-Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
-boostingStrategy.treeStrategy().setCategoricalFeaturesInfo(categoricalFeaturesInfo);
-
-final GradientBoostedTreesModel model =
-  GradientBoostedTrees.train(trainingData, boostingStrategy);
-
-// Evaluate model on test instances and compute test error
-JavaPairRDD<Double, Double> predictionAndLabel =
-  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override
-    public Tuple2<Double, Double> call(LabeledPoint p) {
-      return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
-    }
-  });
-Double testMSE =
-  predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-    @Override
-    public Double call(Tuple2<Double, Double> pl) {
-      Double diff = pl._1() - pl._2();
-      return diff * diff;
-    }
-  }).reduce(new Function2<Double, Double, Double>() {
-    @Override
-    public Double call(Double a, Double b) {
-      return a + b;
-    }
-  }) / data.count();
-System.out.println("Test Mean Squared Error: " + testMSE);
-System.out.println("Learned regression GBT model:\n" + model.toDebugString());
-
-// Save and load model
-model.save(sc.sc(), "myModelPath");
-GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(sc.sc(), "myModelPath");
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaGradientBoostingRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel
-from pyspark.mllib.util import MLUtils
-
-# Load and parse the data file.
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
-# Split the data into training and test sets (30% held out for testing)
-(trainingData, testData) = data.randomSplit([0.7, 0.3])
-
-# Train a GradientBoostedTrees model.
-#  Notes: (a) Empty categoricalFeaturesInfo indicates all features are continuous.
-#         (b) Use more iterations in practice.
-model = GradientBoostedTrees.trainRegressor(trainingData,
-    categoricalFeaturesInfo={}, numIterations=3)
-
-# Evaluate model on test instances and compute test error
-predictions = model.predict(testData.map(lambda x: x.features))
-labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
-testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
-print('Test Mean Squared Error = ' + str(testMSE))
-print('Learned regression GBT model:')
-print(model.toDebugString())
-
-# Save and load model
-model.save(sc, "myModelPath")
-sameModel = GradientBoostedTreesModel.load(sc, "myModelPath")
-{% endhighlight %}
+{% include_example python/mllib/gradient_boosting_regression_example.py %}
 </div>
 
 </div>

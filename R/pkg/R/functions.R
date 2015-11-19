@@ -520,6 +520,22 @@ setMethod("isNaN",
             column(jc)
           })
 
+#' kurtosis
+#'
+#' Aggregate function: returns the kurtosis of the values in a group.
+#'
+#' @rdname kurtosis
+#' @name kurtosis
+#' @family agg_funcs
+#' @export
+#' @examples \dontrun{kurtosis(df$c)}
+setMethod("kurtosis",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "kurtosis", x@jc)
+            column(jc)
+          })
+
 #' last
 #'
 #' Aggregate function: returns the last value in a group.
@@ -861,6 +877,28 @@ setMethod("rtrim",
             column(jc)
           })
 
+#' sd
+#'
+#' Aggregate function: alias for \link{stddev_samp}
+#'
+#' @rdname sd
+#' @name sd
+#' @family agg_funcs
+#' @seealso \link{stddev_pop}, \link{stddev_samp}
+#' @export
+#' @examples
+#'\dontrun{
+#'stddev(df$c)
+#'select(df, stddev(df$age))
+#'agg(df, sd(df$age))
+#'}
+setMethod("sd",
+          signature(x = "Column"),
+          function(x, na.rm = FALSE) {
+            # In R, sample standard deviation is calculated with the sd() function.
+            stddev_samp(x)
+          })
+
 #' second
 #'
 #' Extracts the seconds as an integer from a given date/timestamp/string.
@@ -958,6 +996,22 @@ setMethod("size",
             column(jc)
           })
 
+#' skewness
+#'
+#' Aggregate function: returns the skewness of the values in a group.
+#'
+#' @rdname skewness
+#' @name skewness
+#' @family agg_funcs
+#' @export
+#' @examples \dontrun{skewness(df$c)}
+setMethod("skewness",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "skewness", x@jc)
+            column(jc)
+          })
+
 #' soundex
 #'
 #' Return the soundex code for the specified expression.
@@ -971,6 +1025,49 @@ setMethod("soundex",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "soundex", x@jc)
+            column(jc)
+          })
+
+#' @rdname sd
+#' @name stddev
+setMethod("stddev",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "stddev", x@jc)
+            column(jc)
+          })
+
+#' stddev_pop
+#'
+#' Aggregate function: returns the population standard deviation of the expression in a group.
+#'
+#' @rdname stddev_pop
+#' @name stddev_pop
+#' @family agg_funcs
+#' @seealso \link{sd}, \link{stddev_samp}
+#' @export
+#' @examples \dontrun{stddev_pop(df$c)}
+setMethod("stddev_pop",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "stddev_pop", x@jc)
+            column(jc)
+          })
+
+#' stddev_samp
+#'
+#' Aggregate function: returns the unbiased sample standard deviation of the expression in a group.
+#'
+#' @rdname stddev_samp
+#' @name stddev_samp
+#' @family agg_funcs
+#' @seealso \link{stddev_pop}, \link{sd}
+#' @export
+#' @examples \dontrun{stddev_samp(df$c)}
+setMethod("stddev_samp",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "stddev_samp", x@jc)
             column(jc)
           })
 
@@ -1168,6 +1265,71 @@ setMethod("upper",
             column(jc)
           })
 
+#' var
+#'
+#' Aggregate function: alias for \link{var_samp}.
+#'
+#' @rdname var
+#' @name var
+#' @family agg_funcs
+#' @seealso \link{var_pop}, \link{var_samp}
+#' @export
+#' @examples
+#'\dontrun{
+#'variance(df$c)
+#'select(df, var_pop(df$age))
+#'agg(df, var(df$age))
+#'}
+setMethod("var",
+          signature(x = "Column"),
+          function(x, y = NULL, na.rm = FALSE, use) {
+            # In R, sample variance is calculated with the var() function.
+            var_samp(x)
+          })
+
+#' @rdname var
+#' @name variance
+setMethod("variance",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "variance", x@jc)
+            column(jc)
+          })
+
+#' var_pop
+#'
+#' Aggregate function: returns the population variance of the values in a group.
+#'
+#' @rdname var_pop
+#' @name var_pop
+#' @family agg_funcs
+#' @seealso \link{var}, \link{var_samp}
+#' @export
+#' @examples \dontrun{var_pop(df$c)}
+setMethod("var_pop",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "var_pop", x@jc)
+            column(jc)
+          })
+
+#' var_samp
+#'
+#' Aggregate function: returns the unbiased variance of the values in a group.
+#'
+#' @rdname var_samp
+#' @name var_samp
+#' @family agg_funcs
+#' @seealso \link{var_pop}, \link{var}
+#' @export
+#' @examples \dontrun{var_samp(df$c)}
+setMethod("var_samp",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "var_samp", x@jc)
+            column(jc)
+          })
+
 #' weekofyear
 #'
 #' Extracts the week number as an integer from a given date/timestamp/string.
@@ -1339,7 +1501,7 @@ setMethod("pmod", signature(y = "Column"),
 #' @export
 setMethod("approxCountDistinct",
           signature(x = "Column"),
-          function(x, rsd = 0.95) {
+          function(x, rsd = 0.05) {
             jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
             column(jc)
           })
@@ -2020,10 +2182,10 @@ setMethod("ifelse",
 #'
 #' Window function: returns the cumulative distribution of values within a window partition,
 #' i.e. the fraction of rows that are below the current row.
-#' 
+#'
 #'   N = total number of rows in the partition
 #'   cumeDist(x) = number of values before (and including) x / N
-#'   
+#'
 #' This is equivalent to the CUME_DIST function in SQL.
 #'
 #' @rdname cumeDist
@@ -2039,13 +2201,13 @@ setMethod("cumeDist",
           })
 
 #' denseRank
-#' 
+#'
 #' Window function: returns the rank of rows within a window partition, without any gaps.
 #' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using denseRank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third.
-#' 
+#'
 #' This is equivalent to the DENSE_RANK function in SQL.
 #'
 #' @rdname denseRank
@@ -2065,7 +2227,7 @@ setMethod("denseRank",
 #' Window function: returns the value that is `offset` rows before the current row, and
 #' `defaultValue` if there is less than `offset` rows before the current row. For example,
 #' an `offset` of one will return the previous row at any given point in the window partition.
-#' 
+#'
 #' This is equivalent to the LAG function in SQL.
 #'
 #' @rdname lag
@@ -2092,7 +2254,7 @@ setMethod("lag",
 #' Window function: returns the value that is `offset` rows after the current row, and
 #' `null` if there is less than `offset` rows after the current row. For example,
 #' an `offset` of one will return the next row at any given point in the window partition.
-#' 
+#'
 #' This is equivalent to the LEAD function in SQL.
 #'
 #' @rdname lead
@@ -2119,7 +2281,7 @@ setMethod("lead",
 #' Window function: returns the ntile group id (from 1 to `n` inclusive) in an ordered window
 #' partition. Fow example, if `n` is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
-#' 
+#'
 #' This is equivalent to the NTILE function in SQL.
 #'
 #' @rdname ntile
@@ -2137,9 +2299,9 @@ setMethod("ntile",
 #' percentRank
 #'
 #' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
-#' 
+#'
 #' This is computed by:
-#' 
+#'
 #'   (rank of row in its partition - 1) / (number of rows in the partition - 1)
 #'
 #' This is equivalent to the PERCENT_RANK function in SQL.
@@ -2159,12 +2321,12 @@ setMethod("percentRank",
 #' rank
 #'
 #' Window function: returns the rank of rows within a window partition.
-#' 
+#'
 #' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
 #' sequence when there are ties. That is, if you were ranking a competition using denseRank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third.
-#' 
+#'
 #' This is equivalent to the RANK function in SQL.
 #'
 #' @rdname rank
@@ -2189,7 +2351,7 @@ setMethod("rank",
 #' rowNumber
 #'
 #' Window function: returns a sequential number starting at 1 within a window partition.
-#' 
+#'
 #' This is equivalent to the ROW_NUMBER function in SQL.
 #'
 #' @rdname rowNumber

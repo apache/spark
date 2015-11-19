@@ -194,7 +194,9 @@ case class AttributeReference(
   def sameRef(other: AttributeReference): Boolean = this.exprId == other.exprId
 
   override def equals(other: Any): Boolean = other match {
-    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference =>
+      name == ar.name && dataType == ar.dataType && nullable == ar.nullable &&
+        metadata == ar.metadata && exprId == ar.exprId && qualifiers == ar.qualifiers
     case _ => false
   }
 
@@ -203,12 +205,19 @@ case class AttributeReference(
     case _ => false
   }
 
+  override def semanticHash(): Int = {
+    this.exprId.hashCode()
+  }
+
   override def hashCode: Int = {
     // See http://stackoverflow.com/questions/113511/hash-code-implementation
     var h = 17
-    h = h * 37 + exprId.hashCode()
+    h = h * 37 + name.hashCode()
     h = h * 37 + dataType.hashCode()
+    h = h * 37 + nullable.hashCode()
     h = h * 37 + metadata.hashCode()
+    h = h * 37 + exprId.hashCode()
+    h = h * 37 + qualifiers.hashCode()
     h
   }
 

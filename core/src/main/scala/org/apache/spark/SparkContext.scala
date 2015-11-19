@@ -96,7 +96,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private def assertNotStopped(): Unit = {
     if (stopped.get()) {
-      throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
+      val activeContext = SparkContext.activeContext.get()
+      val activeCreationSite =
+        if (activeContext == null) {
+          "(No active SparkContext.)"
+        } else {
+          activeContext.creationSite.longForm
+        }
+      throw new IllegalStateException(
+        s"""Cannot call methods on a stopped SparkContext.
+           |This stopped SparkContext was created at:
+           |
+           |${creationSite.longForm}
+           |
+           |The currently active SparkContext was created at:
+           |
+           |$activeCreationSite
+         """.stripMargin)
     }
   }
 
@@ -863,10 +879,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new WholeTextFileRDD(
       this,
       classOf[WholeTextFileInputFormat],
-      classOf[String],
-      classOf[String],
+      classOf[Text],
+      classOf[Text],
       updateConf,
-      minPartitions).setName(path)
+      minPartitions).setName(path).map(record => (record._1.toString, record._2.toString))
   }
 
   /**
@@ -1445,7 +1461,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   override def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds)
+        b.killExecutors(executorIds, replace = false, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1483,7 +1499,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true)
+        b.killExecutors(Seq(executorId), replace = true, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1787,10 +1803,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * has overridden the call site using `setCallSite()`, this will return the user's version.
    */
   private[spark] def getCallSite(): CallSite = {
-    Option(getLocalProperty(CallSite.SHORT_FORM)).map { case shortCallSite =>
-      val longCallSite = Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse("")
-      CallSite(shortCallSite, longCallSite)
-    }.getOrElse(Utils.getCallSite())
+    val callSite = Utils.getCallSite()
+    CallSite(
+      Option(getLocalProperty(CallSite.SHORT_FORM)).getOrElse(callSite.shortForm),
+      Option(getLocalProperty(CallSite.LONG_FORM)).getOrElse(callSite.longForm)
+    )
   }
 
   /**

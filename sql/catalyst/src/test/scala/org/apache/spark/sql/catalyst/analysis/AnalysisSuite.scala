@@ -45,7 +45,7 @@ class AnalysisSuite extends AnalysisTest {
     val explode = Explode(AttributeReference("a", IntegerType, nullable = true)())
     assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
 
-    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
+    assert(!Project(Seq(Alias(count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {

@@ -106,29 +106,9 @@ private[sql] object PhysicalRDD {
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
-      relation: BaseRelation): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString, relation.isInstanceOf[HadoopFsRelation])
+      relation: BaseRelation,
+      extraInformation: String = ""): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString + extraInformation,
+      relation.isInstanceOf[HadoopFsRelation])
   }
-}
-
-/** Logical plan node for scanning data from a local collection. */
-private[sql]
-case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sqlContext: SQLContext)
-   extends LogicalPlan with MultiInstanceRelation {
-
-  override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): this.type =
-    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
-
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rows == rows
-    case _ => false
-  }
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    // TODO: Improve the statistics estimation.
-    // This is made small enough so it can be broadcasted.
-    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
-  )
 }

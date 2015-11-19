@@ -17,118 +17,55 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types._
 
+case class StddevSamp(child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends CentralMomentAgg(child) {
 
-// Compute the population standard deviation of a column
-case class StddevPop(child: Expression) extends StddevAgg(child) {
-  override def isSample: Boolean = false
-  override def prettyName: String = "stddev_pop"
-}
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
 
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-// Compute the sample standard deviation of a column
-case class StddevSamp(child: Expression) extends StddevAgg(child) {
-  override def isSample: Boolean = true
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
+
   override def prettyName: String = "stddev_samp"
+
+  override protected val momentOrder = 2
+
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
+
+    if (n == 0.0 || n == 1.0) Double.NaN else math.sqrt(moments(2) / (n - 1.0))
+  }
 }
 
+case class StddevPop(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
+  extends CentralMomentAgg(child) {
 
-// Compute standard deviation based on online algorithm specified here:
-// http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-abstract class StddevAgg(child: Expression) extends DeclarativeAggregate {
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
 
-  def isSample: Boolean
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
-  override def children: Seq[Expression] = child :: Nil
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def nullable: Boolean = true
+  override def prettyName: String = "stddev_pop"
 
-  override def dataType: DataType = resultType
+  override protected val momentOrder = 2
 
-  // Expected input data type.
-  // TODO: Right now, we replace old aggregate functions (based on AggregateExpression1) to the
-  // new version at planning time (after analysis phase). For now, NullType is added at here
-  // to make it resolved when we have cases like `select stddev(null)`.
-  // We can use our analyzer to cast NullType to the default data type of the NumericType once
-  // we remove the old aggregate functions. Then, we will not need NullType at here.
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(NumericType, NullType))
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+    require(moments.length == momentOrder + 1,
+      s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-  private val resultType = DoubleType
-
-  private val count = AttributeReference("count", resultType)()
-  private val avg = AttributeReference("avg", resultType)()
-  private val mk = AttributeReference("mk", resultType)()
-
-  override val aggBufferAttributes = count :: avg :: mk :: Nil
-
-  override val initialValues: Seq[Expression] = Seq(
-    /* count = */ Cast(Literal(0), resultType),
-    /* avg = */ Cast(Literal(0), resultType),
-    /* mk = */ Cast(Literal(0), resultType)
-  )
-
-  override val updateExpressions: Seq[Expression] = {
-    val value = Cast(child, resultType)
-    val newCount = count + Cast(Literal(1), resultType)
-
-    // update average
-    // avg = avg + (value - avg)/count
-    val newAvg = avg + (value - avg) / newCount
-
-    // update sum ofference from mean
-    // Mk = Mk + (value - preAvg) * (value - updatedAvg)
-    val newMk = mk + (value - avg) * (value - newAvg)
-
-    Seq(
-      /* count = */ If(IsNull(child), count, newCount),
-      /* avg = */ If(IsNull(child), avg, newAvg),
-      /* mk = */ If(IsNull(child), mk, newMk)
-    )
-  }
-
-  override val mergeExpressions: Seq[Expression] = {
-
-    // count merge
-    val newCount = count.left + count.right
-
-    // average merge
-    val newAvg = ((avg.left * count.left) + (avg.right * count.right)) / newCount
-
-    // update sum of square differences
-    val newMk = {
-      val avgDelta = avg.right - avg.left
-      val mkDelta = (avgDelta * avgDelta) * (count.left * count.right) / newCount
-      mk.left + mk.right + mkDelta
-    }
-
-    Seq(
-      /* count = */ If(IsNull(count.left), count.right,
-                       If(IsNull(count.right), count.left, newCount)),
-      /* avg = */ If(IsNull(avg.left), avg.right,
-                     If(IsNull(avg.right), avg.left, newAvg)),
-      /* mk = */ If(IsNull(mk.left), mk.right,
-                    If(IsNull(mk.right), mk.left, newMk))
-    )
-  }
-
-  override val evaluateExpression: Expression = {
-    // when count == 0, return null
-    // when count == 1, return 0
-    // when count >1
-    // stddev_samp = sqrt (mk/(count -1))
-    // stddev_pop = sqrt (mk/count)
-    val varCol =
-      if (isSample) {
-        mk / Cast(count - Cast(Literal(1), resultType), resultType)
-      } else {
-        mk / count
-      }
-
-    If(EqualTo(count, Cast(Literal(0), resultType)), Cast(Literal(null), resultType),
-      If(EqualTo(count, Cast(Literal(1), resultType)), Cast(Literal(0), resultType),
-        Cast(Sqrt(varCol), resultType)))
+    if (n == 0.0) Double.NaN else math.sqrt(moments(2) / n)
   }
 }

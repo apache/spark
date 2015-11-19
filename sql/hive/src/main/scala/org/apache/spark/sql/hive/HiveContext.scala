@@ -190,6 +190,9 @@ class HiveContext private[hive](
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
+  protected[hive] def hiveThriftServerSingleSession: Boolean =
+    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
@@ -454,7 +457,7 @@ class HiveContext private[hive](
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy())
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), this.executionHive)
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
   // can't access the SessionState of metadataHive.
@@ -576,7 +579,6 @@ class HiveContext private[hive](
       HiveTableScans,
       DataSinks,
       Scripts,
-      HashAggregation,
       Aggregation,
       LeftSemiJoin,
       EquiJoinSelection,

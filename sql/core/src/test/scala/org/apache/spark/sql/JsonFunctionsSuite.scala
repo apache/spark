@@ -41,23 +41,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("json_tuple select") {
     val df: DataFrame = tuples.toDF("key", "jstring")
-    val expected = Row("1", Row("value1", "value2", "3", null, "5.23")) ::
-      Row("2", Row("value12", "2", "value3", "4.01", null)) ::
-      Row("3", Row("value13", "2", "value33", "value44", "5.01")) ::
-      Row("4", Row(null, null, null, null, null)) ::
-      Row("5", Row("", null, null, null, null)) ::
-      Row("6", Row(null, null, null, null, null)) ::
+    val expected =
+      Row("1", "value1", "value2", "3", null, "5.23") ::
+      Row("2", "value12", "2", "value3", "4.01", null) ::
+      Row("3", "value13", "2", "value33", "value44", "5.01") ::
+      Row("4", null, null, null, null, null) ::
+      Row("5", "", null, null, null, null) ::
+      Row("6", null, null, null, null, null) ::
       Nil
 
-    checkAnswer(df.selectExpr("key", "json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5')"), expected)
+    checkAnswer(
+      df.select($"key", functions.json_tuple($"jstring", "f1", "f2", "f3", "f4", "f5")),
+      expected)
   }
 
   test("json_tuple filter and group") {
     val df: DataFrame = tuples.toDF("key", "jstring")
     val expr = df
-      .selectExpr("json_tuple(jstring, 'f1', 'f2') as jt")
-      .where($"jt.c0".isNotNull)
-      .groupBy($"jt.c1")
+      .select(functions.json_tuple($"jstring", "f1", "f2"))
+      .where($"c0".isNotNull)
+      .groupBy($"c1")
       .count()
 
     val expected = Row(null, 1) ::

@@ -79,6 +79,7 @@ setMethod("count",
 #' @param x a GroupedData
 #' @return a DataFrame
 #' @rdname agg
+#' @family agg_funcs
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -117,8 +118,11 @@ setMethod("summarize",
             agg(x, ...)
           })
 
-# sum/mean/avg/min/max
-methods <- c("sum", "mean", "avg", "min", "max")
+# Aggregate Functions by name
+methods <- c("avg", "max", "mean", "min", "sum")
+
+# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
+# "variance", "var_samp", "var_pop"
 
 createMethod <- function(name) {
   setMethod(name,

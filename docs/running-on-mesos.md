@@ -278,7 +278,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the name of the docker image that the Spark executors will run in. The selected
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
-    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY</code>.
   </td>
 </tr>
 <tr>
