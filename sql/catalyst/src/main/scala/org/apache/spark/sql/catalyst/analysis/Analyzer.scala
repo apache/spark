@@ -639,6 +639,7 @@ class Analyzer(
         if aggregate.resolved =>
 
           // Try resolving the ordering as though it is in the aggregate clause.
+        try {
           val aliasedOrdering = sortOrder.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
@@ -650,34 +651,37 @@ class Analyzer(
             CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
 
           try {
-          // If we pass the analysis check, then the ordering expressions should only reference to
-          // aggregate expressions or grouping expressions, and it's safe to push them down to
-          // Aggregate.
-          checkAnalysis(resolvedAggregate)
+            // If we pass the analysis check, then the ordering expressions should only reference to
+            // aggregate expressions or grouping expressions, and it's safe to push them down to
+            // Aggregate.
+            checkAnalysis(resolvedAggregate)
 
-          // If the ordering expression is same with original aggregate expression, we don't need
-          // to push down this ordering expression and can reference the original aggregate
-          // expression instead.
-          val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
-            resolvedAliasedOrdering, sortOrder, originalAggExprs, true)
+            // If the ordering expression is same with original aggregate expression, we don't need
+            // to push down this ordering expression and can reference the original aggregate
+            // expression instead.
+            val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
+              resolvedAliasedOrdering, sortOrder, originalAggExprs, true)
 
-          // Since we don't rely on sort.resolved as the stop condition for this rule,
-          // we need to check this and prevent applying this rule multiple times
-          if (sortOrder == evaluatedOrderings) {
-            sort
-          } else {
-            Project(aggregate.output,
-              Sort(evaluatedOrderings, global,
-                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+            // Since we don't rely on sort.resolved as the stop condition for this rule,
+            // we need to check this and prevent applying this rule multiple times
+            if (sortOrder == evaluatedOrderings) {
+              sort
+            } else {
+              Project(aggregate.output,
+                Sort(evaluatedOrderings, global,
+                  aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+            }
+          } catch {
+            // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+            // Return the plan after replacing any alias's in the sort with the attributes
+            // from aggregate expression if they are semantically equivalent.
+            case ae: AnalysisException =>
+              val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
+                resolvedAliasedOrdering, sortOrder, originalAggExprs, false)
+              Sort(evaluatedOrderings, global, aggregate)
           }
         } catch {
-          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-          // Return the plan after replacing any alias's in the sort with the attributes
-          // from aggregate expression if they are semantically equivalent.
-          case ae: AnalysisException =>
-            val (evaluatedOrderings, needsPushDown) = computeEvaluatedOrderings(
-              resolvedAliasedOrdering, sortOrder, originalAggExprs, false)
-            Sort(evaluatedOrderings, global, aggregate)
+          case ae: AnalysisException => sort
         }
     }
 
