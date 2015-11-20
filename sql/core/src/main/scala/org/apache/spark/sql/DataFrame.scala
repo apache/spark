@@ -1241,7 +1241,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
-    drop(colName.toSeq)
+    drop(Seq(colName))
   }
 
   /**
