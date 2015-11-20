@@ -343,47 +343,71 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 }
 
 /**
- * A function that trim the spaces from both ends for the specified string.
+ * A function that trims the given character (by default space) from both ends for given string.
  */
-case class StringTrim(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class StringTrim(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def convert(v: UTF8String): UTF8String = v.trim()
+  def this(token: Expression) = {
+    this(token, Literal(' '.toByte))
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+
+  protected override def nullSafeEval(token: Any, ch: Any): Any =
+    token.asInstanceOf[UTF8String].trim(ch.asInstanceOf[Byte])
 
   override def prettyName: String = "trim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c).trim()")
+    defineCodeGen(ctx, ev, (t, c) => s"($t).trim($c)")
   }
 }
 
 /**
- * A function that trim the spaces from left end for given string.
+ * A function that trims the given character (by default space) from left end for given string.
  */
-case class StringTrimLeft(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class StringTrimLeft(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def convert(v: UTF8String): UTF8String = v.trimLeft()
+  def this(token: Expression) = {
+    this(token, Literal(' '.toByte))
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+
+  protected override def nullSafeEval(token: Any, ch: Any): Any =
+    token.asInstanceOf[UTF8String].trimLeft(ch.asInstanceOf[Byte])
 
   override def prettyName: String = "ltrim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
+    defineCodeGen(ctx, ev, (t, c) => s"($t).trimLeft($c)")
   }
 }
 
 /**
- * A function that trim the spaces from right end for given string.
+ * A function that trims the given character (by default space) from right end for given string.
  */
-case class StringTrimRight(child: Expression)
-  extends UnaryExpression with String2StringExpression {
+case class StringTrimRight(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
 
-  def convert(v: UTF8String): UTF8String = v.trimRight()
+  def this(token: Expression) = {
+    this(token, Literal(' '.toByte))
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+
+  protected override def nullSafeEval(token: Any, ch: Any): Any =
+    token.asInstanceOf[UTF8String].trimRight(ch.asInstanceOf[Byte])
 
   override def prettyName: String = "rtrim"
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, c => s"($c).trimRight()")
+    defineCodeGen(ctx, ev, (t, c) => s"($t).trimRight($c)")
   }
 }
 
