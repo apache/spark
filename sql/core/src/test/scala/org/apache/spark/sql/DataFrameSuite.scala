@@ -378,6 +378,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
+  test("drop columns using drop") {
+    val src = Seq((1,2,3)).toDF("a", "b", "c")
+    val df = src.drop("a", "b")
+    checkAnswer(
+      df,
+      src.collect().map(x => Row(x.getInt(2))).toSeq)
+    assert(df.schema.map(_.name) === Seq("c"))
+  }
+
   test("drop unknown column (no-op)") {
     val df = testData.drop("random")
     checkAnswer(
