@@ -133,7 +133,7 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
        ${code}
      }
 
-     ${functions}
+     ${extraFunctions}
      """
   }
 
