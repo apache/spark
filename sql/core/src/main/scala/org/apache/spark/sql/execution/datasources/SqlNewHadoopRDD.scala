@@ -20,6 +20,8 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -28,12 +30,11 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
+import org.apache.spark.sql.{SQLConf, SQLContext}
+import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{Utils, SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 import org.apache.spark.{Partition => SparkPartition, _}
-
-import scala.reflect.ClassTag
 
 
 private[spark] class SqlNewHadoopPartition(
@@ -61,13 +62,13 @@ private[spark] class SqlNewHadoopPartition(
  * changes based on [[org.apache.spark.rdd.HadoopRDD]].
  */
 private[spark] class SqlNewHadoopRDD[V: ClassTag](
-    sc : SparkContext,
+    sqlContext: SQLContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
     initLocalJobFuncOpt: Option[Job => Unit],
     inputFormatClass: Class[_ <: InputFormat[Void, V]],
     valueClass: Class[V])
-  extends RDD[V](sc, Nil)
+    extends RDD[V](sqlContext.sparkContext, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
 
@@ -99,7 +100,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   // If true, enable using the custom RecordReader for parquet. This only works for
   // a subset of the types (no complex types).
   protected val enableUnsafeRowParquetReader: Boolean =
-      sc.conf.getBoolean("spark.parquet.enableUnsafeRowRecordReader", true)
+    sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -120,8 +121,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   }
 
   override def compute(
-      theSplit: SparkPartition,
-      context: TaskContext): Iterator[V] = {
+    theSplit: SparkPartition,
+    context: TaskContext): Iterator[V] = {
     val iter = new Iterator[V] {
       val split = theSplit.asInstanceOf[SqlNewHadoopPartition]
       logInfo("Input split: " + split.serializableHadoopSplit)
@@ -132,8 +133,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
       // Sets the thread local variable for the file's name
       split.serializableHadoopSplit.value match {
-        case fs: FileSplit => SqlNewHadoopRDD.setInputFileName(fs.getPath.toString)
-        case _ => SqlNewHadoopRDD.unsetInputFileName()
+        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
+        case _ => SqlNewHadoopRDDState.unsetInputFileName()
       }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
@@ -163,15 +164,13 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         * TODO: plumb this through a different way?
         */
       if (enableUnsafeRowParquetReader &&
-          format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        // TODO: move this class to sql.execution and remove this.
-        reader = Utils.classForName(
-          "org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader")
-          .newInstance().asInstanceOf[RecordReader[Void, V]]
-        try {
-          reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-        } catch {
-          case e: Exception => reader = null
+        format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
+        val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
+        if (!parquetReader.tryInitialize(
+            split.serializableHadoopSplit.value, hadoopAttemptContext)) {
+          parquetReader.close()
+        } else {
+          reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
         }
       }
 
@@ -217,7 +216,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
       private def close() {
         if (reader != null) {
-          SqlNewHadoopRDD.unsetInputFileName()
+          SqlNewHadoopRDDState.unsetInputFileName()
           // Close the reader and release it. Note: it's very important that we don't close the
           // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
           // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
@@ -235,7 +234,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-                     split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+            split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
@@ -276,23 +275,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     }
     super.persist(storageLevel)
   }
-}
-
-private[spark] object SqlNewHadoopRDD {
-
-  /**
-   * The thread variable for the name of the current file being read. This is used by
-   * the InputFileName function in Spark SQL.
-   */
-  private[this] val inputFileName: ThreadLocal[UTF8String] = new ThreadLocal[UTF8String] {
-    override protected def initialValue(): UTF8String = UTF8String.fromString("")
-  }
-
-  def getInputFileName(): UTF8String = inputFileName.get()
-
-  private[spark] def setInputFileName(file: String) = inputFileName.set(UTF8String.fromString(file))
-
-  private[spark] def unsetInputFileName(): Unit = inputFileName.remove()
 
   /**
    * Analogous to [[org.apache.spark.rdd.MapPartitionsRDD]], but passes in an InputSplit to
