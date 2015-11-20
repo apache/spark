@@ -9,7 +9,7 @@ import unittest
 
 from airflow import configuration
 configuration.test_mode()
-from airflow import jobs, models, DAG, utils, operators, hooks, macros
+from airflow import jobs, models, DAG, utils, operators, hooks, macros, settings
 from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
@@ -53,6 +53,9 @@ class CoreTest(unittest.TestCase):
         self.runme_0 = self.dag_bash.get_task('runme_0')
 
     def test_schedule_dag_no_previous_runs(self):
+        """
+        Tests scheduling a dag with no previous runs
+        """
         dag = DAG(TEST_DAG_ID+'test_schedule_dag_no_previous_runs') 
         dag.tasks = [models.BaseOperator(task_id="faketastic", owner='Also fake',
             start_date=datetime(2015, 1, 2, 0, 0))]
@@ -62,11 +65,47 @@ class CoreTest(unittest.TestCase):
         assert dag_run.run_id is not None
         assert dag_run.run_id != ''
         assert dag_run.execution_date == datetime(2015, 1, 2, 0, 0), (
-                'dag_run.execution_date did not match expectation: %s' % dag_run.execution_date)        
+                'dag_run.execution_date did not match expectation: {0}'
+                .format(dag_run.execution_date))        
+        assert dag_run.state == models.State.RUNNING
+        assert dag_run.external_trigger == False
+
+    def test_schedule_dag_fake_scheduled_previous(self):
+        """
+        Test scheduling a dag where there is a prior DagRun
+        which has the same run_id as the next run should have
+        """
+        delta = timedelta(hours=1)
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_fake_scheduled_previous',
+                schedule_interval=delta,
+                start_date=DEFAULT_DATE)
+        dag.tasks = [models.BaseOperator(task_id="faketastic",
+            owner='Also fake',
+            start_date=DEFAULT_DATE)]
+        scheduler = jobs.SchedulerJob(test_mode=True)
+        trigger = models.DagRun(
+                    dag_id=dag.dag_id,
+                    run_id=models.DagRun.id_for_date(DEFAULT_DATE),
+                    execution_date=DEFAULT_DATE,
+                    state=utils.State.SUCCESS,
+                    external_trigger=True)
+        settings.Session().add(trigger)
+        dag_run = scheduler.schedule_dag(dag)
+        assert dag_run is not None
+        assert dag_run.dag_id == dag.dag_id
+        assert dag_run.run_id is not None
+        assert dag_run.run_id != ''
+        assert dag_run.execution_date == DEFAULT_DATE+delta, (
+                'dag_run.execution_date did not match expectation: {0}'
+                .format(dag_run.execution_date)) 
         assert dag_run.state == models.State.RUNNING
         assert dag_run.external_trigger == False
 
     def test_schedule_dag_once(self):
+        """
+        Tests scheduling a dag scheduled for @once - should be scheduled the first time
+        it is called, and not scheduled the second. 
+        """
         dag = DAG(TEST_DAG_ID+'test_schedule_dag_once') 
         dag.schedule_interval = '@once'
         dag.tasks = [models.BaseOperator(task_id="faketastic", owner='Also fake',
