@@ -296,7 +296,7 @@ setMethod("names<-",
 #' @name colnames
 setMethod("colnames",
           signature(x = "DataFrame"),
-          function(x, do.NULL = TRUE, prefix = "col") {
+          function(x) {
             columns(x)
           })
 
@@ -313,10 +313,10 @@ setMethod("colnames<-",
 #'
 #' Get column types of a DataFrame
 #'
-#' @name coltypes
-#' @param x (DataFrame)
-#' @return value (character) A character vector with the column types of the given DataFrame
+#' @param x A SparkSQL DataFrame
+#' @return value A character vector with the column types of the given DataFrame
 #' @rdname coltypes
+#' @name coltypes
 #' @family DataFrame functions
 #' @export
 #' @examples
@@ -364,12 +364,12 @@ setMethod("coltypes",
 #'
 #' Set the column types of a DataFrame.
 #'
-#' @name coltypes<-
-#' @param x (DataFrame)
-#' @param value (character) A character vector with the target column types for the given
+#' @param x A SparkSQL DataFrame
+#' @param value A character vector with the target column types for the given
 #'    DataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
 #'    to keep that column as-is.
 #' @rdname coltypes
+#' @name coltypes<-
 #' @export
 #' @examples
 #'\dontrun{
@@ -394,7 +394,7 @@ setMethod("coltypes<-",
             newCols <- lapply(seq_len(ncols), function(i) {
               col <- getColumn(x, cols[i])
               if (!is.na(value[i])) {
-                stype <- rToScalaTypes[[value[i]]]
+                stype <- rToSQLTypes[[value[i]]]
                 if (is.null(stype)) {
                   stop("Only atomic type is supported for column types")
                 }
@@ -2219,4 +2219,3 @@ setMethod("with",
             newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
-

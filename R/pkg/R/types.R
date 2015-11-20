@@ -43,9 +43,9 @@ COMPLEX_TYPES <- list(
 DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), COMPLEX_TYPES))
 
 # An environment for mapping R to Scala, names are R types and values are Scala types.
-rToScalaTypes <- new.env()
-rToScalaTypes[["integer"]]   <- "integer" # in R, integer is 32bit
-rToScalaTypes[["numeric"]]   <- "double"  # in R, numeric == double which is 64bit
-rToScalaTypes[["double"]]    <- "double"
-rToScalaTypes[["character"]] <- "string"
-rToScalaTypes[["logical"]]   <- "boolean"
+rToSQLTypes <- new.env()
+rToSQLTypes[["integer"]]   <- "integer" # in R, integer is 32bit
+rToSQLTypes[["numeric"]]   <- "double"  # in R, numeric == double which is 64bit
+rToSQLTypes[["double"]]    <- "double"
+rToSQLTypes[["character"]] <- "string"
+rToSQLTypes[["logical"]]   <- "boolean"
