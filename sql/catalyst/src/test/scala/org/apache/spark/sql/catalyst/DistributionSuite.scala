@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.physical._
 
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class DistributionSuite extends FunSuite {
+class DistributionSuite extends SparkFunSuite {
 
   protected def checkSatisfied(
       inputPartitioning: Partitioning,
@@ -43,7 +42,7 @@ class DistributionSuite extends FunSuite {
     }
   }
 
-  test("HashPartitioning is the output partitioning") {
+  test("HashPartitioning (with nullSafe = true) is the output partitioning") {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),

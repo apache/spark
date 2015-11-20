@@ -119,6 +119,20 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     }
   }
 
+  override def onOutputOperationStarted(
+      outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = synchronized {
+    // This method is called after onBatchStarted
+    runningBatchUIData(outputOperationStarted.outputOperationInfo.batchTime).
+      updateOutputOperationInfo(outputOperationStarted.outputOperationInfo)
+  }
+
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = synchronized {
+    // This method is called before onBatchCompleted
+    runningBatchUIData(outputOperationCompleted.outputOperationInfo.batchTime).
+      updateOutputOperationInfo(outputOperationCompleted.outputOperationInfo)
+  }
+
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     getBatchTimeAndOutputOpId(jobStart.properties).foreach { case (batchTime, outputOpId) =>
       var outputOpIdToSparkJobIds = batchTimeToOutputOpIdSparkJobIdPair.get(batchTime)
@@ -146,6 +160,14 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def numReceivers: Int = synchronized {
     receiverInfos.size
+  }
+
+  def numActiveReceivers: Int = synchronized {
+    receiverInfos.count(_._2.active)
+  }
+
+  def numInactiveReceivers: Int = {
+    ssc.graph.getReceiverInputStreams().size - numActiveReceivers
   }
 
   def numTotalCompletedBatches: Long = synchronized {
@@ -192,7 +214,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   def receivedEventRateWithBatchTime: Map[Int, Seq[(Long, Double)]] = synchronized {
     val _retainedBatches = retainedBatches
     val latestBatches = _retainedBatches.map { batchUIData =>
-      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToNumRecords)
+      (batchUIData.batchTime.milliseconds, batchUIData.streamIdToInputInfo.mapValues(_.numRecords))
     }
     streamIds.map { streamId =>
       val eventRates = latestBatches.map {
@@ -205,7 +227,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   }
 
   def lastReceivedBatchRecords: Map[Int, Long] = synchronized {
-    val lastReceivedBlockInfoOption = lastReceivedBatch.map(_.streamIdToNumRecords)
+    val lastReceivedBlockInfoOption =
+      lastReceivedBatch.map(_.streamIdToInputInfo.mapValues(_.numRecords))
     lastReceivedBlockInfoOption.map { lastReceivedBlockInfo =>
       streamIds.map { streamId =>
         (streamId, lastReceivedBlockInfo.getOrElse(streamId, 0L))

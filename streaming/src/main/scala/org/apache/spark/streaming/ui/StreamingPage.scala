@@ -303,6 +303,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val numCompletedBatches = listener.retainedCompletedBatches.size
     val numActiveBatches = batchTimes.length - numCompletedBatches
+    val numReceivers = listener.numInactiveReceivers + listener.numActiveReceivers
     val table =
       // scalastyle:off
       <table id="stat-table" class="table table-bordered" style="width: auto">
@@ -310,7 +311,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <th style="width: 160px;"></th>
           <th style="width: 492px;">Timelines (Last {batchTimes.length} batches, {numActiveBatches} active, {numCompletedBatches} completed)</th>
-          <th style="width: 300px;">Histograms</th></tr>
+          <th style="width: 350px;">Histograms</th></tr>
       </thead>
       <tbody>
         <tr>
@@ -330,6 +331,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 }
               }
               </div>
+              {
+                if (numReceivers > 0) {
+                  <div>Receivers: {listener.numActiveReceivers} / {numReceivers} active</div>
+                }
+              }
               <div>Avg: {eventRateForAllStreams.formattedAvg} events/sec</div>
             </div>
           </td>
@@ -396,7 +402,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <th style="width: 151px;"></th>
           <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Status</div></th>
-          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Location</div></th>
+          <th style="width: 167px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Executor ID / Host</div></th>
           <th style="width: 166px; padding: 8px 0 8px 0"><div style="margin: 0 8px 0 8px">Last Error Time</div></th>
           <th>Last Error Message</th>
         </tr>
@@ -424,7 +430,11 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receiverActive = receiverInfo.map { info =>
       if (info.active) "ACTIVE" else "INACTIVE"
     }.getOrElse(emptyCell)
-    val receiverLocation = receiverInfo.map(_.location).getOrElse(emptyCell)
+    val receiverLocation = receiverInfo.map { info =>
+      val executorId = if (info.executorId.isEmpty) emptyCell else info.executorId
+      val location = if (info.location.isEmpty) emptyCell else info.location
+      s"$executorId / $location"
+    }.getOrElse(emptyCell)
     val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
       if (msg.size > 100) msg.take(97) + "..." else msg
@@ -456,7 +466,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <td>{receiverActive}</td>
       <td>{receiverLocation}</td>
       <td>{receiverLastErrorTime}</td>
-      <td><div style="width: 292px;">{receiverLastError}</div></td>
+      <td><div style="width: 342px;">{receiverLastError}</div></td>
     </tr>
     <tr>
       <td colspan="3" class="timeline">

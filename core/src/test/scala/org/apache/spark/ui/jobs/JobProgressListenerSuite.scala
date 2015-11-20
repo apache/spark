@@ -19,7 +19,6 @@ package org.apache.spark.ui.jobs
 
 import java.util.Properties
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import org.apache.spark._
@@ -28,7 +27,7 @@ import org.apache.spark.executor._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
-class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
+class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers {
 
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
@@ -241,10 +240,10 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val taskFailedReasons = Seq(
       Resubmitted,
       new FetchFailed(null, 0, 0, 0, "ignored"),
-      ExceptionFailure("Exception", "description", null, null, None),
+      ExceptionFailure("Exception", "description", null, null, None, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure("0"),
+      ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {

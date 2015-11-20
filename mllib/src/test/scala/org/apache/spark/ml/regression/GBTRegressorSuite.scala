@@ -17,21 +17,23 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.util.Utils
 
 
 /**
  * Test suite for [[GBTRegressor]].
  */
-class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
+class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import GBTRegressorSuite.compareAPIs
 
@@ -66,6 +68,47 @@ class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
           compareAPIs(data, None, gbt, categoricalFeatures)
       }
     }
+  }
+
+  test("GBTRegressor behaves reasonably on toy data") {
+    val df = sqlContext.createDataFrame(Seq(
+      LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
+      LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
+      LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
+      LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
+      LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
+      LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
+    ))
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+    val model = gbt.fit(df)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+    val preds = model.transform(df)
+    val predictions = preds.select("prediction").map(_.getDouble(0))
+    // Checks based on SPARK-8736 (to ensure it is not doing classification)
+    assert(predictions.max() > 2)
+    assert(predictions.min() < -1)
+  }
+
+  test("Checkpointing") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    sc.setCheckpointDir(path)
+
+    val df = sqlContext.createDataFrame(data)
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(5)
+      .setStepSize(0.1)
+      .setCheckpointInterval(2)
+    val model = gbt.fit(df)
+
+    sc.checkpointDir = None
+    Utils.deleteRecursively(tempDir)
+
   }
 
   // TODO: Reinstate test once runWithValidation is implemented  SPARK-7132
@@ -113,7 +156,7 @@ class GBTRegressorSuite extends FunSuite with MLlibTestSparkContext {
   */
 }
 
-private object GBTRegressorSuite {
+private object GBTRegressorSuite extends SparkFunSuite {
 
   /**
    * Train 2 models on the given dataset, one using the old API and one using the new API.
@@ -124,14 +167,17 @@ private object GBTRegressorSuite {
       validationData: Option[RDD[LabeledPoint]],
       gbt: GBTRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    val numFeatures = data.first().features.size
     val oldBoostingStrategy = gbt.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Regression)
     val oldGBT = new OldGBT(oldBoostingStrategy)
     val oldModel = oldGBT.run(data)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = gbt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldModelAsNew = GBTRegressionModel.fromOld(
-      oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures)
+      oldModel, newModel.parent.asInstanceOf[GBTRegressor], categoricalFeatures, numFeatures)
     TreeTests.checkEqual(oldModelAsNew, newModel)
+    assert(newModel.numFeatures === numFeatures)
+    assert(oldModelAsNew.numFeatures === numFeatures)
   }
 }

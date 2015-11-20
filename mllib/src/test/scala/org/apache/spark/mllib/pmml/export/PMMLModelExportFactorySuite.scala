@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, SVMModel}
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.{LassoModel, LinearRegressionModel, RidgeRegressionModel}
 import org.apache.spark.mllib.util.LinearDataGenerator
 
-class PMMLModelExportFactorySuite extends FunSuite {
+class PMMLModelExportFactorySuite extends SparkFunSuite {
 
   test("PMMLModelExportFactory create KMeansPMMLModelExport when passing a KMeansModel") {
     val clusterCenters = Array(
@@ -61,25 +60,25 @@ class PMMLModelExportFactorySuite extends FunSuite {
   test("PMMLModelExportFactory create BinaryClassificationPMMLModelExport "
     + "when passing a LogisticRegressionModel or SVMModel") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
-    
+
     val logisticRegressionModel =
       new LogisticRegressionModel(linearInput(0).features, linearInput(0).label)
     val logisticRegressionModelExport =
       PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
     assert(logisticRegressionModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
-    
+
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
     val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
     assert(svmModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
   }
-  
+
   test("PMMLModelExportFactory throw IllegalArgumentException "
     + "when passing a Multinomial Logistic Regression") {
     /** 3 classes, 2 features */
     val multiclassLogisticRegressionModel = new LogisticRegressionModel(
-      weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0, 
+      weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0,
       numFeatures = 2, numClasses = 3)
-    
+
     intercept[IllegalArgumentException] {
       PMMLModelExportFactory.createPMMLModelExport(multiclassLogisticRegressionModel)
     }

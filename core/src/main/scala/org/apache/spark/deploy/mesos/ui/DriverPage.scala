@@ -46,7 +46,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     val schedulerHeaders = Seq("Scheduler property", "Value")
     val commandEnvHeaders = Seq("Command environment variable", "Value")
     val launchedHeaders = Seq("Launched property", "Value")
-    val commandHeaders = Seq("Comamnd property", "Value")
+    val commandHeaders = Seq("Command property", "Value")
     val retryHeaders = Seq("Last failed status", "Next retry time", "Retry count")
     val driverDescription = Iterable.apply(driverState.description)
     val submissionState = Iterable.apply(driverState.submissionState)
@@ -68,7 +68,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         retryHeaders, retryRow, Iterable.apply(driverState.description.retryState))
     val content =
       <p>Driver state information for driver id {driverId}</p>
-        <a href="/">Back to Drivers</a>
+        <a href={UIUtils.prependBaseUri("/")}>Back to Drivers</a>
         <div class="row-fluid">
           <div class="span12">
             <h4>Driver state: {driverState.state}</h4>

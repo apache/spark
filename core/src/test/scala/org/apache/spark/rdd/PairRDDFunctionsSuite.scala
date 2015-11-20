@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import org.apache.commons.math3.distribution.{PoissonDistribution, BinomialDistribution}
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.util.Progressable
@@ -28,12 +29,10 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
-import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.{Partitioner, SharedSparkContext, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-import org.scalatest.FunSuite
-
-class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
+class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
 
@@ -284,6 +283,29 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  // See SPARK-9326
+  test("cogroup with empty RDD") {
+    import scala.reflect.classTag
+    val intPairCT = classTag[(Int, Int)]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[(Int, Int)](intPairCT)
+
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
+  // See SPARK-9326
+  test("cogroup with groupByed RDD having 0 partitions") {
+    import scala.reflect.classTag
+    val intCT = classTag[Int]
+
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.emptyRDD[Int](intCT).groupBy((x) => 5)
+    val joined = rdd1.cogroup(rdd2).collect()
+    assert(joined.size > 0)
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
@@ -512,17 +534,17 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("lookup") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     assert(pairs.partitioner === None)
     assert(pairs.lookup(1) === Seq(2))
-    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(5) === Seq(6, 7))
     assert(pairs.lookup(-1) === Seq())
 
   }
 
   test("lookup with partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2
@@ -533,12 +555,12 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
 
     assert(shuffled.partitioner === Some(p))
     assert(shuffled.lookup(1) === Seq(2))
-    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(5) === Seq(6, 7))
     assert(shuffled.lookup(-1) === Seq())
   }
 
   test("lookup with bad partitioner") {
-    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+    val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
     val p = new Partitioner {
       def numPartitions: Int = 2
@@ -557,17 +579,36 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
     }
 
-    def checkSize(exact: Boolean,
-        withReplacement: Boolean,
-        expected: Long,
-        actual: Long,
-        p: Double): Boolean = {
+    def assertBinomialSample(
+        exact: Boolean,
+        actual: Int,
+        trials: Int,
+        p: Double): Unit = {
       if (exact) {
-        return expected == actual
+        assert(actual == math.ceil(p * trials).toInt)
+      } else {
+        val dist = new BinomialDistribution(trials, p)
+        val q = dist.cumulativeProbability(actual)
+        withClue(s"p = $p: trials = $trials") {
+          assert(q >= 0.001 && q <= 0.999)
+        }
       }
-      val stdev = if (withReplacement) math.sqrt(expected) else math.sqrt(expected * p * (1 - p))
-      // Very forgiving margin since we're dealing with very small sample sizes most of the time
-      math.abs(actual - expected) <= 6 * stdev
+    }
+
+    def assertPoissonSample(
+        exact: Boolean,
+        actual: Int,
+        trials: Int,
+        p: Double): Unit = {
+      if (exact) {
+        assert(actual == math.ceil(p * trials).toInt)
+      } else {
+        val dist = new PoissonDistribution(p * trials)
+        val q = dist.cumulativeProbability(actual)
+        withClue(s"p = $p: trials = $trials") {
+          assert(q >= 0.001 && q <= 0.999)
+        }
+      }
     }
 
     def testSampleExact(stratifiedData: RDD[(String, Int)],
@@ -592,8 +633,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         samplingRate: Double,
         seed: Long,
         n: Long): Unit = {
-      val expectedSampleSize = stratifiedData.countByKey()
-        .mapValues(count => math.ceil(count * samplingRate).toInt)
+      val trials = stratifiedData.countByKey()
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
       val sample = if (exact) {
         stratifiedData.sampleByKeyExact(false, fractions, seed)
@@ -602,8 +642,10 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       }
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
-      sampleCounts.foreach { case(k, v) =>
-        assert(checkSize(exact, false, expectedSampleSize(k), v, samplingRate)) }
+      sampleCounts.foreach { case (k, v) =>
+        assertBinomialSample(exact = exact, actual = v.toInt, trials = trials(k).toInt,
+          p = samplingRate)
+      }
       assert(takeSample.size === takeSample.toSet.size)
       takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
     }
@@ -614,6 +656,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
         samplingRate: Double,
         seed: Long,
         n: Long): Unit = {
+      val trials = stratifiedData.countByKey()
       val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
         math.ceil(count * samplingRate).toInt)
       val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
@@ -625,7 +668,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       val sampleCounts = sample.countByKey()
       val takeSample = sample.collect()
       sampleCounts.foreach { case (k, v) =>
-        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate))
+        assertPoissonSample(exact, actual = v.toInt, trials = trials(k).toInt, p = samplingRate)
       }
       val groupedByKey = takeSample.groupBy(_._1)
       for ((key, v) <- groupedByKey) {
@@ -636,7 +679,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
           if (exact) {
             assert(v.toSet.size <= expectedSampleSize(key))
           } else {
-            assert(checkSize(false, true, expectedSampleSize(key), v.toSet.size, samplingRate))
+            assertPoissonSample(false, actual = v.toSet.size, trials(key).toInt, p = samplingRate)
           }
         }
       }

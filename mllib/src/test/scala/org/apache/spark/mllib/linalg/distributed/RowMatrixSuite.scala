@@ -19,13 +19,15 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.util.Random
 
+import breeze.numerics.abs
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, svd => brzSvd}
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
+import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -238,9 +240,42 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("QR Decomposition") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val result = mat.tallSkinnyQR(true)
+      val expected = breeze.linalg.qr.reduced(mat.toBreeze())
+      val calcQ = result.Q
+      val calcR = result.R
+      assert(closeToZero(abs(expected.q) - abs(calcQ.toBreeze())))
+      assert(closeToZero(abs(expected.r) - abs(calcR.toBreeze.asInstanceOf[BDM[Double]])))
+      assert(closeToZero(calcQ.multiply(calcR).toBreeze - mat.toBreeze()))
+      // Decomposition without computing Q
+      val rOnly = mat.tallSkinnyQR(computeQ = false)
+      assert(rOnly.Q == null)
+      assert(closeToZero(abs(expected.r) - abs(rOnly.R.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("compute covariance") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      val result = mat.computeCovariance()
+      val expected = breeze.linalg.cov(mat.toBreeze())
+      assert(closeToZero(abs(expected) - abs(result.toBreeze.asInstanceOf[BDM[Double]])))
+    }
+  }
+
+  test("covariance matrix is symmetric (SPARK-10875)") {
+    val rdd = RandomRDDs.normalVectorRDD(sc, 100, 10, 0, 0)
+    val matrix = new RowMatrix(rdd)
+    val cov = matrix.computeCovariance()
+    for (i <- 0 until cov.numRows; j <- 0 until i) {
+      assert(cov(i, j) === cov(j, i))
+    }
+  }
 }
 
-class RowMatrixClusterSuite extends FunSuite with LocalClusterSparkContext {
+class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   var mat: RowMatrix = _
 

@@ -19,7 +19,9 @@ package org.apache.spark.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, PrivateMethodTester}
+
+import org.apache.spark.SparkFunSuite
 
 class DummyClass1 {}
 
@@ -58,8 +60,17 @@ class DummyString(val arr: Array[Char]) {
   @transient val hash32: Int = 0
 }
 
+class DummyClass8 extends KnownSizeEstimation {
+  val x: Int = 0
+
+  override def estimatedSize: Long = 2015
+}
+
 class SizeEstimatorSuite
-  extends FunSuite with BeforeAndAfterEach with PrivateMethodTester with ResetSystemProperties {
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with PrivateMethodTester
+  with ResetSystemProperties {
 
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
@@ -208,5 +219,11 @@ class SizeEstimatorSuite
     SizeEstimator invokePrivate initialize()
     // Class should be 32 bytes on s390x if recognised as 64 bit platform
     assertResult(32)(SizeEstimator.estimate(new DummyClass7))
+  }
+
+  test("SizeEstimation can provide the estimated size") {
+    // DummyClass8 provides its size estimation.
+    assertResult(2015)(SizeEstimator.estimate(new DummyClass8))
+    assertResult(20206)(SizeEstimator.estimate(Array.fill(10)(new DummyClass8)))
   }
 }

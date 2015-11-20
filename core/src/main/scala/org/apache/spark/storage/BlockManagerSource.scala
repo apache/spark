@@ -17,9 +17,8 @@
 
 package org.apache.spark.storage
 
-import com.codahale.metrics.{Gauge,MetricRegistry}
+import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.metrics.source.Source
 
 private[spark] class BlockManagerSource(val blockManager: BlockManager)

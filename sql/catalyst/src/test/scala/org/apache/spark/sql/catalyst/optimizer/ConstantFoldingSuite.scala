@@ -162,7 +162,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -170,7 +170,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1.0) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -248,31 +248,16 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("Constant folding test: Fold In(v, list) into true or false") {
-    var originalQuery =
+    val originalQuery =
       testRelation
         .select('a)
         .where(In(Literal(1), Seq(Literal(1), Literal(2))))
 
-    var optimized = Optimize.execute(originalQuery.analyze)
+    val optimized = Optimize.execute(originalQuery.analyze)
 
-    var correctAnswer =
-      testRelation
-        .select('a)
-        .where(Literal(true))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
-
-    originalQuery =
-      testRelation
-        .select('a)
-        .where(In(Literal(1), Seq(Literal(1), 'a.attr)))
-
-    optimized = Optimize.execute(originalQuery.analyze)
-
-    correctAnswer =
+    val correctAnswer =
       testRelation
         .select('a)
         .where(Literal(true))

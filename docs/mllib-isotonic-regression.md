@@ -59,97 +59,28 @@ i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
-{% highlight scala %}
-import org.apache.spark.mllib.regression.IsotonicRegression
+Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.IsotonicRegressionModel) for details on the API.
 
-val data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
-
-// Create label, feature, weight tuples from input data with weight set to default value 1.0.
-val parsedData = data.map { line =>
-  val parts = line.split(',').map(_.toDouble)
-  (parts(0), parts(1), 1.0)
-}
-
-// Split data into training (60%) and test (40%) sets.
-val splits = parsedData.randomSplit(Array(0.6, 0.4), seed = 11L)
-val training = splits(0)
-val test = splits(1)
-
-// Create isotonic regression model from training data.
-// Isotonic parameter defaults to true so it is only shown for demonstration
-val model = new IsotonicRegression().setIsotonic(true).run(training)
-
-// Create tuples of predicted and real labels.
-val predictionAndLabel = test.map { point =>
-  val predictedLabel = model.predict(point._2)
-  (predictedLabel, point._1)
-}
-
-// Calculate mean squared error between predicted and real labels.
-val meanSquaredError = predictionAndLabel.map{case(p, l) => math.pow((p - l), 2)}.mean()
-println("Mean Squared Error = " + meanSquaredError)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/IsotonicRegressionExample.scala %}
 </div>
-
 <div data-lang="java" markdown="1">
 Data are read from a file where each line has a format label,feature
 i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
-{% highlight java %}
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.mllib.regression.IsotonicRegressionModel;
-import scala.Tuple2;
-import scala.Tuple3;
+Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegression.html) and [`IsotonicRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/IsotonicRegressionModel.html) for details on the API.
 
-JavaRDD<String> data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt");
+{% include_example java/org/apache/spark/examples/mllib/JavaIsotonicRegressionExample.java %}
+</div>
+<div data-lang="python" markdown="1">
+Data are read from a file where each line has a format label,feature
+i.e. 4710.28,500.00. The data are split to training and testing set.
+Model is created using the training set and a mean squared error is calculated from the predicted
+labels and real labels in the test set.
 
-// Create label, feature, weight tuples from input data with weight set to default value 1.0.
-JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
-  new Function<String, Tuple3<Double, Double, Double>>() {
-    public Tuple3<Double, Double, Double> call(String line) {
-      String[] parts = line.split(",");
-      return new Tuple3<>(new Double(parts[0]), new Double(parts[1]), 1.0);
-    }
-  }
-);
+Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegressionModel) for more details on the API.
 
-// Split data into training (60%) and test (40%) sets.
-JavaRDD<Tuple3<Double, Double, Double>>[] splits = parsedData.randomSplit(new double[] {0.6, 0.4}, 11L);
-JavaRDD<Tuple3<Double, Double, Double>> training = splits[0];
-JavaRDD<Tuple3<Double, Double, Double>> test = splits[1];
-
-// Create isotonic regression model from training data.
-// Isotonic parameter defaults to true so it is only shown for demonstration
-IsotonicRegressionModel model = new IsotonicRegression().setIsotonic(true).run(training);
-
-// Create tuples of predicted and real labels.
-JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(
-  new PairFunction<Tuple3<Double, Double, Double>, Double, Double>() {
-    @Override public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
-      Double predictedLabel = model.predict(point._2());
-      return new Tuple2<Double, Double>(predictedLabel, point._1());
-    }
-  }
-);
-
-// Calculate mean squared error between predicted and real labels.
-Double meanSquaredError = new JavaDoubleRDD(predictionAndLabel.map(
-  new Function<Tuple2<Double, Double>, Object>() {
-    @Override public Object call(Tuple2<Double, Double> pl) {
-      return Math.pow(pl._1() - pl._2(), 2);
-    }
-  }
-).rdd()).mean();
-
-System.out.println("Mean Squared Error = " + meanSquaredError);
-{% endhighlight %}
+{% include_example python/mllib/isotonic_regression_example.py %}
 </div>
 </div>

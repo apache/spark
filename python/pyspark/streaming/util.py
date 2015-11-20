@@ -37,6 +37,11 @@ class TransformFunction(object):
         self.ctx = ctx
         self.func = func
         self.deserializers = deserializers
+        self._rdd_wrapper = lambda jrdd, ctx, ser: RDD(jrdd, ctx, ser)
+
+    def rdd_wrapper(self, func):
+        self._rdd_wrapper = func
+        return self
 
     def call(self, milliseconds, jrdds):
         try:
@@ -51,7 +56,7 @@ class TransformFunction(object):
             if len(sers) < len(jrdds):
                 sers += (sers[0],) * (len(jrdds) - len(sers))
 
-            rdds = [RDD(jrdd, self.ctx, ser) if jrdd else None
+            rdds = [self._rdd_wrapper(jrdd, self.ctx, ser) if jrdd else None
                     for jrdd, ser in zip(jrdds, sers)]
             t = datetime.fromtimestamp(milliseconds / 1000.0)
             r = self.func(t, *rdds)
@@ -125,4 +130,6 @@ def rddToFileName(prefix, suffix, timestamp):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

@@ -74,6 +74,10 @@ code {
   color: #444444;
 }
 
+div .highlight pre {
+  font-size: 12px;
+}
+
 a code {
   color: #0088cc;
 }
@@ -146,3 +150,8 @@ ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
 .MathJax .mi { color: inherit }
 .MathJax .mf { color: inherit }
 .MathJax .mh { color: inherit }
+
+/**
+ * AnchorJS (anchor links when hovering over headers)
+ */
+a.anchorjs-link:hover { text-decoration: none; }

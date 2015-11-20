@@ -17,40 +17,30 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.sources.{HadoopFsRelation, BaseRelation}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-object RDDConversions {
-  def productToRowRdd[A <: Product](data: RDD[A], schema: StructType): RDD[Row] = {
-    data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new SpecificMutableRow(schema.fields.map(_.dataType))
-        val schemaFields = schema.fields.toArray
-        val converters = schemaFields.map {
-          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
-        }
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = converters(i)(r.productElement(i))
-            i += 1
-          }
 
-          mutableRow
+object RDDConversions {
+  def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
+    data.mapPartitions { iterator =>
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r.productElement(i))
+          i += 1
         }
+
+        mutableRow
       }
     }
   }
@@ -58,36 +48,35 @@ object RDDConversions {
   /**
    * Convert the objects inside Row into the types Catalyst expected.
    */
-  def rowToRowRdd(data: RDD[Row], schema: StructType): RDD[Row] = {
+  def rowToRowRdd(data: RDD[Row], outputTypes: Seq[DataType]): RDD[InternalRow] = {
     data.mapPartitions { iterator =>
-      if (iterator.isEmpty) {
-        Iterator.empty
-      } else {
-        val bufferedIterator = iterator.buffered
-        val mutableRow = new GenericMutableRow(bufferedIterator.head.toSeq.toArray)
-        val schemaFields = schema.fields.toArray
-        val converters = schemaFields.map {
-          f => CatalystTypeConverters.createToCatalystConverter(f.dataType)
+      val numColumns = outputTypes.length
+      val mutableRow = new GenericMutableRow(numColumns)
+      val converters = outputTypes.map(CatalystTypeConverters.createToCatalystConverter)
+      iterator.map { r =>
+        var i = 0
+        while (i < numColumns) {
+          mutableRow(i) = converters(i)(r(i))
+          i += 1
         }
-        bufferedIterator.map { r =>
-          var i = 0
-          while (i < mutableRow.length) {
-            mutableRow(i) = converters(i)(r(i))
-            i += 1
-          }
 
-          mutableRow
-        }
+        mutableRow
       }
     }
   }
 }
 
 /** Logical plan node for scanning data from an RDD. */
-private[sql] case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlContext: SQLContext)
+private[sql] case class LogicalRDD(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow])(sqlContext: SQLContext)
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil
+
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    sqlContext :: Nil
+  }
 
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
@@ -105,28 +94,25 @@ private[sql] case class LogicalRDD(output: Seq[Attribute], rdd: RDD[Row])(sqlCon
 }
 
 /** Physical plan node for scanning data from an RDD. */
-private[sql] case class PhysicalRDD(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {
-  protected override def doExecute(): RDD[Row] = rdd
+private[sql] case class PhysicalRDD(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow],
+    extraInformation: String,
+    override val outputsUnsafeRows: Boolean = false)
+  extends LeafNode {
+
+  protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
 }
 
-/** Logical plan node for scanning data from a local collection. */
-private[sql]
-case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[Row])(sqlContext: SQLContext)
-   extends LogicalPlan with MultiInstanceRelation {
-
-  override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): this.type =
-    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
-
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rows == rows
-    case _ => false
+private[sql] object PhysicalRDD {
+  def createFromDataSource(
+      output: Seq[Attribute],
+      rdd: RDD[InternalRow],
+      relation: BaseRelation,
+      extraInformation: String = ""): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString + extraInformation,
+      relation.isInstanceOf[HadoopFsRelation])
   }
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    // TODO: Improve the statistics estimation.
-    // This is made small enough so it can be broadcasted.
-    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
-  )
 }

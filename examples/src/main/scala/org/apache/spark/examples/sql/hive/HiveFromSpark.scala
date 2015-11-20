@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
 import com.google.common.io.{ByteStreams, Files}
@@ -77,3 +78,4 @@ object HiveFromSpark {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -91,8 +91,8 @@ public class ExternalShuffleIntegrationSuite {
     dataContext1.create();
     dataContext1.insertHashShuffleData(1, 0, exec1Blocks);
 
-    conf = new TransportConf(new SystemPropertyConfigProvider());
-    handler = new ExternalShuffleBlockHandler(conf);
+    conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+    handler = new ExternalShuffleBlockHandler(conf, null);
     TransportContext transportContext = new TransportContext(conf, handler);
     server = transportContext.createServer();
   }

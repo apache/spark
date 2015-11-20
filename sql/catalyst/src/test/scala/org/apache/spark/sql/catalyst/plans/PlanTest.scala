@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
@@ -26,8 +25,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * Provides helper methods for comparing plans.
  */
-class PlanTest extends FunSuite {
-
+abstract class PlanTest extends SparkFunSuite {
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.

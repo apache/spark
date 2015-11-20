@@ -50,6 +50,7 @@ spark-tests.log
 streaming-tests.log
 dependency-reduced-pom.xml
 .ensime
+.ensime_cache/
 .ensime_lucene
 checkpoint
 derby.log
@@ -66,6 +67,7 @@ scalastyle-output.xml
 R-unit-tests.log
 R/unit-tests.out
 python/lib/pyspark.zip
+lint-r-report.log
 
 # For Hive
 metastore_db/
@@ -73,3 +75,7 @@ metastore/
 warehouse/
 TempStatsStore/
 sql/hive-thriftserver/test_warehouses
+
+# For R session data
+.RHistory
+.RData

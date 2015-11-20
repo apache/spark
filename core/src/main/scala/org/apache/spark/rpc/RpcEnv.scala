@@ -17,10 +17,7 @@
 
 package org.apache.spark.rpc
 
-import java.net.URI
-
-import scala.concurrent.{Await, Future}
-import scala.language.postfixOps
+import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.util.{RpcUtils, Utils}
@@ -33,12 +30,12 @@ import org.apache.spark.util.{RpcUtils, Utils}
 private[spark] object RpcEnv {
 
   private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
-    // Add more RpcEnv implementations here
-    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "akka")
+    val rpcEnvNames = Map(
+      "akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory",
+      "netty" -> "org.apache.spark.rpc.netty.NettyRpcEnvFactory")
+    val rpcEnvName = conf.get("spark.rpc", "netty")
     val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Class.forName(rpcEnvFactoryClassName, true, Utils.getContextOrSparkClassLoader).
-      newInstance().asInstanceOf[RpcEnvFactory]
+    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
   }
 
   def create(
@@ -46,12 +43,12 @@ private[spark] object RpcEnv {
       host: String,
       port: Int,
       conf: SparkConf,
-      securityManager: SecurityManager): RpcEnv = {
+      securityManager: SecurityManager,
+      clientMode: Boolean = false): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
-    val config = RpcEnvConfig(conf, name, host, port, securityManager)
+    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
     getRpcEnvFactory(conf).create(config)
   }
-
 }
 
 
@@ -66,7 +63,7 @@ private[spark] object RpcEnv {
  */
 private[spark] abstract class RpcEnv(conf: SparkConf) {
 
-  private[spark] val defaultLookupTimeout = RpcUtils.lookupTimeout(conf)
+  private[spark] val defaultLookupTimeout = RpcUtils.lookupRpcTimeout(conf)
 
   /**
    * Return RpcEndpointRef of the registered [[RpcEndpoint]]. Will be used to implement
@@ -94,16 +91,7 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * Retrieve the [[RpcEndpointRef]] represented by `uri`. This is a blocking action.
    */
   def setupEndpointRefByURI(uri: String): RpcEndpointRef = {
-    Await.result(asyncSetupEndpointRefByURI(uri), defaultLookupTimeout)
-  }
-
-  /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
-   * asynchronously.
-   */
-  def asyncSetupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
-    asyncSetupEndpointRefByURI(uriOf(systemName, address, endpointName))
+    defaultLookupTimeout.awaitResult(asyncSetupEndpointRefByURI(uri))
   }
 
   /**
@@ -138,6 +126,12 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
    * creating it manually because different [[RpcEnv]] may have different formats.
    */
   def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
+
+  /**
+   * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
+   * that contains [[RpcEndpointRef]]s, the deserialization codes should be wrapped by this method.
+   */
+  def deserialize[T](deserializationAction: () => T): T
 }
 
 
@@ -146,39 +140,5 @@ private[spark] case class RpcEnvConfig(
     name: String,
     host: String,
     port: Int,
-    securityManager: SecurityManager)
-
-
-/**
- * Represents a host and port.
- */
-private[spark] case class RpcAddress(host: String, port: Int) {
-  // TODO do we need to add the type of RpcEnv in the address?
-
-  val hostPort: String = host + ":" + port
-
-  override val toString: String = hostPort
-}
-
-
-private[spark] object RpcAddress {
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURI(uri: URI): RpcAddress = {
-    RpcAddress(uri.getHost, uri.getPort)
-  }
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURIString(uri: String): RpcAddress = {
-    fromURI(new java.net.URI(uri))
-  }
-
-  def fromSparkURL(sparkUrl: String): RpcAddress = {
-    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
-    RpcAddress(host, port)
-  }
-}
+    securityManager: SecurityManager,
+    clientMode: Boolean)

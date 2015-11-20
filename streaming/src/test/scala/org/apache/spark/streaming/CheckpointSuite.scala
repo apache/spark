@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming
 
-import java.io.File
+import java.io.{ObjectOutputStream, ByteArrayOutputStream, ByteArrayInputStream, File}
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets
@@ -29,10 +29,14 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, Text}
 import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.mockito.Mockito.mock
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.TestUtils
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
-import org.apache.spark.util.{Clock, ManualClock, Utils}
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{MutableURLClassLoader, Clock, ManualClock, Utils}
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -191,8 +195,51 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests if "spark.driver.host" and "spark.driver.port" is set by user, can be recovered
+  // with correct value.
+  test("get correct spark.driver.[host|port] from checkpoint") {
+    val conf = Map("spark.driver.host" -> "localhost", "spark.driver.port" -> "9999")
+    conf.foreach(kv => System.setProperty(kv._1, kv._2))
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val originalConf = ssc.conf
+    assert(originalConf.get("spark.driver.host") === "localhost")
+    assert(originalConf.get("spark.driver.port") === "9999")
 
-  // This tests whether the systm can recover from a master failure with simple
+    val cp = new Checkpoint(ssc, Time(1000))
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.createSparkConf()
+    assert(newCpConf.contains("spark.driver.host"))
+    assert(newCpConf.contains("spark.driver.port"))
+    assert(newCpConf.get("spark.driver.host") === "localhost")
+    assert(newCpConf.get("spark.driver.port") === "9999")
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf = ssc.conf
+    assert(restoredConf.get("spark.driver.host") === "localhost")
+    assert(restoredConf.get("spark.driver.port") === "9999")
+    ssc.stop()
+
+    // If spark.driver.host and spark.driver.host is not set in system property, these two
+    // parameters should not be presented in the newly recovered conf.
+    conf.foreach(kv => System.clearProperty(kv._1))
+    val newCpConf1 = newCp.createSparkConf()
+    assert(!newCpConf1.contains("spark.driver.host"))
+    assert(!newCpConf1.contains("spark.driver.port"))
+
+    // Spark itself will dispatch a random, not-used port for spark.driver.port if it is not set
+    // explicitly.
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf1 = ssc.conf
+    assert(restoredConf1.get("spark.driver.host") === "localhost")
+    assert(restoredConf1.get("spark.driver.port") !== "9999")
+  }
+
+  // This tests whether the system can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
   // source - TestInputDStream.
   test("recovery with map and reduceByKey operations") {
@@ -348,6 +395,34 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
+  test("recovery maintains rate controller") {
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.checkpoint(checkpointDir)
+
+    val dstream = new RateTestInputDStream(ssc) {
+      override val rateController =
+        Some(new ReceiverRateController(id, new ConstantEstimator(200)))
+    }
+
+    val output = new TestOutputStreamWithPartitions(dstream.checkpoint(batchDuration * 2))
+    output.register()
+    runStreams(ssc, 5, 5)
+
+    ssc = new StreamingContext(checkpointDir)
+    ssc.start()
+
+    eventually(timeout(10.seconds)) {
+      assert(RateTestReceiver.getActive().nonEmpty)
+    }
+
+    advanceTimeWithRealDelay(ssc, 2)
+
+    eventually(timeout(10.seconds)) {
+      assert(RateTestReceiver.getActive().get.getDefaultBlockGeneratorRateLimit() === 200)
+    }
+    ssc.stop()
+  }
+
   // This tests whether file input stream remembers what files were seen before
   // the master failure and uses them again to process a large window operation.
   // It also tests whether batches, whose processing was incomplete due to the
@@ -424,11 +499,11 @@ class CheckpointSuite extends TestSuiteBase {
             }
           }
         }
-        clock.advance(batchDuration.milliseconds)
         eventually(eventuallyTimeout) {
           // Wait until all files have been recorded and all batches have started
           assert(recordedFiles(ssc) === Seq(1, 2, 3) && batchCounter.getNumStartedBatches === 3)
         }
+        clock.advance(batchDuration.milliseconds)
         // Wait for a checkpoint to be written
         eventually(eventuallyTimeout) {
           assert(Checkpoint.getCheckpointFiles(checkpointDir).size === 6)
@@ -454,9 +529,12 @@ class CheckpointSuite extends TestSuiteBase {
       // recorded before failure were saved and successfully recovered
       logInfo("*********** RESTARTING ************")
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
-        // So that the restarted StreamingContext's clock has gone forward in time since failure
-        ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration * 3).milliseconds.toString)
-        val oldClockTime = clock.getTimeMillis()
+        // "batchDuration.milliseconds * 3" has gone before restarting StreamingContext. And because
+        // the recovery time is read from the checkpoint time but the original clock doesn't align
+        // with the batch time, we need to add the offset "batchDuration.milliseconds / 2".
+        ssc.conf.set("spark.streaming.manualClock.jump",
+          (batchDuration.milliseconds / 2 + batchDuration.milliseconds * 3).toString)
+        val oldClockTime = clock.getTimeMillis() // 15000ms
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
@@ -467,10 +545,10 @@ class CheckpointSuite extends TestSuiteBase {
         ssc.start()
         // Verify that the clock has traveled forward to the expected time
         eventually(eventuallyTimeout) {
-          clock.getTimeMillis() === oldClockTime
+          assert(clock.getTimeMillis() === oldClockTime)
         }
-        // Wait for pre-failure batch to be recomputed (3 while SSC was down plus last batch)
-        val numBatchesAfterRestart = 4
+        // There are 5 batches between 6000ms and 15000ms (inclusive).
+        val numBatchesAfterRestart = 5
         eventually(eventuallyTimeout) {
           assert(batchCounter.getNumCompletedBatches === numBatchesAfterRestart)
         }
@@ -483,7 +561,6 @@ class CheckpointSuite extends TestSuiteBase {
             assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
           }
         }
-        clock.advance(batchDuration.milliseconds)
         logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed after restart")
         ssc.stop()
@@ -504,6 +581,58 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests whether spark can deserialize array object
+  // refer to SPARK-5569
+  test("recovery from checkpoint contains array object") {
+    // create a class which is invisible to app class loader
+    val jar = TestUtils.createJarWithClasses(
+      classNames = Seq("testClz"),
+      toStringValue = "testStringValue"
+      )
+
+    // invisible to current class loader
+    val appClassLoader = getClass.getClassLoader
+    intercept[ClassNotFoundException](appClassLoader.loadClass("testClz"))
+
+    // visible to mutableURLClassLoader
+    val loader = new MutableURLClassLoader(
+      Array(jar), appClassLoader)
+    assert(loader.loadClass("testClz").newInstance().toString == "testStringValue")
+
+    // create and serialize Array[testClz]
+    // scalastyle:off classforname
+    val arrayObj = Class.forName("[LtestClz;", false, loader)
+    // scalastyle:on classforname
+    val bos = new ByteArrayOutputStream()
+    new ObjectOutputStream(bos).writeObject(arrayObj)
+
+    // deserialize the Array[testClz]
+    val ois = new ObjectInputStreamWithLoader(
+      new ByteArrayInputStream(bos.toByteArray), loader)
+    assert(ois.readObject().asInstanceOf[Class[_]].getName == "[LtestClz;")
+  }
+
+  test("SPARK-11267: the race condition of two checkpoints in a batch") {
+    val jobGenerator = mock(classOf[JobGenerator])
+    val checkpointDir = Utils.createTempDir().toString
+    val checkpointWriter =
+      new CheckpointWriter(jobGenerator, conf, checkpointDir, new Configuration())
+    val bytes1 = Array.fill[Byte](10)(1)
+    new checkpointWriter.CheckpointWriteHandler(
+      Time(2000), bytes1, clearCheckpointDataLater = false).run()
+    val bytes2 = Array.fill[Byte](10)(2)
+    new checkpointWriter.CheckpointWriteHandler(
+      Time(1000), bytes2, clearCheckpointDataLater = true).run()
+    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir).reverse.map { path =>
+      new File(path.toUri)
+    }
+    assert(checkpointFiles.size === 2)
+    // Although bytes2 was written with an old time, it contains the latest status, so we should
+    // try to read from it at first.
+    assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
+    assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
+    checkpointWriter.stop()
+  }
 
   /**
    * Tests a streaming operation under checkpointing, by restarting the operation

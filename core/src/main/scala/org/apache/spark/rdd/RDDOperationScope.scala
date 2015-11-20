@@ -23,6 +23,7 @@ import com.fasterxml.jackson.annotation.{JsonIgnore, JsonInclude, JsonPropertyOr
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.google.common.base.Objects
 
 import org.apache.spark.{Logging, SparkContext}
 
@@ -67,6 +68,8 @@ private[spark] class RDDOperationScope(
     }
   }
 
+  override def hashCode(): Int = Objects.hashCode(id, name, parent)
+
   override def toString: String = toJson
 }
 
@@ -95,10 +98,9 @@ private[spark] object RDDOperationScope extends Logging {
   private[spark] def withScope[T](
       sc: SparkContext,
       allowNesting: Boolean = false)(body: => T): T = {
-    val stackTrace = Thread.currentThread.getStackTrace().tail // ignore "Thread#getStackTrace"
-    val ourMethodName = stackTrace(1).getMethodName // i.e. withScope
-    // Climb upwards to find the first method that's called something different
-    val callerMethodName = stackTrace
+    val ourMethodName = "withScope"
+    val callerMethodName = Thread.currentThread.getStackTrace()
+      .dropWhile(_.getMethodName != ourMethodName)
       .find(_.getMethodName != ourMethodName)
       .map(_.getMethodName)
       .getOrElse {

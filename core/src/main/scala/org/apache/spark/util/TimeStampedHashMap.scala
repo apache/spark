@@ -21,7 +21,8 @@ import java.util.Set
 import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.{JavaConversions, mutable}
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.Logging
 
@@ -50,8 +51,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   def iterator: Iterator[(A, B)] = {
-    val jIterator = getEntrySet.iterator
-    JavaConversions.asScalaIterator(jIterator).map(kv => (kv.getKey, kv.getValue.value))
+    getEntrySet.iterator.asScala.map(kv => (kv.getKey, kv.getValue.value))
   }
 
   def getEntrySet: Set[Entry[A, TimeStampedValue[B]]] = internalMap.entrySet
@@ -90,9 +90,7 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   }
 
   override def filter(p: ((A, B)) => Boolean): mutable.Map[A, B] = {
-    JavaConversions.mapAsScalaConcurrentMap(internalMap)
-      .map { case (k, TimeStampedValue(v, t)) => (k, v) }
-      .filter(p)
+    internalMap.asScala.map { case (k, TimeStampedValue(v, t)) => (k, v) }.filter(p)
   }
 
   override def empty: mutable.Map[A, B] = new TimeStampedHashMap[A, B]()

@@ -176,10 +176,15 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
  * A sampler for sampling with replacement, based on values drawn from Poisson distribution.
  *
  * @param fraction the sampling fraction (with replacement)
+ * @param useGapSamplingIfPossible if true, use gap sampling when sampling ratio is low.
  * @tparam T item type
  */
 @DeveloperApi
-class PoissonSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class PoissonSampler[T: ClassTag](
+    fraction: Double,
+    useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
+
+  def this(fraction: Double) = this(fraction, useGapSamplingIfPossible = true)
 
   /** Epsilon slop to avoid failure from floating point jitter. */
   require(
@@ -199,17 +204,18 @@ class PoissonSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] 
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (fraction <= 0.0) {
       Iterator.empty
-    } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
-        new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
+    } else if (useGapSamplingIfPossible &&
+               fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
+      new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
     } else {
-      items.flatMap { item => {
+      items.flatMap { item =>
         val count = rng.sample()
         if (count == 0) Iterator.empty else Iterator.fill(count)(item)
-      }}
+      }
     }
   }
 
-  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction)
+  override def clone: PoissonSampler[T] = new PoissonSampler[T](fraction, useGapSamplingIfPossible)
 }
 
 

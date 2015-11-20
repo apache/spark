@@ -176,7 +176,7 @@ class DStream(object):
                 print(record)
             if len(taken) > num:
                 print("...")
-            print()
+            print("")
 
         self.foreachRDD(takeAndPrint)
 
@@ -524,8 +524,8 @@ class DStream(object):
         `invFunc` can be None, then it will reduce all the RDDs in window, could be slower
         than having `invFunc`.
 
-        @param reduceFunc:     associative reduce function
-        @param invReduceFunc:  inverse function of `reduceFunc`
+        @param func:           associative reduce function
+        @param invFunc:        inverse function of `reduceFunc`
         @param windowDuration: width of the window; must be a multiple of this DStream's
                               batching interval
         @param slideDuration:  sliding interval of the window (i.e., the interval after which
@@ -556,7 +556,7 @@ class DStream(object):
                                     if kv[1] is not None else kv[0])
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
-        if invReduceFunc:
+        if invFunc:
             jinvReduceFunc = TransformFunction(self._sc, invReduceFunc, reduced._jrdd_deserializer)
         else:
             jinvReduceFunc = None
@@ -610,7 +610,10 @@ class TransformedDStream(DStream):
         self.is_checkpointed = False
         self._jdstream_val = None
 
-        if (isinstance(prev, TransformedDStream) and
+        # Using type() to avoid folding the functions and compacting the DStreams which is not
+        # not strictly a object of TransformedDStream.
+        # Changed here is to avoid bug in KafkaTransformedDStream when calling offsetRanges().
+        if (type(prev) is TransformedDStream and
                 not prev.is_cached and not prev.is_checkpointed):
             prev_func = prev.func
             self.func = lambda t, rdd: func(t, prev_func(t, rdd))

@@ -10,7 +10,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 
 `\[
 \newcommand{\R}{\mathbb{R}}
-\newcommand{\E}{\mathbb{E}} 
+\newcommand{\E}{\mathbb{E}}
 \newcommand{\x}{\mathbf{x}}
 \newcommand{\y}{\mathbf{y}}
 \newcommand{\wv}{\mathbf{w}}
@@ -18,10 +18,10 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 \newcommand{\bv}{\mathbf{b}}
 \newcommand{\N}{\mathbb{N}}
 \newcommand{\id}{\mathbf{I}}
-\newcommand{\ind}{\mathbf{1}} 
-\newcommand{\0}{\mathbf{0}} 
-\newcommand{\unit}{\mathbf{e}} 
-\newcommand{\one}{\mathbf{1}} 
+\newcommand{\ind}{\mathbf{1}}
+\newcommand{\0}{\mathbf{0}}
+\newcommand{\unit}{\mathbf{e}}
+\newcommand{\one}{\mathbf{1}}
 \newcommand{\zero}{\mathbf{0}}
 \]`
 
@@ -29,7 +29,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
 
 Many standard *machine learning* methods can be formulated as a convex optimization problem, i.e.
 the task of finding a minimizer of a convex function `$f$` that depends on a variable vector
-`$\wv$` (called `weights` in the code), which has `$d$` entries. 
+`$\wv$` (called `weights` in the code), which has `$d$` entries.
 Formally, we can write this as the optimization problem `$\min_{\wv \in\R^d} \; f(\wv)$`, where
 the objective function is of the form
 `\begin{equation}
@@ -39,7 +39,7 @@ the objective function is of the form
     \ .
 \end{equation}`
 Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
-`$y_i\in\R$` are their corresponding labels, which we want to predict. 
+`$y_i\in\R$` are their corresponding labels, which we want to predict.
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
 Several of MLlib's classification and regression algorithms fall into this category,
 and are discussed here.
@@ -99,6 +99,9 @@ regularizers in MLlib:
     <tr>
       <td>L1</td><td>$\|\wv\|_1$</td><td>$\mathrm{sign}(\wv)$</td>
     </tr>
+    <tr>
+      <td>elastic net</td><td>$\alpha \|\wv\|_1 + (1-\alpha)\frac{1}{2}\|\wv\|_2^2$</td><td>$\alpha \mathrm{sign}(\wv) + (1-\alpha) \wv$</td>
+    </tr>
   </tbody>
 </table>
 
@@ -107,7 +110,7 @@ of `$\wv$`.
 
 L2-regularized problems are generally easier to solve than L1-regularized due to smoothness.
 However, L1 regularization can help promote sparsity in weights leading to smaller and more interpretable models, the latter of which can be useful for feature selection.
-It is not recommended to train models without any regularization,
+[Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization) is a combination of L1 and L2 regularization. It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
 ### Optimization
@@ -162,12 +165,11 @@ training algorithm on this training data using a static method in the algorithm
 object, and make predictions with the resulting model to compute the training
 error.
 
+Refer to the [`SVMWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD) and [`SVMModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMModel) for details on the API.
+
 {% highlight scala %}
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
 
 // Load training data in LIBSVM format.
@@ -228,18 +230,18 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given bellow:
+that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`SVMWithSGD` Java docs](api/java/org/apache/spark/mllib/classification/SVMWithSGD.html) and [`SVMModel` Java docs](api/java/org/apache/spark/mllib/classification/SVMModel.html) for details on the API.
 
 {% highlight java %}
-import java.util.Random;
-
 import scala.Tuple2;
 
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.classification.*;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
-import org.apache.spark.mllib.linalg.Vector;
+
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
@@ -282,8 +284,8 @@ public class SVMClassifier {
     System.out.println("Area under ROC = " + auROC);
 
     // Save and load model
-    model.save(sc.sc(), "myModelPath");
-    SVMModel sameModel = SVMModel.load(sc.sc(), "myModelPath");
+    model.save(sc, "myModelPath");
+    SVMModel sameModel = SVMModel.load(sc, "myModelPath");
   }
 }
 {% endhighlight %}
@@ -315,15 +317,14 @@ a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
-The following example shows how to load a sample dataset, build Logistic Regression model,
+The following example shows how to load a sample dataset, build SVM model,
 and make predictions with the resulting model to compute the training error.
 
-Note that the Python API does not yet support model save/load but will in the future.
+Refer to the [`SVMWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMWithSGD) and [`SVMModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMModel) for more details on the API.
 
 {% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithSGD
+from pyspark.mllib.classification import SVMWithSGD, SVMModel
 from pyspark.mllib.regression import LabeledPoint
-from numpy import array
 
 # Load and parse the data
 def parsePoint(line):
@@ -334,12 +335,16 @@ data = sc.textFile("data/mllib/sample_svm_data.txt")
 parsedData = data.map(parsePoint)
 
 # Build the model
-model = LogisticRegressionWithSGD.train(parsedData)
+model = SVMWithSGD.train(parsedData, iterations=100)
 
 # Evaluating the model on training data
 labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = SVMModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
@@ -396,6 +401,8 @@ test, and use
 to fit a logistic regression model.
 Then the model is evaluated against the test dataset and saved to disk.
 
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, LogisticRegressionModel}
@@ -441,6 +448,8 @@ test, and use
 [LogisticRegressionWithLBFGS](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html)
 to fit a logistic regression model.
 Then the model is evaluated against the test dataset and saved to disk.
+
+Refer to the [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -502,10 +511,11 @@ and make predictions with the resulting model to compute the training error.
 Note that the Python API does not yet support multiclass classification and model save/load but
 will in the future.
 
+Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionModel) for more details on the API.
+
 {% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
 from pyspark.mllib.regression import LabeledPoint
-from numpy import array
 
 # Load and parse the data
 def parsePoint(line):
@@ -522,6 +532,10 @@ model = LogisticRegressionWithLBFGS.train(parsedData)
 labelsAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 trainErr = labelsAndPreds.filter(lambda (v, p): v != p).count() / float(parsedData.count())
 print("Training Error = " + str(trainErr))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LogisticRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
@@ -531,7 +545,7 @@ print("Training Error = " + str(trainErr))
 ### Linear least squares, Lasso, and ridge regression
 
 
-Linear least squares is the most common formulation for regression problems. 
+Linear least squares is the most common formulation for regression problems.
 It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss
 function in the formulation given by the squared loss:
 `\[
@@ -539,8 +553,8 @@ L(\wv;\x,y) :=  \frac{1}{2} (\wv^T \x - y)^2.
 \]`
 
 Various related regression methods are derived by using different types of regularization:
-[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or 
-[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses 
+[*ordinary least squares*](http://en.wikipedia.org/wiki/Ordinary_least_squares) or
+[*linear least squares*](http://en.wikipedia.org/wiki/Linear_least_squares_(mathematics)) uses
  no regularization; [*ridge regression*](http://en.wikipedia.org/wiki/Ridge_regression) uses L2
 regularization; and [*Lasso*](http://en.wikipedia.org/wiki/Lasso_(statistics)) uses L1
 regularization.  For all of these models, the average loss or training error, $\frac{1}{n} \sum_{i=1}^n (\wv^T x_i - y_i)^2$, is
@@ -552,9 +566,11 @@ known as the [mean squared error](http://en.wikipedia.org/wiki/Mean_squared_erro
 
 <div data-lang="scala" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
+The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
+
+Refer to the [`LinearRegressionWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -596,7 +612,9 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
-the Scala snippet provided, is presented bellow:
+the Scala snippet provided, is presented below:
+
+Refer to the [`LinearRegressionWithSGD` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html) and [`LinearRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -614,7 +632,7 @@ public class LinearRegression {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
     JavaSparkContext sc = new JavaSparkContext(conf);
-    
+
     // Load and parse the data
     String path = "data/mllib/ridge-data/lpsa.data";
     JavaRDD<String> data = sc.textFile(path);
@@ -634,7 +652,7 @@ public class LinearRegression {
 
     // Building the model
     int numIterations = 100;
-    final LinearRegressionModel model = 
+    final LinearRegressionModel model =
       LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
 
     // Evaluate model on training examples and compute training error
@@ -665,15 +683,16 @@ public class LinearRegression {
 
 <div data-lang="python" markdown="1">
 The following example demonstrate how to load training data, parse it as an RDD of LabeledPoint.
-The example then uses LinearRegressionWithSGD to build a simple linear model to predict label 
+The example then uses LinearRegressionWithSGD to build a simple linear model to predict label
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 Note that the Python API does not yet support model save/load but will in the future.
 
+Refer to the [`LinearRegressionWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionModel) for more details on the API.
+
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
-from numpy import array
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
 
 # Load and parse the data
 def parsePoint(line):
@@ -690,6 +709,10 @@ model = LinearRegressionWithSGD.train(parsedData)
 valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
 MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y) / valuesAndPreds.count()
 print("Mean Squared Error = " + str(MSE))
+
+# Save and load model
+model.save(sc, "myModelPath")
+sameModel = LinearRegressionModel.load(sc, "myModelPath")
 {% endhighlight %}
 </div>
 </div>
@@ -702,8 +725,8 @@ a dependency.
 
 ###Streaming linear regression
 
-When data arrive in a streaming fashion, it is useful to fit regression models online, 
-updating the parameters of the model as new data arrives. MLlib currently supports 
+When data arrive in a streaming fashion, it is useful to fit regression models online,
+updating the parameters of the model as new data arrives. MLlib currently supports
 streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
@@ -718,7 +741,7 @@ online to the first stream, and make predictions on the second stream.
 
 <div data-lang="scala" markdown="1">
 
-First, we import the necessary classes for parsing our input data and creating the model. 
+First, we import the necessary classes for parsing our input data and creating the model.
 
 {% highlight scala %}
 
@@ -730,7 +753,7 @@ import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
 
 Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
 has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
-for more info. For this example, we use labeled points in training and testing streams, 
+for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
@@ -750,7 +773,7 @@ val model = new StreamingLinearRegressionWithSGD()
 
 {% endhighlight %}
 
-Now we register the streams for training and testing and start the job. 
+Now we register the streams for training and testing and start the job.
 Printing predictions alongside true labels lets us easily see the result.
 
 {% highlight scala %}
@@ -760,14 +783,66 @@ model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()
 
 ssc.start()
 ssc.awaitTermination()
- 
+
 {% endhighlight %}
 
 We can now save text files with data to the training or testing folders.
-Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label 
-and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir` 
-the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions. 
-As you feed more data to the training directory, the predictions 
+Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
+and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
+the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+As you feed more data to the training directory, the predictions
+will get better!
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+First, we import the necessary classes for parsing our input data and creating the model.
+
+{% highlight python %}
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.regression import StreamingLinearRegressionWithSGD
+{% endhighlight %}
+
+Then we make input streams for training and testing data. We assume a StreamingContext `ssc`
+has already been created, see [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing)
+for more info. For this example, we use labeled points in training and testing streams,
+but in practice you will likely want to use unlabeled vectors for test data.
+
+{% highlight python %}
+def parse(lp):
+    label = float(lp[lp.find('(') + 1: lp.find(',')])
+    vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+    return LabeledPoint(label, vec)
+
+trainingData = ssc.textFileStream("/training/data/dir").map(parse).cache()
+testData = ssc.textFileStream("/testing/data/dir").map(parse)
+{% endhighlight %}
+
+We create our model by initializing the weights to 0
+
+{% highlight python %}
+numFeatures = 3
+model = StreamingLinearRegressionWithSGD()
+model.setInitialWeights([0.0, 0.0, 0.0])
+{% endhighlight %}
+
+Now we register the streams for training and testing and start the job.
+
+{% highlight python %}
+model.trainOn(trainingData)
+print(model.predictOnValues(testData.map(lambda lp: (lp.label, lp.features))))
+
+ssc.start()
+ssc.awaitTermination()
+{% endhighlight %}
+
+We can now save text files with data to the training or testing folders.
+Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
+and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
+the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+As you feed more data to the training directory, the predictions
 will get better!
 
 </div>
@@ -785,8 +860,7 @@ gradient descent (`stepSize`, `numIterations`, `miniBatchFraction`).  For each o
 all three possible regularizations (none, L1 or L2).
 
 For Logistic Regression, [L-BFGS](api/scala/index.html#org.apache.spark.mllib.optimization.LBFGS)
-version is implemented under [LogisticRegressionWithLBFGS]
-(api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
+version is implemented under [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS), and this
 version supports both binary and multinomial Logistic Regression while SGD version only supports
 binary Logistic Regression. However, L-BFGS version doesn't support L1 regularization but SGD one
 supports L1 regularization. When L1 regularization is not required, L-BFGS version is strongly

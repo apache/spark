@@ -15,25 +15,31 @@
 # limitations under the License.
 #
 
-from py4j.java_gateway import Py4JJavaError
+from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
 from pyspark.storagelevel import StorageLevel
-from pyspark.serializers import PairDeserializer, NoOpSerializer
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer, PairDeserializer, \
+    NoOpSerializer
 from pyspark.streaming import DStream
+from pyspark.streaming.dstream import TransformedDStream
+from pyspark.streaming.util import TransformFunction
 
-__all__ = ['Broker', 'KafkaUtils', 'OffsetRange', 'TopicAndPartition', 'utf8_decoder']
+__all__ = ['Broker', 'KafkaMessageAndMetadata', 'KafkaUtils', 'OffsetRange',
+           'TopicAndPartition', 'utf8_decoder']
 
 
 def utf8_decoder(s):
     """ Decode the unicode as UTF-8 """
-    return s and s.decode('utf-8')
+    if s is None:
+        return None
+    return s.decode('utf-8')
 
 
 class KafkaUtils(object):
 
     @staticmethod
-    def createStream(ssc, zkQuorum, groupId, topics, kafkaParams={},
+    def createStream(ssc, zkQuorum, groupId, topics, kafkaParams=None,
                      storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
                      keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
@@ -50,6 +56,8 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
         """
+        if kafkaParams is None:
+            kafkaParams = dict()
         kafkaParams.update({
             "zookeeper.connect": zkQuorum,
             "group.id": groupId,
@@ -75,8 +83,9 @@ class KafkaUtils(object):
         return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
 
     @staticmethod
-    def createDirectStream(ssc, topics, kafkaParams, fromOffsets={},
-                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+    def createDirectStream(ssc, topics, kafkaParams, fromOffsets=None,
+                           keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                           messageHandler=None):
         """
         .. note:: Experimental
 
@@ -101,12 +110,24 @@ class KafkaUtils(object):
                             point of the stream.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder).
         :param valueDecoder:  A function used to decode value (default is utf8_decoder).
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A DStream object
         """
+        if fromOffsets is None:
+            fromOffsets = dict()
         if not isinstance(topics, list):
             raise TypeError("topics should be list")
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
+
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
 
         try:
             helperClass = ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
@@ -115,19 +136,28 @@ class KafkaUtils(object):
 
             jfromOffsets = dict([(k._jTopicAndPartition(helper),
                                   v) for (k, v) in fromOffsets.items()])
-            jstream = helper.createDirectStream(ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+            if messageHandler is None:
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                func = funcWithoutMessageHandler
+                jstream = helper.createDirectStreamWithoutMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
+            else:
+                ser = AutoBatchedSerializer(PickleSerializer())
+                func = funcWithMessageHandler
+                jstream = helper.createDirectStreamWithMessageHandler(
+                    ssc._jssc, kafkaParams, set(topics), jfromOffsets)
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(ssc.sparkContext)
             raise e
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        stream = DStream(jstream, ssc, ser)
-        return stream.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
+        stream = DStream(jstream, ssc, ser).map(func)
+        return KafkaDStream(stream._jdstream, ssc, stream._jrdd_deserializer)
 
     @staticmethod
-    def createRDD(sc, kafkaParams, offsetRanges, leaders={},
-                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
+    def createRDD(sc, kafkaParams, offsetRanges, leaders=None,
+                  keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
+                  messageHandler=None):
         """
         .. note:: Experimental
 
@@ -140,12 +170,24 @@ class KafkaUtils(object):
             map, in which case leaders will be looked up on the driver.
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
+        :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
+                               meta using messageHandler (default is None).
         :return: A RDD object
         """
+        if leaders is None:
+            leaders = dict()
         if not isinstance(kafkaParams, dict):
             raise TypeError("kafkaParams should be dict")
         if not isinstance(offsetRanges, list):
             raise TypeError("offsetRanges should be list")
+
+        def funcWithoutMessageHandler(k_v):
+            return (keyDecoder(k_v[0]), valueDecoder(k_v[1]))
+
+        def funcWithMessageHandler(m):
+            m._set_key_decoder(keyDecoder)
+            m._set_value_decoder(valueDecoder)
+            return messageHandler(m)
 
         try:
             helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
@@ -154,15 +196,21 @@ class KafkaUtils(object):
             joffsetRanges = [o._jOffsetRange(helper) for o in offsetRanges]
             jleaders = dict([(k._jTopicAndPartition(helper),
                               v._jBroker(helper)) for (k, v) in leaders.items()])
-            jrdd = helper.createRDD(sc._jsc, kafkaParams, joffsetRanges, jleaders)
+            if messageHandler is None:
+                jrdd = helper.createRDDWithoutMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
+                rdd = RDD(jrdd, sc, ser).map(funcWithoutMessageHandler)
+            else:
+                jrdd = helper.createRDDWithMessageHandler(
+                    sc._jsc, kafkaParams, joffsetRanges, jleaders)
+                rdd = RDD(jrdd, sc).map(funcWithMessageHandler)
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 KafkaUtils._printErrorMsg(sc)
             raise e
 
-        ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
-        rdd = RDD(jrdd, sc, ser)
-        return rdd.map(lambda k_v: (keyDecoder(k_v[0]), valueDecoder(k_v[1])))
+        return KafkaRDD(rdd._jrdd, sc, rdd._jrdd_deserializer)
 
     @staticmethod
     def _printErrorMsg(sc):
@@ -200,14 +248,30 @@ class OffsetRange(object):
         :param fromOffset: Inclusive starting offset.
         :param untilOffset: Exclusive ending offset.
         """
-        self._topic = topic
-        self._partition = partition
-        self._fromOffset = fromOffset
-        self._untilOffset = untilOffset
+        self.topic = topic
+        self.partition = partition
+        self.fromOffset = fromOffset
+        self.untilOffset = untilOffset
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self.topic == other.topic
+                    and self.partition == other.partition
+                    and self.fromOffset == other.fromOffset
+                    and self.untilOffset == other.untilOffset)
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return "OffsetRange(topic: %s, partition: %d, range: [%d -> %d]" \
+               % (self.topic, self.partition, self.fromOffset, self.untilOffset)
 
     def _jOffsetRange(self, helper):
-        return helper.createOffsetRange(self._topic, self._partition, self._fromOffset,
-                                        self._untilOffset)
+        return helper.createOffsetRange(self.topic, self.partition, self.fromOffset,
+                                        self.untilOffset)
 
 
 class TopicAndPartition(object):
@@ -227,6 +291,16 @@ class TopicAndPartition(object):
     def _jTopicAndPartition(self, helper):
         return helper.createTopicAndPartition(self._topic, self._partition)
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return (self._topic == other._topic
+                    and self._partition == other._partition)
+        else:
+            return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 
 class Broker(object):
     """
@@ -244,3 +318,137 @@ class Broker(object):
 
     def _jBroker(self, helper):
         return helper.createBroker(self._host, self._port)
+
+
+class KafkaRDD(RDD):
+    """
+    A Python wrapper of KafkaRDD, to provide additional information on normal RDD.
+    """
+
+    def __init__(self, jrdd, ctx, jrdd_deserializer):
+        RDD.__init__(self, jrdd, ctx, jrdd_deserializer)
+
+    def offsetRanges(self):
+        """
+        Get the OffsetRange of specific KafkaRDD.
+        :return: A list of OffsetRange
+        """
+        try:
+            helperClass = self.ctx._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
+                .loadClass("org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper")
+            helper = helperClass.newInstance()
+            joffsetRanges = helper.offsetRangesOfKafkaRDD(self._jrdd.rdd())
+        except Py4JJavaError as e:
+            if 'ClassNotFoundException' in str(e.java_exception):
+                KafkaUtils._printErrorMsg(self.ctx)
+            raise e
+
+        ranges = [OffsetRange(o.topic(), o.partition(), o.fromOffset(), o.untilOffset())
+                  for o in joffsetRanges]
+        return ranges
+
+
+class KafkaDStream(DStream):
+    """
+    A Python wrapper of KafkaDStream
+    """
+
+    def __init__(self, jdstream, ssc, jrdd_deserializer):
+        DStream.__init__(self, jdstream, ssc, jrdd_deserializer)
+
+    def foreachRDD(self, func):
+        """
+        Apply a function to each RDD in this DStream.
+        """
+        if func.__code__.co_argcount == 1:
+            old_func = func
+            func = lambda r, rdd: old_func(rdd)
+        jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer) \
+            .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
+        api = self._ssc._jvm.PythonDStream
+        api.callForeachRDD(self._jdstream, jfunc)
+
+    def transform(self, func):
+        """
+        Return a new DStream in which each RDD is generated by applying a function
+        on each RDD of this DStream.
+
+        `func` can have one argument of `rdd`, or have two arguments of
+        (`time`, `rdd`)
+        """
+        if func.__code__.co_argcount == 1:
+            oldfunc = func
+            func = lambda t, rdd: oldfunc(rdd)
+        assert func.__code__.co_argcount == 2, "func should take one or two arguments"
+
+        return KafkaTransformedDStream(self, func)
+
+
+class KafkaTransformedDStream(TransformedDStream):
+    """
+    Kafka specific wrapper of TransformedDStream to transform on Kafka RDD.
+    """
+
+    def __init__(self, prev, func):
+        TransformedDStream.__init__(self, prev, func)
+
+    @property
+    def _jdstream(self):
+        if self._jdstream_val is not None:
+            return self._jdstream_val
+
+        jfunc = TransformFunction(self._sc, self.func, self.prev._jrdd_deserializer) \
+            .rdd_wrapper(lambda jrdd, ctx, ser: KafkaRDD(jrdd, ctx, ser))
+        dstream = self._sc._jvm.PythonTransformedDStream(self.prev._jdstream.dstream(), jfunc)
+        self._jdstream_val = dstream.asJavaDStream()
+        return self._jdstream_val
+
+
+class KafkaMessageAndMetadata(object):
+    """
+    Kafka message and metadata information. Including topic, partition, offset and message
+    """
+
+    def __init__(self, topic, partition, offset, key, message):
+        """
+        Python wrapper of Kafka MessageAndMetadata
+        :param topic: topic name of this Kafka message
+        :param partition: partition id of this Kafka message
+        :param offset: Offset of this Kafka message in the specific partition
+        :param key: key payload of this Kafka message, can be null if this Kafka message has no key
+                    specified, the return data is undecoded bytearry.
+        :param message: actual message payload of this Kafka message, the return data is
+                        undecoded bytearray.
+        """
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
+        self._rawKey = key
+        self._rawMessage = message
+        self._keyDecoder = utf8_decoder
+        self._valueDecoder = utf8_decoder
+
+    def __str__(self):
+        return "KafkaMessageAndMetadata(topic: %s, partition: %d, offset: %d, key and message...)" \
+               % (self.topic, self.partition, self.offset)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __reduce__(self):
+        return (KafkaMessageAndMetadata,
+                (self.topic, self.partition, self.offset, self._rawKey, self._rawMessage))
+
+    def _set_key_decoder(self, decoder):
+        self._keyDecoder = decoder
+
+    def _set_value_decoder(self, decoder):
+        self._valueDecoder = decoder
+
+    @property
+    def key(self):
+        return self._keyDecoder(self._rawKey)
+
+    @property
+    def message(self):
+        return self._valueDecoder(self._rawMessage)

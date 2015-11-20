@@ -52,4 +52,6 @@ public abstract class RpcHandler {
    * No further requests will come from this client.
    */
   public void connectionTerminated(TransportClient client) { }
+
+  public void exceptionCaught(Throwable cause, TransportClient client) { }
 }

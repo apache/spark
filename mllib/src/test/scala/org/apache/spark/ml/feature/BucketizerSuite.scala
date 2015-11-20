@@ -19,21 +19,18 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row}
 
-class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
+class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  @transient private var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
+  test("params") {
+    ParamsSuite.checkParams(new Bucketizer)
   }
 
   test("Bucket continuous features, without -inf,inf") {
@@ -115,9 +112,17 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
+
+  test("read/write") {
+    val t = new Bucketizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setSplits(Array(0.1, 0.8, 0.9))
+    testDefaultReadWrite(t)
+  }
 }
 
-private object BucketizerSuite extends FunSuite {
+private object BucketizerSuite extends SparkFunSuite {
   /** Brute force search for buckets.  Bucket i is defined by the range [split(i), split(i+1)). */
   def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
     require(feature >= splits.head)

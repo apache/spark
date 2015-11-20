@@ -24,16 +24,11 @@
 # Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
-
-. "$sbin/spark-config.sh"
-. "$SPARK_PREFIX/bin/load-spark-env.sh"
-
-if [ $# != 0 ]; then
-  echo "Using command line arguments for setting the log directory is deprecated. Please "
-  echo "set the spark.history.fs.logDirectory configuration option instead."
-  export SPARK_HISTORY_OPTS="$SPARK_HISTORY_OPTS -Dspark.history.fs.logDirectory=$1"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
 
-exec "$sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1
+. "${SPARK_HOME}/sbin/spark-config.sh"
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+exec "${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.history.HistoryServer 1 $@

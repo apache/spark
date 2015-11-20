@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{PackratParsers, RegexParsers}
+import scala.util.parsing.combinator.PackratParsers
 import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -28,14 +28,16 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def parse(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = synchronized {
     // Initialize the Keywords.
-    lexical.initialize(reservedWords)
+    initLexical
     phrase(start)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
+  /* One time initialization of lexical.This avoid reinitialization of  lexical in parse method */
+  protected lazy val initLexical: Unit = lexical.initialize(reservedWords)
 
   protected case class Keyword(str: String) {
     def normalize: String = lexical.normalizeKeyword(str)
@@ -76,7 +78,7 @@ private[sql] abstract class AbstractSparkSQLParser
 }
 
 class SqlLexical extends StdLexical {
-  case class FloatLit(chars: String) extends Token {
+  case class DecimalLit(chars: String) extends Token {
     override def toString: String = chars
   }
 
@@ -100,11 +102,16 @@ class SqlLexical extends StdLexical {
   }
 
   override lazy val token: Parser[Token] =
-    ( identChar ~ (identChar | digit).* ^^
-      { case first ~ rest => processIdent((first :: rest).mkString) }
+    ( rep1(digit) ~ scientificNotation ^^ { case i ~ s => DecimalLit(i.mkString + s) }
+    | '.' ~> (rep1(digit) ~ scientificNotation) ^^
+      { case i ~ s => DecimalLit("0." + i.mkString + s) }
+    | rep1(digit) ~ ('.' ~> digit.*) ~ scientificNotation ^^
+      { case i1 ~ i2 ~ s => DecimalLit(i1.mkString + "." + i2.mkString + s) }
+    | digit.* ~ identChar ~ (identChar | digit).* ^^
+      { case first ~ middle ~ rest => processIdent((first ++ (middle :: rest)).mkString) }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
-        case i ~ None    => NumericLit(i.mkString)
-        case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
+        case i ~ None => NumericLit(i.mkString)
+        case i ~ Some(d) => DecimalLit(i.mkString + "." + d.mkString)
       }
     | '\'' ~> chrExcept('\'', '\n', EofCh).* <~ '\'' ^^
       { case chars => StringLit(chars mkString "") }
@@ -120,6 +127,11 @@ class SqlLexical extends StdLexical {
     )
 
   override def identChar: Parser[Elem] = letter | elem('_')
+
+  private lazy val scientificNotation: Parser[String] =
+    (elem('e') | elem('E')) ~> (elem('+') | elem('-')).? ~ rep1(digit) ^^ {
+      case s ~ rest => "e" + s.mkString + rest.mkString
+    }
 
   override def whitespace: Parser[Any] =
     ( whitespaceChar

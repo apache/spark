@@ -18,13 +18,13 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.math.max
 
 import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 
 
 /**
@@ -87,14 +87,12 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
  * val row = Row(Row(1, 2, true))
  * // row: Row = [[1,2,true]]
  * }}}
- *
- * @group dataType
  */
 @DeveloperApi
 case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
   /** No-arg constructor for kryo. */
-  protected def this() = this(null)
+  def this() = this(Array.empty[StructField])
 
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
@@ -102,6 +100,108 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
+
+  /**
+   * Creates a new [[StructType]] by adding a new field.
+   * {{{
+   * val struct = (new StructType)
+   *   .add(StructField("a", IntegerType, true))
+   *   .add(StructField("b", LongType, false))
+   *   .add(StructField("c", StringType, true))
+   *}}}
+   */
+  def add(field: StructField): StructType = {
+    StructType(fields :+ field)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata.
+   *
+   * val struct = (new StructType)
+   *   .add("a", IntegerType)
+   *   .add("b", LongType)
+   *   .add("c", StringType)
+   */
+  def add(name: String, dataType: DataType): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable = true, Metadata.empty))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata.
+   *
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true)
+   *   .add("b", LongType, false)
+   *   .add("c", StringType, true)
+   */
+  def add(name: String, dataType: DataType, nullable: Boolean): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, Metadata.empty))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", IntegerType, true, Metadata.empty)
+   *   .add("b", LongType, false, Metadata.empty)
+   *   .add("c", StringType, true, Metadata.empty)
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: DataType,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
+    StructType(fields :+ new StructField(name, dataType, nullable, metadata))
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new nullable field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int")
+   *   .add("b", "long")
+   *   .add("c", "string")
+   * }}}
+   */
+  def add(name: String, dataType: String): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field with no metadata where the
+   * dataType is specified as a String.
+   *
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true)
+   *   .add("b", "long", false)
+   *   .add("c", "string", true)
+   * }}}
+   */
+  def add(name: String, dataType: String, nullable: Boolean): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+  }
+
+  /**
+   * Creates a new [[StructType]] by adding a new field and specifying metadata where the
+   * dataType is specified as a String.
+   * {{{
+   * val struct = (new StructType)
+   *   .add("a", "int", true, Metadata.empty)
+   *   .add("b", "long", false, Metadata.empty)
+   *   .add("c", "string", true, Metadata.empty)
+   * }}}
+   */
+  def add(
+      name: String,
+      dataType: String,
+      nullable: Boolean,
+      metadata: Metadata): StructType = {
+    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+  }
 
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
@@ -150,7 +250,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.toString()
   }
 
+  // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
+  // scalastyle:on println
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     fields.foreach(field => field.buildFormattedString(prefix, builder))
@@ -190,7 +292,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private[sql] def merge(that: StructType): StructType =
     StructType.merge(this, that).asInstanceOf[StructType]
 
-  private[spark] override def asNullable: StructType = {
+  override private[spark] def asNullable: StructType = {
     val newFields = fields.map {
       case StructField(name, dataType, nullable, metadata) =>
         StructField(name, dataType.asNullable, nullable = true, metadata)
@@ -198,15 +300,36 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
     StructType(newFields)
   }
+
+  override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
+    f(this) || fields.exists(field => field.dataType.existsRecursively(f))
+  }
+
+  @transient
+  private[sql] lazy val interpretedOrdering =
+    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 }
 
+object StructType extends AbstractDataType {
 
-object StructType {
+  override private[sql] def defaultConcreteType: DataType = new StructType
+
+  override private[sql] def acceptsType(other: DataType): Boolean = {
+    other.isInstanceOf[StructType]
+  }
+
+  override private[sql] def simpleString: String = "struct"
+
+  private[sql] def fromString(raw: String): StructType = DataType.fromString(raw) match {
+    case t: StructType => t
+    case _ => throw new RuntimeException(s"Failed parsing StructType: $raw")
+  }
 
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
-    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+    import scala.collection.JavaConverters._
+    StructType(fields.asScala)
   }
 
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
@@ -230,10 +353,10 @@ object StructType {
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
 
+        val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
-            rightFields
-              .find(_.name == leftName)
+            rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
               leftField.copy(
                 dataType = merge(leftType, rightType),
@@ -243,17 +366,27 @@ object StructType {
               .foreach(newFields += _)
         }
 
+        val leftMapped = fieldsMap(leftFields)
         rightFields
-          .filterNot(f => leftFields.map(_.name).contains(f.name))
+          .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach(newFields += _)
 
         StructType(newFields)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
-      DecimalType.Fixed(rightPrecision, rightScale)) =>
-        DecimalType(
-          max(leftScale, rightScale) + max(leftPrecision - leftScale, rightPrecision - rightScale),
-          max(leftScale, rightScale))
+        DecimalType.Fixed(rightPrecision, rightScale)) =>
+        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
+          DecimalType(leftPrecision, leftScale)
+        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
+        } else if (leftPrecision != rightPrecision) {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"precision $leftPrecision and $rightPrecision")
+        } else {
+          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+            s"scala $leftScale and $rightScale")
+        }
 
       case (leftUdt: UserDefinedType[_], rightUdt: UserDefinedType[_])
         if leftUdt.userClass == rightUdt.userClass => leftUdt
@@ -264,4 +397,9 @@ object StructType {
       case _ =>
         throw new SparkException(s"Failed to merge incompatible data types $left and $right")
     }
+
+  private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
+    import scala.collection.breakOut
+    fields.map(s => (s.name, s))(breakOut)
+  }
 }

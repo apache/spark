@@ -17,20 +17,17 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.col
 
-
-class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
-  private var sqlContext: SQLContext = _
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    sqlContext = new SQLContext(sc)
-  }
+class OneHotEncoderSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   def stringIndexed(): DataFrame = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
@@ -42,15 +39,20 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     indexer.transform(df)
   }
 
-  test("OneHotEncoder includeFirst = true") {
+  test("params") {
+    ParamsSuite.checkParams(new OneHotEncoder)
+  }
+
+  test("OneHotEncoder dropLast = false") {
     val transformed = stringIndexed()
     val encoder = new OneHotEncoder()
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
+      .setDropLast(false)
     val encoded = encoder.transform(transformed)
 
     val output = encoded.select("id", "labelVec").map { r =>
-      val vec = r.get(1).asInstanceOf[Vector]
+      val vec = r.getAs[Vector](1)
       (r.getInt(0), vec(0), vec(1), vec(2))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
@@ -59,22 +61,54 @@ class OneHotEncoderSuite extends FunSuite with MLlibTestSparkContext {
     assert(output === expected)
   }
 
-  test("OneHotEncoder includeFirst = false") {
+  test("OneHotEncoder dropLast = true") {
     val transformed = stringIndexed()
     val encoder = new OneHotEncoder()
-      .setIncludeFirst(false)
       .setInputCol("labelIndex")
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
 
     val output = encoded.select("id", "labelVec").map { r =>
-      val vec = r.get(1).asInstanceOf[Vector]
+      val vec = r.getAs[Vector](1)
       (r.getInt(0), vec(0), vec(1))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
-    val expected = Set((0, 0.0, 0.0), (1, 0.0, 1.0), (2, 1.0, 0.0),
-      (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0))
+    val expected = Set((0, 1.0, 0.0), (1, 0.0, 0.0), (2, 0.0, 1.0),
+      (3, 1.0, 0.0), (4, 1.0, 0.0), (5, 0.0, 1.0))
     assert(output === expected)
   }
 
+  test("input column with ML attribute") {
+    val attr = NominalAttribute.defaultAttr.withValues("small", "medium", "large")
+    val df = sqlContext.createDataFrame(Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply)).toDF("size")
+      .select(col("size").as("size", attr.toMetadata()))
+    val encoder = new OneHotEncoder()
+      .setInputCol("size")
+      .setOutputCol("encoded")
+    val output = encoder.transform(df)
+    val group = AttributeGroup.fromStructField(output.schema("encoded"))
+    assert(group.size === 2)
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("small").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("medium").withIndex(1))
+  }
+
+  test("input column without ML attribute") {
+    val df = sqlContext.createDataFrame(Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply)).toDF("index")
+    val encoder = new OneHotEncoder()
+      .setInputCol("index")
+      .setOutputCol("encoded")
+    val output = encoder.transform(df)
+    val group = AttributeGroup.fromStructField(output.schema("encoded"))
+    assert(group.size === 2)
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
+  }
+
+  test("read/write") {
+    val t = new OneHotEncoder()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setDropLast(false)
+    testDefaultReadWrite(t)
+  }
 }

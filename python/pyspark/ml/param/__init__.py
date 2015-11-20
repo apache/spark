@@ -18,6 +18,7 @@
 from abc import ABCMeta
 import copy
 
+from pyspark import since
 from pyspark.ml.util import Identifiable
 
 
@@ -27,6 +28,8 @@ __all__ = ['Param', 'Params']
 class Param(object):
     """
     A param with self-contained documentation.
+
+    .. versionadded:: 1.3.0
     """
 
     def __init__(self, parent, name, doc):
@@ -56,20 +59,25 @@ class Params(Identifiable):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
+
+    .. versionadded:: 1.3.0
     """
 
     __metaclass__ = ABCMeta
 
-    #: internal param map for user-supplied values param map
-    _paramMap = {}
+    def __init__(self):
+        super(Params, self).__init__()
+        #: internal param map for user-supplied values param map
+        self._paramMap = {}
 
-    #: internal param map for default values
-    _defaultParamMap = {}
+        #: internal param map for default values
+        self._defaultParamMap = {}
 
-    #: value returned by :py:func:`params`
-    _params = None
+        #: value returned by :py:func:`params`
+        self._params = None
 
     @property
+    @since("1.3.0")
     def params(self):
         """
         Returns all params ordered by name. The default implementation
@@ -81,6 +89,7 @@ class Params(Identifiable):
                                        [getattr(self, x) for x in dir(self) if x != "params"]))
         return self._params
 
+    @since("1.4.0")
     def explainParam(self, param):
         """
         Explains a single param and returns its name, doc, and optional
@@ -98,6 +107,7 @@ class Params(Identifiable):
         valueStr = "(" + ", ".join(values) + ")"
         return "%s: %s %s" % (param.name, param.doc, valueStr)
 
+    @since("1.4.0")
     def explainParams(self):
         """
         Returns the documentation of all params with their optionally
@@ -105,6 +115,7 @@ class Params(Identifiable):
         """
         return "\n".join([self.explainParam(param) for param in self.params])
 
+    @since("1.4.0")
     def getParam(self, paramName):
         """
         Gets a param by its name.
@@ -115,6 +126,7 @@ class Params(Identifiable):
         else:
             raise ValueError("Cannot find param with name %s." % paramName)
 
+    @since("1.4.0")
     def isSet(self, param):
         """
         Checks whether a param is explicitly set by user.
@@ -122,6 +134,7 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._paramMap
 
+    @since("1.4.0")
     def hasDefault(self, param):
         """
         Checks whether a param has a default value.
@@ -129,6 +142,7 @@ class Params(Identifiable):
         param = self._resolveParam(param)
         return param in self._defaultParamMap
 
+    @since("1.4.0")
     def isDefined(self, param):
         """
         Checks whether a param is explicitly set by user or has
@@ -136,6 +150,7 @@ class Params(Identifiable):
         """
         return self.isSet(param) or self.hasDefault(param)
 
+    @since("1.4.0")
     def hasParam(self, paramName):
         """
         Tests whether this instance contains a param with a given
@@ -144,10 +159,11 @@ class Params(Identifiable):
         param = self._resolveParam(paramName)
         return param in self.params
 
+    @since("1.4.0")
     def getOrDefault(self, param):
         """
         Gets the value of a param in the user-supplied param map or its
-        default value. Raises an error if either is set.
+        default value. Raises an error if neither is set.
         """
         param = self._resolveParam(param)
         if param in self._paramMap:
@@ -155,22 +171,27 @@ class Params(Identifiable):
         else:
             return self._defaultParamMap[param]
 
-    def extractParamMap(self, extra={}):
+    @since("1.4.0")
+    def extractParamMap(self, extra=None):
         """
         Extracts the embedded default param values and user-supplied
         values, and then merges them with extra values from input into
         a flat param map, where the latter value is used if there exist
         conflicts, i.e., with ordering: default param values <
         user-supplied values < extra.
+
         :param extra: extra param values
         :return: merged param map
         """
+        if extra is None:
+            extra = dict()
         paramMap = self._defaultParamMap.copy()
         paramMap.update(self._paramMap)
         paramMap.update(extra)
         return paramMap
 
-    def copy(self, extra={}):
+    @since("1.4.0")
+    def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some
         extra params. The default implementation creates a
@@ -178,9 +199,12 @@ class Params(Identifiable):
         embedded and extra parameters over and returns the copy.
         Subclasses should override this method if the default approach
         is not sufficient.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
+        if extra is None:
+            extra = dict()
         that = copy.copy(self)
         that._paramMap = self.extractParamMap(extra)
         return that
@@ -195,6 +219,7 @@ class Params(Identifiable):
     def _resolveParam(self, param):
         """
         Resolves a param and validates the ownership.
+
         :param param: param name or the param instance, which must
                       belong to this Params instance
         :return: resolved param instance
@@ -233,14 +258,17 @@ class Params(Identifiable):
             self._defaultParamMap[getattr(self, param)] = value
         return self
 
-    def _copyValues(self, to, extra={}):
+    def _copyValues(self, to, extra=None):
         """
         Copies param values from this instance to another instance for
         params shared by them.
+
         :param to: the target instance
         :param extra: extra params to be copied
         :return: the target instance with param values copied
         """
+        if extra is None:
+            extra = dict()
         paramMap = self.extractParamMap(extra)
         for p in self.params:
             if p in paramMap and to.hasParam(p.name):

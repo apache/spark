@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
 import org.scalatest.{Matchers, FunSpec}
@@ -28,8 +29,10 @@ class RowTest extends FunSpec with Matchers {
     StructField("col2", StringType) ::
     StructField("col3", IntegerType) :: Nil)
   val values = Array("value1", "value2", 1)
+  val valuesWithoutCol3 = Array[Any](null, "value2", null)
 
   val sampleRow: Row = new GenericRowWithSchema(values, schema)
+  val sampleRowWithoutCol3: Row = new GenericRowWithSchema(valuesWithoutCol3, schema)
   val noSchemaRow: Row = new GenericRow(values)
 
   describe("Row (without schema)") {
@@ -66,6 +69,39 @@ class RowTest extends FunSpec with Matchers {
         "col2" -> "value2"
       )
       sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
+    }
+
+    it("getValuesMap() retrieves null value on non AnyVal Type") {
+      val expected = Map(
+        "col1" -> null,
+        "col2" -> "value2"
+      )
+      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
+    }
+
+    it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
+      intercept[NullPointerException] {
+        sampleRowWithoutCol3.getInt(sampleRowWithoutCol3.fieldIndex("col3"))
+      }
+    }
+
+    it("getAs() on type extending AnyVal does not throw exception when value is null"){
+      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+    }
+  }
+
+  describe("row equals") {
+    val externalRow = Row(1, 2)
+    val externalRow2 = Row(1, 2)
+    val internalRow = InternalRow(1, 2)
+    val internalRow2 = InternalRow(1, 2)
+
+    it("equality check for external rows") {
+      externalRow shouldEqual externalRow2
+    }
+
+    it("equality check for internal rows") {
+      internalRow shouldEqual internalRow2
     }
   }
 }

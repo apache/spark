@@ -35,6 +35,10 @@ private[spark] object ToolTips {
 
   val OUTPUT = "Bytes and records written to Hadoop."
 
+  val STORAGE_MEMORY =
+    "Memory used / total available memory for storage of data " +
+      "like RDD partitions cached in memory. "
+
   val SHUFFLE_WRITE =
     "Bytes and records written to disk in order to be read by a shuffle in a future stage."
 
@@ -57,6 +61,13 @@ private[spark] object ToolTips {
   val GC_TIME =
     """Time that the executor spent paused for Java garbage collection while the task was
        running."""
+
+  val PEAK_EXECUTION_MEMORY =
+    """Execution memory refers to the memory used by internal data structures created during
+       shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator
+       should be approximately the sum of the peak sizes across all such data structures created
+       in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and
+       external sort."""
 
   val JOB_TIMELINE =
     """Shows when jobs started and ended and when executors joined or left. Drag to scroll.

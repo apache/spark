@@ -39,11 +39,20 @@ private [sql] object JavaTypeInference {
   private val valuesReturnType = classOf[JMap[_, _]].getMethod("values").getGenericReturnType
 
   /**
+   * Infers the corresponding SQL data type of a JavaClean class.
+   * @param beanClass Java type
+   * @return (SQL data type, nullable)
+   */
+  def inferDataType(beanClass: Class[_]): (DataType, Boolean) = {
+    inferDataType(TypeToken.of(beanClass))
+  }
+
+  /**
    * Infers the corresponding SQL data type of a Java type.
    * @param typeToken Java type
    * @return (SQL data type, nullable)
    */
-  private [sql] def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
+  private def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
@@ -66,7 +75,7 @@ private [sql] object JavaTypeInference {
       case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
       case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
 
-      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+      case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType.SYSTEM_DEFAULT, true)
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 

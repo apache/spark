@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -152,7 +153,7 @@ object GBTExample {
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
       val labelIndexer = new StringIndexer()
-        .setInputCol("labelString")
+        .setInputCol("label")
         .setOutputCol(labelColName)
       stages += labelIndexer
     }
@@ -236,3 +237,4 @@ object GBTExample {
     sc.stop()
   }
 }
+// scalastyle:on println

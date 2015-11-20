@@ -19,7 +19,7 @@ package org.apache.spark.unsafe.memory;
 
 import javax.annotation.Nullable;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * A consecutive block of memory, starting at a {@link MemoryLocation} with a fixed size.
@@ -30,11 +30,12 @@ public class MemoryBlock extends MemoryLocation {
 
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * MemoryManager. This is package-private and is modified by MemoryManager.
+   * TaskMemoryManager. This field is public so that it can be modified by the TaskMemoryManager,
+   * which lives in a different package.
    */
-  int pageNumber = -1;
+  public int pageNumber = -1;
 
-  MemoryBlock(@Nullable Object obj, long offset, long length) {
+  public MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);
     this.length = length;
   }
@@ -50,6 +51,6 @@ public class MemoryBlock extends MemoryLocation {
    * Creates a memory block pointing to the memory used by the long array.
    */
   public static MemoryBlock fromLongArray(final long[] array) {
-    return new MemoryBlock(array, PlatformDependent.LONG_ARRAY_OFFSET, array.length * 8);
+    return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8);
   }
 }

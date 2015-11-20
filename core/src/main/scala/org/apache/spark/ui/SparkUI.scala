@@ -19,7 +19,8 @@ package org.apache.spark.ui
 
 import java.util.Date
 
-import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo, JsonRootResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
+  UIRoot}
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -55,6 +56,8 @@ private[spark] class SparkUI private (
 
   val stagesTab = new StagesTab(this)
 
+  var appId: String = _
+
   /** Initialize all components of the server. */
   def initialize() {
     attachTab(new JobsTab(this))
@@ -63,20 +66,19 @@ private[spark] class SparkUI private (
     attachTab(new EnvironmentTab(this))
     attachTab(new ExecutorsTab(this))
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
-    attachHandler(createRedirectHandler("/", "/jobs", basePath = basePath))
-    attachHandler(JsonRootResource.getJsonServlet(this))
+    attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
+    attachHandler(ApiRootResource.getServletHandler(this))
     // This should be POST only, but, the YARN AM proxy won't proxy POSTs
     attachHandler(createRedirectHandler(
-      "/stages/stage/kill", "/stages", stagesTab.handleKillRequest,
+      "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
       httpMethods = Set("GET", "POST")))
   }
   initialize()
 
   def getAppName: String = appName
 
-  /** Set the app name for this UI. */
-  def setAppName(name: String) {
-    appName = name
+  def setAppId(id: String): Unit = {
+    appId = id
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
@@ -93,13 +95,17 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    if (appId == this.appId) Some(this) else None
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
+      coresGranted = None,
+      maxCores = None,
+      coresPerExecutor = None,
+      memoryPerExecutorMB = None,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
         startTime = new Date(startTime),
@@ -136,7 +142,7 @@ private[spark] object SparkUI {
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String,
-      startTime: Long): SparkUI =  {
+      startTime: Long): SparkUI = {
     create(Some(sc), conf, listenerBus, securityManager, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }

@@ -20,9 +20,10 @@ package org.apache.spark.ui
 import java.net.{HttpURLConnection, URL}
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 
-import scala.collection.JavaConversions._
+import scala.io.Source
 import scala.xml.Node
 
+import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -31,6 +32,7 @@ import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
+import org.w3c.css.sac.CSSParseException
 
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark._
@@ -39,17 +41,44 @@ import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
 
+private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
+
+  private val cssWhiteList = List("bootstrap.min.css", "vis.min.css")
+
+  private def isInWhileList(uri: String): Boolean = cssWhiteList.exists(uri.endsWith)
+
+  override def warning(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.warning(e)
+    }
+  }
+
+  override def fatalError(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.fatalError(e)
+    }
+  }
+
+  override def error(e: CSSParseException): Unit = {
+    if (!isInWhileList(e.getURI)) {
+      super.error(e)
+    }
+  }
+}
+
 /**
  * Selenium tests for the Spark Web UI.
  */
-class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
+class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
   implicit val formats = DefaultFormats
 
 
   override def beforeAll(): Unit = {
-    webDriver = new HtmlUnitDriver
+    webDriver = new HtmlUnitDriver {
+      getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
+    }
   }
 
   override def afterAll(): Unit = {
@@ -311,15 +340,15 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         // The completed jobs table should have two rows. The first row will be the most recent job:
         val firstRow = find(cssSelector("tbody tr")).get.underlying
         val firstRowColumns = firstRow.findElements(By.tagName("td"))
-        firstRowColumns(0).getText should be ("1")
-        firstRowColumns(4).getText should be ("1/1 (2 skipped)")
-        firstRowColumns(5).getText should be ("8/8 (16 skipped)")
+        firstRowColumns.get(0).getText should be ("1")
+        firstRowColumns.get(4).getText should be ("1/1 (2 skipped)")
+        firstRowColumns.get(5).getText should be ("8/8 (16 skipped)")
         // The second row is the first run of the job, where nothing was skipped:
         val secondRow = findAll(cssSelector("tbody tr")).toSeq(1).underlying
         val secondRowColumns = secondRow.findElements(By.tagName("td"))
-        secondRowColumns(0).getText should be ("0")
-        secondRowColumns(4).getText should be ("3/3")
-        secondRowColumns(5).getText should be ("24/24")
+        secondRowColumns.get(0).getText should be ("0")
+        secondRowColumns.get(4).getText should be ("3/3")
+        secondRowColumns.get(5).getText should be ("24/24")
       }
     }
   }
@@ -472,8 +501,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         for {
           (row, idx) <- rows.zipWithIndex
           columns = row.findElements(By.tagName("td"))
-          id = columns(0).getText()
-          description = columns(1).getText()
+          id = columns.get(0).getText()
+          description = columns.get(1).getText()
         } {
           id should be (expJobInfo(idx)._1)
           description should include (expJobInfo(idx)._2)
@@ -483,11 +512,11 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       val jobsJson = getJson(sc.ui.get, "jobs")
       jobsJson.children.size should be (expJobInfo.size)
       for {
-        (job @ JObject(_),idx) <- jobsJson.children.zipWithIndex
+        (job @ JObject(_), idx) <- jobsJson.children.zipWithIndex
         id = (job \ "jobId").extract[String]
         name = (job \ "name").extract[String]
       } {
-        withClue(s"idx = $idx; id = $id; name = ${name.substring(0,20)}") {
+        withClue(s"idx = $idx; id = $id; name = ${name.substring(0, 20)}") {
           id should be (expJobInfo(idx)._1)
           name should include (expJobInfo(idx)._2)
         }
@@ -497,7 +526,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       goToUi(sc, "/jobs/job/?id=7")
       find("no-info").get.text should be ("No information to display for job 7")
 
-      val badJob = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get, "jobs/7"))
+      val badJob = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "jobs/7"))
       badJob._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badJob._2 should be (None)
       badJob._3 should be (Some("unknown job: 7"))
@@ -517,8 +546,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
         for {
           (row, idx) <- rows.zipWithIndex
           columns = row.findElements(By.tagName("td"))
-          id = columns(0).getText()
-          description = columns(1).getText()
+          id = columns.get(0).getText()
+          description = columns.get(1).getText()
         } {
           id should be (expStageInfo(idx)._1)
           description should include (expStageInfo(idx)._2)
@@ -540,18 +569,18 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
 
       goToUi(sc, "/stages/stage/?id=12&attempt=0")
       find("no-info").get.text should be ("No information to display for Stage 12 (Attempt 0)")
-      val badStage = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/12/0"))
+      val badStage = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/12/0"))
       badStage._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStage._2 should be (None)
       badStage._3 should be (Some("unknown stage: 12"))
 
-      val badAttempt = HistoryServerSuite.getContentAndCode(jsonUrl(sc.ui.get,"stages/19/15"))
+      val badAttempt = HistoryServerSuite.getContentAndCode(apiUrl(sc.ui.get, "stages/19/15"))
       badAttempt._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badAttempt._2 should be (None)
       badAttempt._3 should be (Some("unknown attempt for stage 19.  Found attempts: [0]"))
 
       val badStageAttemptList = HistoryServerSuite.getContentAndCode(
-        jsonUrl(sc.ui.get, "stages/12"))
+        apiUrl(sc.ui.get, "stages/12"))
       badStageAttemptList._1 should be (HttpServletResponse.SC_NOT_FOUND)
       badStageAttemptList._2 should be (None)
       badStageAttemptList._3 should be (Some("unknown stage: 12"))
@@ -561,7 +590,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
       val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.appUIAddress + "/json/v1/applications"))
+        sc.ui.get.appUIAddress + "/api/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst \ "attempts").children
@@ -571,6 +600,44 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
       parseDate(attempts(0) \ "endTime") should be (-1)
       val oneAppJsonAst = getJson(sc.ui.get, "")
       oneAppJsonAst should be (appListJsonAst.children(0))
+    }
+  }
+
+  test("job stages should have expected dotfile under DAG visualization") {
+    withSpark(newSparkContext()) { sc =>
+      // Create a multi-stage job
+      val rdd =
+        sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
+      rdd.count()
+
+      val stage0 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
+      assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
+        "label=&quot;Stage 0&quot;;\n    subgraph "))
+      assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
+        "0 [label=&quot;ParallelCollectionRDD [0]"))
+      assert(stage0.contains("{\n      label=&quot;map&quot;;\n      " +
+        "1 [label=&quot;MapPartitionsRDD [1]"))
+      assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "2 [label=&quot;MapPartitionsRDD [2]"))
+
+      val stage1 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
+      assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
+        "label=&quot;Stage 1&quot;;\n    subgraph "))
+      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "3 [label=&quot;ShuffledRDD [3]"))
+      assert(stage1.contains("{\n      label=&quot;map&quot;;\n      " +
+        "4 [label=&quot;MapPartitionsRDD [4]"))
+      assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "5 [label=&quot;MapPartitionsRDD [5]"))
+
+      val stage2 = Source.fromURL(sc.ui.get.appUIAddress +
+        "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
+      assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
+        "label=&quot;Stage 2&quot;;\n    subgraph "))
+      assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +
+        "6 [label=&quot;ShuffledRDD [6]"))
     }
   }
 
@@ -587,10 +654,10 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers with Before
   }
 
   def getJson(ui: SparkUI, path: String): JValue = {
-    JsonMethods.parse(HistoryServerSuite.getUrl(jsonUrl(ui, path)))
+    JsonMethods.parse(HistoryServerSuite.getUrl(apiUrl(ui, path)))
   }
 
-  def jsonUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/json/v1/applications/test/" + path)
+  def apiUrl(ui: SparkUI, path: String): URL = {
+    new URL(ui.appUIAddress + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
   }
 }

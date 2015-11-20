@@ -17,24 +17,23 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.NoSuchElementException
+
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
  */
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
-  self: Product =>
-
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
   def run(sqlContext: SQLContext): Seq[Row]
@@ -54,69 +53,174 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
    * The `execute()` method of all the physical command classes should reference `sideEffectResult`
    * so that the command can be executed eagerly right after the command query is created.
    */
-  protected[sql] lazy val sideEffectResult: Seq[Row] = cmd.run(sqlContext)
+  protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    cmd.run(sqlContext).map(converter(_).asInstanceOf[InternalRow])
+  }
 
   override def output: Seq[Attribute] = cmd.output
 
   override def children: Seq[SparkPlan] = Nil
 
-  override def executeCollect(): Array[Row] = sideEffectResult.toArray
+  override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
-  override def executeTake(limit: Int): Array[Row] = sideEffectResult.take(limit).toArray
+  override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
-  protected override def doExecute(): RDD[Row] = {
-    val converted = sideEffectResult.map(r =>
-      CatalystTypeConverters.convertToCatalyst(r, schema).asInstanceOf[Row])
-    sqlContext.sparkContext.parallelize(converted, 1)
+  protected override def doExecute(): RDD[InternalRow] = {
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
+
+  override def argString: String = cmd.toString
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
-case class SetCommand(
-    kv: Option[(String, Option[String])],
-    override val output: Seq[Attribute])
-  extends RunnableCommand with Logging {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = kv match {
+case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
+
+  private def keyValueOutput: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("key", StringType, false) ::
+        StructField("value", StringType, false) :: Nil)
+    schema.toAttributes
+  }
+
+  private val (_output, runFunc): (Seq[Attribute], SQLContext => Seq[Row]) = kv match {
     // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      if (value.toInt < 1) {
-        val msg = s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
-          "determining the number of reducers is not supported."
-        throw new IllegalArgumentException(msg)
-      } else {
-        sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS, value)
-        Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        if (value.toInt < 1) {
+          val msg =
+            s"Setting negative ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} for automatically " +
+              "determining the number of reducers is not supported."
+          throw new IllegalArgumentException(msg)
+        } else {
+          sqlContext.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
+        }
       }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
+            s"External sort will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
+            s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
+            s"continue to be true.")
+        Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
+            s"will be ignored. Tungsten will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
+            s"will be ignored. Codegen will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
+            s"will be ignored. Unsafe mode will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
+      }
+      (keyValueOutput, runFunc)
+
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
+            s"will be ignored. Sort merge join will continue to be used.")
+        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
+      }
+      (keyValueOutput, runFunc)
 
     // Configures a single property.
     case Some((key, Some(value))) =>
-      sqlContext.setConf(key, value)
-      Seq(Row(s"$key=$value"))
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.setConf(key, value)
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
 
-    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
-    // Notice that different from Hive, here "SET -v" is an alias of "SET".
     // (In Hive, "SET" returns all changed properties while "SET -v" returns all properties.)
-    case Some(("-v", None)) | None =>
-      sqlContext.getAllConfs.map { case (k, v) => Row(s"$k=$v") }.toSeq
+    // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
+    case None =>
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+      }
+      (keyValueOutput, runFunc)
+
+    // Queries all properties along with their default values and docs that are defined in the
+    // SQLConf of the sqlContext.
+    case Some(("-v", None)) =>
+      val runFunc = (sqlContext: SQLContext) => {
+        sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+          Row(key, defaultValue, doc)
+        }
+      }
+      val schema = StructType(
+        StructField("key", StringType, false) ::
+          StructField("default", StringType, false) ::
+          StructField("meaning", StringType, false) :: Nil)
+      (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, None)) =>
-      logWarning(
-        s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
-          s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        logWarning(
+          s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
+            s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, sqlContext.conf.numShufflePartitions.toString))
+      }
+      (keyValueOutput, runFunc)
 
     // Queries a single property.
     case Some((key, None)) =>
-      Seq(Row(s"$key=${sqlContext.getConf(key, "<undefined>")}"))
+      val runFunc = (sqlContext: SQLContext) => {
+        val value =
+          try {
+            if (key == SQLConf.DIALECT.key) {
+              sqlContext.conf.dialect
+            } else {
+              sqlContext.getConf(key)
+            }
+          } catch {
+            case _: NoSuchElementException => "<undefined>"
+          }
+        Seq(Row(key, value))
+      }
+      (keyValueOutput, runFunc)
   }
+
+  override val output: Seq[Attribute] = _output
+
+  override def run(sqlContext: SQLContext): Seq[Row] = runFunc(sqlContext)
+
 }
 
 /**
@@ -124,10 +228,7 @@ case class SetCommand(
  *
  * Note that this command takes in a logical plan, runs the optimizer on the logical plan
  * (but do NOT actually execute it).
- *
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     override val output: Seq[Attribute] =
@@ -147,10 +248,7 @@ case class ExplainCommand(
   }
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class CacheTableCommand(
     tableName: String,
     plan: Option[LogicalPlan],
@@ -175,10 +273,6 @@ case class CacheTableCommand(
 }
 
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -190,10 +284,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 }
 
 /**
- * :: DeveloperApi ::
  * Clear all cached data from the in-memory cache.
  */
-@DeveloperApi
 case object ClearCacheCommand extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -204,10 +296,7 @@ case object ClearCacheCommand extends RunnableCommand {
   override def output: Seq[Attribute] = Seq.empty
 }
 
-/**
- * :: DeveloperApi ::
- */
-@DeveloperApi
+
 case class DescribeCommand(
     child: SparkPlan,
     override val output: Seq[Attribute],
@@ -230,9 +319,7 @@ case class DescribeCommand(
  * {{{
  *    SHOW TABLES [IN databaseName]
  * }}}
- * :: DeveloperApi ::
  */
-@DeveloperApi
 case class ShowTablesCommand(databaseName: Option[String]) extends RunnableCommand {
 
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
@@ -252,5 +339,80 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
     }
 
     rows
+  }
+}
+
+/**
+ * A command for users to list all of the registered functions.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    SHOW FUNCTIONS
+ * }}}
+ * TODO currently we are simply ignore the db
+ */
+case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
+    case Some(p) =>
+      try {
+        val regex = java.util.regex.Pattern.compile(p)
+        sqlContext.functionRegistry.listFunction().filter(regex.matcher(_).matches()).map(Row(_))
+      } catch {
+        // probably will failed in the regex that user provided, then returns empty row.
+        case _: Throwable => Seq.empty[Row]
+      }
+    case None =>
+      sqlContext.functionRegistry.listFunction().map(Row(_))
+  }
+}
+
+/**
+ * A command for users to get the usage of a registered function.
+ * The syntax of using this command in SQL is
+ * {{{
+ *   DESCRIBE FUNCTION [EXTENDED] upper;
+ * }}}
+ */
+case class DescribeFunction(
+    functionName: String,
+    isExtended: Boolean) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("function_desc", StringType, nullable = false) :: Nil)
+
+    schema.toAttributes
+  }
+
+  private def replaceFunctionName(usage: String, functionName: String): String = {
+    if (usage == null) {
+      "To be added."
+    } else {
+      usage.replaceAll("_FUNC_", functionName)
+    }
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.functionRegistry.lookupFunction(functionName) match {
+      case Some(info) =>
+        val result =
+          Row(s"Function: ${info.getName}") ::
+          Row(s"Class: ${info.getClassName}") ::
+          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+
+        if (isExtended) {
+          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+        } else {
+          result
+        }
+
+      case None => Seq(Row(s"Function: $functionName is not found."))
+    }
   }
 }

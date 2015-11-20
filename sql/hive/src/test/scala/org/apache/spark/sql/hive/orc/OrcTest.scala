@@ -22,16 +22,12 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-private[sql] trait OrcTest extends SQLTestUtils {
-  protected def hiveContext = sqlContext.asInstanceOf[HiveContext]
-
-  import sqlContext.sparkContext
-  import sqlContext.implicits._
+private[sql] trait OrcTest extends SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   /**
    * Writes `data` to a Orc file, which is then passed to `f` and will be deleted after `f`
@@ -41,7 +37,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toDF().write.format("orc").save(file.getCanonicalPath)
+      sparkContext.parallelize(data).toDF().write.orc(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -53,7 +49,7 @@ private[sql] trait OrcTest extends SQLTestUtils {
   protected def withOrcDataFrame[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
       (f: DataFrame => Unit): Unit = {
-    withOrcFile(data)(path => f(hiveContext.read.format("orc").load(path)))
+    withOrcFile(data)(path => f(sqlContext.read.orc(path)))
   }
 
   /**
@@ -65,18 +61,18 @@ private[sql] trait OrcTest extends SQLTestUtils {
       (data: Seq[T], tableName: String)
       (f: => Unit): Unit = {
     withOrcDataFrame(data) { df =>
-      hiveContext.registerDataFrameAsTable(df, tableName)
+      sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    data.toDF().write.format("orc").mode(SaveMode.Overwrite).save(path.getCanonicalPath)
+    data.toDF().write.mode(SaveMode.Overwrite).orc(path.getCanonicalPath)
   }
 
   protected def makeOrcFile[T <: Product: ClassTag: TypeTag](
       df: DataFrame, path: File): Unit = {
-    df.write.format("orc").mode(SaveMode.Overwrite).save(path.getCanonicalPath)
+    df.write.mode(SaveMode.Overwrite).orc(path.getCanonicalPath)
   }
 }

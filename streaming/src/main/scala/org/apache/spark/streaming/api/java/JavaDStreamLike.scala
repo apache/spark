@@ -17,18 +17,17 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.util
 import java.lang.{Long => JLong}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaRDDLike}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, _}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3, VoidFunction => JVoidFunction, VoidFunction2 => JVoidFunction2, _}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.api.java.JavaDStream._
@@ -145,8 +144,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * an array.
    */
   def glom(): JavaDStream[JList[T]] =
-    new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
-
+    new JavaDStream(dstream.glom().map(_.toSeq.asJava))
 
 
   /** Return the [[org.apache.spark.streaming.StreamingContext]] associated with this DStream */
@@ -191,7 +189,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaDStream[U] = {
     def fn: (Iterator[T]) => Iterator[U] = {
-      (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
     }
     new JavaDStream(dstream.mapPartitions(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
@@ -204,7 +202,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   def mapPartitionsToPair[K2, V2](f: PairFlatMapFunction[java.util.Iterator[T], K2, V2])
   : JavaPairDStream[K2, V2] = {
     def fn: (Iterator[T]) => Iterator[(K2, V2)] = {
-      (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
     }
     new JavaPairDStream(dstream.mapPartitions(fn))(fakeClassTag[K2], fakeClassTag[V2])
   }
@@ -282,7 +280,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Return all the RDDs between 'fromDuration' to 'toDuration' (both included)
    */
   def slice(fromTime: Time, toTime: Time): JList[R] = {
-    new util.ArrayList(dstream.slice(fromTime, toTime).map(wrapRDD(_)).toSeq)
+    dstream.slice(fromTime, toTime).map(wrapRDD).asJava
   }
 
   /**
@@ -291,7 +289,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *
    * @deprecated  As of release 0.9.0, replaced by foreachRDD
    */
-  @Deprecated
+  @deprecated("Use foreachRDD", "0.9.0")
   def foreach(foreachFunc: JFunction[R, Void]) {
     foreachRDD(foreachFunc)
   }
@@ -302,7 +300,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *
    * @deprecated  As of release 0.9.0, replaced by foreachRDD
    */
-  @Deprecated
+  @deprecated("Use foreachRDD", "0.9.0")
   def foreach(foreachFunc: JFunction2[R, Time, Void]) {
     foreachRDD(foreachFunc)
   }
@@ -310,7 +308,10 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated  As of release 1.6.0, replaced by foreachRDD(JVoidFunction)
    */
+  @deprecated("Use foreachRDD(foreachFunc: JVoidFunction[R])", "1.6.0")
   def foreachRDD(foreachFunc: JFunction[R, Void]) {
     dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
   }
@@ -318,8 +319,27 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated  As of release 1.6.0, replaced by foreachRDD(JVoidFunction2)
    */
+  @deprecated("Use foreachRDD(foreachFunc: JVoidFunction2[R, Time])", "1.6.0")
   def foreachRDD(foreachFunc: JFunction2[R, Time, Void]) {
+    dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
+  }
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  def foreachRDD(foreachFunc: JVoidFunction[R]) {
+    dstream.foreachRDD(rdd => foreachFunc.call(wrapRDD(rdd)))
+  }
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  def foreachRDD(foreachFunc: JVoidFunction2[R, Time]) {
     dstream.foreachRDD((rdd, time) => foreachFunc.call(wrapRDD(rdd), time))
   }
 

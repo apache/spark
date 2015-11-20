@@ -66,6 +66,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
     val f = new ComplexFutureAction[Seq[T]]
+    val callSite = self.context.getCallSite
 
     f.run {
       // This is a blocking action so we should use "AsyncRDDActions.futureExecutionContext" which
@@ -73,6 +74,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       val results = new ArrayBuffer[T](num)
       val totalParts = self.partitions.length
       var partsScanned = 0
+      self.context.setCallSite(callSite)
       while (results.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
@@ -85,9 +87,9 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
             numPartsToTry = partsScanned * 4
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
-            numPartsToTry = Math.max(1, 
+            numPartsToTry = Math.max(1,
               (1.5 * num * partsScanned / results.size).toInt - partsScanned)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
           }
         }
 

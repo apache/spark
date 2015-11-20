@@ -20,11 +20,10 @@ package org.apache.spark.io
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import com.google.common.io.ByteStreams
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
-class CompressionCodecSuite extends FunSuite {
+class CompressionCodecSuite extends SparkFunSuite {
   val conf = new SparkConf(false)
 
   def testCodec(codec: CompressionCodec) {
@@ -101,12 +100,10 @@ class CompressionCodecSuite extends FunSuite {
     testCodec(codec)
   }
 
-  test("snappy does not support concatenation of serialized streams") {
+  test("snappy supports concatenation of serialized streams") {
     val codec = CompressionCodec.createCodec(conf, classOf[SnappyCompressionCodec].getName)
     assert(codec.getClass === classOf[SnappyCompressionCodec])
-    intercept[Exception] {
-      testConcatenationOfSerializedStreams(codec)
-    }
+    testConcatenationOfSerializedStreams(codec)
   }
 
   test("bad compression codec") {

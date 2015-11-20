@@ -16,7 +16,8 @@
 #
 
 .First <- function() {
-  home <- Sys.getenv("SPARK_HOME")
-  .libPaths(c(file.path(home, "R", "lib"), .libPaths()))
+  packageDir <- Sys.getenv("SPARKR_PACKAGE_DIR")
+  dirs <- strsplit(packageDir, ",")[[1]]
+  .libPaths(c(dirs, .libPaths()))
   Sys.setenv(NOAWT=1)
 }

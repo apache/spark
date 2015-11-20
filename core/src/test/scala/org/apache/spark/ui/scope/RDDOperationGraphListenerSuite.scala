@@ -17,9 +17,7 @@
 
 package org.apache.spark.ui.scope
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SparkListenerStageSubmitted
 import org.apache.spark.scheduler.SparkListenerStageCompleted
@@ -28,7 +26,7 @@ import org.apache.spark.scheduler.SparkListenerJobStart
 /**
  * Tests that this listener populates and cleans up its data structures properly.
  */
-class RDDOperationGraphListenerSuite extends FunSuite {
+class RDDOperationGraphListenerSuite extends SparkFunSuite {
   private var jobIdCounter = 0
   private var stageIdCounter = 0
   private val maxRetainedJobs = 10

@@ -17,11 +17,9 @@
 
 package org.apache.spark.streaming.ui
 
-import org.eclipse.jetty.servlet.ServletContextHandler
-
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.ui.{JettyUtils, SparkUI, SparkUITab}
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 import StreamingTab._
 
@@ -42,18 +40,14 @@ private[spark] class StreamingTab(val ssc: StreamingContext)
   attachPage(new StreamingPage(this))
   attachPage(new BatchPage(this))
 
-  var staticHandler: ServletContextHandler = null
-
   def attach() {
     getSparkUI(ssc).attachTab(this)
-    staticHandler = JettyUtils.createStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
-    getSparkUI(ssc).attachHandler(staticHandler)
+    getSparkUI(ssc).addStaticHandler(STATIC_RESOURCE_DIR, "/static/streaming")
   }
 
   def detach() {
     getSparkUI(ssc).detachTab(this)
-    getSparkUI(ssc).detachHandler(staticHandler)
-    staticHandler = null
+    getSparkUI(ssc).removeStaticHandler("/static/streaming")
   }
 }
 

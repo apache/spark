@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
@@ -32,9 +31,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partit
  * @param output      The output Schema
  * @param child       Child operator
  */
-@DeveloperApi
 case class Expand(
-    projections: Seq[GroupExpression],
+    projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: SparkPlan)
   extends UnaryNode {
@@ -43,22 +41,32 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
-  protected override def doExecute(): RDD[Row] = attachTree(this, "execute") {
-    child.execute().mapPartitions { iter =>
-      // TODO Move out projection objects creation and transfer to
-      // workers via closure. However we can't assume the Projection
-      // is serializable because of the code gen, so we have to
-      // create the projections within each of the partition processing.
-      val groups = projections.map(ee => newProjection(ee.children, child.output)).toArray
+  override def outputsUnsafeRows: Boolean = child.outputsUnsafeRows
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = true
 
-      new Iterator[Row] {
-        private[this] var result: Row = _
+  override def references: AttributeSet =
+    AttributeSet(projections.flatten.flatMap(_.references))
+
+  private[this] val projection = {
+    if (outputsUnsafeRows) {
+      (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
+    } else {
+      (exprs: Seq[Expression]) => newMutableProjection(exprs, child.output)()
+    }
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    child.execute().mapPartitions { iter =>
+      val groups = projections.map(projection).toArray
+      new Iterator[InternalRow] {
+        private[this] var result: InternalRow = _
         private[this] var idx = -1  // -1 means the initial state
-        private[this] var input: Row = _
+        private[this] var input: InternalRow = _
 
         override final def hasNext: Boolean = (-1 < idx && idx < groups.length) || iter.hasNext
 
-        override final def next(): Row = {
+        override final def next(): InternalRow = {
           if (idx <= 0) {
             // in the initial (-1) or beginning(0) of a new input row, fetch the next input tuple
             input = iter.next()

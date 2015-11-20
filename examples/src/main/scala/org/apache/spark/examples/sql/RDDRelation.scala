@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -73,3 +74,4 @@ object RDDRelation {
     sc.stop()
   }
 }
+// scalastyle:on println

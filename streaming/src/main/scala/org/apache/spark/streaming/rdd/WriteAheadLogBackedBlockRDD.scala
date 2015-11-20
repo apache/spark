@@ -23,12 +23,11 @@ import java.util.UUID
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark._
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.streaming.util._
+import org.apache.spark.util.SerializableConfiguration
 
 /**
  * Partition class for [[org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD]].
@@ -62,7 +61,7 @@ class WriteAheadLogBackedBlockRDDPartition(
  *
  *
  * @param sc SparkContext
- * @param blockIds Ids of the blocks that contains this RDD's data
+ * @param _blockIds Ids of the blocks that contains this RDD's data
  * @param walRecordHandles Record handles in write ahead logs that contain this RDD's data
  * @param isBlockIdValid Whether the block Ids are valid (i.e., the blocks are present in the Spark
  *                         executors). If not, then block lookups by the block ids will be skipped.
@@ -74,35 +73,35 @@ class WriteAheadLogBackedBlockRDDPartition(
  */
 private[streaming]
 class WriteAheadLogBackedBlockRDD[T: ClassTag](
-    @transient sc: SparkContext,
-    @transient blockIds: Array[BlockId],
-    @transient walRecordHandles: Array[WriteAheadLogRecordHandle],
-    @transient isBlockIdValid: Array[Boolean] = Array.empty,
+    sc: SparkContext,
+    @transient private val _blockIds: Array[BlockId],
+    @transient val walRecordHandles: Array[WriteAheadLogRecordHandle],
+    @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     storeInBlockManager: Boolean = false,
     storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER)
-  extends BlockRDD[T](sc, blockIds) {
+  extends BlockRDD[T](sc, _blockIds) {
 
   require(
-    blockIds.length == walRecordHandles.length,
-    s"Number of block Ids (${blockIds.length}) must be " +
-      s" same as number of WAL record handles (${walRecordHandles.length}})")
+    _blockIds.length == walRecordHandles.length,
+    s"Number of block Ids (${_blockIds.length}) must be " +
+      s" same as number of WAL record handles (${walRecordHandles.length})")
 
   require(
-    isBlockIdValid.isEmpty || isBlockIdValid.length == blockIds.length,
+    isBlockIdValid.isEmpty || isBlockIdValid.length == _blockIds.length,
     s"Number of elements in isBlockIdValid (${isBlockIdValid.length}) must be " +
-      s" same as number of block Ids (${blockIds.length})")
+      s" same as number of block Ids (${_blockIds.length})")
 
   // Hadoop configuration is not serializable, so broadcast it as a serializable.
   @transient private val hadoopConfig = sc.hadoopConfiguration
-  private val broadcastedHadoopConf = new SerializableWritable(hadoopConfig)
+  private val broadcastedHadoopConf = new SerializableConfiguration(hadoopConfig)
 
   override def isValid(): Boolean = true
 
   override def getPartitions: Array[Partition] = {
     assertValid()
-    Array.tabulate(blockIds.length) { i =>
+    Array.tabulate(_blockIds.length) { i =>
       val isValid = if (isBlockIdValid.length == 0) true else isBlockIdValid(i)
-      new WriteAheadLogBackedBlockRDDPartition(i, blockIds(i), isValid, walRecordHandles(i))
+      new WriteAheadLogBackedBlockRDDPartition(i, _blockIds(i), isValid, walRecordHandles(i))
     }
   }
 

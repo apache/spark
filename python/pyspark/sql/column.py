@@ -16,11 +16,13 @@
 #
 
 import sys
+import warnings
 
 if sys.version >= '3':
     basestring = str
     long = int
 
+from pyspark import since
 from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
@@ -59,6 +61,18 @@ def _to_seq(sc, cols, converter=None):
     return sc._jvm.PythonUtils.toSeq(cols)
 
 
+def _to_list(sc, cols, converter=None):
+    """
+    Convert a list of Column (or names) into a JVM (Scala) List of Column.
+
+    An optional `converter` could be used to convert items in `cols`
+    into JVM Column objects.
+    """
+    if converter:
+        cols = [converter(c) for c in cols]
+    return sc._jvm.PythonUtils.toList(cols)
+
+
 def _unary_op(name, doc="unary operator"):
     """ Create a method for given unary operator """
     def _(self):
@@ -73,6 +87,17 @@ def _func_op(name, doc=''):
         sc = SparkContext._active_spark_context
         jc = getattr(sc._jvm.functions, name)(self._jc)
         return Column(jc)
+    _.__doc__ = doc
+    return _
+
+
+def _bin_func_op(name, reverse=False, doc="binary function"):
+    def _(self, other):
+        sc = SparkContext._active_spark_context
+        fn = getattr(sc._jvm.functions, name)
+        jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
+        njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
+        return Column(njc)
     _.__doc__ = doc
     return _
 
@@ -114,6 +139,10 @@ class Column(object):
         # 2. Create from an expression
         df.colName + 1
         1 / df.colName
+
+    .. note:: Experimental
+
+    .. versionadded:: 1.3
     """
 
     def __init__(self, jc):
@@ -133,6 +162,8 @@ class Column(object):
     __rdiv__ = _reverse_op("divide")
     __rtruediv__ = _reverse_op("divide")
     __rmod__ = _reverse_op("mod")
+    __pow__ = _bin_func_op("pow")
+    __rpow__ = _bin_func_op("pow", reverse=True)
 
     # logistic operators
     __eq__ = _bin_op("equalTo")
@@ -159,9 +190,11 @@ class Column(object):
     bitwiseAND = _bin_op("bitwiseAND")
     bitwiseXOR = _bin_op("bitwiseXOR")
 
+    @since(1.3)
     def getItem(self, key):
-        """An expression that gets an item at position `ordinal` out of a list,
-         or gets an item by key out of a dict.
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
 
         >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
@@ -179,8 +212,10 @@ class Column(object):
         """
         return self[key]
 
+    @since(1.3)
     def getField(self, name):
-        """An expression that gets a field by name in a StructField.
+        """
+        An expression that gets a field by name in a StructField.
 
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
@@ -204,6 +239,9 @@ class Column(object):
             raise AttributeError(item)
         return self.getField(item)
 
+    def __iter__(self):
+        raise TypeError("Column is not iterable")
+
     # string methods
     rlike = _bin_op("rlike")
     like = _bin_op("like")
@@ -211,9 +249,10 @@ class Column(object):
     endswith = _bin_op("endsWith")
 
     @ignore_unicode_prefix
+    @since(1.3)
     def substr(self, startPos, length):
         """
-        Return a :class:`Column` which is a substring of the column
+        Return a :class:`Column` which is a substring of the column.
 
         :param startPos: start position (int or Column)
         :param length:  length of the substring (int or Column)
@@ -234,20 +273,39 @@ class Column(object):
     __getslice__ = substr
 
     @ignore_unicode_prefix
+    @since(1.3)
     def inSet(self, *cols):
-        """ A boolean expression that is evaluated to true if the value of this
+        """
+        A boolean expression that is evaluated to true if the value of this
         expression is contained by the evaluated values of the arguments.
 
         >>> df[df.name.inSet("Bob", "Mike")].collect()
         [Row(age=5, name=u'Bob')]
         >>> df[df.age.inSet([1, 2, 3])].collect()
         [Row(age=2, name=u'Alice')]
+
+        .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
+        """
+        warnings.warn("inSet is deprecated. Use isin() instead.")
+        return self.isin(*cols)
+
+    @ignore_unicode_prefix
+    @since(1.5)
+    def isin(self, *cols):
+        """
+        A boolean expression that is evaluated to true if the value of this
+        expression is contained by the evaluated values of the arguments.
+
+        >>> df[df.name.isin("Bob", "Mike")].collect()
+        [Row(age=5, name=u'Bob')]
+        >>> df[df.age.isin([1, 2, 3])].collect()
+        [Row(age=2, name=u'Alice')]
         """
         if len(cols) == 1 and isinstance(cols[0], (list, set)):
             cols = cols[0]
         cols = [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols]
         sc = SparkContext._active_spark_context
-        jc = getattr(self._jc, "in")(_to_seq(sc, cols))
+        jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
     # order
@@ -259,8 +317,10 @@ class Column(object):
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
 
+    @since(1.3)
     def alias(self, *alias):
-        """Returns this column aliased with a new name or names (in the case of expressions that
+        """
+        Returns this column aliased with a new name or names (in the case of expressions that
         return more than one column, such as explode).
 
         >>> df.select(df.age.alias("age2")).collect()
@@ -274,8 +334,9 @@ class Column(object):
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     @ignore_unicode_prefix
+    @since(1.3)
     def cast(self, dataType):
-        """ Convert the column into type `dataType`
+        """ Convert the column into type ``dataType``.
 
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
@@ -293,16 +354,28 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    @ignore_unicode_prefix
+    astype = cast
+
+    @since(1.3)
     def between(self, lowerBound, upperBound):
-        """ A boolean expression that is evaluated to true if the value of this
+        """
+        A boolean expression that is evaluated to true if the value of this
         expression is between the given columns.
+
+        >>> df.select(df.name, df.age.between(2, 4)).show()
+        +-----+--------------------------+
+        | name|((age >= 2) && (age <= 4))|
+        +-----+--------------------------+
+        |Alice|                      true|
+        |  Bob|                     false|
+        +-----+--------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 
-    @ignore_unicode_prefix
+    @since(1.4)
     def when(self, condition, value):
-        """Evaluates a list of conditions and returns one of multiple possible result expressions.
+        """
+        Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
         See :func:`pyspark.sql.functions.when` for example usage.
@@ -310,26 +383,69 @@ class Column(object):
         :param condition: a boolean :class:`Column` expression.
         :param value: a literal value, or a :class:`Column` expression.
 
+        >>> from pyspark.sql import functions as F
+        >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
+        +-----+--------------------------------------------------------+
+        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0|
+        +-----+--------------------------------------------------------+
+        |Alice|                                                      -1|
+        |  Bob|                                                       1|
+        +-----+--------------------------------------------------------+
         """
-        sc = SparkContext._active_spark_context
         if not isinstance(condition, Column):
             raise TypeError("condition should be a Column")
         v = value._jc if isinstance(value, Column) else value
-        jc = sc._jvm.functions.when(condition._jc, v)
+        jc = self._jc.when(condition._jc, v)
         return Column(jc)
 
-    @ignore_unicode_prefix
+    @since(1.4)
     def otherwise(self, value):
-        """Evaluates a list of conditions and returns one of multiple possible result expressions.
+        """
+        Evaluates a list of conditions and returns one of multiple possible result expressions.
         If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
 
         See :func:`pyspark.sql.functions.when` for example usage.
 
         :param value: a literal value, or a :class:`Column` expression.
+
+        >>> from pyspark.sql import functions as F
+        >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
+        +-----+---------------------------------+
+        | name|CASE WHEN (age > 3) THEN 1 ELSE 0|
+        +-----+---------------------------------+
+        |Alice|                                0|
+        |  Bob|                                1|
+        +-----+---------------------------------+
         """
         v = value._jc if isinstance(value, Column) else value
-        jc = self._jc.otherwise(value)
+        jc = self._jc.otherwise(v)
         return Column(jc)
+
+    @since(1.4)
+    def over(self, window):
+        """
+        Define a windowing column.
+
+        :param window: a :class:`WindowSpec`
+        :return: a Column
+
+        >>> from pyspark.sql import Window
+        >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
+        >>> from pyspark.sql.functions import rank, min
+        >>> # df.select(rank().over(window), min('age').over(window))
+
+        .. note:: Window functions is only supported with HiveContext in 1.4
+        """
+        from pyspark.sql.window import WindowSpec
+        if not isinstance(window, WindowSpec):
+            raise TypeError("window should be WindowSpec")
+        jc = self._jc.over(window._jspec)
+        return Column(jc)
+
+    def __nonzero__(self):
+        raise ValueError("Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
+                         "'~' for 'not' when building DataFrame boolean expressions.")
+    __bool__ = __nonzero__
 
     def __repr__(self):
         return 'Column<%s>' % self._jc.toString().encode('utf8')

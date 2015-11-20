@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
 
-import java.sql.Types
-
 /**
  * :: DeveloperApi ::
  * A database type definition coupled with the jdbc type needed to send null
@@ -53,7 +51,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect {
+abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -80,6 +78,25 @@ abstract class JdbcDialect {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Quotes the identifier. This is used to put quotes around the identifier in case the column
+   * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
+   */
+  def quoteIdentifier(colName: String): String = {
+    s""""$colName""""
+  }
+
+  /**
+   * Get the SQL query that should be used to find if the given table exists. Dialects can
+   * override this method to return a query that works best in a particular database.
+   * @param table  The name of the table.
+   * @return The SQL query to use for checking the table.
+   */
+  def getTableExistsQuery(table: String): String = {
+    s"SELECT * FROM $table WHERE 1=0"
+  }
+
 }
 
 /**
@@ -96,11 +113,10 @@ abstract class JdbcDialect {
 @DeveloperApi
 object JdbcDialects {
 
-  private var dialects = List[JdbcDialect]()
-
   /**
    * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
    * Readding an existing dialect will cause a move-to-front.
+   *
    * @param dialect The new dialect.
    */
   def registerDialect(dialect: JdbcDialect) : Unit = {
@@ -109,14 +125,21 @@ object JdbcDialects {
 
   /**
    * Unregister a dialect. Does nothing if the dialect is not registered.
+   *
    * @param dialect The jdbc dialect.
    */
   def unregisterDialect(dialect : JdbcDialect) : Unit = {
     dialects = dialects.filterNot(_ == dialect)
   }
 
+  private[this] var dialects = List[JdbcDialect]()
+
   registerDialect(MySQLDialect)
   registerDialect(PostgresDialect)
+  registerDialect(DB2Dialect)
+  registerDialect(MsSqlServerDialect)
+  registerDialect(DerbyDialect)
+  registerDialect(OracleDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
@@ -132,80 +155,8 @@ object JdbcDialects {
 }
 
 /**
- * :: DeveloperApi ::
- * AggregatedDialect can unify multiple dialects into one virtual Dialect.
- * Dialects are tried in order, and the first dialect that does not return a
- * neutral element will will.
- * @param dialects List of dialects.
- */
-@DeveloperApi
-class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
-
-  require(!dialects.isEmpty)
-
-  def canHandle(url : String): Boolean =
-    dialects.map(_.canHandle(url)).reduce(_ && _)
-
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
-    dialects.map(_.getCatalystType(sqlType, typeName, size, md)).flatten.headOption
-
-  override def getJDBCType(dt: DataType): Option[JdbcType] =
-    dialects.map(_.getJDBCType(dt)).flatten.headOption
-
-}
-
-/**
- * :: DeveloperApi ::
  * NOOP dialect object, always returning the neutral element.
  */
-@DeveloperApi
-case object NoopDialect extends JdbcDialect {
-  def canHandle(url : String): Boolean = true
-}
-
-/**
- * :: DeveloperApi ::
- * Default postgres dialect, mapping bit/cidr/inet on read and string/binary/boolean on write.
- */
-@DeveloperApi
-case object PostgresDialect extends JdbcDialect {
-  def canHandle(url: String): Boolean = url.startsWith("jdbc:postgresql")
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.BIT && typeName.equals("bit") && size != 1) {
-      Some(BinaryType)
-    } else if (sqlType == Types.OTHER && typeName.equals("cidr")) {
-      Some(StringType)
-    } else if (sqlType == Types.OTHER && typeName.equals("inet")) {
-      Some(StringType)
-    } else None
-  }
-
-  override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case StringType => Some(JdbcType("TEXT", java.sql.Types.CHAR))
-    case BinaryType => Some(JdbcType("BYTEA", java.sql.Types.BINARY))
-    case BooleanType => Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
-    case _ => None
-  }
-}
-
-/**
- * :: DeveloperApi ::
- * Default mysql dialect to read bit/bitsets correctly.
- */
-@DeveloperApi
-case object MySQLDialect extends JdbcDialect {
-  def canHandle(url : String): Boolean = url.startsWith("jdbc:mysql")
-  override def getCatalystType(
-      sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.VARBINARY && typeName.equals("BIT") && size != 1) {
-      // This could instead be a BinaryType if we'd rather return bit-vectors of up to 64 bits as
-      // byte arrays instead of longs.
-      md.putLong("binarylong", 1)
-      Some(LongType)
-    } else if (sqlType == Types.BIT && typeName.equals("TINYINT")) {
-      Some(BooleanType)
-    } else None
-  }
+private object NoopDialect extends JdbcDialect {
+  override def canHandle(url : String): Boolean = true
 }

@@ -21,11 +21,10 @@ import java.io.File
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -50,10 +49,7 @@ case class Contact(name: String, phone: String)
 
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
-class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll with OrcTest {
-  override val sqlContext = TestHive
-
-  import TestHive.read
+class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   def getTempFilePath(prefix: String, suffix: String = ""): File = {
     val tempFile = File.createTempFile(prefix, suffix)
@@ -68,14 +64,14 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        sqlContext.read.orc(file),
         data.toDF().collect())
     }
   }
 
   test("Read/write binary data") {
     withOrcFile(BinaryData("test".getBytes("utf8")) :: Nil) { file =>
-      val bytes = read.format("orc").load(file).head().getAs[Array[Byte]](0)
+      val bytes = read.orc(file).head().getAs[Array[Byte]](0)
       assert(new String(bytes, "utf8") === "test")
     }
   }
@@ -93,7 +89,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         data.toDF().collect())
     }
   }
@@ -163,7 +159,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
 
     withOrcFile(data) { file =>
       checkAnswer(
-        read.format("orc").load(file),
+        read.orc(file),
         Row(Seq.fill(5)(null): _*))
     }
   }
@@ -172,7 +168,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
   test("Default compression options for writing to an ORC file") {
     withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
       assertResult(CompressionKind.ZLIB) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
   }
@@ -185,21 +181,21 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.SNAPPY) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.NONE) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
     withOrcFile(data) { file =>
       assertResult(CompressionKind.LZO) {
-        OrcFileOperator.getFileReader(file).getCompression
+        OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
   }
@@ -223,7 +219,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("overwriting") {
@@ -233,7 +229,7 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("self-join") {
@@ -289,6 +285,94 @@ class OrcQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll w
       checkAnswer(
         sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t WHERE `_2` = 'run_5' GROUP BY `_1`, `_2`"),
         List(Row("same", "run_5", 100)))
+    }
+  }
+
+  test("SPARK-9170: Don't implicitly lowercase of user-provided columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      sqlContext.range(0, 10).select('id as "Acol").write.format("orc").save(path)
+      sqlContext.read.format("orc").load(path).schema("Acol")
+      intercept[IllegalArgumentException] {
+        sqlContext.read.format("orc").load(path).schema("acol")
+      }
+      checkAnswer(sqlContext.read.format("orc").load(path).select("acol").sort("acol"),
+        (0 until 10).map(Row(_)))
+    }
+  }
+
+  test("SPARK-8501: Avoids discovery schema from empty ORC files") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withTable("empty_orc") {
+        withTempTable("empty", "single") {
+          sqlContext.sql(
+            s"""CREATE TABLE empty_orc(key INT, value STRING)
+               |STORED AS ORC
+               |LOCATION '$path'
+             """.stripMargin)
+
+          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+          emptyDF.registerTempTable("empty")
+
+          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
+          // Spark SQL ORC data source always avoids write empty ORC files.
+          sqlContext.sql(
+            s"""INSERT INTO TABLE empty_orc
+               |SELECT key, value FROM empty
+             """.stripMargin)
+
+          val errorMessage = intercept[AnalysisException] {
+            sqlContext.read.orc(path)
+          }.getMessage
+
+          assert(errorMessage.contains("Failed to discover schema from ORC files"))
+
+          val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
+          singleRowDF.registerTempTable("single")
+
+          sqlContext.sql(
+            s"""INSERT INTO TABLE empty_orc
+               |SELECT key, value FROM single
+             """.stripMargin)
+
+          val df = sqlContext.read.orc(path)
+          assert(df.schema === singleRowDF.schema.asNullable)
+          checkAnswer(df, singleRowDF)
+        }
+      }
+    }
+  }
+
+  test("SPARK-10623 Enable ORC PPD") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        import testImplicits._
+
+        val path = dir.getCanonicalPath
+        sqlContext.range(10).coalesce(1).write.orc(path)
+        val df = sqlContext.read.orc(path)
+
+        def checkPredicate(pred: Column, answer: Seq[Long]): Unit = {
+          checkAnswer(df.where(pred), answer.map(Row(_)))
+        }
+
+        checkPredicate('id === 5, Seq(5L))
+        checkPredicate('id <=> 5, Seq(5L))
+        checkPredicate('id < 5, 0L to 4L)
+        checkPredicate('id <= 5, 0L to 5L)
+        checkPredicate('id > 5, 6L to 9L)
+        checkPredicate('id >= 5, 5L to 9L)
+        checkPredicate('id.isNull, Seq.empty[Long])
+        checkPredicate('id.isNotNull, 0L to 9L)
+        checkPredicate('id.isin(1L, 3L, 5L), Seq(1L, 3L, 5L))
+        checkPredicate('id > 0 && 'id < 3, 1L to 2L)
+        checkPredicate('id < 1 || 'id > 8, Seq(0L, 9L))
+        checkPredicate(!('id > 3), 0L to 3L)
+        checkPredicate(!('id > 0 && 'id < 3), Seq(0L) ++ (3L to 9L))
+      }
     }
   }
 }

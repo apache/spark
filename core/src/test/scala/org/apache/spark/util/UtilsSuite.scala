@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io.{File, ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream}
+import java.lang.{Double => JDouble, Float => JFloat}
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.text.DecimalFormatSymbols
@@ -29,16 +30,15 @@ import scala.util.Random
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
-import org.scalatest.FunSuite
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.SparkConf
 
-class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
+class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("timeConversion") {
     // Test -1
@@ -384,7 +384,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
     assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
-    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar%23app.jar")
+    assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
     if (Utils.isWindows) {
       assertResolves("C:\\path\\to\\file.txt", "file:/C:/path/to/file.txt")
@@ -414,10 +414,10 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     assertResolves("file:/jar1,file:/jar2", "file:/jar1,file:/jar2")
     assertResolves("hdfs:/jar1,file:/jar2,jar3", s"hdfs:/jar1,file:/jar2,file:$cwd/jar3")
     assertResolves("hdfs:/jar1,file:/jar2,jar3,jar4#jar5,path to/jar6",
-      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4%23jar5,file:$cwd/path%20to/jar6")
+      s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:$cwd/jar4#jar5,file:$cwd/path%20to/jar6")
     if (Utils.isWindows) {
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py#py.pi,file:/C:/path%20to/jar4")
     }
   }
 
@@ -487,11 +487,17 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
 
   // Test for using the util function to change our log levels.
   test("log4j log level change") {
-    Utils.setLogLevel(org.apache.log4j.Level.ALL)
-    assert(log.isInfoEnabled())
-    Utils.setLogLevel(org.apache.log4j.Level.ERROR)
-    assert(!log.isInfoEnabled())
-    assert(log.isErrorEnabled())
+    val current = org.apache.log4j.Logger.getRootLogger().getLevel()
+    try {
+      Utils.setLogLevel(org.apache.log4j.Level.ALL)
+      assert(log.isInfoEnabled())
+      Utils.setLogLevel(org.apache.log4j.Level.ERROR)
+      assert(!log.isInfoEnabled())
+      assert(log.isErrorEnabled())
+    } finally {
+      // Best effort at undoing changes this test made.
+      Utils.setLogLevel(current)
+    }
   }
 
   test("deleteRecursively") {
@@ -551,7 +557,7 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
   test("fetch hcfs dir") {
     val tempDir = Utils.createTempDir()
     val sourceDir = new File(tempDir, "source-dir")
-    val innerSourceDir = Utils.createTempDir(root=sourceDir.getPath)
+    val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
     val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
     val targetDir = new File(tempDir, "target-dir")
     Files.write("some text", sourceFile, UTF_8)
@@ -609,4 +615,123 @@ class UtilsSuite extends FunSuite with ResetSystemProperties with Logging {
     manager.runAll()
     assert(output.toList === List(4, 3, 2))
   }
+
+  test("isInDirectory") {
+    val tmpDir = new File(sys.props("java.io.tmpdir"))
+    val parentDir = new File(tmpDir, "parent-dir")
+    val childDir1 = new File(parentDir, "child-dir-1")
+    val childDir1b = new File(parentDir, "child-dir-1b")
+    val childFile1 = new File(parentDir, "child-file-1.txt")
+    val childDir2 = new File(childDir1, "child-dir-2")
+    val childDir2b = new File(childDir1, "child-dir-2b")
+    val childFile2 = new File(childDir1, "child-file-2.txt")
+    val childFile3 = new File(childDir2, "child-file-3.txt")
+    val nullFile: File = null
+    parentDir.mkdir()
+    childDir1.mkdir()
+    childDir1b.mkdir()
+    childDir2.mkdir()
+    childDir2b.mkdir()
+    childFile1.createNewFile()
+    childFile2.createNewFile()
+    childFile3.createNewFile()
+
+    // Identity
+    assert(Utils.isInDirectory(parentDir, parentDir))
+    assert(Utils.isInDirectory(childDir1, childDir1))
+    assert(Utils.isInDirectory(childDir2, childDir2))
+
+    // Valid ancestor-descendant pairs
+    assert(Utils.isInDirectory(parentDir, childDir1))
+    assert(Utils.isInDirectory(parentDir, childFile1))
+    assert(Utils.isInDirectory(parentDir, childDir2))
+    assert(Utils.isInDirectory(parentDir, childFile2))
+    assert(Utils.isInDirectory(parentDir, childFile3))
+    assert(Utils.isInDirectory(childDir1, childDir2))
+    assert(Utils.isInDirectory(childDir1, childFile2))
+    assert(Utils.isInDirectory(childDir1, childFile3))
+    assert(Utils.isInDirectory(childDir2, childFile3))
+
+    // Inverted ancestor-descendant pairs should fail
+    assert(!Utils.isInDirectory(childDir1, parentDir))
+    assert(!Utils.isInDirectory(childDir2, parentDir))
+    assert(!Utils.isInDirectory(childDir2, childDir1))
+    assert(!Utils.isInDirectory(childFile1, parentDir))
+    assert(!Utils.isInDirectory(childFile2, parentDir))
+    assert(!Utils.isInDirectory(childFile3, parentDir))
+    assert(!Utils.isInDirectory(childFile2, childDir1))
+    assert(!Utils.isInDirectory(childFile3, childDir1))
+    assert(!Utils.isInDirectory(childFile3, childDir2))
+
+    // Non-existent files or directories should fail
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one.txt")))
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one/two.txt")))
+    assert(!Utils.isInDirectory(parentDir, new File(parentDir, "one/two/three.txt")))
+
+    // Siblings should fail
+    assert(!Utils.isInDirectory(childDir1, childDir1b))
+    assert(!Utils.isInDirectory(childDir1, childFile1))
+    assert(!Utils.isInDirectory(childDir2, childDir2b))
+    assert(!Utils.isInDirectory(childDir2, childFile2))
+
+    // Null files should fail without throwing NPE
+    assert(!Utils.isInDirectory(parentDir, nullFile))
+    assert(!Utils.isInDirectory(childFile3, nullFile))
+    assert(!Utils.isInDirectory(nullFile, parentDir))
+    assert(!Utils.isInDirectory(nullFile, childFile3))
+  }
+
+  test("circular buffer") {
+    val buffer = new CircularBuffer(25)
+    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+
+    // scalastyle:off println
+    stream.println("test circular test circular test circular test circular test circular")
+    // scalastyle:on println
+    assert(buffer.toString === "t circular test circular\n")
+  }
+
+  test("nanSafeCompareDoubles") {
+    def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
+      assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
+      assert(Utils.nanSafeCompareDoubles(b, a) === JDouble.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0d, 0d)
+    shouldMatchDefaultOrder(0d, 1d)
+    shouldMatchDefaultOrder(Double.MinValue, Double.MaxValue)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NaN) === 0)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.PositiveInfinity) === 1)
+    assert(Utils.nanSafeCompareDoubles(Double.NaN, Double.NegativeInfinity) === 1)
+    assert(Utils.nanSafeCompareDoubles(Double.PositiveInfinity, Double.NaN) === -1)
+    assert(Utils.nanSafeCompareDoubles(Double.NegativeInfinity, Double.NaN) === -1)
+  }
+
+  test("nanSafeCompareFloats") {
+    def shouldMatchDefaultOrder(a: Float, b: Float): Unit = {
+      assert(Utils.nanSafeCompareFloats(a, b) === JFloat.compare(a, b))
+      assert(Utils.nanSafeCompareFloats(b, a) === JFloat.compare(b, a))
+    }
+    shouldMatchDefaultOrder(0f, 0f)
+    shouldMatchDefaultOrder(1f, 1f)
+    shouldMatchDefaultOrder(Float.MinValue, Float.MaxValue)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NaN) === 0)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.PositiveInfinity) === 1)
+    assert(Utils.nanSafeCompareFloats(Float.NaN, Float.NegativeInfinity) === 1)
+    assert(Utils.nanSafeCompareFloats(Float.PositiveInfinity, Float.NaN) === -1)
+    assert(Utils.nanSafeCompareFloats(Float.NegativeInfinity, Float.NaN) === -1)
+  }
+
+  test("isDynamicAllocationEnabled") {
+    val conf = new SparkConf()
+    assert(Utils.isDynamicAllocationEnabled(conf) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "1")) === false)
+    assert(Utils.isDynamicAllocationEnabled(
+      conf.set("spark.executor.instances", "0")) === true)
+  }
+
 }

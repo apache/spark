@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
@@ -28,7 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 
-class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import DecisionTreeRegressorSuite.compareAPIs
 
@@ -49,6 +49,7 @@ class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
       .setImpurity("variance")
       .setMaxDepth(2)
       .setMaxBins(100)
+      .setSeed(1)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
@@ -62,6 +63,16 @@ class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
 
+  test("copied model must have the same parent") {
+    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val model = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(8).fit(df)
+    MLTestingUtils.checkCopy(model)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -69,7 +80,7 @@ class DecisionTreeRegressorSuite extends FunSuite with MLlibTestSparkContext {
   // TODO: test("model save/load")   SPARK-6725
 }
 
-private[ml] object DecisionTreeRegressorSuite extends FunSuite {
+private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
 
   /**
    * Train 2 decision trees on the given dataset, one using the old API and one using the new API.
@@ -79,13 +90,15 @@ private[ml] object DecisionTreeRegressorSuite extends FunSuite {
       data: RDD[LabeledPoint],
       dt: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newTree = dt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(newTree.numFeatures === numFeatures)
   }
 }

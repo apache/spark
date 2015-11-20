@@ -20,8 +20,8 @@ package org.apache.spark.mllib.regression
 import scala.util.Random
 
 import org.jblas.DoubleMatrix
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
   MLlibTestSparkContext}
@@ -33,7 +33,7 @@ private object RidgeRegressionSuite {
   val model = new RidgeRegressionModel(weights = Vectors.dense(0.1, 0.2, 0.3), intercept = 0.5)
 }
 
-class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
+class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]): Double = {
     predictions.zip(input).map { case (prediction, expected) =>
@@ -101,7 +101,7 @@ class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-class RidgeRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+class RidgeRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction") {
     val m = 4

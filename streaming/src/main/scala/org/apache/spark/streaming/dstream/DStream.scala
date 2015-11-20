@@ -217,53 +217,52 @@ abstract class DStream[T: ClassTag] (
       case StreamingContextState.INITIALIZED =>
         // good to go
       case StreamingContextState.ACTIVE =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "starting a context is not supported")
       case StreamingContextState.STOPPED =>
-        throw new SparkException(
+        throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "stopping a context is not supported")
     }
   }
 
   private[streaming] def validateAtStart() {
-    assert(rememberDuration != null, "Remember duration is set to null")
+    require(rememberDuration != null, "Remember duration is set to null")
 
-    assert(
+    require(
       !mustCheckpoint || checkpointDuration != null,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has not been set." +
         " Please use DStream.checkpoint() to set the interval."
     )
 
-    assert(
+    require(
      checkpointDuration == null || context.sparkContext.checkpointDir.isDefined,
-      "The checkpoint directory has not been set. Please use StreamingContext.checkpoint()" +
-      " or SparkContext.checkpoint() to set the checkpoint directory."
+      "The checkpoint directory has not been set. Please set it by StreamingContext.checkpoint()."
     )
 
-    assert(
+    require(
       checkpointDuration == null || checkpointDuration >= slideDuration,
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
         checkpointDuration + " which is lower than its slide time (" + slideDuration + "). " +
         "Please set it to at least " + slideDuration + "."
     )
 
-    assert(
+    require(
       checkpointDuration == null || checkpointDuration.isMultipleOf(slideDuration),
       "The checkpoint interval for " + this.getClass.getSimpleName + " has been set to " +
         checkpointDuration + " which not a multiple of its slide time (" + slideDuration + "). " +
-        "Please set it to a multiple " + slideDuration + "."
+        "Please set it to a multiple of " + slideDuration + "."
     )
 
-    assert(
+    require(
       checkpointDuration == null || storageLevel != StorageLevel.NONE,
       "" + this.getClass.getSimpleName + " has been marked for checkpointing but the storage " +
         "level has not been set to enable persisting. Please use DStream.persist() to set the " +
         "storage level to use memory for better checkpointing performance."
     )
 
-    assert(
+    require(
       checkpointDuration == null || rememberDuration > checkpointDuration,
       "The remember duration for " + this.getClass.getSimpleName + " has been set to " +
         rememberDuration + " which is not more than the checkpoint interval (" +
@@ -272,7 +271,7 @@ abstract class DStream[T: ClassTag] (
 
     val metadataCleanerDelay = MetadataCleaner.getDelaySeconds(ssc.conf)
     logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
-    assert(
+    require(
       metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
       "It seems you are doing some DStream window operation or setting a checkpoint interval " +
         "which requires " + this.getClass.getSimpleName + " to remember generated RDDs for more " +
@@ -342,7 +341,7 @@ abstract class DStream[T: ClassTag] (
       // of RDD generation, else generate nothing.
       if (isTimeValid(time)) {
 
-        val rddOption = createRDDWithLocalProperties(time) {
+        val rddOption = createRDDWithLocalProperties(time, displayInnerRDDOps = false) {
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details. We need to have this call here because
@@ -374,27 +373,52 @@ abstract class DStream[T: ClassTag] (
   /**
    * Wrap a body of code such that the call site and operation scope
    * information are passed to the RDDs created in this body properly.
+   * @param body RDD creation code to execute with certain local properties.
+   * @param time Current batch time that should be embedded in the scope names
+   * @param displayInnerRDDOps Whether the detailed callsites and scopes of the inner RDDs generated
+   *                           by `body` will be displayed in the UI; only the scope and callsite
+   *                           of the DStream operation that generated `this` will be displayed.
    */
-  protected def createRDDWithLocalProperties[U](time: Time)(body: => U): U = {
+  protected[streaming] def createRDDWithLocalProperties[U](
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
     val scopeKey = SparkContext.RDD_SCOPE_KEY
     val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
     // Pass this DStream's operation scope and creation site information to RDDs through
     // thread-local properties in our SparkContext. Since this method may be called from another
     // DStream, we need to temporarily store any old scope and creation site information to
     // restore them later after setting our own.
-    val prevCallSite = ssc.sparkContext.getCallSite()
+    val prevCallSite = CallSite(
+      ssc.sparkContext.getLocalProperty(CallSite.SHORT_FORM),
+      ssc.sparkContext.getLocalProperty(CallSite.LONG_FORM)
+    )
     val prevScope = ssc.sparkContext.getLocalProperty(scopeKey)
     val prevScopeNoOverride = ssc.sparkContext.getLocalProperty(scopeNoOverrideKey)
 
     try {
-      ssc.sparkContext.setCallSite(creationSite)
+      if (displayInnerRDDOps) {
+        // Unset the short form call site, so that generated RDDs get their own
+        ssc.sparkContext.setLocalProperty(CallSite.SHORT_FORM, null)
+        ssc.sparkContext.setLocalProperty(CallSite.LONG_FORM, null)
+      } else {
+        // Set the callsite, so that the generated RDDs get the DStream's call site and
+        // the internal RDD call sites do not get displayed
+        ssc.sparkContext.setCallSite(creationSite)
+      }
+
       // Use the DStream's base scope for this RDD so we can (1) preserve the higher level
       // DStream operation name, and (2) share this scope with other DStreams created in the
       // same operation. Disallow nesting so that low-level Spark primitives do not show up.
       // TODO: merge callsites with scopes so we can just reuse the code there
       makeScope(time).foreach { s =>
         ssc.sparkContext.setLocalProperty(scopeKey, s.toJson)
-        ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        if (displayInnerRDDOps) {
+          // Allow inner RDDs to add inner scopes
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, null)
+        } else {
+          // Do not allow inner RDDs to override the scope set by DStream
+          ssc.sparkContext.setLocalProperty(scopeNoOverrideKey, "true")
+        }
       }
 
       body
@@ -539,7 +563,7 @@ abstract class DStream[T: ClassTag] (
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(filterFunc: T => Boolean): DStream[T] = ssc.withScope {
-    new FilteredDStream(this, filterFunc)
+    new FilteredDStream(this, context.sparkContext.clean(filterFunc))
   }
 
   /**
@@ -604,6 +628,8 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
@@ -613,6 +639,8 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
+   *
+   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
    */
   @deprecated("use foreachRDD", "0.9.0")
   def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
@@ -624,7 +652,8 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
+    val cleanedF = context.sparkContext.clean(foreachFunc, false)
+    foreachRDD((r: RDD[T], t: Time) => cleanedF(r), displayInnerRDDOps = true)
   }
 
   /**
@@ -632,10 +661,26 @@ abstract class DStream[T: ClassTag] (
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc, false)).register()
+    foreachRDD(foreachFunc, displayInnerRDDOps = true)
+  }
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   * @param foreachFunc foreachRDD function
+   * @param displayInnerRDDOps Whether the detailed callsites and scopes of the RDDs generated
+   *                           in the `foreachFunc` to be displayed in the UI. If `false`, then
+   *                           only the scopes and callsites of `foreachRDD` will override those
+   *                           of the RDDs on the display.
+   */
+  private def foreachRDD(
+      foreachFunc: (RDD[T], Time) => Unit,
+      displayInnerRDDOps: Boolean): Unit = {
+    new ForEachDStream(this,
+      context.sparkContext.clean(foreachFunc, false), displayInnerRDDOps).register()
   }
 
   /**
@@ -643,8 +688,8 @@ abstract class DStream[T: ClassTag] (
    * on each RDD of 'this' DStream.
    */
   def transform[U: ClassTag](transformFunc: RDD[T] => RDD[U]): DStream[U] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
     transform((r: RDD[T], t: Time) => cleanedF(r))
@@ -655,11 +700,11 @@ abstract class DStream[T: ClassTag] (
    * on each RDD of 'this' DStream.
    */
   def transform[U: ClassTag](transformFunc: (RDD[T], Time) => RDD[U]): DStream[U] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = context.sparkContext.clean(transformFunc, false)
-    val realTransformFunc =  (rdds: Seq[RDD[_]], time: Time) => {
+    val realTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
       assert(rdds.length == 1)
       cleanedF(rdds.head.asInstanceOf[RDD[T]], time)
     }
@@ -673,8 +718,8 @@ abstract class DStream[T: ClassTag] (
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U]) => RDD[V]
     ): DStream[V] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = ssc.sparkContext.clean(transformFunc, false)
     transformWith(other, (rdd1: RDD[T], rdd2: RDD[U], time: Time) => cleanedF(rdd1, rdd2))
@@ -687,8 +732,8 @@ abstract class DStream[T: ClassTag] (
   def transformWith[U: ClassTag, V: ClassTag](
       other: DStream[U], transformFunc: (RDD[T], RDD[U], Time) => RDD[V]
     ): DStream[V] = ssc.withScope {
-    // because the DStream is reachable from the outer object here, and because 
-    // DStreams can't be serialized with closures, we can't proactively check 
+    // because the DStream is reachable from the outer object here, and because
+    // DStreams can't be serialized with closures, we can't proactively check
     // it for serializability and so we pass the optional false to SparkContext.clean
     val cleanedF = ssc.sparkContext.clean(transformFunc, false)
     val realTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
@@ -716,15 +761,17 @@ abstract class DStream[T: ClassTag] (
     def foreachFunc: (RDD[T], Time) => Unit = {
       (rdd: RDD[T], time: Time) => {
         val firstNum = rdd.take(num + 1)
+        // scalastyle:off println
         println("-------------------------------------------")
         println("Time: " + time)
         println("-------------------------------------------")
         firstNum.take(num).foreach(println)
         if (firstNum.length > num) println("...")
         println()
+        // scalastyle:on println
       }
     }
-    new ForEachDStream(this, context.sparkContext.clean(foreachFunc)).register()
+    foreachRDD(context.sparkContext.clean(foreachFunc), displayInnerRDDOps = false)
   }
 
   /**
@@ -894,7 +941,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, displayInnerRDDOps = false)
   }
 
   /**
@@ -907,7 +954,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreachRDD(saveFunc)
+    this.foreachRDD(saveFunc, displayInnerRDDOps = false)
   }
 
   /**

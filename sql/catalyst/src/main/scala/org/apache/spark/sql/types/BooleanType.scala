@@ -27,8 +27,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
- *
- *@group dataType
  */
 @DeveloperApi
 class BooleanType private() extends AtomicType {

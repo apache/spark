@@ -17,22 +17,22 @@
 
 package org.apache.spark.executor
 
-import java.io.File
+import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util._
 
 /**
@@ -147,7 +147,7 @@ private[spark] class Executor(
 
   /** Returns the total amount of time this JVM process has spent in garbage collection. */
   private def computeTotalGcTime(): Long = {
-    ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
+    ManagementFactory.getGarbageCollectorMXBeans.asScala.map(_.getCollectionTime).sum
   }
 
   class TaskRunner(
@@ -179,7 +179,7 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      val taskMemoryManager = new TaskMemoryManager(env.executorMemoryManager)
+      val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
@@ -209,15 +209,19 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = try {
-          task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
+        var threwException = true
+        val (value, accumUpdates) = try {
+          val res = task.run(
+            taskAttemptId = taskId,
+            attemptNumber = attemptNumber,
+            metricsSystem = env.metricsSystem)
+          threwException = false
+          res
         } finally {
-          // Note: this memory freeing logic is duplicated in DAGScheduler.runLocallyWithinThread;
-          // when changing this, make sure to update both copies.
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
-            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
+            if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {
               logError(errMsg)
@@ -245,9 +249,9 @@ private[spark] class Executor(
           m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
           m.setJvmGCTime(computeTotalGcTime() - startGCTime)
           m.setResultSerializationTime(afterSerialization - beforeSerialization)
+          m.updateAccumulators()
         }
 
-        val accumUpdates = Accumulators.values
         val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.orNull)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
@@ -297,11 +301,20 @@ private[spark] class Executor(
             task.metrics.map { m =>
               m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
               m.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              m.updateAccumulators()
               m
             }
           }
-          val taskEndReason = new ExceptionFailure(t, metrics)
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(taskEndReason))
+          val serializedTaskEndReason = {
+            try {
+              ser.serialize(new ExceptionFailure(t, metrics))
+            } catch {
+              case _: NotSerializableException =>
+                // t is not serializable so just send the stacktrace
+                ser.serialize(new ExceptionFailure(t, metrics, false))
+            }
+          }
+          execBackend.statusUpdate(taskId, TaskState.FAILED, serializedTaskEndReason)
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
           // stopping other tasks unnecessarily.
@@ -310,12 +323,6 @@ private[spark] class Executor(
           }
 
       } finally {
-        // Release memory used by this thread for shuffles
-        env.shuffleMemoryManager.releaseMemoryForThisThread()
-        // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
-        // Release memory used by this thread for accumulators
-        Accumulators.clear()
         runningTasks.remove(taskId)
       }
     }
@@ -356,7 +363,7 @@ private[spark] class Executor(
       logInfo("Using REPL class URI: " + classUri)
       try {
         val _userClassPathFirst: java.lang.Boolean = userClassPathFirst
-        val klass = Class.forName("org.apache.spark.repl.ExecutorClassLoader")
+        val klass = Utils.classForName("org.apache.spark.repl.ExecutorClassLoader")
           .asInstanceOf[Class[_ <: ClassLoader]]
         val constructor = klass.getConstructor(classOf[SparkConf], classOf[String],
           classOf[ClassLoader], classOf[Boolean])
@@ -418,12 +425,13 @@ private[spark] class Executor(
     val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
     val curGCTime = computeTotalGcTime()
 
-    for (taskRunner <- runningTasks.values()) {
+    for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
         taskRunner.task.metrics.foreach { metrics =>
           metrics.updateShuffleReadMetrics()
           metrics.updateInputMetrics()
           metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+          metrics.updateAccumulators()
 
           if (isLocal) {
             // JobProgressListener will hold an reference of it during
@@ -443,7 +451,7 @@ private[spark] class Executor(
     try {
       val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](message)
       if (response.reregisterBlockManager) {
-        logWarning("Told to re-register on heartbeat")
+        logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
     } catch {

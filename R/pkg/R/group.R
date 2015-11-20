@@ -79,6 +79,7 @@ setMethod("count",
 #' @param x a GroupedData
 #' @return a DataFrame
 #' @rdname agg
+#' @family agg_funcs
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
@@ -87,7 +88,7 @@ setMethod("count",
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
-            cols = list(...)
+            cols <- list(...)
             stopifnot(length(cols) > 0)
             if (is.character(cols[[1]])) {
               cols <- varargsToEnv(...)
@@ -97,12 +98,12 @@ setMethod("agg",
               if (!is.null(ns)) {
                 for (n in ns) {
                   if (n != "") {
-                    cols[[n]] = alias(cols[[n]], n)
+                    cols[[n]] <- alias(cols[[n]], n)
                   }
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], listToSeq(jcols[-1]))
+              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], jcols[-1])
             } else {
               stop("agg can only support Column or character")
             }
@@ -117,14 +118,17 @@ setMethod("summarize",
             agg(x, ...)
           })
 
-# sum/mean/avg/min/max
-methods <- c("sum", "mean", "avg", "min", "max")
+# Aggregate Functions by name
+methods <- c("avg", "max", "mean", "min", "sum")
+
+# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
+# "variance", "var_samp", "var_pop"
 
 createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
             function(x, ...) {
-              sdf <- callJMethod(x@sgd, name, toSeq(...))
+              sdf <- callJMethod(x@sgd, name, list(...))
               dataFrame(sdf)
             })
 }
@@ -136,4 +140,3 @@ createMethods <- function() {
 }
 
 createMethods()
-

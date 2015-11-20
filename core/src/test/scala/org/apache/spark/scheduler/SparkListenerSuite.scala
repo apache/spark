@@ -20,15 +20,15 @@ package org.apache.spark.scheduler
 import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.Matchers
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ResetSystemProperties
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
-class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
+class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
 
   /** Length of time to wait while draining listener events. */
@@ -47,7 +47,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
     // Starting listener bus should flush all buffered events
     bus.start(sc)
-    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(counter.count === 5)
 
     // After listener bus has stopped, posting events should not increment counter
@@ -131,7 +131,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     rdd2.setName("Target RDD")
     rdd2.count()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 
     listener.stageInfos.size should be {1}
     val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
@@ -156,7 +156,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     rdd3.setName("Trois")
 
     rdd1.count()
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be {1}
     val stageInfo1 = listener.stageInfos.keys.find(_.stageId == 0).get
     stageInfo1.rddInfos.size should be {1} // ParallelCollectionRDD
@@ -165,7 +165,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     listener.stageInfos.clear()
 
     rdd2.count()
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be {1}
     val stageInfo2 = listener.stageInfos.keys.find(_.stageId == 1).get
     stageInfo2.rddInfos.size should be {3} // ParallelCollectionRDD, FilteredRDD, MappedRDD
@@ -174,7 +174,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     listener.stageInfos.clear()
 
     rdd3.count()
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
     val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
@@ -188,9 +188,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
     val rdd2 = rdd1.map(_.toString)
-    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
+    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1))
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 
     listener.stageInfos.size should be {1}
     val (stageInfo, _) = listener.stageInfos.head
@@ -212,20 +212,21 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       i
     }
 
-    val d = sc.parallelize(0 to 1e4.toInt, 64).map(w)
+    val numSlices = 16
+    val d = sc.parallelize(0 to 1e3.toInt, numSlices).map(w)
     d.count()
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (1)
 
     val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
     val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
-    val d4 = d2.cogroup(d3, 64).map { case (k, (v1, v2)) =>
+    val d4 = d2.cogroup(d3, numSlices).map { case (k, (v1, v2)) =>
       w(k) -> (v1.size, v2.size)
     }
     d4.setName("A Cogroup")
     d4.collectAsMap()
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (4)
     listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
       /**
@@ -258,8 +259,8 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
         if (stageInfo.rddInfos.exists(_.name == d4.name)) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
-          sm.totalBlocksFetched should be (128)
-          sm.localBlocksFetched should be (128)
+          sm.totalBlocksFetched should be (2*numSlices)
+          sm.localBlocksFetched should be (2*numSlices)
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0L)
         }
@@ -268,20 +269,21 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    sc = new SparkContext("local", "SparkListenerSuite")
+    val conf = new SparkConf().set("spark.akka.frameSize", "1")
+    sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
     // Make a task whose result is larger than the akka frame size
-    System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+    assert(akkaFrameSize === 1024 * 1024)
     val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(akkaFrameSize).toArray }
       .reduce { case (x, y) => x }
     assert(result === 1.to(akkaFrameSize).toArray)
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
@@ -297,7 +299,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
     assert(result === 2)
 
-    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)
@@ -352,7 +354,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
 
     // Post events to all listeners, and wait until the queue is drained
     (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded)) }
-    assert(bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
 
     // The exception should be caught, and the event should be propagated to other listeners
     assert(bus.listenerThreadIsAlive)
@@ -365,10 +367,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
       .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
         classOf[BasicJobCounter].getName)
     sc = new SparkContext(conf)
-    sc.listenerBus.listeners.collect { case x: BasicJobCounter => x}.size should be (1)
-    sc.listenerBus.listeners.collect {
-      case x: ListenerThatAcceptsSparkConf => x
-    }.size should be (1)
+    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
+    sc.listenerBus.listeners.asScala
+      .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
   }
 
   /**

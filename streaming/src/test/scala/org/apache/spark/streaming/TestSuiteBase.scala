@@ -24,16 +24,34 @@ import scala.collection.mutable.SynchronizedBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
+
+/**
+ * A dummy stream that does absolutely nothing.
+ */
+private[streaming] class DummyDStream(ssc: StreamingContext) extends DStream[Int](ssc) {
+  override def dependencies: List[DStream[Int]] = List.empty
+  override def slideDuration: Duration = Seconds(1)
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
+
+/**
+ * A dummy input stream that does absolutely nothing.
+ */
+private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputDStream[Int](ssc) {
+  override def start(): Unit = { }
+  override def stop(): Unit = { }
+  override def compute(time: Time): Option[RDD[Int]] = Some(ssc.sc.emptyRDD[Int])
+}
 
 /**
  * This is a input stream just for the testsuites. This is equivalent to a checkpointable,
@@ -58,7 +76,7 @@ class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], 
     }
 
     // Report the input data's information to InputInfoTracker for testing
-    val inputInfo = InputInfo(id, selectedInput.length.toLong)
+    val inputInfo = StreamInputInfo(id, selectedInput.length.toLong)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     val rdd = ssc.sc.makeRDD(selectedInput, numPartitions)
@@ -80,7 +98,7 @@ class TestOutputStream[T: ClassTag](
   ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
-  }) {
+  }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
@@ -104,7 +122,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
     output += collected
-  }) {
+  }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])
@@ -186,7 +204,7 @@ class BatchCounter(ssc: StreamingContext) {
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
+trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
   def framework: String = this.getClass.getSimpleName

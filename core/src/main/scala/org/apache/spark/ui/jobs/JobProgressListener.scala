@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.jobs
 
+import java.util.concurrent.TimeoutException
+
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
@@ -49,8 +51,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type PoolName = String
   type ExecutorId = String
 
-  // Applicatin:
+  // Application:
   @volatile var startTime = -1L
+  @volatile var endTime = -1L
 
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
@@ -119,7 +122,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       "failedStages" -> failedStages.size
     )
   }
-  
+
   // These collections may grow arbitrarily, but once Spark becomes idle they should shrink back to
   // some bound based on the `spark.ui.retainedStages` and `spark.ui.retainedJobs` settings:
   private[spark] def getSizesOfSoftSizeLimitedCollections: Map[String, Int] = {
@@ -278,7 +281,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
-        jobData.completedStageIndices.add(stage.stageId)
+        if (!stage.submissionTime.isEmpty) {
+          jobData.completedStageIndices.add(stage.stageId)
+        }
       } else {
         jobData.numFailedStages += 1
       }
@@ -311,6 +316,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages += 1
+
+      // If a stage retries again, it should be removed from completedStageIndices set
+      jobData.completedStageIndices.remove(stage.stageId)
     }
   }
 
@@ -525,5 +533,35 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   override def onApplicationStart(appStarted: SparkListenerApplicationStart) {
     startTime = appStarted.time
+  }
+
+  override def onApplicationEnd(appEnded: SparkListenerApplicationEnd) {
+    endTime = appEnded.time
+  }
+
+  /**
+   * For testing only. Wait until at least `numExecutors` executors are up, or throw
+   * `TimeoutException` if the waiting time elapsed before `numExecutors` executors up.
+   * Exposed for testing.
+   *
+   * @param numExecutors the number of executors to wait at least
+   * @param timeout time to wait in milliseconds
+   */
+  private[spark] def waitUntilExecutorsUp(numExecutors: Int, timeout: Long): Unit = {
+    val finishTime = System.currentTimeMillis() + timeout
+    while (System.currentTimeMillis() < finishTime) {
+      val numBlockManagers = synchronized {
+        blockManagerIds.size
+      }
+      if (numBlockManagers >= numExecutors + 1) {
+        // Need to count the block manager in driver
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Can't find $numExecutors executors before $timeout milliseconds elapsed")
   }
 }

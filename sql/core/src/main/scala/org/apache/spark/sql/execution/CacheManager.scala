@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.columnar.InMemoryRelation
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -37,22 +37,13 @@ private[sql] case class CachedData(plan: LogicalPlan, cachedRepresentation: InMe
  *
  * Internal to Spark SQL.
  */
-private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
+private[sql] class CacheManager extends Logging {
 
   @transient
   private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
-
-  /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = lookupCachedData(sqlContext.table(tableName)).nonEmpty
-
-  /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(sqlContext.table(tableName), Some(tableName))
-
-  /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = uncacheQuery(sqlContext.table(tableName))
 
   /** Acquires a read lock on the cache for the duration of `f`. */
   private def readLock[A](f: => A): A = {
@@ -84,7 +75,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Caches the data produced by the logical representation of the given schema rdd.  Unlike
+   * Caches the data produced by the logical representation of the given [[DataFrame]]. Unlike
    * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
    * the in-memory columnar representation of the underlying table is expensive.
    */
@@ -96,6 +87,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
+      val sqlContext = query.sqlContext
       cachedData +=
         CachedData(
           planToCache,
@@ -103,7 +95,7 @@ private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
             sqlContext.conf.useCompression,
             sqlContext.conf.columnBatchSize,
             storageLevel,
-            query.queryExecution.executedPlan,
+            sqlContext.executePlan(query.logicalPlan).executedPlan,
             tableName))
     }
   }

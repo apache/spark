@@ -44,7 +44,7 @@ class WindowedDStream[T: ClassTag](
   // Persist parent level by default, as those RDDs are going to be obviously reused.
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
-  def windowDuration: Duration =  _windowDuration
+  def windowDuration: Duration = _windowDuration
 
   override def dependencies: List[DStream[_]] = List(parent)
 
@@ -68,7 +68,7 @@ class WindowedDStream[T: ClassTag](
       new PartitionerAwareUnionRDD(ssc.sc, rddsInWindow)
     } else {
       logDebug("Using normal union for windowing at " + validTime)
-      new UnionRDD(ssc.sc,rddsInWindow)
+      new UnionRDD(ssc.sc, rddsInWindow)
     }
     Some(windowRDD)
   }

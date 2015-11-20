@@ -20,12 +20,13 @@ package org.apache.spark.util
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.util.Random
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class ThreadUtilsSuite extends FunSuite {
+class ThreadUtilsSuite extends SparkFunSuite {
 
   test("newDaemonSingleThreadExecutor") {
     val executor = ThreadUtils.newDaemonSingleThreadExecutor("this-is-a-thread-name")
@@ -65,5 +66,26 @@ class ThreadUtilsSuite extends FunSuite {
     }(ThreadUtils.sameThread)
     val futureThreadName = Await.result(f, 10.seconds)
     assert(futureThreadName === callerThreadName)
+  }
+
+  test("runInNewThread") {
+    import ThreadUtils._
+    assert(runInNewThread("thread-name") { Thread.currentThread().getName } === "thread-name")
+    assert(runInNewThread("thread-name") { Thread.currentThread().isDaemon } === true)
+    assert(
+      runInNewThread("thread-name", isDaemon = false) { Thread.currentThread().isDaemon } === false
+    )
+    val uniqueExceptionMessage = "test" + Random.nextInt()
+    val exception = intercept[IllegalArgumentException] {
+      runInNewThread("thread-name") { throw new IllegalArgumentException(uniqueExceptionMessage) }
+    }
+    assert(exception.asInstanceOf[IllegalArgumentException].getMessage === uniqueExceptionMessage)
+    assert(exception.getStackTrace.mkString("\n").contains(
+      "... run in separate thread using org.apache.spark.util.ThreadUtils ...") === true,
+      "stack trace does not contain expected place holder"
+    )
+    assert(exception.getStackTrace.mkString("\n").contains("ThreadUtils.scala") === false,
+      "stack trace contains unexpected references to ThreadUtils"
+    )
   }
 }

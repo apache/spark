@@ -19,49 +19,49 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
+class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext.implicits._
 
-class QueryPartitionSuite extends QueryTest {
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+  test("SPARK-5068: query data when path doesn't exist") {
+    withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
+      val testData = sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString))).toDF()
+      testData.registerTempTable("testData")
 
-  test("SPARK-5068: query data when path doesn't exist"){
-    val testData = TestHive.sparkContext.parallelize(
-      (1 to 10).map(i => TestData(i, i.toString))).toDF()
-    testData.registerTempTable("testData")
+      val tmpDir = Files.createTempDir()
+      // create the table for test
+      sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+        s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
+        "SELECT key,value FROM testData")
 
-    val tmpDir = Files.createTempDir()
-    // create the table for test
-    sql(s"CREATE TABLE table_with_partition(key int,value string) " +
-      s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
-      "SELECT key,value FROM testData")
-    sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
-      "SELECT key,value FROM testData")
+      // test for the exist path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect
+          ++ testData.toDF.collect ++ testData.toDF.collect)
 
-    // test for the exist path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect)
+      // delete the path of one partition
+      tmpDir.listFiles
+        .find { f => f.isDirectory && f.getName().startsWith("ds=") }
+        .foreach { f => Utils.deleteRecursively(f) }
 
-    // delete the path of one partition
-    tmpDir.listFiles
-      .find { f => f.isDirectory && f.getName().startsWith("ds=") }
-      .foreach { f => Utils.deleteRecursively(f) }
+      // test for after delete the path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-    // test for after delete the path
-    checkAnswer(sql("select key,value from table_with_partition"),
-      testData.toSchemaRDD.collect ++ testData.toSchemaRDD.collect
-        ++ testData.toSchemaRDD.collect)
-
-    sql("DROP TABLE table_with_partition")
-    sql("DROP TABLE createAndInsertTest")
+      sql("DROP TABLE table_with_partition")
+      sql("DROP TABLE createAndInsertTest")
+    }
   }
 }

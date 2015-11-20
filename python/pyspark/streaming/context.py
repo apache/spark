@@ -32,48 +32,6 @@ from pyspark.streaming.util import TransformFunction, TransformFunctionSerialize
 __all__ = ["StreamingContext"]
 
 
-def _daemonize_callback_server():
-    """
-    Hack Py4J to daemonize callback server
-
-    The thread of callback server has daemon=False, it will block the driver
-    from exiting if it's not shutdown. The following code replace `start()`
-    of CallbackServer with a new version, which set daemon=True for this
-    thread.
-
-    Also, it will update the port number (0) with real port
-    """
-    # TODO: create a patch for Py4J
-    import socket
-    import py4j.java_gateway
-    logger = py4j.java_gateway.logger
-    from py4j.java_gateway import Py4JNetworkError
-    from threading import Thread
-
-    def start(self):
-        """Starts the CallbackServer. This method should be called by the
-        client instead of run()."""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,
-                                      1)
-        try:
-            self.server_socket.bind((self.address, self.port))
-            if not self.port:
-                # update port with real port
-                self.port = self.server_socket.getsockname()[1]
-        except Exception as e:
-            msg = 'An error occurred while trying to start the callback server: %s' % e
-            logger.exception(msg)
-            raise Py4JNetworkError(msg)
-
-        # Maybe thread needs to be cleanup up?
-        self.thread = Thread(target=self.run)
-        self.thread.daemon = True
-        self.thread.start()
-
-    py4j.java_gateway.CallbackServer.start = start
-
-
 class StreamingContext(object):
     """
     Main entry point for Spark Streaming functionality. A StreamingContext
@@ -85,6 +43,9 @@ class StreamingContext(object):
     to wait for the termination of the context by `stop()` or by an exception.
     """
     _transformerSerializer = None
+
+    # Reference to a currently active StreamingContext
+    _activeContext = None
 
     def __init__(self, sparkContext, batchDuration=None, jssc=None):
         """
@@ -120,10 +81,14 @@ class StreamingContext(object):
 
         # start callback server
         # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__:
-            _daemonize_callback_server()
-            # use random port
-            gw._start_callback_server(0)
+        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+            gw.callback_server_parameters.eager_load = True
+            gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
+            gw.callback_server_parameters.port = 0
+            gw.start_callback_server(gw.callback_server_parameters)
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
             # gateway with real port
             gw._python_proxy_port = gw._callback_server.port
             # get the GatewayServer object in JVM by ID
@@ -142,19 +107,19 @@ class StreamingContext(object):
         Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
         If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
-        will be used to create a JavaStreamingContext.
+        will be used to create a new context.
 
-        @param checkpointPath: Checkpoint directory used in an earlier JavaStreamingContext program
-        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program
+        @param setupFunc:      Function to create a new context and setup DStreams
         """
-        # TODO: support checkpoint in HDFS
-        if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):
+        cls._ensure_initialized()
+        gw = SparkContext._gateway
+
+        # Check whether valid checkpoint information exists in the given path
+        if gw.jvm.CheckpointReader.read(checkpointPath).isEmpty():
             ssc = setupFunc()
             ssc.checkpoint(checkpointPath)
             return ssc
-
-        cls._ensure_initialized()
-        gw = SparkContext._gateway
 
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
@@ -162,13 +127,63 @@ class StreamingContext(object):
             print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
-        jsc = jssc.sparkContext()
-        conf = SparkConf(_jconf=jsc.getConf())
-        sc = SparkContext(conf=conf, gateway=gw, jsc=jsc)
+        # If there is already an active instance of Python SparkContext use it, or create a new one
+        if not SparkContext._active_spark_context:
+            jsc = jssc.sparkContext()
+            conf = SparkConf(_jconf=jsc.getConf())
+            SparkContext(conf=conf, gateway=gw, jsc=jsc)
+
+        sc = SparkContext._active_spark_context
+
         # update ctx in serializer
-        SparkContext._active_spark_context = sc
         cls._transformerSerializer.ctx = sc
         return StreamingContext(sc, None, jssc)
+
+    @classmethod
+    def getActive(cls):
+        """
+        Return either the currently active StreamingContext (i.e., if there is a context started
+        but not stopped) or None.
+        """
+        activePythonContext = cls._activeContext
+        if activePythonContext is not None:
+            # Verify that the current running Java StreamingContext is active and is the same one
+            # backing the supposedly active Python context
+            activePythonContextJavaId = activePythonContext._jssc.ssc().hashCode()
+            activeJvmContextOption = activePythonContext._jvm.StreamingContext.getActive()
+
+            if activeJvmContextOption.isEmpty():
+                cls._activeContext = None
+            elif activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
+                cls._activeContext = None
+                raise Exception("JVM's active JavaStreamingContext is not the JavaStreamingContext "
+                                "backing the action Python StreamingContext. This is unexpected.")
+        return cls._activeContext
+
+    @classmethod
+    def getActiveOrCreate(cls, checkpointPath, setupFunc):
+        """
+        Either return the active StreamingContext (i.e. currently started but not stopped),
+        or recreate a StreamingContext from checkpoint data or create a new StreamingContext
+        using the provided setupFunc function. If the checkpointPath is None or does not contain
+        valid checkpoint data, then setupFunc will be called to create a new context and setup
+        DStreams.
+
+        @param checkpointPath: Checkpoint directory used in an earlier streaming program. Can be
+                               None if the intention is to always create a new context when there
+                               is no active context.
+        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
+        """
+
+        if setupFunc is None:
+            raise Exception("setupFunc cannot be None")
+        activeContext = cls.getActive()
+        if activeContext is not None:
+            return activeContext
+        elif checkpointPath is not None:
+            return cls.getOrCreate(checkpointPath, setupFunc)
+        else:
+            return setupFunc()
 
     @property
     def sparkContext(self):
@@ -182,10 +197,12 @@ class StreamingContext(object):
         Start the execution of the streams.
         """
         self._jssc.start()
+        StreamingContext._activeContext = self
 
     def awaitTermination(self, timeout=None):
         """
         Wait for the execution to stop.
+
         @param timeout: time to wait in seconds
         """
         if timeout is None:
@@ -198,9 +215,10 @@ class StreamingContext(object):
         Wait for the execution to stop. Return `true` if it's stopped; or
         throw the reported error during the execution; or `false` if the
         waiting time elapsed before returning from the method.
+
         @param timeout: time to wait in seconds
         """
-        self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
+        return self._jssc.awaitTerminationOrTimeout(int(timeout * 1000))
 
     def stop(self, stopSparkContext=True, stopGraceFully=False):
         """
@@ -212,6 +230,7 @@ class StreamingContext(object):
                               of all received data to be completed
         """
         self._jssc.stop(stopSparkContext, stopGraceFully)
+        StreamingContext._activeContext = None
         if stopSparkContext:
             self._sc.stop()
 
@@ -344,3 +363,11 @@ class StreamingContext(object):
         first = dstreams[0]
         jrest = [d._jdstream for d in dstreams[1:]]
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def addStreamingListener(self, streamingListener):
+        """
+        Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+        receiving system events related to streaming.
+        """
+        self._jssc.addStreamingListener(self._jvm.JavaStreamingListenerWrapper(
+            self._jvm.PythonStreamingListenerWrapper(streamingListener)))

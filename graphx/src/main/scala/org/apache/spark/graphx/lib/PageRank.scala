@@ -104,19 +104,24 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
+    val personalized = srcId isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
+
     // Initialize the PageRank graph with each edge attribute having
-    // weight 1/outDegree and each vertex with attribute 1.0.
+    // weight 1/outDegree and each vertex with attribute resetProb.
+    // When running personalized pagerank, only the source vertex
+    // has an attribute resetProb. All others are set to 0.
     var rankGraph: Graph[Double, Double] = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
       // Set the vertex attributes to the initial pagerank values
-      .mapVertices( (id, attr) => resetProb )
+      .mapVertices { (id, attr) =>
+        if (!(id != src && personalized)) resetProb else 0.0
+      }
 
-    val personalized = srcId isDefined
-    val src: VertexId = srcId.getOrElse(-1L)
-    def delta(u: VertexId, v: VertexId):Double = { if (u == v) 1.0 else 0.0 }
+    def delta(u: VertexId, v: VertexId): Double = { if (u == v) 1.0 else 0.0 }
 
     var iteration = 0
     var prevRankGraph: Graph[Double, Double] = null
@@ -133,13 +138,13 @@ object PageRank extends Logging {
       // edge partitions.
       prevRankGraph = rankGraph
       val rPrb = if (personalized) {
-        (src: VertexId ,id: VertexId) => resetProb * delta(src,id)
+        (src: VertexId , id: VertexId) => resetProb * delta(src, id)
       } else {
         (src: VertexId, id: VertexId) => resetProb
       }
 
       rankGraph = rankGraph.joinVertices(rankUpdates) {
-        (id, oldRank, msgSum) => rPrb(src,id) + (1.0 - resetProb) * msgSum
+        (id, oldRank, msgSum) => rPrb(src, id) + (1.0 - resetProb) * msgSum
       }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
@@ -192,6 +197,9 @@ object PageRank extends Logging {
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15,
       srcId: Option[VertexId] = None): Graph[Double, Double] =
   {
+    val personalized = srcId.isDefined
+    val src: VertexId = srcId.getOrElse(-1L)
+
     // Initialize the pagerankGraph with each edge attribute
     // having weight 1/outDegree and each vertex with attribute 1.0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
@@ -202,12 +210,10 @@ object PageRank extends Logging {
       // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initalPR, delta = 0)
-      .mapVertices( (id, attr) => (0.0, 0.0) )
+      .mapVertices { (id, attr) =>
+        if (id == src) (resetProb, Double.NegativeInfinity) else (0.0, 0.0)
+      }
       .cache()
-
-    val personalized = srcId.isDefined
-    val src: VertexId = srcId.getOrElse(-1L)
-
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
@@ -225,7 +231,8 @@ object PageRank extends Logging {
       teleport = oldPR*delta
 
       val newPR = teleport + (1.0 - resetProb) * msgSum
-      (newPR, newPR - oldPR)
+      val newDelta = if (lastDelta == Double.NegativeInfinity) newPR else newPR - oldPR
+      (newPR, newDelta)
     }
 
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
@@ -239,11 +246,11 @@ object PageRank extends Logging {
     def messageCombiner(a: Double, b: Double): Double = a + b
 
     // The initial message received by all vertices in PageRank
-    val initialMessage = resetProb / (1.0 - resetProb)
+    val initialMessage = if (personalized) 0.0 else resetProb / (1.0 - resetProb)
 
     // Execute a dynamic version of Pregel.
     val vp = if (personalized) {
-      (id: VertexId, attr: (Double, Double),msgSum: Double) =>
+      (id: VertexId, attr: (Double, Double), msgSum: Double) =>
         personalizedVertexProgram(id, attr, msgSum)
     } else {
       (id: VertexId, attr: (Double, Double), msgSum: Double) =>

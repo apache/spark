@@ -17,36 +17,39 @@
 
 package org.apache.spark.mllib.stat.test
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 
 /**
- * :: Experimental ::
  * Trait for hypothesis test results.
  * @tparam DF Return type of `degreesOfFreedom`.
  */
-@Experimental
+@Since("1.1.0")
 trait TestResult[DF] {
 
   /**
    * The probability of obtaining a test statistic result at least as extreme as the one that was
    * actually observed, assuming that the null hypothesis is true.
    */
+  @Since("1.1.0")
   def pValue: Double
 
   /**
    * Returns the degree(s) of freedom of the hypothesis test.
    * Return type should be Number(e.g. Int, Double) or tuples of Numbers for toString compatibility.
    */
+  @Since("1.1.0")
   def degreesOfFreedom: DF
 
   /**
    * Test statistic.
    */
+  @Since("1.1.0")
   def statistic: Double
 
   /**
    * Null hypothesis of the test.
    */
+  @Since("1.1.0")
   def nullHypothesis: String
 
   /**
@@ -74,15 +77,14 @@ trait TestResult[DF] {
 }
 
 /**
- * :: Experimental ::
  * Object containing the test results for the chi-squared hypothesis test.
  */
-@Experimental
+@Since("1.1.0")
 class ChiSqTestResult private[stat] (override val pValue: Double,
-    override val degreesOfFreedom: Int,
-    override val statistic: Double,
-    val method: String,
-    override val nullHypothesis: String) extends TestResult[Int] {
+    @Since("1.1.0") override val degreesOfFreedom: Int,
+    @Since("1.1.0") override val statistic: Double,
+    @Since("1.1.0") val method: String,
+    @Since("1.1.0") override val nullHypothesis: String) extends TestResult[Int] {
 
   override def toString: String = {
     "Chi squared test summary:\n" +
@@ -90,3 +92,44 @@ class ChiSqTestResult private[stat] (override val pValue: Double,
       super.toString
   }
 }
+
+/**
+ * :: Experimental ::
+ * Object containing the test results for the Kolmogorov-Smirnov test.
+ */
+@Experimental
+@Since("1.5.0")
+class KolmogorovSmirnovTestResult private[stat] (
+    @Since("1.5.0") override val pValue: Double,
+    @Since("1.5.0") override val statistic: Double,
+    @Since("1.5.0") override val nullHypothesis: String) extends TestResult[Int] {
+
+  @Since("1.5.0")
+  override val degreesOfFreedom = 0
+
+  override def toString: String = {
+    "Kolmogorov-Smirnov test summary:\n" + super.toString
+  }
+}
+
+/**
+ * :: Experimental ::
+ * Object containing the test results for streaming testing.
+ */
+@Experimental
+@Since("1.6.0")
+private[stat] class StreamingTestResult @Since("1.6.0") (
+    @Since("1.6.0") override val pValue: Double,
+    @Since("1.6.0") override val degreesOfFreedom: Double,
+    @Since("1.6.0") override val statistic: Double,
+    @Since("1.6.0") val method: String,
+    @Since("1.6.0") override val nullHypothesis: String)
+  extends TestResult[Double] with Serializable {
+
+  override def toString: String = {
+    "Streaming test summary:\n" +
+      s"method: $method\n" +
+      super.toString
+  }
+}
+

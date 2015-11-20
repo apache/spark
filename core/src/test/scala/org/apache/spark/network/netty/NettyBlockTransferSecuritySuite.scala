@@ -31,12 +31,12 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{FunSuite, ShouldMatchers}
+import org.scalatest.ShouldMatchers
 
-class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with ShouldMatchers {
+class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")

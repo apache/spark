@@ -4,7 +4,7 @@ displayTitle: Bagel Programming Guide
 title: Bagel
 ---
 
-**Bagel will soon be superseded by [GraphX](graphx-programming-guide.html); we recommend that new users try GraphX instead.**
+**Bagel is deprecated, and superseded by [GraphX](graphx-programming-guide.html).**
 
 Bagel is a Spark implementation of Google's [Pregel](http://portal.acm.org/citation.cfm?id=1807184) graph processing framework. Bagel currently supports basic graph computation, combiners, and aggregators.
 
@@ -157,11 +157,3 @@ trait Message[K] {
   def targetId: K
 }
 {% endhighlight %}
-
-# Where to Go from Here
-
-Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/org/apache/spark/examples/bagel`. You can run them by passing the class name to the `bin/run-example` script included in Spark; e.g.:
-
-    ./bin/run-example org.apache.spark.examples.bagel.WikipediaPageRank
-
-Each example program prints usage help when run without any arguments.

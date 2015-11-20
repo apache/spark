@@ -53,6 +53,11 @@ public final class ChunkFetchFailure implements ResponseMessage {
   }
 
   @Override
+  public int hashCode() {
+    return Objects.hashCode(streamChunkId, errorString);
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof ChunkFetchFailure) {
       ChunkFetchFailure o = (ChunkFetchFailure) other;

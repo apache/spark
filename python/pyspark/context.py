@@ -19,8 +19,10 @@ from __future__ import print_function
 
 import os
 import shutil
+import signal
 import sys
-from threading import Lock
+import threading
+from threading import RLock
 from tempfile import NamedTemporaryFile
 
 from pyspark import accumulators
@@ -64,7 +66,7 @@ class SparkContext(object):
     _jvm = None
     _next_accum_id = 0
     _active_spark_context = None
-    _lock = Lock()
+    _lock = RLock()
     _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
 
     PACKAGE_EXTENSIONS = ('.zip', '.egg', '.jar')
@@ -152,6 +154,11 @@ class SparkContext(object):
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
         self.sparkHome = self._conf.get("spark.home", None)
+
+        # Let YARN know it's a pyspark app, so it distributes needed libraries.
+        if self.master == "yarn-client":
+            self._conf.set("spark.yarn.isPython", "true")
+
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
@@ -212,6 +219,14 @@ class SparkContext(object):
         else:
             self.profiler_collector = None
 
+        # create a signal handler which would be invoked on receiving SIGINT
+        def signal_handler(signal, frame):
+            self.cancelAllJobs()
+
+        # see http://stackoverflow.com/questions/23206787/
+        if isinstance(threading.current_thread(), threading._MainThread):
+            signal.signal(signal.SIGINT, signal_handler)
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization
@@ -250,7 +265,7 @@ class SparkContext(object):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
             "It appears that you are attempting to reference SparkContext from a broadcast "
-            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
@@ -267,6 +282,18 @@ class SparkContext(object):
         Specifically stop the context on exit of the with block.
         """
         self.stop()
+
+    @classmethod
+    def getOrCreate(cls, conf=None):
+        """
+        Get or instantiate a SparkContext and register it as a singleton object.
+
+        :param conf: SparkConf (optional)
+        """
+        with SparkContext._lock:
+            if SparkContext._active_spark_context is None:
+                SparkContext(conf=conf or SparkConf())
+            return SparkContext._active_spark_context
 
     def setLogLevel(self, logLevel):
         """
@@ -290,6 +317,26 @@ class SparkContext(object):
         The version of Spark on which this application is running.
         """
         return self._jsc.version()
+
+    @property
+    @ignore_unicode_prefix
+    def applicationId(self):
+        """
+        A unique identifier for the Spark application.
+        Its format depends on the scheduler implementation.
+
+        * in case of local spark app something like 'local-1433865536131'
+        * in case of YARN something like 'application_1433865536131_34483'
+
+        >>> sc.applicationId  # doctest: +ELLIPSIS
+        u'local-...'
+        """
+        return self._jsc.sc().applicationId()
+
+    @property
+    def startTime(self):
+        """Return the epoch time when the Spark Context was started."""
+        return self._jsc.startTime()
 
     @property
     def defaultParallelism(self):
@@ -319,10 +366,18 @@ class SparkContext(object):
         with SparkContext._lock:
             SparkContext._active_spark_context = None
 
-    def range(self, start, end, step=1, numSlices=None):
+    def emptyRDD(self):
+        """
+        Create an RDD that has no partitions or elements.
+        """
+        return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
+
+    def range(self, start, end=None, step=1, numSlices=None):
         """
         Create a new RDD of int containing elements from `start` to `end`
-        (exclusive), increased by `step` every element.
+        (exclusive), increased by `step` every element. Can be called the same
+        way as python's built-in range() function. If called with a single argument,
+        the argument is interpreted as `end`, and `start` is set to 0.
 
         :param start: the start value
         :param end: the end value (exclusive)
@@ -330,9 +385,17 @@ class SparkContext(object):
         :param numSlices: the number of partitions of the new RDD
         :return: An RDD of int
 
+        >>> sc.range(5).collect()
+        [0, 1, 2, 3, 4]
+        >>> sc.range(2, 4).collect()
+        [2, 3]
         >>> sc.range(1, 7, 2).collect()
         [1, 3, 5]
         """
+        if end is None:
+            end = start
+            start = 0
+
         return self.parallelize(xrange(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
@@ -872,8 +935,7 @@ class SparkContext(object):
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions,
-                                          allowLocal)
+        port = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
         return list(_load_from_socket(port, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self):

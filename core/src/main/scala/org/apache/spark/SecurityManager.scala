@@ -17,11 +17,13 @@
 
 package org.apache.spark
 
+import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
-import java.security.KeyStore
+import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
 import javax.net.ssl._
 
+import com.google.common.hash.HashCodes
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
 
@@ -130,15 +132,16 @@ import org.apache.spark.util.Utils
  *
  *  The exact mechanisms used to generate/distribute the shared secret are deployment-specific.
  *
- *  For Yarn deployments, the secret is automatically generated using the Akka remote
- *  Crypt.generateSecureCookie() API. The secret is placed in the Hadoop UGI which gets passed
- *  around via the Hadoop RPC mechanism. Hadoop RPC can be configured to support different levels
- *  of protection. See the Hadoop documentation for more details. Each Spark application on Yarn
- *  gets a different shared secret. On Yarn, the Spark UI gets configured to use the Hadoop Yarn
- *  AmIpFilter which requires the user to go through the ResourceManager Proxy. That Proxy is there
- *  to reduce the possibility of web based attacks through YARN. Hadoop can be configured to use
- *  filters to do authentication. That authentication then happens via the ResourceManager Proxy
- *  and Spark will use that to do authorization against the view acls.
+ *  For YARN deployments, the secret is automatically generated. The secret is placed in the Hadoop
+ *  UGI which gets passed around via the Hadoop RPC mechanism. Hadoop RPC can be configured to
+ *  support different levels of protection. See the Hadoop documentation for more details. Each
+ *  Spark application on YARN gets a different shared secret.
+ *
+ *  On YARN, the Spark UI gets configured to use the Hadoop YARN AmIpFilter which requires the user
+ *  to go through the ResourceManager Proxy. That proxy is there to reduce the possibility of web
+ *  based attacks through YARN. Hadoop can be configured to use filters to do authentication. That
+ *  authentication then happens via the ResourceManager Proxy and Spark will use that to do
+ *  authorization against the view acls.
  *
  *  For other Spark deployments, the shared secret must be specified via the
  *  spark.authenticate.secret config.
@@ -189,10 +192,9 @@ import org.apache.spark.util.Utils
 private[spark] class SecurityManager(sparkConf: SparkConf)
   extends Logging with SecretKeyHolder {
 
-  // key used to store the spark secret in the Hadoop UGI
-  private val sparkSecretLookupKey = "sparkCookie"
+  import SecurityManager._
 
-  private val authOn = sparkConf.getBoolean("spark.authenticate", false)
+  private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
@@ -310,7 +312,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
-  def getViewAcls: String = viewAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getViewAcls: String = {
+    if (viewAcls.contains("*")) {
+      "*"
+    } else {
+      viewAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -321,7 +332,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
-  def getModifyAcls: String = modifyAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getModifyAcls: String = {
+    if (modifyAcls.contains("*")) {
+      "*"
+    } else {
+      modifyAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -347,31 +367,38 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
    * we throw an exception.
    */
   private def generateSecretKey(): String = {
-    if (!isAuthenticationEnabled) return null
-    // first check to see if the secret is already set, else generate a new one if on yarn
-    val sCookie = if (SparkHadoopUtil.get.isYarnMode) {
-      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(sparkSecretLookupKey)
-      if (secretKey != null) {
-        logDebug("in yarn mode, getting secret from credentials")
-        return new Text(secretKey).toString
+    if (!isAuthenticationEnabled) {
+      null
+    } else if (SparkHadoopUtil.get.isYarnMode) {
+      // In YARN mode, the secure cookie will be created by the driver and stashed in the
+      // user's credentials, where executors can get it. The check for an array of size 0
+      // is because of the test code in YarnSparkHadoopUtilSuite.
+      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
+      if (secretKey == null || secretKey.length == 0) {
+        logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
+        val rnd = new SecureRandom()
+        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
+        val secret = new Array[Byte](length)
+        rnd.nextBytes(secret)
+
+        val cookie = HashCodes.fromBytes(secret).toString()
+        SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
+        cookie
       } else {
-        logDebug("getSecretKey: yarn mode, secret key from credentials is null")
+        new Text(secretKey).toString
       }
-      val cookie = akka.util.Crypt.generateSecureCookie
-      // if we generated the secret then we must be the first so lets set it so t
-      // gets used by everyone else
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, cookie)
-      logInfo("adding secret to credentials in yarn mode")
-      cookie
     } else {
       // user must have set spark.authenticate.secret config
-      sparkConf.getOption("spark.authenticate.secret") match {
+      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
+      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
+        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
         case Some(value) => value
-        case None => throw new Exception("Error: a secret key must be specified via the " +
-          "spark.authenticate.secret config")
+        case None =>
+          throw new IllegalArgumentException(
+            "Error: a secret key must be specified via the " +
+              SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
       }
     }
-    sCookie
   }
 
   /**
@@ -392,7 +419,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user)
+    !aclsEnabled || user == null || viewAcls.contains(user) || viewAcls.contains("*")
   }
 
   /**
@@ -407,7 +434,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user)
+    !aclsEnabled || user == null || modifyAcls.contains(user) || modifyAcls.contains("*")
   }
 
 
@@ -448,4 +475,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
   override def getSecretKey(appId: String): String = getSecretKey()
+}
+
+private[spark] object SecurityManager {
+
+  val SPARK_AUTH_CONF: String = "spark.authenticate"
+  val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
+  // This is used to set auth secret to an executor's env variable. It should have the same
+  // value as SPARK_AUTH_SECRET_CONF set in SparkConf
+  val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
+
+  // key used to store the spark secret in the Hadoop UGI
+  val SECRET_LOOKUP_KEY = "sparkCookie"
 }

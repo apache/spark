@@ -19,14 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
+import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.sources.DescribeCommand
-import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
+
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -40,7 +42,7 @@ import org.apache.spark.sql.hive.test.TestHive
  * configured using system properties.
  */
 abstract class HiveComparisonTest
-  extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -124,7 +126,7 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
@@ -273,7 +275,7 @@ abstract class HiveComparisonTest
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
-          case (queryString, i)  =>
+          case (queryString, i) =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
             new File(answerCache, cachedAnswerName)
         }
@@ -304,7 +306,7 @@ abstract class HiveComparisonTest
             // other DDL has not been executed yet.
             hiveQueries.foreach(_.logical)
             val computedResults = (queryList.zipWithIndex, hiveQueries, hiveCacheFiles).zipped.map {
-              case ((queryString, i), hiveQuery, cachedAnswerFile)=>
+              case ((queryString, i), hiveQuery, cachedAnswerFile) =>
                 try {
                   // Hooks often break the harness and don't really affect our test anyway, don't
                   // even try running them.
@@ -370,7 +372,11 @@ abstract class HiveComparisonTest
             // Check that the results match unless its an EXPLAIN query.
             val preparedHive = prepareAnswer(hiveQuery, hive)
 
-            if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
+            // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
+            if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctions]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
+                preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
@@ -382,11 +388,45 @@ abstract class HiveComparisonTest
                 hiveCacheFiles.foreach(_.delete())
               }
 
+              // If this query is reading other tables that were created during this test run
+              // also print out the query plans and results for those.
+              val computedTablesMessages: String = try {
+                val tablesRead = new TestHive.QueryExecution(query).executedPlan.collect {
+                  case ts: HiveTableScan => ts.relation.tableName
+                }.toSet
+
+                TestHive.reset()
+                val executions = queryList.map(new TestHive.QueryExecution(_))
+                executions.foreach(_.toRdd)
+                val tablesGenerated = queryList.zip(executions).flatMap {
+                  case (q, e) => e.executedPlan.collect {
+                    case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
+                      (q, e, i)
+                  }
+                }
+
+                tablesGenerated.map { case (hiveql, execution, insert) =>
+                  s"""
+                     |=== Generated Table ===
+                     |$hiveql
+                     |$execution
+                     |== Results ==
+                     |${insert.child.execute().collect().mkString("\n")}
+                   """.stripMargin
+                }.mkString("\n")
+
+              } catch {
+                case NonFatal(e) =>
+                  logError("Failed to compute generated tables", e)
+                  s"Couldn't compute dependent tables: $e"
+              }
+
               val errorMessage =
                 s"""
                   |Results do not match for $testCaseName:
                   |$hiveQuery\n${hiveQuery.analyzed.output.map(_.name).mkString("\t")}
                   |$resultComparison
+                  |$computedTablesMessages
                 """.stripMargin
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)

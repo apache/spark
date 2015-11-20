@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import com.twitter.algebird._
@@ -113,3 +114,4 @@ object TwitterAlgebirdCMS {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
@@ -39,7 +39,6 @@ public final class LongArray {
   private final long length;
 
   public LongArray(MemoryBlock memory) {
-    assert memory.size() % WIDTH == 0 : "Memory not aligned (" + memory.size() + ")";
     assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 4 billion elements";
     this.memory = memory;
     this.baseObj = memory.getBaseObject();
@@ -51,6 +50,14 @@ public final class LongArray {
     return memory;
   }
 
+  public Object getBaseObject() {
+    return baseObj;
+  }
+
+  public long getBaseOffset() {
+    return baseOffset;
+  }
+
   /**
    * Returns the number of elements this array can hold.
    */
@@ -59,12 +66,21 @@ public final class LongArray {
   }
 
   /**
+   * Fill this all with 0L.
+   */
+  public void zeroOut() {
+    for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
+      Platform.putLong(baseObj, off, 0);
+    }
+  }
+
+  /**
    * Sets the value at position {@code index}.
    */
   public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    PlatformDependent.UNSAFE.putLong(baseObj, baseOffset + index * WIDTH, value);
+    Platform.putLong(baseObj, baseOffset + index * WIDTH, value);
   }
 
   /**
@@ -73,6 +89,6 @@ public final class LongArray {
   public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    return PlatformDependent.UNSAFE.getLong(baseObj, baseOffset + index * WIDTH);
+    return Platform.getLong(baseObj, baseOffset + index * WIDTH);
   }
 }

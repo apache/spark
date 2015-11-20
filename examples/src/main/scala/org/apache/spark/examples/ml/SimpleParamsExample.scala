@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -69,7 +70,7 @@ object SimpleParamsExample {
     // which supports several methods for specifying parameters.
     val paramMap = ParamMap(lr.maxIter -> 20)
     paramMap.put(lr.maxIter, 30) // Specify 1 Param.  This overwrites the original maxIter.
-    paramMap.put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
+    paramMap.put(lr.regParam -> 0.1, lr.thresholds -> Array(0.45, 0.55)) // Specify multiple Params.
 
     // One can also combine ParamMaps.
     val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name
@@ -87,7 +88,7 @@ object SimpleParamsExample {
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
     // Make predictions on test data using the Transformer.transform() method.
-    // LogisticRegression.transform will only use the 'features' column.
+    // LogisticRegressionModel.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'myProbability' column instead of the usual
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test.toDF())
@@ -100,3 +101,4 @@ object SimpleParamsExample {
     sc.stop()
   }
 }
+// scalastyle:on println

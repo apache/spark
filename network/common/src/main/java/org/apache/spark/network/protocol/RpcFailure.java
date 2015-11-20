@@ -51,6 +51,11 @@ public final class RpcFailure implements ResponseMessage {
   }
 
   @Override
+  public int hashCode() {
+    return Objects.hashCode(requestId, errorString);
+  }
+
+  @Override
   public boolean equals(Object other) {
     if (other instanceof RpcFailure) {
       RpcFailure o = (RpcFailure) other;

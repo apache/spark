@@ -17,19 +17,20 @@
 
 package org.apache.spark.ml.classification
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
-  DecisionTreeSuite => OldDecisionTreeSuite}
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
 
-
-class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import DecisionTreeClassifierSuite.compareAPIs
 
@@ -56,6 +57,12 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       OldDecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures())
   }
 
+  test("params") {
+    ParamsSuite.checkParams(new DecisionTreeClassifier)
+    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)
+    ParamsSuite.checkParams(model)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
@@ -65,6 +72,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
       .setImpurity("gini")
       .setMaxDepth(2)
       .setMaxBins(100)
+      .setSeed(1)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
@@ -226,6 +234,47 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
     compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
+  test("predictRaw and predictProbability") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(newTree)
+
+    val predictions = newTree.transform(newData)
+      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
+      .collect()
+
+    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
+      assert(pred === rawPred.argmax,
+        s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+      val sum = rawPred.toArray.sum
+      assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
+        "probability prediction mismatch")
+    }
+  }
+
+  test("training with 1-category categorical feature") {
+    val data = sc.parallelize(Seq(
+      LabeledPoint(0, Vectors.dense(0, 2, 3)),
+      LabeledPoint(1, Vectors.dense(0, 3, 1)),
+      LabeledPoint(0, Vectors.dense(0, 2, 2)),
+      LabeledPoint(1, Vectors.dense(0, 3, 9)),
+      LabeledPoint(0, Vectors.dense(0, 2, 6))
+    ))
+    val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
+    val dt = new DecisionTreeClassifier().setMaxDepth(3)
+    val model = dt.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -251,7 +300,7 @@ class DecisionTreeClassifierSuite extends FunSuite with MLlibTestSparkContext {
   */
 }
 
-private[ml] object DecisionTreeClassifierSuite extends FunSuite {
+private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
 
   /**
    * Train 2 decision trees on the given dataset, one using the old API and one using the new API.
@@ -262,13 +311,15 @@ private[ml] object DecisionTreeClassifierSuite extends FunSuite {
       dt: DecisionTreeClassifier,
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): Unit = {
+    val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures, numClasses)
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
-    // Use parent, fittingParamMap from newTree since these are not checked anyways.
+    // Use parent from newTree since this is not checked anyways.
     val oldTreeAsNew = DecisionTreeClassificationModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeClassifier], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(newTree.numFeatures === numFeatures)
   }
 }

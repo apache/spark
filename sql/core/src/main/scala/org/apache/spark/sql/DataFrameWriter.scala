@@ -19,9 +19,15 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.jdbc.{JDBCWriteDetails, JdbcUtils}
-import org.apache.spark.sql.sources.{ResolvedDataSource, CreateTableUsingAsSelect}
+import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.sources.HadoopFsRelation
 
 
 /**
@@ -105,7 +111,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def options(options: java.util.Map[String, String]): DataFrameWriter = {
-    this.options(scala.collection.JavaConversions.mapAsScalaMap(options))
+    this.options(options.asScala)
     this
   }
 
@@ -149,21 +155,101 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Inserts the content of the [[DataFrame]] to the specified table. It requires that
+   * the schema of the [[DataFrame]] is the same as the schema of the table.
+   *
+   * Because it inserts data to an existing table, format or options will be ignored.
+   *
+   * @since 1.4.0
+   */
+  def insertInto(tableName: String): Unit = {
+    insertInto(SqlParser.parseTableIdentifier(tableName))
+  }
+
+  private def insertInto(tableIdent: TableIdentifier): Unit = {
+    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
+    val overwrite = mode == SaveMode.Overwrite
+
+    // A partitioned relation's schema can be different from the input logicalPlan, since
+    // partition columns are all moved after data columns. We Project to adjust the ordering.
+    // TODO: this belongs to the analyzer.
+    val input = normalizedParCols.map { parCols =>
+      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
+        parCols.contains(attr.name)
+      }
+      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
+    }.getOrElse(df.logicalPlan)
+
+    df.sqlContext.executePlan(
+      InsertIntoTable(
+        UnresolvedRelation(tableIdent),
+        partitions.getOrElse(Map.empty[String, Option[String]]),
+        input,
+        overwrite,
+        ifNotExists = false)).toRdd
+  }
+
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
+    parCols.map { col =>
+      df.logicalPlan.output
+        .map(_.name)
+        .find(df.sqlContext.analyzer.resolver(_, col))
+        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
+          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+    }
+  }
+
+  /**
    * Saves the content of the [[DataFrame]] as the specified table.
+   *
+   * In the case the table already exists, behavior of this function depends on the
+   * save mode, specified by the `mode` function (default to throwing an exception).
+   * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+   * the same as that of the existing table.
+   * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
+   * the same as that of the existing table, and format or options will be ignored.
+   *
+   * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
+   * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
+   * and Parquet), the table is persisted in a Hive compatible format, which means other systems
+   * like Hive will be able to read this table. Otherwise, the table is persisted in a Spark SQL
+   * specific format.
    *
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    val cmd =
-      CreateTableUsingAsSelect(
-        tableName,
-        source,
-        temporary = false,
-        partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-        mode,
-        extraOptions.toMap,
-        df.logicalPlan)
-    df.sqlContext.executePlan(cmd).toRdd
+    saveAsTable(SqlParser.parseTableIdentifier(tableName))
+  }
+
+  private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
+
+    (tableExists, mode) match {
+      case (true, SaveMode.Ignore) =>
+        // Do nothing
+
+      case (true, SaveMode.ErrorIfExists) =>
+        throw new AnalysisException(s"Table $tableIdent already exists.")
+
+      case (true, SaveMode.Append) =>
+        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
+        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
+        // the table. But, insertInto with Overwrite requires the schema of data be the same
+        // the schema of the table.
+        insertInto(tableIdent)
+
+      case _ =>
+        val cmd =
+          CreateTableUsingAsSelect(
+            tableIdent,
+            source,
+            temporary = false,
+            partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
+            mode,
+            extraOptions.toMap,
+            df.logicalPlan)
+        df.sqlContext.executePlan(cmd).toRdd
+    }
   }
 
   /**
@@ -179,12 +265,20 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
+   *
+   * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    val conn = JdbcUtils.createConnection(url, connectionProperties)
+    val props = new Properties()
+    extraOptions.foreach { case (key, value) =>
+      props.put(key, value)
+    }
+    // connectionProperties should override settings in extraOptions
+    props.putAll(connectionProperties)
+    val conn = JdbcUtils.createConnection(url, props)
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, table)
+      var tableExists = JdbcUtils.tableExists(conn, url, table)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
@@ -201,15 +295,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JDBCWriteDetails.schemaString(df, url)
+        val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
-        conn.prepareStatement(sql).executeUpdate()
+        conn.createStatement.executeUpdate(sql)
       }
     } finally {
       conn.close()
     }
 
-    JDBCWriteDetails.saveTable(df, url, table, connectionProperties)
+    JdbcUtils.saveTable(df, url, table, props)
   }
 
   /**
@@ -233,6 +327,34 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def parquet(path: String): Unit = format("parquet").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in ORC format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("orc").save(path)
+   * }}}
+   *
+   * @since 1.5.0
+   * @note Currently, this method can only be used together with `HiveContext`.
+   */
+  def orc(path: String): Unit = format("orc").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * The DataFrame must have only one column that is of string type.
+   * Each row becomes a new line in the output file. For example:
+   * {{{
+   *   // Scala:
+   *   df.write.text("/path/to/output")
+   *
+   *   // Java:
+   *   df.write().text("/path/to/output")
+   * }}}
+   *
+   * @since 1.6.0
+   */
+  def text(path: String): Unit = format("text").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

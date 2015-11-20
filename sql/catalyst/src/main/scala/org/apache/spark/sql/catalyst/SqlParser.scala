@@ -19,11 +19,15 @@ package org.apache.spark.sql.catalyst
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -35,58 +39,58 @@ import org.apache.spark.sql.types._
  * This is currently included mostly for illustrative purposes.  Users wanting more complete support
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
-class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
+object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
-  def parseExpression(input: String): Expression = {
+  def parseExpression(input: String): Expression = synchronized {
     // Initialize the Keywords.
-    lexical.initialize(reservedWords)
+    initLexical
     phrase(projection)(new lexical.Scanner(input)) match {
       case Success(plan, _) => plan
       case failureOrError => sys.error(failureOrError.toString)
     }
   }
 
+  def parseTableIdentifier(input: String): TableIdentifier = synchronized {
+    // Initialize the Keywords.
+    initLexical
+    phrase(tableIdentifier)(new lexical.Scanner(input)) match {
+      case Success(ident, _) => ident
+      case failureOrError => sys.error(failureOrError.toString)
+    }
+  }
+
   // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
   // properties via reflection the class in runtime for constructing the SqlLexical object
-  protected val ABS = Keyword("ABS")
   protected val ALL = Keyword("ALL")
   protected val AND = Keyword("AND")
   protected val APPROXIMATE = Keyword("APPROXIMATE")
   protected val AS = Keyword("AS")
   protected val ASC = Keyword("ASC")
-  protected val AVG = Keyword("AVG")
   protected val BETWEEN = Keyword("BETWEEN")
   protected val BY = Keyword("BY")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
-  protected val COALESCE = Keyword("COALESCE")
-  protected val COUNT = Keyword("COUNT")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
   protected val FALSE = Keyword("FALSE")
-  protected val FIRST = Keyword("FIRST")
   protected val FROM = Keyword("FROM")
   protected val FULL = Keyword("FULL")
   protected val GROUP = Keyword("GROUP")
   protected val HAVING = Keyword("HAVING")
-  protected val IF = Keyword("IF")
   protected val IN = Keyword("IN")
   protected val INNER = Keyword("INNER")
   protected val INSERT = Keyword("INSERT")
   protected val INTERSECT = Keyword("INTERSECT")
+  protected val INTERVAL = Keyword("INTERVAL")
   protected val INTO = Keyword("INTO")
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
-  protected val LAST = Keyword("LAST")
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
-  protected val LOWER = Keyword("LOWER")
-  protected val MAX = Keyword("MAX")
-  protected val MIN = Keyword("MIN")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -100,25 +104,13 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val RLIKE = Keyword("RLIKE")
   protected val SELECT = Keyword("SELECT")
   protected val SEMI = Keyword("SEMI")
-  protected val SQRT = Keyword("SQRT")
-  protected val SUBSTR = Keyword("SUBSTR")
-  protected val SUBSTRING = Keyword("SUBSTRING")
-  protected val SUM = Keyword("SUM")
   protected val TABLE = Keyword("TABLE")
   protected val THEN = Keyword("THEN")
   protected val TRUE = Keyword("TRUE")
   protected val UNION = Keyword("UNION")
-  protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
   protected val WITH = Keyword("WITH")
-
-  protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
-    exprs.zipWithIndex.map {
-      case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
-    }
-  }
 
   protected lazy val start: Parser[LogicalPlan] =
     start1 | insert | cte
@@ -140,12 +132,12 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       (HAVING ~> expression).? ~
       sortType.? ~
       (LIMIT  ~> expression).? ^^ {
-        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
+        case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l =>
           val base = r.getOrElse(OneRowRelation)
           val withFilter = f.map(Filter(_, base)).getOrElse(base)
           val withProjection = g
-            .map(Aggregate(_, assignAliases(p), withFilter))
-            .getOrElse(Project(assignAliases(p), withFilter))
+            .map(Aggregate(_, p.map(UnresolvedAlias(_)), withFilter))
+            .getOrElse(Project(p.map(UnresolvedAlias(_)), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
           val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
@@ -180,7 +172,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+    ( tableIdentifier ~ (opt(AS) ~> opt(ident)) ^^ {
         case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
       | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
@@ -212,7 +204,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
     ( rep1sep(expression ~ direction.? , ",") ^^ {
-        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
+        case exps => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
 
@@ -228,7 +220,10 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     andExpression * (OR ^^^ { (e1: Expression, e2: Expression) => Or(e1, e2) })
 
   protected lazy val andExpression: Parser[Expression] =
-    comparisonExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+    notExpression * (AND ^^^ { (e1: Expression, e2: Expression) => And(e1, e2) })
+
+  protected lazy val notExpression: Parser[Expression] =
+    NOT.? ~ comparisonExpression ^^ { case maybeNot ~ e => maybeNot.map(_ => Not(e)).getOrElse(e) }
 
   protected lazy val comparisonExpression: Parser[Expression] =
     ( termExpression ~ ("="  ~> termExpression) ^^ { case e1 ~ e2 => EqualTo(e1, e2) }
@@ -242,7 +237,7 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
         case e ~ not ~ el ~ eu =>
           val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
-          not.fold(betweenExpr)(f=> Not(betweenExpr))
+          not.fold(betweenExpr)(f => Not(betweenExpr))
       }
     | termExpression ~ (RLIKE  ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
     | termExpression ~ (REGEXP ~> termExpression) ^^ { case e1 ~ e2 => RLike(e1, e2) }
@@ -256,7 +251,6 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       }
     | termExpression <~ IS ~ NULL ^^ { case e => IsNull(e) }
     | termExpression <~ IS ~ NOT ~ NULL ^^ { case e => IsNotNull(e) }
-    | NOT ~> termExpression ^^ {e => Not(e)}
     | termExpression
     )
 
@@ -277,43 +271,52 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
       )
 
   protected lazy val function: Parser[Expression] =
-    ( SUM   ~> "(" ~> expression             <~ ")" ^^ { case exp => Sum(exp) }
-    | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
-    | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
-    | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
-    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
-      { case exps => CountDistinct(exps) }
-    | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
-      { case exp => ApproxCountDistinct(exp) }
-    | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
-      { case s ~ _ ~ _ ~ _ ~ _ ~ e => ApproxCountDistinct(e, s.toDouble) }
-    | FIRST ~ "(" ~> expression <~ ")" ^^ { case exp => First(exp) }
-    | LAST  ~ "(" ~> expression <~ ")" ^^ { case exp => Last(exp) }
-    | AVG   ~ "(" ~> expression <~ ")" ^^ { case exp => Average(exp) }
-    | MIN   ~ "(" ~> expression <~ ")" ^^ { case exp => Min(exp) }
-    | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
-    | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
-    | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
-    | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
-      { case c ~ t ~ f => If(c, t, f) }
-    | CASE ~> expression.? ~ rep1(WHEN ~> expression ~ (THEN ~> expression)) ~
-        (ELSE ~> expression).? <~ END ^^ {
-          case casePart ~ altPart ~ elsePart =>
-            val branches = altPart.flatMap { case whenExpr ~ thenExpr =>
-              Seq(whenExpr, thenExpr)
-            } ++ elsePart
-            casePart.map(CaseKeyWhen(_, branches)).getOrElse(CaseWhen(branches))
-        }
-    | (SUBSTR | SUBSTRING) ~ "(" ~> expression ~ ("," ~> expression) <~ ")" ^^
-      { case s ~ p => Substring(s, p, Literal(Integer.MAX_VALUE)) }
-    | (SUBSTR | SUBSTRING) ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
-      { case s ~ p ~ l => Substring(s, p, l) }
-    | COALESCE ~ "(" ~> repsep(expression, ",") <~ ")" ^^ { case exprs => Coalesce(exprs) }
-    | SQRT  ~ "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) }
-    | ABS   ~ "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) }
+    ( ident <~ ("(" ~ "*" ~ ")") ^^ { case udfName =>
+      if (lexical.normalizeKeyword(udfName) == "count") {
+        AggregateExpression(Count(Literal(1)), mode = Complete, isDistinct = false)
+      } else {
+        throw new AnalysisException(s"invalid expression $udfName(*)")
+      }
+    }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
-      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
+      { case udfName ~ exprs => UnresolvedFunction(udfName, exprs, isDistinct = false) }
+    | ident ~ ("(" ~ DISTINCT ~> repsep(expression, ",")) <~ ")" ^^ { case udfName ~ exprs =>
+      lexical.normalizeKeyword(udfName) match {
+        case "count" =>
+          aggregate.Count(exprs).toAggregateExpression(isDistinct = true)
+        case _ => UnresolvedFunction(udfName, exprs, isDistinct = true)
+      }
+    }
+    | APPROXIMATE ~> ident ~ ("(" ~ DISTINCT ~> expression <~ ")") ^^ { case udfName ~ exp =>
+      if (lexical.normalizeKeyword(udfName) == "count") {
+        AggregateExpression(new HyperLogLogPlusPlus(exp), mode = Complete, isDistinct = false)
+      } else {
+        throw new AnalysisException(s"invalid function approximate $udfName")
+      }
+    }
+    | APPROXIMATE ~> "(" ~> unsignedFloat ~ ")" ~ ident ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
+      { case s ~ _ ~ udfName ~ _ ~ _ ~ exp =>
+        if (lexical.normalizeKeyword(udfName) == "count") {
+          AggregateExpression(
+            HyperLogLogPlusPlus(exp, s.toDouble, 0, 0),
+            mode = Complete,
+            isDistinct = false)
+        } else {
+          throw new AnalysisException(s"invalid function approximate($s) $udfName")
+        }
+      }
+    | CASE ~> whenThenElse ^^ CaseWhen
+    | CASE ~> expression ~ whenThenElse ^^
+      { case keyPart ~ branches => CaseKeyWhen(keyPart, branches) }
     )
+
+  protected lazy val whenThenElse: Parser[List[Expression]] =
+    rep1(WHEN ~> expression ~ (THEN ~> expression)) ~ (ELSE ~> expression).? <~ END ^^ {
+      case altPart ~ elsePart =>
+        altPart.flatMap { case whenExpr ~ thenExpr =>
+          Seq(whenExpr, thenExpr)
+        } ++ elsePart
+    }
 
   protected lazy val cast: Parser[Expression] =
     CAST ~ "(" ~> expression ~ (AS ~> dataType) <~ ")" ^^ {
@@ -323,7 +326,8 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val literal: Parser[Literal] =
     ( numericLiteral
     | booleanLiteral
-    | stringLit ^^ {case s => Literal.create(s, StringType) }
+    | stringLit ^^ { case s => Literal.create(s, StringType) }
+    | intervalLiteral
     | NULL ^^^ Literal.create(null, NullType)
     )
 
@@ -333,19 +337,113 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val numericLiteral: Parser[Literal] =
-    signedNumericLiteral | unsignedNumericLiteral
-
-  protected lazy val sign: Parser[String] =
-    "+" | "-"
-
-  protected lazy val signedNumericLiteral: Parser[Literal] =
-    ( sign ~ numericLit  ^^ { case s ~ l => Literal(toNarrowestIntegerType(s + l)) }
-    | sign ~ floatLit ^^ { case s ~ f => Literal((s + f).toDouble) }
+    ( integral  ^^ { case i => Literal(toNarrowestIntegerType(i)) }
+    | sign.? ~ unsignedFloat ^^
+      { case s ~ f => Literal(toDecimalOrDouble(s.getOrElse("") + f)) }
     )
 
-  protected lazy val unsignedNumericLiteral: Parser[Literal] =
-    ( numericLit ^^ { n => Literal(toNarrowestIntegerType(n)) }
-    | floatLit ^^ { f => Literal(f.toDouble) }
+  protected lazy val unsignedFloat: Parser[String] =
+    ( "." ~> numericLit ^^ { u => "0." + u }
+    | elem("decimal", _.isInstanceOf[lexical.DecimalLit]) ^^ (_.chars)
+    )
+
+  protected lazy val sign: Parser[String] = ("+" | "-")
+
+  protected lazy val integral: Parser[String] =
+    sign.? ~ numericLit ^^ { case s ~ n => s.getOrElse("") + n }
+
+  private def intervalUnit(unitName: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      val normalized = lexical.normalizeKeyword(str)
+      normalized == unitName || normalized == unitName + "s"
+    case _ => false
+  } {_ => "wrong interval unit"}
+
+  protected lazy val month: Parser[Int] =
+    integral <~ intervalUnit("month") ^^ { case num => num.toInt }
+
+  protected lazy val year: Parser[Int] =
+    integral <~ intervalUnit("year") ^^ { case num => num.toInt * 12 }
+
+  protected lazy val microsecond: Parser[Long] =
+    integral <~ intervalUnit("microsecond") ^^ { case num => num.toLong }
+
+  protected lazy val millisecond: Parser[Long] =
+    integral <~ intervalUnit("millisecond") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_MILLI
+    }
+
+  protected lazy val second: Parser[Long] =
+    integral <~ intervalUnit("second") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_SECOND
+    }
+
+  protected lazy val minute: Parser[Long] =
+    integral <~ intervalUnit("minute") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_MINUTE
+    }
+
+  protected lazy val hour: Parser[Long] =
+    integral <~ intervalUnit("hour") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_HOUR
+    }
+
+  protected lazy val day: Parser[Long] =
+    integral <~ intervalUnit("day") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_DAY
+    }
+
+  protected lazy val week: Parser[Long] =
+    integral <~ intervalUnit("week") ^^ {
+      case num => num.toLong * CalendarInterval.MICROS_PER_WEEK
+    }
+
+  private def intervalKeyword(keyword: String) = acceptIf {
+    case lexical.Identifier(str) =>
+      lexical.normalizeKeyword(str) == keyword
+    case _ => false
+  } {_ => "wrong interval keyword"}
+
+  protected lazy val intervalLiteral: Parser[Literal] =
+    ( INTERVAL ~> stringLit <~ intervalKeyword("year") ~ intervalKeyword("to") ~
+        intervalKeyword("month") ^^ { case s =>
+      Literal(CalendarInterval.fromYearMonthString(s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ~ intervalKeyword("to") ~
+        intervalKeyword("second") ^^ { case s =>
+      Literal(CalendarInterval.fromDayTimeString(s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("year") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("year", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("month") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("month", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("day") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("day", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("hour") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("hour", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("minute") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("minute", s))
+    }
+    | INTERVAL ~> stringLit <~ intervalKeyword("second") ^^ { case s =>
+      Literal(CalendarInterval.fromSingleUnitString("second", s))
+    }
+    | INTERVAL ~> year.? ~ month.? ~ week.? ~ day.? ~ hour.? ~ minute.? ~ second.? ~
+        millisecond.? ~ microsecond.? ^^ { case year ~ month ~ week ~ day ~ hour ~ minute ~ second ~
+          millisecond ~ microsecond =>
+      if (!Seq(year, month, week, day, hour, minute, second,
+        millisecond, microsecond).exists(_.isDefined)) {
+        throw new AnalysisException(
+          "at least one time unit should be given for interval literal")
+      }
+      val months = Seq(year, month).map(_.getOrElse(0)).sum
+      val microseconds = Seq(week, day, hour, minute, second, millisecond, microsecond)
+        .map(_.getOrElse(0L)).sum
+      Literal(new CalendarInterval(months, microseconds))
+    }
     )
 
   private def toNarrowestIntegerType(value: String): Any = {
@@ -358,19 +456,30 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     }
   }
 
-  protected lazy val floatLit: Parser[String] =
-    ( "." ~> unsignedNumericLiteral ^^ { u => "0." + u }
-    | elem("decimal", _.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
-    )
+  private def toDecimalOrDouble(value: String): Any = {
+    val decimal = BigDecimal(value)
+    // follow the behavior in MS SQL Server
+    // https://msdn.microsoft.com/en-us/library/ms179899.aspx
+    if (value.contains('E') || value.contains('e')) {
+      decimal.doubleValue()
+    } else {
+      decimal.underlying()
+    }
+  }
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ UnresolvedStar(None)
-    | ident <~ "." ~ "*" ^^ { case tableName  => UnresolvedStar(Option(tableName)) }
+    | rep1(ident <~ ".") <~ "*" ^^ { case target => UnresolvedStar(Option(target))}
     | primary
-    )
+   )
 
   protected lazy val signedPrimary: Parser[Expression] =
-    sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e}
+    sign ~ primary ^^ { case s ~ e => if (s == "-") UnaryMinus(e) else e }
+
+  protected lazy val attributeName: Parser[String] = acceptMatch("attribute name", {
+    case lexical.Identifier(str) => str
+    case lexical.Keyword(str) if !lexical.delimiters.contains(str) => str
+  })
 
   protected lazy val primary: PackratParser[Expression] =
     ( literal
@@ -382,13 +491,18 @@ class SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     | "(" ~> expression <~ ")"
     | function
     | dotExpressionHeader
-    | ident ^^ {case i => UnresolvedAttribute.quoted(i)}
     | signedPrimary
     | "~" ~> expression ^^ BitwiseNot
+    | attributeName ^^ UnresolvedAttribute.quoted
     )
 
   protected lazy val dotExpressionHeader: Parser[Expression] =
     (ident <~ ".") ~ ident ~ rep("." ~> ident) ^^ {
       case i1 ~ i2 ~ rest => UnresolvedAttribute(Seq(i1, i2) ++ rest)
+    }
+
+  protected lazy val tableIdentifier: Parser[TableIdentifier] =
+    (ident <~ ".").? ~ ident ^^ {
+      case maybeDbName ~ tableName => TableIdentifier(tableName, maybeDbName)
     }
 }

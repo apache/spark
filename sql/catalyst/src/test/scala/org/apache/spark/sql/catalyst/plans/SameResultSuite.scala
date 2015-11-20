@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * Tests for the sameResult function of [[LogicalPlan]].
  */
-class SameResultSuite extends FunSuite {
+class SameResultSuite extends SparkFunSuite {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
 

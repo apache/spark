@@ -20,7 +20,7 @@ from abc import ABCMeta
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
-from pyspark.ml.pipeline import Estimator, Transformer, Evaluator, Model
+from pyspark.ml.pipeline import Estimator, Transformer, Model
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
@@ -119,6 +119,7 @@ class JavaEstimator(Estimator, JavaWrapper):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
+
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -136,7 +137,8 @@ class JavaEstimator(Estimator, JavaWrapper):
 class JavaTransformer(Transformer, JavaWrapper):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
-    implementations.
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
     """
 
     __metaclass__ = ABCMeta
@@ -166,15 +168,18 @@ class JavaModel(Model, JavaTransformer):
         self._java_obj = java_model
         self.uid = java_model.uid()
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
         """
         Creates a copy of this instance with the same uid and some
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java model with extra params.
         So both the Python wrapper and the Java model get copied.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
+        if extra is None:
+            extra = dict()
         that = super(JavaModel, self).copy(extra)
         that._java_obj = self._java_obj.copy(self._empty_java_param_map())
         that._transfer_params_to_java()
@@ -185,22 +190,3 @@ class JavaModel(Model, JavaTransformer):
         sc = SparkContext._active_spark_context
         java_args = [_py2java(sc, arg) for arg in args]
         return _java2py(sc, m(*java_args))
-
-
-@inherit_doc
-class JavaEvaluator(Evaluator, JavaWrapper):
-    """
-    Base class for :py:class:`Evaluator`s that wrap Java/Scala
-    implementations.
-    """
-
-    __metaclass__ = ABCMeta
-
-    def _evaluate(self, dataset):
-        """
-        Evaluates the output.
-        :param dataset: a dataset that contains labels/observations and predictions.
-        :return: evaluation metric
-        """
-        self._transfer_params_to_java()
-        return self._java_obj.evaluate(dataset._jdf)

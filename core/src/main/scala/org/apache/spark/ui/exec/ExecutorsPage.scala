@@ -62,12 +62,12 @@ private[ui] class ExecutorsPage(
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS_STRIPED}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
           <th>RDD Blocks</th>
-          <th>Memory Used</th>
+          <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
           <th>Disk Used</th>
           <th>Active Tasks</th>
           <th>Failed Tasks</th>

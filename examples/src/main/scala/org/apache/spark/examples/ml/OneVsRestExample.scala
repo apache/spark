@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
@@ -22,13 +23,14 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{OneVsRest, LogisticRegression}
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.sql.DataFrame
+// $example off$
 import org.apache.spark.sql.SQLContext
 
 /**
@@ -73,7 +75,7 @@ object OneVsRestExample {
         .action((x, c) => c.copy(fracTest = x))
       opt[String]("testInput")
         .text("input path to test dataset.  If given, option fracTest is ignored")
-        .action((x,c) => c.copy(testInput = Some(x)))
+        .action((x, c) => c.copy(testInput = Some(x)))
       opt[Int]("maxIter")
         .text(s"maximum number of iterations for Logistic Regression." +
           s" default: ${defaultParams.maxIter}")
@@ -88,10 +90,10 @@ object OneVsRestExample {
         .action((x, c) => c.copy(fitIntercept = x))
       opt[Double]("regParam")
         .text(s"the regularization parameter for Logistic Regression.")
-        .action((x,c) => c.copy(regParam = Some(x)))
+        .action((x, c) => c.copy(regParam = Some(x)))
       opt[Double]("elasticNetParam")
         .text(s"the ElasticNet mixing parameter for Logistic Regression.")
-        .action((x,c) => c.copy(elasticNetParam = Some(x)))
+        .action((x, c) => c.copy(elasticNetParam = Some(x)))
       checkConfig { params =>
         if (params.fracTest < 0 || params.fracTest >= 1) {
           failure(s"fracTest ${params.fracTest} value incorrect; should be in [0,1).")
@@ -110,24 +112,25 @@ object OneVsRestExample {
   private def run(params: Params) {
     val conf = new SparkConf().setAppName(s"OneVsRestExample with $params")
     val sc = new SparkContext(conf)
-    val inputData = MLUtils.loadLibSVMFile(sc, params.input)
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
+    // $example on$
+    val inputData = sqlContext.read.format("libsvm").load(params.input)
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
       case Some(t) => {
         // compute the number of features in the training set.
-        val numFeatures = inputData.first().features.size
-        val testData = MLUtils.loadLibSVMFile(sc, t, numFeatures)
-        Array[RDD[LabeledPoint]](inputData, testData)
+        val numFeatures = inputData.first().getAs[Vector](1).size
+        val testData = sqlContext.read.option("numFeatures", numFeatures.toString)
+          .format("libsvm").load(t)
+        Array[DataFrame](inputData, testData)
       }
       case None => {
         val f = params.fracTest
         inputData.randomSplit(Array(1 - f, f), seed = 12345)
       }
     }
-    val Array(train, test) = data.map(_.toDF().cache())
+    val Array(train, test) = data.map(_.cache())
 
     // instantiate the base classifier
     val classifier = new LogisticRegression()
@@ -172,6 +175,7 @@ object OneVsRestExample {
     println("label\tfpr")
 
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
+    // $example off$
 
     sc.stop()
   }
@@ -183,3 +187,4 @@ object OneVsRestExample {
     (NANO.toSeconds(t1 - t0), result)
   }
 }
+// scalastyle:on println

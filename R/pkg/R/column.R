@@ -24,10 +24,9 @@ setOldClass("jobj")
 
 #' @title S4 class that represents a DataFrame column
 #' @description The column class supports unary, binary operations on DataFrame columns
-
 #' @rdname column
 #'
-#' @param jc reference to JVM DataFrame column
+#' @slot jc reference to JVM DataFrame column
 #' @export
 setClass("Column",
          slots = list(jc = "jobj"))
@@ -37,15 +36,14 @@ setMethod("initialize", "Column", function(.Object, jc) {
   .Object
 })
 
-column <- function(jc) {
-  new("Column", jc)
-}
-
-col <- function(x) {
-  column(callJStatic("org.apache.spark.sql.functions", "col", x))
-}
+setMethod("column",
+          signature(x = "jobj"),
+          function(x) {
+            new("Column", x)
+          })
 
 #' @rdname show
+#' @name show
 setMethod("show", "Column",
           function(object) {
             cat("Column", callJMethod(object@jc, "toString"), "\n")
@@ -60,12 +58,6 @@ operators <- list(
 )
 column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
-functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct",
-               "acos", "asin", "atan", "cbrt", "ceiling", "cos", "cosh", "exp",
-               "expm1", "floor", "log", "log10", "log1p", "rint", "sign",
-               "sin", "sinh", "tan", "tanh", "toDegrees", "toRadians")
-binary_mathfunctions<- c("atan2", "hypot")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -111,33 +103,6 @@ createColumnFunction2 <- function(name) {
             })
 }
 
-createStaticFunction <- function(name) {
-  setMethod(name,
-            signature(x = "Column"),
-            function(x) {
-              if (name == "ceiling") {
-                  name <- "ceil"
-              }
-              if (name == "sign") {
-                  name <- "signum"
-              }
-              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
-              column(jc)
-            })
-}
-
-createBinaryMathfunctions <- function(name) {
-  setMethod(name,
-            signature(y = "Column"),
-            function(y, x) {
-              if (class(x) == "Column") {
-                x <- x@jc
-              }
-              jc <- callJStatic("org.apache.spark.sql.functions", name, y@jc, x)
-              column(jc)
-            })
-}
-
 createMethods <- function() {
   for (op in names(operators)) {
     createOperator(op)
@@ -148,12 +113,6 @@ createMethods <- function() {
   for (name in column_functions2) {
     createColumnFunction2(name)
   }
-  for (x in functions) {
-    createStaticFunction(x)
-  }
-  for (name in binary_mathfunctions) {
-    createBinaryMathfunctions(name)
-  }
 }
 
 createMethods()
@@ -161,8 +120,11 @@ createMethods()
 #' alias
 #'
 #' Set a new name for a column
-
-#' @rdname column
+#'
+#' @rdname alias
+#' @name alias
+#' @family colum_func
+#' @export
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -177,7 +139,9 @@ setMethod("alias",
 #'
 #' An expression that returns a substring.
 #'
-#' @rdname column
+#' @rdname substr
+#' @name substr
+#' @family colum_func
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -187,12 +151,32 @@ setMethod("substr", signature(x = "Column"),
             column(jc)
           })
 
+#' between
+#'
+#' Test if the column is between the lower bound and upper bound, inclusive.
+#'
+#' @rdname between
+#' @name between
+#' @family colum_func
+#'
+#' @param bounds lower and upper bounds
+setMethod("between", signature(x = "Column"),
+          function(x, bounds) {
+            if (is.vector(bounds) && length(bounds) == 2) {
+              jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
+              column(jc)
+            } else {
+              stop("bounds should be a vector of lower and upper bounds")
+            }
+          })
+
 #' Casts the column to a different data type.
 #'
-#' @rdname column
+#' @rdname cast
+#' @name cast
+#' @family colum_func
 #'
-#' @examples
-#' \dontrun{
+#' @examples \dontrun{
 #'   cast(df$age, "string")
 #'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
@@ -210,44 +194,38 @@ setMethod("cast",
             }
           })
 
-#' Approx Count Distinct
+#' Match a column with given values.
 #'
-#' @rdname column
-#' @return the approximate number of distinct items in a group.
-setMethod("approxCountDistinct",
+#' @rdname match
+#' @name %in%
+#' @aliases %in%
+#' @return a matched values as a result of comparing with given values.
+#' @export
+#' @examples
+#' \dontrun{
+#' filter(df, "age in (10, 30)")
+#' where(df, df$age %in% c(10, 30))
+#' }
+setMethod("%in%",
           signature(x = "Column"),
-          function(x, rsd = 0.95) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
-            column(jc)
+          function(x, table) {
+            jc <- callJMethod(x@jc, "in", as.list(table))
+            return(column(jc))
           })
 
-#' Count Distinct
+#' otherwise
 #'
-#' @rdname column
-#' @return the number of distinct items in a group.
-setMethod("countDistinct",
-          signature(x = "Column"),
-          function(x, ...) {
-            jcol <- lapply(list(...), function (x) {
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              listToSeq(jcol))
+#' If values in the specified column are null, returns the value. 
+#' Can be used in conjunction with `when` to specify a default value for expressions.
+#'
+#' @rdname otherwise
+#' @name otherwise
+#' @family colum_func
+#' @export
+setMethod("otherwise",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- ifelse(class(value) == "Column", value@jc, value)
+            jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
-          })
-
-#' @rdname column
-#' @aliases countDistinct
-setMethod("n_distinct",
-          signature(x = "Column"),
-          function(x, ...) {
-            countDistinct(x, ...)
-          })
-
-#' @rdname column
-#' @aliases count
-setMethod("n",
-          signature(x = "Column"),
-          function(x) {
-            count(x)
           })

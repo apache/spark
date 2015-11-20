@@ -55,16 +55,19 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportResponseHandler responseHandler;
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
+  private final boolean closeIdleConnections;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
-      long requestTimeoutMs) {
+      long requestTimeoutMs,
+      boolean closeIdleConnections) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.closeIdleConnections = closeIdleConnections;
   }
 
   public TransportClient getClient() {
@@ -111,16 +114,21 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       IdleStateEvent e = (IdleStateEvent) evt;
       // See class comment for timeout semantics. In addition to ensuring we only timeout while
       // there are outstanding requests, we also do a secondary consistency check to ensure
-      // there's no race between the idle timeout and incrementing the numOutstandingRequests.
-      boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
+      // there's no race between the idle timeout and incrementing the numOutstandingRequests
+      // (see SPARK-7003).
       boolean isActuallyOverdue =
         System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
-      if (e.state() == IdleState.ALL_IDLE && hasInFlightRequests && isActuallyOverdue) {
-        String address = NettyUtils.getRemoteAddress(ctx.channel());
-        logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-          "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
-          "is wrong.", address, requestTimeoutNs / 1000 / 1000);
-        ctx.close();
+      if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
+        if (responseHandler.numOutstandingRequests() > 0) {
+          String address = NettyUtils.getRemoteAddress(ctx.channel());
+          logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
+            "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
+            "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+          ctx.close();
+        } else if (closeIdleConnections) {
+          // While CloseIdleConnections is enable, we also close idle connection
+          ctx.close();
+        }
       }
     }
   }

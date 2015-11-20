@@ -17,8 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.Evaluator
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
@@ -28,37 +27,56 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: AlphaComponent ::
- *
- * Evaluator for binary classification, which expects two input columns: score and label.
+ * :: Experimental ::
+ * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
  */
-@AlphaComponent
-class BinaryClassificationEvaluator(override val uid: String)
+@Since("1.2.0")
+@Experimental
+class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("binEval"))
 
   /**
    * param for metric name in evaluation
+   * Default: areaUnderROC
    * @group param
    */
-  val metricName: Param[String] = new Param(this, "metricName",
-    "metric name in evaluation (areaUnderROC|areaUnderPR)")
+  @Since("1.2.0")
+  val metricName: Param[String] = {
+    val allowedParams = ParamValidators.inArray(Array("areaUnderROC", "areaUnderPR"))
+    new Param(
+      this, "metricName", "metric name in evaluation (areaUnderROC|areaUnderPR)", allowedParams)
+  }
 
   /** @group getParam */
+  @Since("1.2.0")
   def getMetricName: String = $(metricName)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
   /** @group setParam */
+  @Since("1.5.0")
+  def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
+
+  /**
+   * @group setParam
+   * @deprecated use [[setRawPredictionCol()]] instead
+   */
+  @deprecated("use setRawPredictionCol instead", "1.5.0")
+  @Since("1.2.0")
   def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   setDefault(metricName -> "areaUnderROC")
 
+  @Since("1.2.0")
   override def evaluate(dataset: DataFrame): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnType(schema, $(rawPredictionCol), new VectorUDT)
@@ -71,14 +89,19 @@ class BinaryClassificationEvaluator(override val uid: String)
       }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
-      case "areaUnderROC" =>
-        metrics.areaUnderROC()
-      case "areaUnderPR" =>
-        metrics.areaUnderPR()
-      case other =>
-        throw new IllegalArgumentException(s"Does not support metric $other.")
+      case "areaUnderROC" => metrics.areaUnderROC()
+      case "areaUnderPR" => metrics.areaUnderPR()
     }
     metrics.unpersist()
     metric
   }
+
+  @Since("1.5.0")
+  override def isLargerBetter: Boolean = $(metricName) match {
+    case "areaUnderROC" => true
+    case "areaUnderPR" => true
+  }
+
+  @Since("1.4.1")
+  override def copy(extra: ParamMap): BinaryClassificationEvaluator = defaultCopy(extra)
 }

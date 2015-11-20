@@ -21,6 +21,7 @@ import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
@@ -51,10 +52,11 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sqlContext: SQLCo
   }
 }
 
-class PrunedScanSuite extends DataSourceTest {
-  import caseInsensitiveContext._
+class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(
       """
         |CREATE TEMPORARY TABLE oneToTenPruned
@@ -132,7 +134,7 @@ class PrunedScanSuite extends DataSourceTest {
             queryExecution)
       }
 
-      if (rawOutput.size != expectedColumns.size) {
+      if (rawOutput.numFields != expectedColumns.size) {
         fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
       }
     }
