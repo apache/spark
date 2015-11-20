@@ -1260,6 +1260,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.6.0
    */
+  @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
     val iter = colNames.iterator
