@@ -397,7 +397,7 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 #' @export
 setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
 
-#' @rdname describe
+#' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
@@ -459,11 +459,11 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
-#' rdname merge
+#' @rdname merge
 #' @export
 setGeneric("merge")
 
-#' @rdname withColumn
+#' @rdname mutate
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
@@ -475,7 +475,7 @@ setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
 #' @export
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
-#' @rdname withColumnRenamed
+#' @rdname rename
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -553,7 +553,7 @@ setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
-#' @rdname unionAll
+#' @rdname rbind
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
@@ -565,7 +565,7 @@ setGeneric("where", function(x, condition) { standardGeneric("where") })
 #' @export
 setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
 
-#' @rdname withColumnRenamed
+#' @rdname rename
 #' @export
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
