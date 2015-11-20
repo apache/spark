@@ -118,6 +118,8 @@ class StorageStatusListener private[storage](
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
+      removedExecutorIdToStorageStatus.put(executorId,
+          executorIdToStorageStatus.get(executorId).get)
       executorIdToStorageStatus.remove(executorId)
     }
   }
