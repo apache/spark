@@ -42,14 +42,17 @@ object StorageStatusListener {
 }
 
 @DeveloperApi
-class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) extends SparkListener {
-  
+class StorageStatusListener private[storage](
+    conf: SparkConf,
+    ticker: Ticker
+    ) extends SparkListener {
+
   import StorageStatusListener._
 
   def this(conf: SparkConf) = {
     this(conf, Ticker.systemTicker())
   }
-  
+
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
   private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder()
@@ -60,11 +63,11 @@ class StorageStatusListener private[storage](conf: SparkConf, ticker: Ticker) ex
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
   }
-  
+
   def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized {
     removedExecutorIdToStorageStatus.asMap().values().asScala.toSeq
   }
- 
+
   /** Update storage status list to reflect updated block statuses */
   private def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
     executorIdToStorageStatus.get(execId).foreach { storageStatus =>

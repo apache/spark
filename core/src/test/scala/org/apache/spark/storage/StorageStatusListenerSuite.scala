@@ -157,7 +157,7 @@ class StorageStatusListenerSuite extends SparkFunSuite {
     listener.onUnpersistRDD(SparkListenerUnpersistRDD(1))
     assert(listener.executorIdToStorageStatus("big").numBlocks === 0)
   }
-  
+
   test("Killed Executor Entry removed after configurable time") {
     val localtestconf = new SparkConf()
     .set(StorageStatusListener.TIME_TO_EXPIRE_KILLED_EXECUTOR, "5s")

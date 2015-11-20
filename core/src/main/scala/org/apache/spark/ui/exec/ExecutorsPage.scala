@@ -50,7 +50,7 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
-  
+
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -196,7 +196,7 @@ private[spark] object ExecutorsPage {
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
     val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
-    
+
     new ExecutorSummary(
       execId,
       hostPort,
