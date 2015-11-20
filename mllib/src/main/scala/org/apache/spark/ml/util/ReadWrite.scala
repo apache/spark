@@ -31,7 +31,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
 /**
- * Trait for [[Writer]] and [[Reader]].
+ * Trait for [[MLWriter]] and [[MLReader]].
  */
 private[util] sealed trait BaseReadWrite {
   private var optionSQLContext: Option[SQLContext] = None
@@ -64,7 +64,7 @@ private[util] sealed trait BaseReadWrite {
  */
 @Experimental
 @Since("1.6.0")
-abstract class Writer extends BaseReadWrite with Logging {
+abstract class MLWriter extends BaseReadWrite with Logging {
 
   protected var shouldOverwrite: Boolean = false
 
@@ -111,16 +111,16 @@ abstract class Writer extends BaseReadWrite with Logging {
 }
 
 /**
- * Trait for classes that provide [[Writer]].
+ * Trait for classes that provide [[MLWriter]].
  */
 @Since("1.6.0")
-trait Writable {
+trait MLWritable {
 
   /**
-   * Returns a [[Writer]] instance for this ML instance.
+   * Returns an [[MLWriter]] instance for this ML instance.
    */
   @Since("1.6.0")
-  def write: Writer
+  def write: MLWriter
 
   /**
    * Saves this ML instance to the input path, a shortcut of `write.save(path)`.
@@ -130,13 +130,18 @@ trait Writable {
   def save(path: String): Unit = write.save(path)
 }
 
+private[ml] trait DefaultParamsWritable extends MLWritable { self: Params =>
+
+  override def write: MLWriter = new DefaultParamsWriter(this)
+}
+
 /**
  * Abstract class for utility classes that can load ML instances.
  * @tparam T ML instance type
  */
 @Experimental
 @Since("1.6.0")
-abstract class Reader[T] extends BaseReadWrite {
+abstract class MLReader[T] extends BaseReadWrite {
 
   /**
    * Loads the ML component from the input path.
@@ -149,18 +154,18 @@ abstract class Reader[T] extends BaseReadWrite {
 }
 
 /**
- * Trait for objects that provide [[Reader]].
+ * Trait for objects that provide [[MLReader]].
  * @tparam T ML instance type
  */
 @Experimental
 @Since("1.6.0")
-trait Readable[T] {
+trait MLReadable[T] {
 
   /**
-   * Returns a [[Reader]] instance for this class.
+   * Returns an [[MLReader]] instance for this class.
    */
   @Since("1.6.0")
-  def read: Reader[T]
+  def read: MLReader[T]
 
   /**
    * Reads an ML instance from the input path, a shortcut of `read.load(path)`.
@@ -171,13 +176,18 @@ trait Readable[T] {
   def load(path: String): T = read.load(path)
 }
 
+private[ml] trait DefaultParamsReadable[T] extends MLReadable[T] {
+
+  override def read: MLReader[T] = new DefaultParamsReader
+}
+
 /**
- * Default [[Writer]] implementation for transformers and estimators that contain basic
+ * Default [[MLWriter]] implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  * @param instance object to save
  */
-private[ml] class DefaultParamsWriter(instance: Params) extends Writer {
+private[ml] class DefaultParamsWriter(instance: Params) extends MLWriter {
 
   override protected def saveImpl(path: String): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sc)
@@ -194,7 +204,11 @@ private[ml] object DefaultParamsWriter {
    *  - uid
    *  - paramMap: These must be encodable using [[org.apache.spark.ml.param.Param.jsonEncode()]].
    */
-  def saveMetadata(instance: Params, path: String, sc: SparkContext): Unit = {
+  def saveMetadata(
+      instance: Params,
+      path: String,
+      sc: SparkContext,
+      extraMetadata: Option[JValue] = None): Unit = {
     val uid = instance.uid
     val cls = instance.getClass.getName
     val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
@@ -205,7 +219,8 @@ private[ml] object DefaultParamsWriter {
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("extraMetadata" -> extraMetadata)
     val metadataPath = new Path(path, "metadata").toString
     val metadataJson = compact(render(metadata))
     sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
@@ -213,12 +228,13 @@ private[ml] object DefaultParamsWriter {
 }
 
 /**
- * Default [[Reader]] implementation for transformers and estimators that contain basic
+ * Default [[MLReader]] implementation for transformers and estimators that contain basic
  * (json4s-serializable) params and no data. This will not handle more complex params or types with
  * data (e.g., models with coefficients).
  * @tparam T ML instance type
+ * TODO: Consider adding check for correct class name.
  */
-private[ml] class DefaultParamsReader[T] extends Reader[T] {
+private[ml] class DefaultParamsReader[T] extends MLReader[T] {
 
   override def load(path: String): T = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
@@ -235,6 +251,7 @@ private[ml] object DefaultParamsReader {
   /**
    * All info from metadata file.
    * @param params  paramMap, as a [[JValue]]
+   * @param extraMetadata  Extra metadata saved by [[DefaultParamsWriter.saveMetadata()]]
    * @param metadataStr  Full metadata file String (for debugging)
    */
   case class Metadata(
@@ -243,6 +260,7 @@ private[ml] object DefaultParamsReader {
       timestamp: Long,
       sparkVersion: String,
       params: JValue,
+      extraMetadata: Option[JValue],
       metadataStr: String)
 
   /**
@@ -261,12 +279,13 @@ private[ml] object DefaultParamsReader {
     val timestamp = (metadata \ "timestamp").extract[Long]
     val sparkVersion = (metadata \ "sparkVersion").extract[String]
     val params = metadata \ "paramMap"
+    val extraMetadata = (metadata \ "extraMetadata").extract[Option[JValue]]
     if (expectedClassName.nonEmpty) {
       require(className == expectedClassName, s"Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
-    Metadata(className, uid, timestamp, sparkVersion, params, metadataStr)
+    Metadata(className, uid, timestamp, sparkVersion, params, extraMetadata, metadataStr)
   }
 
   /**

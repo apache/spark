@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
@@ -59,7 +61,12 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   override def deserialize(datum: Any): ExamplePoint = {
     datum match {
       case values: ArrayData =>
-        new ExamplePoint(values.getDouble(0), values.getDouble(1))
+        if (values.numElements() > 1) {
+          new ExamplePoint(values.getDouble(0), values.getDouble(1))
+        } else {
+          val random = new Random()
+          new ExamplePoint(random.nextDouble(), random.nextDouble())
+        }
     }
   }
 
