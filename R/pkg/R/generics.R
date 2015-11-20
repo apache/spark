@@ -1097,4 +1097,3 @@ setGeneric("attach")
 #' @rdname with
 #' @export
 setGeneric("with")
-
