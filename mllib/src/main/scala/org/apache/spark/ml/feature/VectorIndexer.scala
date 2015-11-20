@@ -20,14 +20,14 @@ package org.apache.spark.ml.feature
 import java.lang.{Double => JDouble, Integer => JInt}
 import java.util.{Map => JMap}
 
-import org.apache.hadoop.fs.Path
-
 import scala.collection.JavaConverters._
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
