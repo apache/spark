@@ -470,25 +470,25 @@ private[spark] class TaskSchedulerImpl(
     synchronized {
       if (executorIdToTaskCount.contains(executorId)) {
         val hostPort = executorIdToHost(executorId)
-        logError("Lost executor %s on %s: %s".format(executorId, hostPort, reason))
+        logExecutorLoss(executorId, hostPort, reason)
         removeExecutor(executorId, reason)
         failedExecutor = Some(executorId)
       } else {
-         executorIdToHost.get(executorId) match {
-           case Some(_) =>
-             // If the host mapping still exists, it means we don't know the loss reason for the
-             // executor. So call removeExecutor() to update tasks running on that executor when
-             // the real loss reason is finally known.
-             logError(s"Actual reason for lost executor $executorId: ${reason.message}")
-             removeExecutor(executorId, reason)
+        executorIdToHost.get(executorId) match {
+          case Some(hostPort) =>
+            // If the host mapping still exists, it means we don't know the loss reason for the
+            // executor. So call removeExecutor() to update tasks running on that executor when
+            // the real loss reason is finally known.
+            logExecutorLoss(executorId, hostPort, reason)
+            removeExecutor(executorId, reason)
 
-           case None =>
-             // We may get multiple executorLost() calls with different loss reasons. For example,
-             // one may be triggered by a dropped connection from the slave while another may be a
-             // report of executor termination from Mesos. We produce log messages for both so we
-             // eventually report the termination reason.
-             logError("Lost an executor " + executorId + " (already removed): " + reason)
-         }
+          case None =>
+            // We may get multiple executorLost() calls with different loss reasons. For example,
+            // one may be triggered by a dropped connection from the slave while another may be a
+            // report of executor termination from Mesos. We produce log messages for both so we
+            // eventually report the termination reason.
+            logError(s"Lost an executor $executorId (already removed): $reason")
+        }
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
@@ -496,6 +496,18 @@ private[spark] class TaskSchedulerImpl(
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
+  }
+
+  private def logExecutorLoss(
+      executorId: String,
+      hostPort: String,
+      reason: ExecutorLossReason): Unit = reason match {
+    case LossReasonPending =>
+      logDebug(s"Executor $executorId on $hostPort lost, but reason not yet known.")
+    case ExecutorKilled =>
+      logInfo(s"Executor $executorId on $hostPort killed by driver.")
+    case _ =>
+      logError(s"Lost executor $executorId on $hostPort: $reason")
   }
 
   /**
