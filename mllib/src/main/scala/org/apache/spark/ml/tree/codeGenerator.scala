@@ -80,7 +80,7 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
           case 9 => {
             val newFunctionName = freshName()
             val newFunction = nodeToFunction(root, newFunctionName)
-            ("${newFunctionName()", newFunction)
+            ("return ${newFunctionName}();", newFunction)
           }
           case _ => {
             val nodeSplit = node.split
