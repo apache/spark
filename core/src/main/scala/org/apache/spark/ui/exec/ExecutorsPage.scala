@@ -55,7 +55,8 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList ++ listener.removedExecutorStorageStatusList
+    val storageStatusList = 
+      listener.storageStatusList ++ listener.removedExecutorStorageStatusList
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum

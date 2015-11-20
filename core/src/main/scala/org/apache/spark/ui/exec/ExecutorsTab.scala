@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Resubmitted, ExceptionFailure, SparkContext}
+import org.apache.spark.{ExceptionFailure, Resubmitted, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -58,6 +58,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorIdToData = HashMap[String, ExecutorUIData]()
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+  
+  def removedExecutorStorageStatusList: Seq[StorageStatus] = 
+    storageStatusListener.removedExecutorStorageStatusList
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
