@@ -58,8 +58,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorIdToData = HashMap[String, ExecutorUIData]()
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
-  
-  def removedExecutorStorageStatusList: Seq[StorageStatus] = 
+
+  def removedExecutorStorageStatusList: Seq[StorageStatus] =
     storageStatusListener.removedExecutorStorageStatusList
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
