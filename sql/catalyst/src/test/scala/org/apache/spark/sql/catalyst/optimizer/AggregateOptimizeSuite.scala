@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class AggregateOptimizeSuite extends PlanTest {
@@ -29,7 +29,8 @@ class AggregateOptimizeSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
-      RemoveLiteralFromGroupExpressions) :: Nil
+      RemoveLiteralFromGroupExpressions,
+      EliminateDistributeBy) :: Nil
   }
 
   test("replace distinct with aggregate") {
@@ -54,4 +55,27 @@ class AggregateOptimizeSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("eliminate distribute by if preceded by aagregate with same grouping expression") {
+    val input = LocalRelation('a.int, 'b.int)
+    val distributeOn = Seq('a.int)
+
+    val query = RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input))
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = Aggregate(distributeOn, input.output, input)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not eliminate distribute by if numPartitions is not default") {
+    val input = LocalRelation('a.int, 'b.int)
+    val distributeOn = Seq('a.int)
+
+    val query = RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
+    comparePlans(optimized, correctAnswer)
+  }
+
 }

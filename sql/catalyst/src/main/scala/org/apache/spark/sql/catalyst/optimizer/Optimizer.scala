@@ -37,7 +37,8 @@ object DefaultOptimizer extends Optimizer {
       EliminateSubQueries) ::
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
-      RemoveLiteralFromGroupExpressions) ::
+      RemoveLiteralFromGroupExpressions,
+      EliminateDistributeBy) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -963,5 +964,22 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
       a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * Eliminates a distribute by in case it is preceded by a group by with exactly the same grouping columns
+ * and number of partitions is default
+ */
+object EliminateDistributeBy extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case distribute @ RepartitionByExpression(partitionExpression,
+    aggregate @ Aggregate(groupingExpressions, aggregateExpressions, _), None) =>
+
+      if (AttributeSet(partitionExpression) equals AttributeSet(groupingExpressions)) {
+        aggregate
+      } else {
+        distribute
+      }
   }
 }
