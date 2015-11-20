@@ -300,15 +300,6 @@ class DataFrame private[sql](
   def columns: Array[String] = schema.fields.map(_.name)
 
   /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
-
-  /**
    * Returns true if the `collect` and `take` methods can be run locally
    * (without any Spark executors).
    * @group basic
