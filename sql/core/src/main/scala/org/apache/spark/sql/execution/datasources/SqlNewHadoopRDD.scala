@@ -38,9 +38,9 @@ import org.apache.spark.{Partition => SparkPartition, _}
 
 
 private[spark] class SqlNewHadoopPartition(
-  rddId: Int,
-  val index: Int,
-  rawSplit: InputSplit with Writable)
+    rddId: Int,
+    val index: Int,
+    rawSplit: InputSplit with Writable)
   extends SparkPartition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
@@ -62,13 +62,13 @@ private[spark] class SqlNewHadoopPartition(
  * changes based on [[org.apache.spark.rdd.HadoopRDD]].
  */
 private[spark] class SqlNewHadoopRDD[V: ClassTag](
-  sqlContext: SQLContext,
-  broadcastedConf: Broadcast[SerializableConfiguration],
-  @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
-  initLocalJobFuncOpt: Option[Job => Unit],
-  inputFormatClass: Class[_ <: InputFormat[Void, V]],
-  valueClass: Class[V])
-  extends RDD[V](sqlContext.sparkContext, Nil)
+    sqlContext: SQLContext,
+    broadcastedConf: Broadcast[SerializableConfiguration],
+    @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
+    initLocalJobFuncOpt: Option[Job => Unit],
+    inputFormatClass: Class[_ <: InputFormat[Void, V]],
+    valueClass: Class[V])
+    extends RDD[V](sqlContext.sparkContext, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
 
@@ -281,9 +281,9 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
    * the given function rather than the index of the partition.
    */
   private[spark] class NewHadoopMapPartitionsWithSplitRDD[U: ClassTag, T: ClassTag](
-    prev: RDD[T],
-    f: (InputSplit, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean = false)
+      prev: RDD[T],
+      f: (InputSplit, Iterator[T]) => Iterator[U],
+      preservesPartitioning: Boolean = false)
     extends RDD[U](prev) {
 
     override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
