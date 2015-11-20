@@ -140,7 +140,7 @@ class KMeansModel private[ml] (
 object KMeansModel extends MLReadable[KMeansModel] {
 
   @Since("1.6.0")
-  override def read: MLReader[KMeansModel] = new AFTSurvivalRegressionModelReader
+  override def read: MLReader[KMeansModel] = new KMeansModelReader
 
   @Since("1.6.0")
   override def load(path: String): KMeansModel = super.load(path)
@@ -160,7 +160,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
     }
   }
 
-  private class AFTSurvivalRegressionModelReader extends MLReader[KMeansModel] {
+  private class KMeansModelReader extends MLReader[KMeansModel] {
 
     /** Checked against metadata when loading model */
     private val className = classOf[KMeansModel].getName
