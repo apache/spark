@@ -312,7 +312,7 @@ class BlockMatrix @Since("1.3.0") (
   }
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */
-  private [mllib] def toBreeze(): BDM[Double] = {
+  private[mllib] def toBreeze(): BDM[Double] = {
     val localMat = toLocalMatrix()
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
@@ -489,7 +489,8 @@ class BlockMatrix @Since("1.3.0") (
   private[mllib] def SchurComplement: BlockMatrix = {
     require(this.numRowBlocks == this.numColBlocks, "Block Matrix must be square.")
     require(this.numRowBlocks > 1, "Block Matrix must be larger than one block.")
-    val topRange = (0, 0); val botRange = (1, this.numColBlocks - 1)
+    val topRange = (0, 0)
+    val botRange = (1, this.numColBlocks - 1)
     val a11 = this.subBlock(topRange, topRange)
     val a12 = this.subBlock(topRange, botRange)
     val a21 = this.subBlock(botRange, topRange)
@@ -500,8 +501,7 @@ class BlockMatrix @Since("1.3.0") (
     val a11RDD = this.blocks.sparkContext.parallelize(Seq(((0, 0), a11Mtx)))
     val a11Inv = new BlockMatrix(a11RDD, this.rowsPerBlock, this.colsPerBlock)
 
-    val S = a22.subtract(a21.multiply(a11Inv.multiply(a12)))
-    S
+    a22.subtract(a21.multiply(a11Inv.multiply(a12)))
   }
 
   /**
@@ -515,15 +515,12 @@ class BlockMatrix @Since("1.3.0") (
    * @return a BlockMatrix with (0,0) as the upper leftmost block index
    * @since 1.6.0
    */
-  private [mllib] def subBlock(blockRowRange: (Int, Int), blockColRange: (Int, Int)):
-          BlockMatrix = {
-    //  Extracts BlockMatrix elements from a specified range of block indices
-    //  Creating a Sub BlockMatrix of rectangular shape.
-    //  Also reindexes so that the upper left block is always (0, 0)
+  private [mllib] def subBlock(blockRowRange: (Int, Int), blockColRange: (Int, Int)): BlockMatrix = {
 
-    // TODO: add a require statement ...rowMax<=size..
-    val rowMin = blockRowRange._1;    val rowMax = blockRowRange._2
-    val colMin = blockColRange._1 ;   val colMax = blockColRange._2
+    val rowMin = blockRowRange._1
+    val rowMax = blockRowRange._2
+    val colMin = blockColRange._1
+    val colMax = blockColRange._2
     val extractedSeq = this.blocks.filter{ case((x, y), matrix) =>
       x >= rowMin && x<= rowMax &&         // finding blocks
         y >= colMin && y<= colMax }.map {   // shifting indices
@@ -600,37 +597,32 @@ class BlockMatrix @Since("1.3.0") (
    * A class that contains the 3 main BlockMatrix items to be returned
    * when calling blockLU.
    *
-   * @param p The Permutation BlockMatrix
-   * @param l Lower Diagonal BlockMatrix
-   * @param u Upper Diagonal BlockMatrix
+   * @param P The Permutation BlockMatrix
+   * @param L Lower Diagonal BlockMatrix
+   * @param U Upper Diagonal BlockMatrix
    *
    */
-
-  private [mllib] class PLU(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix ){
-    val P = p
-    val L = l
-    val U = u
-  }
+  private [mllib] case class PLU(P: BlockMatrix, L: BlockMatrix, U: BlockMatrix)
 
   /**
    * Extends the base class PLU with additional matrices that are used
    * int he solve method.
    *
-   * @param p The Permutation BlockMatrix
-   * @param l Lower Diagonal BlockMatrix
-   * @param u Upper Diagonal BlockMatrix
+   * @param P The Permutation BlockMatrix
+   * @param L Lower Diagonal BlockMatrix
+   * @param U Upper Diagonal BlockMatrix
    *
-   * @param lInv The inverse of the lower diagaonal matrices (in (i,i)th
+   * @param dLi The inverse of the lower diagaonal matrices (in (i,i)th
    *             cells only).
-   * @param uInv The inverse of the upper diagaonal matrices (in (i,i)th
+   * @param dUi The inverse of the upper diagaonal matrices (in (i,i)th
    *             cells only).
    */
-  private [mllib] class PLUandInverses(p: BlockMatrix, l: BlockMatrix, u: BlockMatrix,
-
-                       lInv: BlockMatrix, uInv: BlockMatrix) extends PLU(p, l, u) {
-    val dLi = lInv
-    val dUi = uInv
-  }
+  private [mllib] case class PLUandInverses(
+      P: BlockMatrix,
+      L: BlockMatrix,
+      U: BlockMatrix,
+      dLi: BlockMatrix,
+      dUi: BlockMatrix)
 
   /**
    * Computes the LU Decomposition of a Square Matrix.  For a matrix A of size (n x n)
@@ -662,7 +654,8 @@ class BlockMatrix @Since("1.3.0") (
     val nDiagBlocks = this.numColBlocks
     // Matrix changes shape during recursion...the "absolute location" must be
     // preserved when reconstructing.
-    val rowsAbs = this.numRowBlocks; val colsAbs = rowsAbs
+    val rowsAbs = this.numRowBlocks
+    val colsAbs = rowsAbs
     // accessing the spark context
     val sc = this.blocks.sparkContext
 
@@ -671,35 +664,30 @@ class BlockMatrix @Since("1.3.0") (
      * more readable.
      *
      * These are passed as an RDD of blocks:
-     * @param p the permutation matrix.
-     * @param l the lower diagonal matrix.
-     * @param u the upper diagonal matrix.
-     * @param lInv the inverse lower diagonal matrix (only populating (i,i) cells).
-     * @param uInv the inverse upper diagonal matrix (only populating (i,i) cells).
-     * @param lDiag the lower diagonal matrices (only populating (i,i) cells).
-     * @param uDiag the upper diagonal matrices (only populating (i,i) cells).
+     * @param P the permutation matrix.
+     * @param L the lower diagonal matrix.
+     * @param U the upper diagonal matrix.
+     * @param Li the inverse lower diagonal matrix (only populating (i,i) cells).
+     * @param Ui the inverse upper diagonal matrix (only populating (i,i) cells).
+     * @param LD the lower diagonal matrices (only populating (i,i) cells).
+     * @param UD the upper diagonal matrices (only populating (i,i) cells).
      * This is passed as a BlockMatrix
-     * @param a the Schur Complement from the previous iteration, treated as the source matrix
+     * @param A the Schur Complement from the previous iteration, treated as the source matrix
      *          for the next iteraton.
      *
      *
      * @Since("1.6.0")
      */
-    class LUSequences(p: RDD[((Int, Int), Matrix)], l: RDD[((Int, Int), Matrix)],
-                      u: RDD[((Int, Int), Matrix)],
-                      lInv: RDD[((Int, Int), Matrix)], uInv: RDD[((Int, Int), Matrix)],
-                      lDiag: RDD[((Int, Int), Matrix)], uDiag: RDD[((Int, Int), Matrix)],
-                      a: BlockMatrix) {
-      val P = p // the permutation matrix.
-      val L = l // the lower diagonal matrix.
-      val U = u // the upper diagonal matrix.
-      val Li = lInv // the inverse lower diagonal matrix (only populating (i,i) cells).
-      val Ui = uInv // the inverse upper diagonal matrix (only populating (i,i) cells).
-      val LD = lDiag // the lower diagonal matrices (only populating (i,i) cells).
-      val UD = uDiag // he upper diagonal matrices (only populating (i,i) cells).
-      val A = a // the Schur Complement: BlockMatrix from the previous iteration, treated
-                // as the source matrix for the next iteraton.
-    }
+
+    case class LUSequences(
+        P: RDD[((Int, Int), Matrix)],
+        L: RDD[((Int, Int), Matrix)],
+        U: RDD[((Int, Int), Matrix)],
+        Li: RDD[((Int, Int), Matrix)],
+        Ui: RDD[((Int, Int), Matrix)],
+        LD: RDD[((Int, Int), Matrix)],
+        UD: RDD[((Int, Int), Matrix)],
+        A: BlockMatrix)
 
     /**
      * Recursive Sequence Build is a nested recursion method that builds up all of the
@@ -723,11 +711,16 @@ class BlockMatrix @Since("1.3.0") (
      */
     def recursiveSequencesBuild(rowI: Int, prev: LUSequences): LUSequences = {
 
-      val rowsRel = prev.A.numRowBlocks; val colsRel = prev.A.numColBlocks
-      val topRangeRel = (0, 0);            val botRangeRel = (1, rowsRel - 1)
-      val topRangeAbs = (rowI, rowI);   val botRangeAbs = (rowI + 1, rowsAbs - 1 )
-      val PLU: List[BDM[Double]] = prev.A.singleBlockPLU;
-      val PBrz = PLU(0); val LBrz = PLU(1); val UBrz = PLU(2)
+      val rowsRel = prev.A.numRowBlocks
+      val colsRel = prev.A.numColBlocks
+      val topRangeRel = (0, 0)
+      val botRangeRel = (1, rowsRel - 1)
+      val topRangeAbs = (rowI, rowI)
+      val botRangeAbs = (rowI + 1, rowsAbs - 1 )
+      val PLU: List[BDM[Double]] = prev.A.singleBlockPLU
+      val PBrz = PLU(0)
+      val LBrz = PLU(1)
+      val UBrz = PLU(2)
 
       val P = Matrices.dense(PBrz.rows, PBrz.cols, PBrz.toArray)
       val L = Matrices.dense(LBrz.rows, LBrz.cols, LBrz.toArray)
@@ -765,8 +758,10 @@ class BlockMatrix @Since("1.3.0") (
     }
 
     // first iteration
-    val PLU: List[BDM[Double]] = this.singleBlockPLU;
-    val PBrz = PLU(0); val LBrz = PLU(1); val UBrz = PLU(2)
+    val PLU: List[BDM[Double]] = this.singleBlockPLU
+    val PBrz = PLU(0)
+    val LBrz = PLU(1)
+    val UBrz = PLU(2)
     val P = Matrices.dense(this.rowsPerBlock, this.colsPerBlock, PBrz.toArray)
     val L = Matrices.dense(this.rowsPerBlock, this.colsPerBlock, LBrz.toArray)
     val U = Matrices.dense(this.rowsPerBlock, this.colsPerBlock, UBrz.toArray)
@@ -784,7 +779,8 @@ class BlockMatrix @Since("1.3.0") (
     val ZB = BDM.zeros[Double](this.rowsPerBlock, this.colsPerBlock)
     val Z = Matrices.dense(this.rowsPerBlock, this.colsPerBlock, ZB.toArray)
     val firstZ = sc.parallelize(Seq(((0, 0), Z)))
-    val topRange = (0, 0);    val botRange = (1, this.numRowBlocks-1)
+    val topRange = (0, 0)
+    val botRange = (1, this.numRowBlocks-1)
 
     val nextLD = this.subBlock(botRange, topRange).
       shiftIndices(botRange._1, topRange._1)
@@ -797,7 +793,7 @@ class BlockMatrix @Since("1.3.0") (
 
     // call to recursive build after initialization step
     val lastSequences = recursiveSequencesBuild(1, nextTuple)
-    val rowsPerBlock = this.rowsPerBlock;
+    val rowsPerBlock = this.rowsPerBlock
     val colsPerBlock = this.colsPerBlock
     val dP = new BlockMatrix(lastSequences.P, rowsPerBlock, colsPerBlock)
     val dL = new BlockMatrix(lastSequences.L, rowsPerBlock, colsPerBlock)
