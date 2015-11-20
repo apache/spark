@@ -71,6 +71,18 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <version>4.5</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.1</version>
+      <scope>test</scope>
+    </dependency>
     <!-- Necessary in order to avoid errors in log messages: -->
     <dependency>
       <groupId>com.google.guava</groupId>
