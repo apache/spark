@@ -148,8 +148,8 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
-			<td sorttable_customkey={info.isAlive.toString}>
-      {if(info.isAlive) "Alive" else "Killed"}
+      <td sorttable_customkey={info.isAlive.toString}>
+      {if (info.isAlive) "Alive" else "Killed"}
       </td>
       {
         if (logsExist) {
