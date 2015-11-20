@@ -1816,6 +1816,23 @@ class JobModelView(ModelViewOnly):
         latest_heartbeat=datetime_f)
 
 
+@utils.provide_session
+def set_dagrun_state(ids, target_state, session=None):
+    try:
+        DR = models.DagRun
+        count = 0
+        for dr in session.query(DR).filter(DR.id.in_(ids)).all():
+            count += 1
+            dr.state = target_state
+        session.commit()
+        flash(
+            "{count} dag runs were set to '{target_state}'".format(**locals()))
+    except Exception as ex:
+        if not self.handle_view_exception(ex):
+            raise Exception("Ooops")
+        flash('Failed to set state', 'error')
+
+
 class DagRunModelView(ModelViewOnly):
     verbose_name_plural = "DAG Runs"
     can_delete = True
@@ -1840,20 +1857,18 @@ class DagRunModelView(ModelViewOnly):
         state=state_f,
         start_date=datetime_f,
         dag_id=dag_link)
-    @action(
-        'set_running', "Set state to 'running'", None)
-    @utils.provide_session
-    def action_set_running(self, ids, session=None):
-        try:
-            DR = models.DagRun
-            count = 0
-            for dr in session.query(DR).filter(DR.id.in_(ids)).all():
-                count += 1
-            flash("{} dag runs were set to 'running'".format(ids))
-        except Exception as ex:
-            if not self.handle_view_exception(ex):
-                raise Exception("Ooops")
-            flash('Failed to set state', 'error')
+
+    @action('set_running', "Set state to 'running'", None)
+    def action_set_running(self, ids):
+        set_dagrun_state(ids, State.RUNNING)
+
+    @action('set_failed', "Set state to 'failed'", None)
+    def action_set_failed(self, ids):
+        set_dagrun_state(ids, State.FAILED)
+
+    @action('set_success', "Set state to 'success'", None)
+    def action_set_success(self, ids):
+        set_dagrun_state(ids, State.SUCCESS)
 
 
 class LogModelView(ModelViewOnly):
