@@ -417,8 +417,7 @@ class Analyzer(
              */
             j
           case Some((oldRelation, newRelation)) =>
-            val attributeRewrites =
-              AttributeMap(oldRelation.output.zip(newRelation.output).filter(x => x._1 != x._2))
+            val attributeRewrites = AttributeMap(oldRelation.output.zip(newRelation.output))
             val newRight = right transformUp {
               case r if r == oldRelation => newRelation
             } transformUp {

@@ -51,8 +51,6 @@ case class Order(
     state: String,
     month: Int)
 
-case class Individual(F1: Integer, F2: Integer)
-
 case class WindowData(
     month: Int,
     area: String,
@@ -1481,18 +1479,5 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
       """.stripMargin), Row("value1", "12", 3.14, "hello"))
   }
-
-  test ("SPARK-11633: HiveContext throws TreeNode Exception : Failed to Copy Node") {
-    val rdd1 = sparkContext.parallelize(Seq( Individual(1,3), Individual(2,1)))
-    val df = hiveContext.createDataFrame(rdd1)
-    df.registerTempTable("foo")
-    val df2 = sql("select f1, F2 as F2 from foo")
-    df2.registerTempTable("foo2")
-    df2.registerTempTable("foo3")
-
-    checkAnswer(sql(
-      """
-        SELECT a.F1 FROM foo2 a INNER JOIN foo3 b ON a.F2=b.F2
-      """.stripMargin), Row(2) :: Row(1) :: Nil)
   }
 }
