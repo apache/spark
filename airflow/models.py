@@ -2672,7 +2672,7 @@ class DagRun(Base):
     __tablename__ = "dag_run"
     
     ID_PREFIX = 'scheduled__' 
-    ID_FORMAT_PREFIX = ID_PREFIX+'%s'
+    ID_FORMAT_PREFIX = ID_PREFIX + '{0}'
     
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
@@ -2698,7 +2698,7 @@ class DagRun(Base):
 
     @classmethod
     def id_for_date(klass, date, prefix=ID_FORMAT_PREFIX):
-        return prefix % date.isoformat()[:19]
+        return prefix.format(date.isoformat()[:19])
 
 class Pool(Base):
     __tablename__ = "slot_pool"
