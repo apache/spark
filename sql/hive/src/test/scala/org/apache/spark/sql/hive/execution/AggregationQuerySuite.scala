@@ -866,6 +866,11 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite
 
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
+  override def afterAll(): Unit = {
+    super.afterAll()
+    sqlContext.conf.unsetConf("spark.sql.TungstenAggregate.testFallbackStartsAt")
+  }
+
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
       sqlContext.setConf(
