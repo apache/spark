@@ -39,7 +39,7 @@ trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
   }
 
   override def afterAll(): Unit = {
-    Utils.deleteRecursively(_tempDir.getParentFile)
+    Utils.deleteRecursively(_tempDir)
     super.afterAll()
   }
 }
