@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType;
  * An example demonstrating LDA
  * Run with
  * <pre>
- * bin/run-example ml.JavaLDAExample <file> <k>
+ * bin/run-example ml.JavaLDAExample
  * </pre>
  */
 public class JavaLDAExample {
