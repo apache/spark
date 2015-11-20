@@ -180,6 +180,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(sql("SELECT * FROM foobar WHERE THEID != 2").collect().size === 2)
     assert(sql("SELECT * FROM foobar WHERE THEID = 1").collect().size === 1)
     assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
+    assert(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'").collect().size === 1)
     assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
     assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
   }
