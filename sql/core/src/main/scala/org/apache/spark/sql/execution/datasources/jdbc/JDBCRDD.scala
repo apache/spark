@@ -263,6 +263,8 @@ private[sql] class JDBCRDD(
    */
   private def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: java.sql.Timestamp => "'" + value + "'"
+    case dateValue: java.sql.Date => "'" + value + "'"
     case _ => value
   }
 
