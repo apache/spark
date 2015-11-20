@@ -27,25 +27,25 @@ import org.apache.spark.sql.DataFrame
 /**
  * Params for [[Arm]].
  */
-trait ArmParams extends Params with HasMaxIter {
+trait ArmParams[M <: Model[M]] extends Params with HasMaxIter {
   /**
    * param for the estimator to be validated
    * @group param
    */
-  val estimator: Param[Estimator[_]] = new Param(this, "estimator", "estimator for selection")
+  val estimator: Param[Estimator[M]] = new Param(this, "estimator", "estimator for selection")
 
   /** @group getParam */
-  def getEstimator: Estimator[_] = $(estimator)
+  def getEstimator: Estimator[M] = $(estimator)
 
   /**
    * Param for the initial model of a given estimator. Default None.
    * @group param
    */
-  val initialModel: Param[Option[Model[_]]] =
+  val initialModel: Param[Option[Model[M]]] =
     new Param(this, "initialModel", "initial model for warm-start")
 
   /** @group getParam */
-  val getInitialModel: Option[Model[_]] = $(initialModel)
+  val getInitialModel: Option[Model[M]] = $(initialModel)
 
   /**
    * param for estimator param maps
@@ -77,15 +77,15 @@ trait ArmParams extends Params with HasMaxIter {
  * consumes a current model and produce a new one. The evaluator computes the error given a target
  * column and a predicted column.
  */
-class Arm(override val uid: String) extends ArmParams {
+class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
 
   def this() = this(Identifiable.randomUID("arm"))
 
   /** @group setParam */
-  def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+  def setEstimator(value: Estimator[M]): this.type = set(estimator, value)
 
   /** @group setParam */
-  def setInitialModel(value: Option[Model[_]]): this.type = set(initialModel, value)
+  def setInitialModel(value: Option[Model[M]]): this.type = set(initialModel, value)
 
   /** @group setParam */
   def setEstimatorParamMap(value: ParamMap): this.type = set(estimatorParamMap, value)
@@ -99,9 +99,9 @@ class Arm(override val uid: String) extends ArmParams {
   /**
    * Inner model to record intermediate training result.
    */
-  private var model: Option[Model[_]] = $(initialModel)
+  private var model: Option[Model[M]] = $(initialModel)
 
-  def getModel: Model[_] = model.get
+  def getModel: Model[M] = model.get
 
   /**
    * Keep record of the number of pulls for computations in some search strategies.
@@ -117,7 +117,7 @@ class Arm(override val uid: String) extends ArmParams {
   def pull(dataset: DataFrame): this.type = {
     this.numPulls += 1
     val epm = $(estimatorParamMap).put(initialModel, model).put(maxIter, $(maxIter))
-    this.model = Some($(estimator).fit(dataset, epm).asInstanceOf[Model[_]])
+    this.model = Some($(estimator).fit(dataset, epm))
     this
   }
 
@@ -132,8 +132,8 @@ class Arm(override val uid: String) extends ArmParams {
     }
   }
 
-  override def copy(extra: ParamMap): Arm = {
-    val copied = defaultCopy(extra).asInstanceOf[Arm]
+  override def copy(extra: ParamMap): Arm[M] = {
+    val copied = defaultCopy(extra).asInstanceOf[Arm[M]]
     copied
   }
 }

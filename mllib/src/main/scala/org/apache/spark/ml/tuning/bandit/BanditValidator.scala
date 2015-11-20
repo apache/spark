@@ -129,7 +129,7 @@ class BanditValidator(override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm()
+        val arm = new Arm[M <: Model[M]]()
           .setMaxIter($(stepsPerPulling))
           .setEstimator(est)
           .setEstimatorParamMap(parameter)
