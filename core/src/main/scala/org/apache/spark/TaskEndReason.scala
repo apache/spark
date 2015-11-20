@@ -200,6 +200,15 @@ case object TaskKilled extends TaskFailedReason {
 
 /**
  * :: DeveloperApi ::
+ * Task caught OOM exception and needs to be rescheduled.
+ */
+@DeveloperApi
+case object TaskOutOfMemory extends TaskFailedReason {
+  override def toErrorString: String = "TaskOutOfMemory (task caught OutOfMemoryError)"
+}
+
+/**
+ * :: DeveloperApi ::
  * Task requested the driver to commit, but was denied.
  */
 @DeveloperApi
