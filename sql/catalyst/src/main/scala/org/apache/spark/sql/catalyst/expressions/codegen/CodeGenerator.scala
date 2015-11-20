@@ -330,6 +330,18 @@ class CodeGenContext {
   }
 
   /**
+    * Generates code for greater of two expressions.
+    *
+    * @param dataType data type of the expressions
+    * @param c1 name of the variable of expression 1's output
+    * @param c2 name of the variable of expression 2's output
+    */
+  def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
+    case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
+    case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
    * List of java data types that have special accessors and setters in [[InternalRow]].
    */
   val primitiveTypes =
