@@ -120,14 +120,14 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
     val t = new StandardScaler()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
+      .setWithStd(false)
       .setWithMean(true)
-      .setWithStd(true)
     testDefaultReadWrite(t)
   }
 
   test("StandardScalerModel read/write") {
     val instance = new StandardScalerModel("myStandardScalerModel",
-      Vectors.dense(0.5, 1.2), Vectors.dense(1.0, 10.0))
+      Vectors.dense(1.0, 2.0), Vectors.dense(3.0, 4.0))
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.std === instance.std)
     assert(newInstance.mean === instance.mean)
