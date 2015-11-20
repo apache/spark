@@ -233,7 +233,6 @@ private[spark] class Client(
         amRequest.setPriority(Priority.newInstance(0))
         amRequest.setCapability(capability)
         amRequest.setNumContainers(1)
-        amRequest.setRelaxLocality(true)
         val amLabelExpression = sparkConf.get("spark.yarn.am.nodeLabelExpression")
         val method = amRequest.getClass.getMethod("setNodeLabelExpression", classOf[String])
         method.invoke(amRequest, amLabelExpression)
