@@ -19,15 +19,15 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, Matrices}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.feature.{PCAModel => OldPCAModel}
 import org.apache.spark.sql.Row
 
-class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
+class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new PCA)
@@ -64,5 +64,25 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }
+  }
+
+  test("read/write") {
+
+    def checkModelData(model1: PCAModel, model2: PCAModel): Unit = {
+      assert(model1.pc === model2.pc)
+    }
+    val allParams: Map[String, Any] = Map(
+      "k" -> 3,
+      "inputCol" -> "features",
+      "outputCol" -> "pca_features"
+    )
+    val data = Seq(
+      (0.0, Vectors.sparse(5, Seq((1, 1.0), (3, 7.0)))),
+      (1.0, Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
+      (2.0, Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
+    )
+    val df = sqlContext.createDataFrame(data).toDF("id", "features")
+    val pca = new PCA().setK(3)
+    testEstimatorAndModelReadWrite(pca, df, allParams, checkModelData)
   }
 }
