@@ -177,6 +177,44 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
+  def refreshJs: Seq[Node] = {
+    <script>
+    {Unparsed
+      {"""
+        |var reloading;
+        |
+        |function checkReloading() {
+        |    if (window.location.href.match(/refresh=true/)) {
+        |        reloading=setTimeout("window.location.reload();", 10000);
+        |        document.getElementById("refresh").checked=true;
+        |    }
+        |}
+        |
+        |function toggleAutoRefresh(cb) {
+        |    if (cb.checked) {
+        |        if (window.location.href.match(/refresh/)) {
+        |          window.location.href = window.location.href.replace(/refresh=false/, "refresh=true");
+        |        } else {
+        |          if (window.location.href.match(/\?/)) {
+        |            window.location.href = window.location.href.replace(/$/, "&refresh=true");
+        |          } else {
+        |            window.location.href = window.location.href.replace(/$/, "?refresh=true");
+        |          }
+        |        }
+        |        reloading=setTimeout("window.location.reload();", 10000);
+        |    } else {
+        |        window.location.href = window.location.href.replace(/refresh=true/, "refresh=false");
+        |        clearTimeout(reloading);
+        |    }
+        |}
+        |
+        |window.onload=checkReloading;
+        |
+      """.stripMargin
+    }}
+    </script>
+  }
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(
       title: String,
@@ -218,11 +256,16 @@ private[spark] object UIUtils extends Logging {
         </div>
         <div class="container-fluid">
           <div class="row-fluid">
-            <div class="span12">
+            <div class="span11">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
                 {helpButton}
               </h3>
+            </div>
+            <div class="span1" style="font-size: 8px; align: right">
+              {refreshJs}
+              <input type="checkbox" onclick="toggleAutoRefresh(this);"
+                     id="refresh"></input> AUTO REFRESH
             </div>
           </div>
           {content}
@@ -241,7 +284,7 @@ private[spark] object UIUtils extends Logging {
       <body>
         <div class="container-fluid">
           <div class="row-fluid">
-            <div class="span12">
+            <div class="span11">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
                   <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
@@ -250,6 +293,11 @@ private[spark] object UIUtils extends Logging {
                 </a>
                 {title}
               </h3>
+            </div>
+            <div class="span1" style="font-size: 8px; align: right">
+              {refreshJs}
+              <input type="checkbox" onclick="toggleAutoRefresh(this);"
+                     id="refresh"></input> AUTO REFRESH
             </div>
           </div>
           {content}
