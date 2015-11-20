@@ -17,13 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -49,7 +51,8 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
  * PCA trains a model to project vectors to a low-dimensional space using PCA.
  */
 @Experimental
-class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams {
+class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
+  with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("pca"))
 
@@ -86,6 +89,13 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams 
   override def copy(extra: ParamMap): PCA = defaultCopy(extra)
 }
 
+@Since("1.6.0")
+object PCA extends DefaultParamsReadable[PCA] {
+
+  @Since("1.6.0")
+  override def load(path: String): PCA = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model fitted by [[PCA]].
@@ -94,7 +104,12 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams 
 class PCAModel private[ml] (
     override val uid: String,
     pcaModel: feature.PCAModel)
-  extends Model[PCAModel] with PCAParams {
+  extends Model[PCAModel] with PCAParams with MLWritable {
+
+  import PCAModel._
+
+  /** a principal components Matrix. Each column is one principal component. */
+  val pc: DenseMatrix = pcaModel.pc
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -127,4 +142,46 @@ class PCAModel private[ml] (
     val copied = new PCAModel(uid, pcaModel)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new PCAModelWriter(this)
+}
+
+@Since("1.6.0")
+object PCAModel extends MLReadable[PCAModel] {
+
+  private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
+
+    private case class Data(k: Int, pc: DenseMatrix)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.getK, instance.pc)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class PCAModelReader extends MLReader[PCAModel] {
+
+    private val className = classOf[PCAModel].getName
+
+    override def load(path: String): PCAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val Row(k: Int, pc: DenseMatrix) = sqlContext.read.parquet(dataPath)
+        .select("k", "pc")
+        .head()
+      val oldModel = new feature.PCAModel(k, pc)
+      val model = new PCAModel(metadata.uid, oldModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[PCAModel] = new PCAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): PCAModel = super.load(path)
 }
