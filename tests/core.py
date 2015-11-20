@@ -90,6 +90,7 @@ class CoreTest(unittest.TestCase):
                     state=utils.State.SUCCESS,
                     external_trigger=True)
         settings.Session().add(trigger)
+        settings.Session().commit()
         dag_run = scheduler.schedule_dag(dag)
         assert dag_run is not None
         assert dag_run.dag_id == dag.dag_id

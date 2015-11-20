@@ -16,7 +16,7 @@ import subprocess
 import sys
 from time import sleep
 
-from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_
+from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_, or_
 from sqlalchemy.orm.session import make_transient
 
 from airflow import executors, models, settings, utils
@@ -361,10 +361,11 @@ class SchedulerJob(BaseJob):
             active_runs = qry.scalar()
             if active_runs >= dag.max_active_runs:
                 return
-            qry = session.query(func.max(DagRun.execution_date)).filter(
-                DagRun.dag_id == dag.dag_id,
-                DagRun.external_trigger == False
-            )
+            qry = session.query(func.max(DagRun.execution_date)).filter_by(
+                    dag_id = dag.dag_id).filter(
+                        or_(DagRun.external_trigger == False,
+                            # add % as a wildcard for the like query
+                            DagRun.run_id.like(DagRun.ID_PREFIX+'%')))
             last_scheduled_run = qry.scalar()
             next_run_date = None
             if not last_scheduled_run:
