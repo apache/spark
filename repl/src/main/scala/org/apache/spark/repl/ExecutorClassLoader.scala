@@ -20,8 +20,6 @@ package org.apache.spark.repl
 import java.io.{IOException, ByteArrayOutputStream, InputStream}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 
-import org.apache.spark.unsafe.Platform
-
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -58,10 +56,6 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
   }
 
   override def findClass(name: String): Class[_] = {
-    // This is a horrible hack to workround an issue that Janino has when operating on a
-    // REPL classloader :(.
-    if (name == "Platform") return classOf[Platform]
-
     userClassPathFirst match {
       case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
       case false => {
@@ -71,7 +65,13 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
           case e: ClassNotFoundException => {
             val classOption = findClassLocally(name)
             classOption match {
-              case None => throw new ClassNotFoundException(name, e)
+              case None =>
+                // If this class has a cause, it will break the internal assumption of Janino
+                // (the compiler used for Spark SQL code-gen).
+                // See org.codehaus.janino.ClassLoaderIClassLoader's findIClass, you will see
+                // its behavior will be changed if there is a cause and the compilation
+                // of generated class will fail.
+                throw new ClassNotFoundException(name)
               case Some(a) => a
             }
           }

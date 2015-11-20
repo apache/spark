@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -33,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -206,7 +204,7 @@ class CodeGenContext {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ => "java.lang.Object"
+    case _ => "Object"
   }
 
   /**
@@ -525,9 +523,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * Compile the Java source code into a Java class, using Janino.
    */
   private[this] def doCompile(code: String): GeneratedClass = {
-    assert(!code.contains(" Object ", s"java.lang.Object should be used instead in: \n$code"))
-    assert(!code.contains(" Object[] ", s"java.lang.Object[] should be used instead in: \n$code"))
-
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
