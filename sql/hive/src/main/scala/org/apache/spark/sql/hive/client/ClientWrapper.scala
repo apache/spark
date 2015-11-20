@@ -20,10 +20,12 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
 
+import org.apache.hadoop.conf.Configuration
+
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, Path}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
@@ -167,6 +169,10 @@ private[hive] class ClientWrapper(
       } else {
         logInfo("Attempting to login to Kerberos" +
           s" using principal: ${principalName} and keytab: ${keytabFileName}")
+        val hadoopConfiguration = new Configuration()
+        hadoopConfiguration.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
+          "kerberos")
+        UserGroupInformation.setConfiguration(hadoopConfiguration)
         UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
       }
     }
