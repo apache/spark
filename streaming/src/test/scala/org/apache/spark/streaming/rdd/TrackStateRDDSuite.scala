@@ -17,30 +17,39 @@
 
 package org.apache.spark.streaming.rdd
 
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.util.OpenHashMapBasedStateMap
-import org.apache.spark.streaming.{Time, State}
-import org.apache.spark.{HashPartitioner, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.streaming.{State, Time}
+import org.apache.spark.util.Utils
 
-class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
+class TrackStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with BeforeAndAfterAll {
 
   private var sc: SparkContext = null
+  private var checkpointDir: File = _
 
   override def beforeAll(): Unit = {
     sc = new SparkContext(
       new SparkConf().setMaster("local").setAppName("TrackStateRDDSuite"))
+    checkpointDir = Utils.createTempDir()
+    sc.setCheckpointDir(checkpointDir.toString)
   }
 
   override def afterAll(): Unit = {
     if (sc != null) {
       sc.stop()
     }
+    Utils.deleteRecursively(checkpointDir)
   }
+
+  override def sparkContext: SparkContext = sc
 
   test("creation from pair RDD") {
     val data = Seq((1, "1"), (2, "2"), (3, "3"))
@@ -276,6 +285,51 @@ class TrackStateRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val rdd8 = testStateUpdates(                      // should remove k3's state
       rdd7, Seq(("k3", 2)), Set())
+  }
+
+  test("checkpointing") {
+    /**
+     * This tests whether the TrackStateRDD correctly truncates any references to its parent RDDs -
+     * the data RDD and the parent TrackStateRDD.
+     */
+    def rddCollectFunc(rdd: RDD[TrackStateRDDRecord[Int, Int, Int]])
+      : Set[(List[(Int, Int, Long)], List[Int])] = {
+      rdd.map { record => (record.stateMap.getAll().toList, record.emittedRecords.toList) }
+         .collect.toSet
+    }
+
+    /** Generate TrackStateRDD with data RDD having a long lineage */
+    def makeStateRDDWithLongLineageDataRDD(longLineageRDD: RDD[Int])
+      : TrackStateRDD[Int, Int, Int, Int] = {
+      TrackStateRDD.createFromPairRDD(longLineageRDD.map { _ -> 1}, partitioner, Time(0))
+    }
+
+    testRDD(
+      makeStateRDDWithLongLineageDataRDD, reliableCheckpoint = true, rddCollectFunc _)
+    testRDDPartitions(
+      makeStateRDDWithLongLineageDataRDD, reliableCheckpoint = true, rddCollectFunc _)
+
+    /** Generate TrackStateRDD with parent state RDD having a long lineage */
+    def makeStateRDDWithLongLineageParenttateRDD(
+        longLineageRDD: RDD[Int]): TrackStateRDD[Int, Int, Int, Int] = {
+
+      // Create a TrackStateRDD that has a long lineage using the data RDD with a long lineage
+      val stateRDDWithLongLineage = makeStateRDDWithLongLineageDataRDD(longLineageRDD)
+
+      // Create a new TrackStateRDD, with the lineage lineage TrackStateRDD as the parent
+      new TrackStateRDD[Int, Int, Int, Int](
+        stateRDDWithLongLineage,
+        stateRDDWithLongLineage.sparkContext.emptyRDD[(Int, Int)].partitionBy(partitioner),
+        (time: Time, key: Int, value: Option[Int], state: State[Int]) => None,
+        Time(10),
+        None
+      )
+    }
+
+    testRDD(
+      makeStateRDDWithLongLineageParenttateRDD, reliableCheckpoint = true, rddCollectFunc _)
+    testRDDPartitions(
+      makeStateRDDWithLongLineageParenttateRDD, reliableCheckpoint = true, rddCollectFunc _)
   }
 
   /** Assert whether the `trackStateByKey` operation generates expected results */
