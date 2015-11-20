@@ -1630,6 +1630,9 @@ test_that("Method str()", {
   DF <- createDataFrame(sqlContext, df)
   out <- capture.output(str(DF))
   expect_equal(length(out), 103)
+
+  # Test utils:::str
+  expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
 unlink(parquetPath)
