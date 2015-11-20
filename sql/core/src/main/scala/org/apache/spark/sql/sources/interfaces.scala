@@ -21,8 +21,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
-import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.{Logging, SparkContext}
@@ -448,15 +447,9 @@ abstract class HadoopFsRelation private[sql](
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
           logInfo(s"Listing $qualified on driver")
-          // Dummy jobconf to get to the pathFilter defined in configuration
-          val jobConf = new JobConf(hadoopConf, this.getClass())
-          val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-          if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
-          } else {
-            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
-          }
+          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
         }.filterNot { status =>
           val name = status.getPath.getName
           name.toLowerCase == "_temporary" || name.startsWith(".")
@@ -854,16 +847,8 @@ private[sql] object HadoopFsRelation extends Logging {
     if (name == "_temporary" || name.startsWith(".")) {
       Array.empty
     } else {
-      // Dummy jobconf to get to the pathFilter defined in configuration
-      val jobConf = new JobConf(fs.getConf, this.getClass())
-      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      if (pathFilter != null) {
-        val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDir)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      } else {
-        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-        files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-      }
+      val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
     }
   }
 

@@ -2152,7 +2152,7 @@ setMethod("with",
           })
 
 #' Returns the column types of a DataFrame.
-#' 
+#'
 #' @name coltypes
 #' @title Get column types of a DataFrame
 #' @family dataframe_funcs

@@ -539,7 +539,7 @@ setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
-setGeneric("subset", function(x, subset, select, ...) { standardGeneric("subset") })
+setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
@@ -790,7 +790,7 @@ setGeneric("kurtosis", function(x) { standardGeneric("kurtosis") })
 
 #' @rdname lag
 #' @export
-setGeneric("lag", function(x, offset, defaultValue = NULL) { standardGeneric("lag") })
+setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export

@@ -357,7 +357,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
-  test("kryo encoder") {
+  test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
@@ -365,7 +365,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
-  test("kryo encoder self join") {
+  test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
@@ -374,6 +374,25 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (KryoData(1), KryoData(2)),
         (KryoData(2), KryoData(1)),
         (KryoData(2), KryoData(2))))
+  }
+
+  test("Java encoder") {
+    implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
+    val ds = Seq(JavaData(1), JavaData(2)).toDS()
+
+    assert(ds.groupBy(p => p).count().collect().toSeq ==
+      Seq((JavaData(1), 1L), (JavaData(2), 1L)))
+  }
+
+  ignore("Java encoder self join") {
+    implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
+    val ds = Seq(JavaData(1), JavaData(2)).toDS()
+    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+      Set(
+        (JavaData(1), JavaData(1)),
+        (JavaData(1), JavaData(2)),
+        (JavaData(2), JavaData(1)),
+        (JavaData(2), JavaData(2))))
   }
 }
 
@@ -405,4 +424,17 @@ class KryoData(val a: Int) {
 
 object KryoData {
   def apply(a: Int): KryoData = new KryoData(a)
+}
+
+/** Used to test Java encoder. */
+class JavaData(val a: Int) extends Serializable {
+  override def equals(other: Any): Boolean = {
+    a == other.asInstanceOf[JavaData].a
+  }
+  override def hashCode: Int = a
+  override def toString: String = s"JavaData($a)"
+}
+
+object JavaData {
+  def apply(a: Int): JavaData = new JavaData(a)
 }

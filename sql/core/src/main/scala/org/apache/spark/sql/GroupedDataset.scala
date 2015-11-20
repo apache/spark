@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.encoders.{FlatEncoder, ExpressionEncoder, encoderFor}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateStruct, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
@@ -52,8 +52,10 @@ class GroupedDataset[K, T] private[sql](
   private implicit val unresolvedKEncoder = encoderFor(kEncoder)
   private implicit val unresolvedTEncoder = encoderFor(tEncoder)
 
-  private val resolvedKEncoder = unresolvedKEncoder.resolve(groupingAttributes)
-  private val resolvedTEncoder = unresolvedTEncoder.resolve(dataAttributes)
+  private val resolvedKEncoder =
+    unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
+  private val resolvedTEncoder =
+    unresolvedTEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
@@ -240,7 +242,7 @@ class GroupedDataset[K, T] private[sql](
    * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
    * for that key.
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(FlatEncoder[Long]))
+  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
