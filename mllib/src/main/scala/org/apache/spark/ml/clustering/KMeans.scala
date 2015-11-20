@@ -188,6 +188,21 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  // Initial cluster centers can be provided as a KMeansModel object rather than using the
+  // random or k-means|| initializationMode
+  private var initialModel: Option[MLlibKMeansModel] = None
+
+  /**
+   * Set the initial starting point, bypassing the random initialization or k-means||
+   * The condition model.k == this.k must be met, failure results
+   * in an IllegalArgumentException.
+   */
+  def setInitialModel(model: MLlibKMeansModel): this.type = {
+    require(model.k == this.getK, "mismatched cluster count")
+    initialModel = Some(model)
+    this
+  }
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
@@ -199,6 +214,15 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+
+    initialModel match {
+      case Some(kMeansCenters) => {
+        algo.setInitialModel(kMeansCenters)
+      }
+      case None => {
+      }
+    }
+
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
     copyValues(model)
