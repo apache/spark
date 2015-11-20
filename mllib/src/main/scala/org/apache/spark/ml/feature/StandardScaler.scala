@@ -90,7 +90,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(uid, scalerModel).setParent(this))
+    copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -116,20 +116,18 @@ object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 /**
  * :: Experimental ::
  * Model fitted by [[StandardScaler]].
+ *
+ * @param std Standard deviation of the StandardScalerModel
+ * @param mean Mean of the StandardScalerModel
  */
 @Experimental
 class StandardScalerModel private[ml] (
     override val uid: String,
-    scaler: feature.StandardScalerModel)
+    val std: Vector,
+    val mean: Vector)
   extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
 
   import StandardScalerModel._
-
-  /** Standard deviation of the StandardScalerModel */
-  val std: Vector = scaler.std
-
-  /** Mean of the StandardScalerModel */
-  val mean: Vector = scaler.mean
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -139,6 +137,7 @@ class StandardScalerModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+    val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
     val scale = udf { scaler.transform _ }
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
@@ -154,7 +153,7 @@ class StandardScalerModel private[ml] (
   }
 
   override def copy(extra: ParamMap): StandardScalerModel = {
-    val copied = new StandardScalerModel(uid, scaler)
+    val copied = new StandardScalerModel(uid, std, mean)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -168,11 +167,11 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
   private[StandardScalerModel]
   class StandardScalerModelWriter(instance: StandardScalerModel) extends MLWriter {
 
-    private case class Data(std: Vector, mean: Vector, withStd: Boolean, withMean: Boolean)
+    private case class Data(std: Vector, mean: Vector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.std, instance.mean, instance.getWithStd, instance.getWithMean)
+      val data = Data(instance.std, instance.mean)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -185,12 +184,10 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     override def load(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(std: Vector, mean: Vector, withStd: Boolean, withMean: Boolean) =
-        sqlContext.read.parquet(dataPath)
-          .select("std", "mean", "withStd", "withMean")
-          .head()
-      val oldModel = new feature.StandardScalerModel(std, mean, withStd, withMean)
-      val model = new StandardScalerModel(metadata.uid, oldModel)
+      val Row(std: Vector, mean: Vector) = sqlContext.read.parquet(dataPath)
+        .select("std", "mean")
+        .head()
+      val model = new StandardScalerModel(metadata.uid, std, mean)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
