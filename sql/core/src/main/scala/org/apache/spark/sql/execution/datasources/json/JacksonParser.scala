@@ -50,7 +50,8 @@ object JacksonParser {
   def convertField(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: DataType): Any = {
+      schema: DataType,
+      configOptions: JSONOptions): Any = {
     import com.fasterxml.jackson.core.JsonToken._
     (parser.getCurrentToken, schema) match {
       case (null | VALUE_NULL, _) =>
@@ -58,7 +59,7 @@ object JacksonParser {
 
       case (FIELD_NAME, _) =>
         parser.nextToken()
-        convertField(factory, parser, schema)
+        convertField(factory, parser, schema, configOptions)
 
       case (VALUE_STRING, StringType) =>
         UTF8String.fromString(parser.getText)
@@ -106,7 +107,22 @@ object JacksonParser {
         parser.getDoubleValue
 
       case (VALUE_STRING, DoubleType) =>
-        parser.getDoubleValue
+        // Special case handling for quoted non-numeric numbers.
+        if (configOptions.allowNonNumericNumbers) {
+          val value = parser.getText
+          val lowerCaseValue = value.toLowerCase()
+          if (lowerCaseValue.equals("nan") ||
+            lowerCaseValue.equals("infinity") ||
+            lowerCaseValue.equals("-infinity") ||
+            lowerCaseValue.equals("inf") ||
+            lowerCaseValue.equals("-inf")) {
+            value.toDouble
+          } else {
+            sys.error(s"Cannot parse $value as DoubleType.")
+          }
+        } else {
+          parser.getDoubleValue
+        }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
         Decimal(parser.getDecimalValue, dt.precision, dt.scale)
@@ -130,26 +146,26 @@ object JacksonParser {
         false
 
       case (START_OBJECT, st: StructType) =>
-        convertObject(factory, parser, st)
+        convertObject(factory, parser, st, configOptions)
 
       case (START_ARRAY, st: StructType) =>
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
-        convertArray(factory, parser, st)
+        convertArray(factory, parser, st, configOptions)
 
       case (START_ARRAY, ArrayType(st, _)) =>
-        convertArray(factory, parser, st)
+        convertArray(factory, parser, st, configOptions)
 
       case (START_OBJECT, ArrayType(st, _)) =>
         // the business end of SPARK-3308:
         // when an object is found but an array is requested just wrap it in a list
-        convertField(factory, parser, st) :: Nil
+        convertField(factory, parser, st, configOptions) :: Nil
 
       case (START_OBJECT, MapType(StringType, kt, _)) =>
-        convertMap(factory, parser, kt)
+        convertMap(factory, parser, kt, configOptions)
 
       case (_, udt: UserDefinedType[_]) =>
-        convertField(factory, parser, udt.sqlType)
+        convertField(factory, parser, udt.sqlType, configOptions)
 
       case (token, dataType) =>
         sys.error(s"Failed to parse a value for data type $dataType (current token: $token).")
@@ -164,12 +180,13 @@ object JacksonParser {
   private def convertObject(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: StructType): InternalRow = {
+      schema: StructType,
+      configOptions: JSONOptions): InternalRow = {
     val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
-          row.update(index, convertField(factory, parser, schema(index).dataType))
+          row.update(index, convertField(factory, parser, schema(index).dataType, configOptions))
 
         case None =>
           parser.skipChildren()
@@ -185,12 +202,13 @@ object JacksonParser {
   private def convertMap(
       factory: JsonFactory,
       parser: JsonParser,
-      valueType: DataType): MapData = {
+      valueType: DataType,
+      configOptions: JSONOptions): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       keys += UTF8String.fromString(parser.getCurrentName)
-      values += convertField(factory, parser, valueType)
+      values += convertField(factory, parser, valueType, configOptions)
     }
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
@@ -198,10 +216,11 @@ object JacksonParser {
   private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
-      elementType: DataType): ArrayData = {
+      elementType: DataType,
+      configOptions: JSONOptions): ArrayData = {
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      values += convertField(factory, parser, elementType)
+      values += convertField(factory, parser, elementType, configOptions)
     }
 
     new GenericArrayData(values.toArray)
@@ -235,7 +254,7 @@ object JacksonParser {
           Utils.tryWithResource(factory.createParser(record)) { parser =>
             parser.nextToken()
 
-            convertField(factory, parser, schema) match {
+            convertField(factory, parser, schema, configOptions) match {
               case null => failedRecord(record)
               case row: InternalRow => row :: Nil
               case array: ArrayData =>

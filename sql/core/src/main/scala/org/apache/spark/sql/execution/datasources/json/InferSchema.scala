@@ -92,7 +92,21 @@ private[json] object InferSchema {
         // record fields' types have been combined.
         NullType
 
-      case VALUE_STRING => StringType
+      case VALUE_STRING =>
+        // When JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS is enabled,
+        // we need to do special handling for quoted non-numeric numbers.
+        if (configOptions.allowNonNumericNumbers) {
+          val value = parser.getText
+          val lowerCaseValue = value.toLowerCase()
+          if (lowerCaseValue.equals("nan") ||
+            lowerCaseValue.equals("infinity") ||
+            lowerCaseValue.equals("-infinity") ||
+            lowerCaseValue.equals("inf") ||
+            lowerCaseValue.equals("-inf")) {
+            return DoubleType
+          }
+        }
+        StringType
       case START_OBJECT =>
         val builder = Seq.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {

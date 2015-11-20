@@ -54,7 +54,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       Utils.tryWithResource(factory.createParser(writer.toString)) { parser =>
         parser.nextToken()
-        JacksonParser.convertField(factory, parser, dataType)
+        JacksonParser.convertField(factory, parser, dataType, JSONOptions())
       }
     }
 

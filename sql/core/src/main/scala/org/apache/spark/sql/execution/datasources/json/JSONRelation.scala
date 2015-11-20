@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.CharArrayWriter
 
-import com.fasterxml.jackson.core.{JsonGenerator, JsonFactory}
+import com.fasterxml.jackson.core.JsonFactory
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
@@ -161,13 +161,12 @@ private[sql] class JSONRelation(
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    val quoteNonNumeric = !options.allowNonNumericNumbers
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, dataSchema, context, quoteNonNumeric)
+        new JsonOutputWriter(path, dataSchema, context)
       }
     }
   }
@@ -176,15 +175,12 @@ private[sql] class JSONRelation(
 private[json] class JsonOutputWriter(
     path: String,
     dataSchema: StructType,
-    context: TaskAttemptContext,
-    quoteNonNumeric: Boolean)
+    context: TaskAttemptContext)
   extends OutputWriter with SparkHadoopMapRedUtil with Logging {
 
   private[this] val writer = new CharArrayWriter()
   // create the Generator without separator inserted between 2 records
-  private[this] val factory = new JsonFactory()
-  factory.configure(JsonGenerator.Feature.QUOTE_NON_NUMERIC_NUMBERS, quoteNonNumeric)
-  private[this] val gen = factory.createGenerator(writer).setRootValueSeparator(null)
+  private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
   private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {

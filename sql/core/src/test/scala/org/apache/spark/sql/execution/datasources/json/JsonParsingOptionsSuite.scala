@@ -107,8 +107,10 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowNonNumericNumbers on") {
     val testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
-      """{"age": -Infinity}""")
-    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity)
+      """{"age": -Infinity}""", """{"age": "NaN"}""", """{"age": "Infinity"}""",
+      """{"age": "-Infinity"}""")
+    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity,
+      _.isNaN, _.isPosInfinity, _.isNegInfinity)
 
     testCases.zipWithIndex.foreach { case (str, idx) =>
       val rdd = sqlContext.sparkContext.parallelize(Seq(str))
