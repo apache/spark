@@ -1467,6 +1467,7 @@ setMethod("pmod", signature(y = "Column"),
 #' @name approxCountDistinct
 #' @return the approximate number of distinct items in a group.
 #' @export
+#' @examples \dontrun{approxCountDistinct(df$c, 0.02)}
 setMethod("approxCountDistinct",
           signature(x = "Column"),
           function(x, rsd = 0.05) {
@@ -1481,6 +1482,7 @@ setMethod("approxCountDistinct",
 #' @name countDistinct
 #' @return the number of distinct items in a group.
 #' @export
+#' @examples \dontrun{countDistinct(df$c)}
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
@@ -1501,6 +1503,7 @@ setMethod("countDistinct",
 #' @rdname concat
 #' @name concat
 #' @export
+#' @examples \dontrun{concat(df$strings, df$strings2)}
 setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
@@ -1518,6 +1521,7 @@ setMethod("concat",
 #' @rdname greatest
 #' @name greatest
 #' @export
+#' @examples \dontrun{greatest(df$c, df$d)}
 setMethod("greatest",
           signature(x = "Column"),
           function(x, ...) {
@@ -1530,12 +1534,13 @@ setMethod("greatest",
 #' least
 #'
 #' Returns the least value of the list of column names, skipping null values.
-#' This function takes at least 2 parameters. It will return null iff all parameters are null.
+#' This function takes at least 2 parameters. It will return null if all parameters are null.
 #'
 #' @family normal_funcs
 #' @rdname least
 #' @name least
 #' @export
+#' @examples \dontrun{least(df$c, df$d)}
 setMethod("least",
           signature(x = "Column"),
           function(x, ...) {
@@ -1549,11 +1554,10 @@ setMethod("least",
 #'
 #' Computes the ceiling of the given value.
 #'
-#' @family math_funcs
 #' @rdname ceil
-#' @name ceil
-#' @aliases ceil
+#' @name ceiling
 #' @export
+#' @examples \dontrun{ceiling(df$c)}
 setMethod("ceiling",
           signature(x = "Column"),
           function(x) {
@@ -1564,11 +1568,10 @@ setMethod("ceiling",
 #'
 #' Computes the signum of the given value.
 #'
-#' @family math_funcs
 #' @rdname signum
-#' @name signum
-#' @aliases signum
+#' @name sign
 #' @export
+#' @examples \dontrun{sign(df$c)}
 setMethod("sign", signature(x = "Column"),
           function(x) {
             signum(x)
@@ -1578,11 +1581,10 @@ setMethod("sign", signature(x = "Column"),
 #'
 #' Aggregate function: returns the number of distinct items in a group.
 #'
-#' @family agg_funcs
 #' @rdname countDistinct
-#' @name countDistinct
-#' @aliases countDistinct
+#' @name n_distinct
 #' @export
+#' @examples \dontrun{n_distinct(df$c)}
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
             countDistinct(x, ...)
@@ -1592,11 +1594,10 @@ setMethod("n_distinct", signature(x = "Column"),
 #'
 #' Aggregate function: returns the number of items in a group.
 #'
-#' @family agg_funcs
 #' @rdname count
-#' @name count
-#' @aliases count
+#' @name n
 #' @export
+#' @examples \dontrun{n(df$c)}
 setMethod("n", signature(x = "Column"),
           function(x) {
             count(x)
@@ -1697,7 +1698,6 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' @name add_months
 #' @family datetime_funcs
 #' @rdname add_months
-#' @name add_months
 #' @export
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
@@ -1952,7 +1952,7 @@ setMethod("rand", signature(seed = "missing"),
             jc <- callJStatic("org.apache.spark.sql.functions", "rand")
             column(jc)
           })
-#' @family normal_funcs
+
 #' @rdname rand
 #' @name rand
 #' @export
@@ -1975,7 +1975,7 @@ setMethod("randn", signature(seed = "missing"),
             jc <- callJStatic("org.apache.spark.sql.functions", "randn")
             column(jc)
           })
-#' @family normal_funcs
+
 #' @rdname randn
 #' @name randn
 #' @export
@@ -2087,7 +2087,7 @@ setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp")
             column(jc)
           })
-#' @family datetime_funcs
+
 #' @rdname unix_timestamp
 #' @name unix_timestamp
 #' @export
@@ -2096,7 +2096,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp", x@jc)
             column(jc)
           })
-#' @family datetime_funcs
+
 #' @rdname unix_timestamp
 #' @name unix_timestamp
 #' @export
