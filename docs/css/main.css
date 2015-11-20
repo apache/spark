@@ -172,17 +172,20 @@ a.anchorjs-link:hover { text-decoration: none; }
  */
 .left-menu-wrapper {
   position: absolute;
-  height: 100%;  
+  height: 100%;
+
+  width: 256px;
+  margin-top: -20px;
+  padding-top: 20px;
+  background-color: #F0F8FC;
 }
 
 .left-menu {
   position: fixed;
   max-width: 350px;
 
-  padding-right: 9.5px;
-  border: 1px solid rgba(0,0,0,0.15);
-  background-color: #e2f1f8;
-  border-radius: 4px;
+  padding-right: 10px;
+  width: 256px;
 }
 
 .left-menu h3 {
