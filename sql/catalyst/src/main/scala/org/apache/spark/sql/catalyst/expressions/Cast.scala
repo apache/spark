@@ -204,8 +204,8 @@ case class Cast(child: Expression, dataType: DataType)
     if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
   }
 
-  // converting milliseconds to us
-  private[this] def longToTimestamp(t: Long): Long = t * 1000L
+  // converting seconds to us
+  private[this] def longToTimestamp(t: Long): Long = t * 1000000L
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
   // converting us to seconds in double
@@ -647,7 +647,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def decimalToTimestampCode(d: String): String =
     s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
-  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000L"
+  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000000L"
   private[this] def timestampToIntegerCode(ts: String): String =
     s"java.lang.Math.floor((double) $ts / 1000000L)"
   private[this] def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"
