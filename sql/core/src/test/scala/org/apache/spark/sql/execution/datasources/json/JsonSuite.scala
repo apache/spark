@@ -19,18 +19,26 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
 import java.sql.{Date, Timestamp}
+import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.spark.rdd.RDD
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.scalactic.Tolerance._
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{ResolvedDataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+class TestFileFilter extends PathFilter {
+  override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
+}
 
 class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   import testImplicits._
@@ -1388,6 +1396,35 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         sqlContext.read.format("json").schema(schema).load(path.getCanonicalPath),
         expectedResult
       )
+    }
+  }
+
+  test("SPARK-11544 test pathfilter") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext.range(2)
+      df.write.json(path + "/p=1")
+      df.write.json(path + "/p=2")
+      assert(sqlContext.read.json(path).count() === 4)
+
+      val clonedConf = new Configuration(hadoopConfiguration)
+      try {
+        // Setting it twice as the name of the propery has changed between hadoop versions.
+        hadoopConfiguration.setClass(
+          "mapred.input.pathFilter.class",
+          classOf[TestFileFilter],
+          classOf[PathFilter])
+        hadoopConfiguration.setClass(
+          "mapreduce.input.pathFilter.class",
+          classOf[TestFileFilter],
+          classOf[PathFilter])
+        assert(sqlContext.read.json(path).count() === 2)
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
     }
   }
 }
