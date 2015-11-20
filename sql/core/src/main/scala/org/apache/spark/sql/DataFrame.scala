@@ -1255,6 +1255,30 @@ class DataFrame private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] with columns dropped.
+   * This is a no-op if schema doesn't contain column name(s).
+   * @group dfops
+   * @since 1.6.0
+   */
+  def drop(colNames: String*): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val iter = colNames.iterator
+    var df = this
+    while (iter.hasNext) {
+      val colName = iter.next()
+      val shouldDrop = df.schema.exists(f => resolver(f.name, colName))
+      if (shouldDrop) {
+        val colsAfterDrop = df.schema.filter { field =>
+          val name = field.name
+          !resolver(name, colName)
+        }.map(f => Column(f.name))
+        df = df.select(colsAfterDrop : _*)
+      }
+    }
+    df
+  }
+
+  /**
    * Returns a new [[DataFrame]] with a column dropped.
    * This version of drop accepts a Column rather than a name.
    * This is a no-op if the DataFrame doesn't have a column
