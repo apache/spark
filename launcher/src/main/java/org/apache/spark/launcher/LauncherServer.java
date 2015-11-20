@@ -242,7 +242,14 @@ class LauncherServer implements Closeable {
           synchronized (clients) {
             clients.add(clientConnection);
           }
-          timeoutTimer.schedule(timeout, getConnectionTimeout());
+          long timeoutMs = getConnectionTimeout();
+          // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
+          // and force an immediate timeout.
+          if (timeoutMs > 0) {
+            timeoutTimer.schedule(timeout, getConnectionTimeout());
+          } else {
+            timeout.run();
+          }
         }
       }
     } catch (IOException ioe) {

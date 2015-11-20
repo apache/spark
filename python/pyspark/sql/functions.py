@@ -122,6 +122,24 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_functions_1_6 = {
+    # unary math functions
+    'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
+              ' the expression in a group.',
+    'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
+                   ' the expression in a group.',
+    'stddev_pop': 'Aggregate function: returns population standard deviation of' +
+                  ' the expression in a group.',
+    'variance': 'Aggregate function: returns the population variance of the values in a group.',
+    'var_samp': 'Aggregate function: returns the unbiased variance of the values in a group.',
+    'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
+    'skewness': 'Aggregate function: returns the skewness of the values in a group.',
+    'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
+    'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
+    'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
+                   ' eliminated.'
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -172,6 +190,8 @@ for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
     globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+for _name, _doc in _functions_1_6.items():
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -233,6 +253,22 @@ def coalesce(*cols):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
     return Column(jc)
+
+
+@since(1.6)
+def corr(col1, col2):
+    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
+    and ``col2``.
+
+    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
+    >>> b = range(20)
+    >>> corrDf = sqlContext.createDataFrame(zip(a, b))
+    >>> corrDf = corrDf.agg(corr(corrDf._1, corrDf._2).alias('c'))
+    >>> corrDf.selectExpr('abs(c - 0.9572339139475857) < 1e-16 as t').collect()
+    [Row(t=True)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.3)
@@ -362,7 +398,7 @@ def expr(str):
     """Parses the expression string into the column that it represents
 
     >>> df.select(expr("length(name)")).collect()
-    [Row('length(name)=5), Row('length(name)=3)]
+    [Row(length(name)=5), Row(length(name)=3)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.expr(str))

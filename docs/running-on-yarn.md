@@ -81,7 +81,7 @@ all environment variables used for launching each container. This process is use
 classpath problems in particular. (Note that enabling this requires admin privileges on cluster
 settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
-To use a custom log4j configuration for the application master or executors, there are two options:
+To use a custom log4j configuration for the application master or executors, here are the options:
 
 - upload a custom `log4j.properties` using `spark-submit`, by adding it to the `--files` list of files
   to be uploaded with the application.
@@ -89,6 +89,9 @@ To use a custom log4j configuration for the application master or executors, the
   (for the driver) or `spark.executor.extraJavaOptions` (for executors). Note that if using a file,
   the `file:` protocol should be explicitly provided, and the file needs to exist locally on all
   the nodes.
+- update the `$SPARK_CONF_DIR/log4j.properties` file and it will be automatically uploaded along
+  with the other configurations. Note that other 2 options has higher priority than this option if
+  multiple options are specified.
 
 Note that for the first option, both executors and the application master will share the same
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
@@ -303,6 +306,15 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
   The maximum number of attempts that will be made to submit the application.
   It should be no larger than the global number of max attempts in the YARN configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.attemptFailuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for AM failure tracking.
+  If the AM has been running for at least the defined interval, the AM failure count will be reset.
+  This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
   </td>
 </tr>
 <tr>

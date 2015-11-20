@@ -53,6 +53,7 @@ public class JavaTokenizerSuite {
       .setOutputCol("tokens")
       .setPattern("\\s")
       .setGaps(true)
+      .setToLowercase(false)
       .setMinTokenLength(3);
 
 

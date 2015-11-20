@@ -20,8 +20,6 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
@@ -30,10 +28,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{Utils, SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.{Partition => SparkPartition, _}
+
+import scala.reflect.ClassTag
 
 
 private[spark] class SqlNewHadoopPartition(
@@ -96,6 +96,11 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
+  // If true, enable using the custom RecordReader for parquet. This only works for
+  // a subset of the types (no complex types).
+  protected val enableUnsafeRowParquetReader: Boolean =
+      sc.conf.getBoolean("spark.parquet.enableUnsafeRowRecordReader", true)
+
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
     val inputFormat = inputFormatClass.newInstance
@@ -150,9 +155,31 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           configurable.setConf(conf)
         case _ =>
       }
-      private[this] var reader = format.createRecordReader(
-        split.serializableHadoopSplit.value, hadoopAttemptContext)
-      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+      private[this] var reader: RecordReader[Void, V] = null
+
+      /**
+        * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
+        * fails (for example, unsupported schema), try with the normal reader.
+        * TODO: plumb this through a different way?
+        */
+      if (enableUnsafeRowParquetReader &&
+          format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
+        // TODO: move this class to sql.execution and remove this.
+        reader = Utils.classForName(
+          "org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader")
+          .newInstance().asInstanceOf[RecordReader[Void, V]]
+        try {
+          reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+        } catch {
+          case e: Exception => reader = null
+        }
+      }
+
+      if (reader == null) {
+        reader = format.createRecordReader(
+          split.serializableHadoopSplit.value, hadoopAttemptContext)
+        reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+      }
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())
@@ -189,32 +216,35 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       }
 
       private def close() {
-        try {
-          if (reader != null) {
+        if (reader != null) {
+          SqlNewHadoopRDD.unsetInputFileName()
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
             reader.close()
-            reader = null
-
-            SqlNewHadoopRDD.unsetInputFileName()
-
-            if (bytesReadCallback.isDefined) {
-              inputMetrics.updateBytesRead()
-            } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-                       split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
-              // If we can't get the bytes read from the FS stats, fall back to the split size,
-              // which may be inaccurate.
-              try {
-                inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
-              } catch {
-                case e: java.io.IOException =>
-                  logWarning("Unable to get input size to set InputMetrics for task", e)
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
               }
+          } finally {
+            reader = null
+          }
+          if (bytesReadCallback.isDefined) {
+            inputMetrics.updateBytesRead()
+          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+                     split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+            // If we can't get the bytes read from the FS stats, fall back to the split size,
+            // which may be inaccurate.
+            try {
+              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+            } catch {
+              case e: java.io.IOException =>
+                logWarning("Unable to get input size to set InputMetrics for task", e)
             }
           }
-        } catch {
-          case e: Exception =>
-            if (!ShutdownHookManager.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
-            }
         }
       }
     }

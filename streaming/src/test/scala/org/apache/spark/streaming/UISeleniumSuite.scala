@@ -117,7 +117,7 @@ class UISeleniumSuite
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
-            "Status")
+            "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
           List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",

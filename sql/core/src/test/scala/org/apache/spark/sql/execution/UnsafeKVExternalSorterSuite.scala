@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
@@ -108,9 +108,9 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       inputData: Seq[(InternalRow, InternalRow)],
       pageSize: Long,
       spill: Boolean): Unit = {
-
-    val taskMemMgr = new TaskMemoryManager(new ExecutorMemoryManager(MemoryAllocator.HEAP))
-    val shuffleMemMgr = new TestShuffleMemoryManager
+    val memoryManager =
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"))
+    val taskMemMgr = new TaskMemoryManager(memoryManager, 0)
     TaskContext.setTaskContext(new TaskContextImpl(
       stageId = 0,
       partitionId = 0,
@@ -121,14 +121,14 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       internalAccumulators = Seq.empty))
 
     val sorter = new UnsafeKVExternalSorter(
-      keySchema, valueSchema, SparkEnv.get.blockManager, shuffleMemMgr, pageSize)
+      keySchema, valueSchema, SparkEnv.get.blockManager, pageSize)
 
     // Insert the keys and values into the sorter
     inputData.foreach { case (k, v) =>
       sorter.insertKV(k.asInstanceOf[UnsafeRow], v.asInstanceOf[UnsafeRow])
       // 1% chance we will spill
       if (rand.nextDouble() < 0.01 && spill) {
-        shuffleMemMgr.markAsOutOfMemory()
+        memoryManager.markExecutionAsOutOfMemoryOnce()
         sorter.closeCurrentPage()
       }
     }
@@ -170,12 +170,7 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
     assert(out.sorted(kvOrdering) === inputData.sorted(kvOrdering))
 
     // Make sure there is no memory leak
-    val leakedUnsafeMemory: Long = taskMemMgr.cleanUpAllAllocatedMemory
-    if (shuffleMemMgr != null) {
-      val leakedShuffleMemory: Long = shuffleMemMgr.getMemoryConsumptionForThisTask()
-      assert(0L === leakedShuffleMemory)
-    }
-    assert(0 === leakedUnsafeMemory)
+    assert(0 === taskMemMgr.cleanUpAllAllocatedMemory)
     TaskContext.unset()
   }
 

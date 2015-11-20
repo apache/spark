@@ -39,10 +39,6 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  *
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
- *
- * @param actorSystem
- * @param conf
- * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
     val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
@@ -267,7 +263,7 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 
   override def receiveWithLogging: Actor.Receive = {
-    case Error(cause: Throwable, _, _, message: String) => logError(message, cause)
+    case Error(cause: Throwable, _, _, message: String) => logDebug(message, cause)
   }
 }
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, AggregateFunction2}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, AggregateFunction}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -321,8 +321,16 @@ private[sql] class InputAggregationBuffer private[sql] (
  */
 private[sql] case class ScalaUDAF(
     children: Seq[Expression],
-    udaf: UserDefinedAggregateFunction)
+    udaf: UserDefinedAggregateFunction,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate with Logging {
+
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   require(
     children.length == udaf.inputSchema.length,
@@ -340,6 +348,11 @@ private[sql] case class ScalaUDAF(
   override val aggBufferSchema: StructType = udaf.bufferSchema
 
   override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
+    aggBufferAttributes.map(_.newInstance())
 
   private[this] lazy val childrenSchema: StructType = {
     val inputFields = children.zipWithIndex.map {
@@ -382,51 +395,33 @@ private[sql] case class ScalaUDAF(
   }
 
   // This buffer is only used at executor side.
-  private[this] var inputAggregateBuffer: InputAggregationBuffer = null
-
-  // This buffer is only used at executor side.
-  private[this] var mutableAggregateBuffer: MutableAggregationBufferImpl = null
-
-  // This buffer is only used at executor side.
-  private[this] var evalAggregateBuffer: InputAggregationBuffer = null
-
-  /**
-   * Sets the inputBufferOffset to newInputBufferOffset and then create a new instance of
-   * `inputAggregateBuffer` based on this new inputBufferOffset.
-   */
-  override def withNewInputAggBufferOffset(newInputBufferOffset: Int): Unit = {
-    super.withNewInputAggBufferOffset(newInputBufferOffset)
-    // inputBufferOffset has been updated.
-    inputAggregateBuffer =
-      new InputAggregationBuffer(
-        aggBufferSchema,
-        bufferValuesToCatalystConverters,
-        bufferValuesToScalaConverters,
-        inputAggBufferOffset,
-        null)
+  private[this] lazy val inputAggregateBuffer: InputAggregationBuffer = {
+    new InputAggregationBuffer(
+      aggBufferSchema,
+      bufferValuesToCatalystConverters,
+      bufferValuesToScalaConverters,
+      inputAggBufferOffset,
+      null)
   }
 
-  /**
-   * Sets the mutableBufferOffset to newMutableBufferOffset and then create a new instance of
-   * `mutableAggregateBuffer` and `evalAggregateBuffer` based on this new mutableBufferOffset.
-   */
-  override def withNewMutableAggBufferOffset(newMutableBufferOffset: Int): Unit = {
-    super.withNewMutableAggBufferOffset(newMutableBufferOffset)
-    // mutableBufferOffset has been updated.
-    mutableAggregateBuffer =
-      new MutableAggregationBufferImpl(
-        aggBufferSchema,
-        bufferValuesToCatalystConverters,
-        bufferValuesToScalaConverters,
-        mutableAggBufferOffset,
-        null)
-    evalAggregateBuffer =
-      new InputAggregationBuffer(
-        aggBufferSchema,
-        bufferValuesToCatalystConverters,
-        bufferValuesToScalaConverters,
-        mutableAggBufferOffset,
-        null)
+  // This buffer is only used at executor side.
+  private[this] lazy val mutableAggregateBuffer: MutableAggregationBufferImpl = {
+    new MutableAggregationBufferImpl(
+      aggBufferSchema,
+      bufferValuesToCatalystConverters,
+      bufferValuesToScalaConverters,
+      mutableAggBufferOffset,
+      null)
+  }
+
+  // This buffer is only used at executor side.
+  private[this] lazy val evalAggregateBuffer: InputAggregationBuffer = {
+    new InputAggregationBuffer(
+      aggBufferSchema,
+      bufferValuesToCatalystConverters,
+      bufferValuesToScalaConverters,
+      mutableAggBufferOffset,
+      null)
   }
 
   override def initialize(buffer: MutableRow): Unit = {

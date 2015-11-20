@@ -24,12 +24,16 @@ import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render, parse => parseJson}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -122,7 +126,8 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Double) => Unit)
+  @Since("1.6.0")
+  def foreachActive(f: (Int, Double) => Unit): Unit
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
@@ -169,6 +174,12 @@ sealed trait Vector extends Serializable {
    */
   @Since("1.5.0")
   def argmax: Int
+
+  /**
+   * Converts the vector to a JSON string.
+   */
+  @Since("1.6.0")
+  def toJson: String
 }
 
 /**
@@ -335,6 +346,27 @@ object Vectors {
   @Since("1.1.0")
   def parse(s: String): Vector = {
     parseNumeric(NumericParser.parse(s))
+  }
+
+  /**
+   * Parses the JSON representation of a vector into a [[Vector]].
+   */
+  @Since("1.6.0")
+  def fromJson(json: String): Vector = {
+    implicit val formats = DefaultFormats
+    val jValue = parseJson(json)
+    (jValue \ "type").extract[Int] match {
+      case 0 => // sparse
+        val size = (jValue \ "size").extract[Int]
+        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
+        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        sparse(size, indices, values)
+      case 1 => // dense
+        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        dense(values)
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
+    }
   }
 
   private[mllib] def parseNumeric(any: Any): Vector = {
@@ -569,7 +601,8 @@ class DenseVector @Since("1.0.0") (
     new DenseVector(values.clone())
   }
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
     val localValuesSize = values.length
     val localValues = values
@@ -647,6 +680,12 @@ class DenseVector @Since("1.0.0") (
       maxIdx
     }
   }
+
+  @Since("1.6.0")
+  override def toJson: String = {
+    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+    compact(render(jValue))
+  }
 }
 
 @Since("1.3.0")
@@ -699,7 +738,8 @@ class SparseVector @Since("1.0.0") (
 
   private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
     val localValuesSize = values.length
     val localIndices = indices
@@ -832,6 +872,15 @@ class SparseVector @Since("1.0.0") (
       i_v
     }.unzip
     new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+  }
+
+  @Since("1.6.0")
+  override def toJson: String = {
+    val jValue = ("type" -> 0) ~
+      ("size" -> size) ~
+      ("indices" -> indices.toSeq) ~
+      ("values" -> values.toSeq)
+    compact(render(jValue))
   }
 }
 

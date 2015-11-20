@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData}
 import org.apache.spark.sql.types._
 
 
@@ -124,6 +125,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
     case StringType => GeneratedExpressionCode("", "false", s"$input.clone()")
+    case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => GeneratedExpressionCode("", "false", input)
   }
 
@@ -146,7 +148,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
     val code = s"""
-      public Object generate($exprType[] expr) {
+      public java.lang.Object generate($exprType[] expr) {
         return new SpecificSafeProjection(expr);
       }
 
@@ -163,7 +165,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${initMutableStates(ctx)}
         }
 
-        public Object apply(Object _i) {
+        public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allExpressions
           return mutableRow;

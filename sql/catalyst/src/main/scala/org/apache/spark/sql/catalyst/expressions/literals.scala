@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -49,8 +48,40 @@ object Literal {
       throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
   }
 
+  /**
+   * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object
+   * into code generation.
+   */
+  def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+  }
+
+  /**
+   * Create a literal with default value for given DataType
+   */
+  def default(dataType: DataType): Literal = dataType match {
+    case NullType => create(null, NullType)
+    case BooleanType => Literal(false)
+    case ByteType => Literal(0.toByte)
+    case ShortType => Literal(0.toShort)
+    case IntegerType => Literal(0)
+    case LongType => Literal(0L)
+    case FloatType => Literal(0.0f)
+    case DoubleType => Literal(0.0)
+    case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
+    case DateType => create(0, DateType)
+    case TimestampType => create(0L, TimestampType)
+    case StringType => Literal("")
+    case BinaryType => Literal("".getBytes)
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case arr: ArrayType => create(Array(), arr)
+    case map: MapType => create(Map(), map)
+    case struct: StructType =>
+      create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
+    case other =>
+      throw new RuntimeException(s"no default for type $dataType")
   }
 }
 

@@ -87,7 +87,7 @@ class TwitterReceiver(
 
       val query = new FilterQuery
       if (filters.size > 0) {
-        query.track(filters.toArray)
+        query.track(filters.mkString(","))
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()

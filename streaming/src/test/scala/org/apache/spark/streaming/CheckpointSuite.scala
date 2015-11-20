@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.File
+import java.io.{ObjectOutputStream, ByteArrayOutputStream, ByteArrayInputStream, File}
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
@@ -29,12 +29,14 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, Text}
 import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.mockito.Mockito.mock
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.TestUtils
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
-import org.apache.spark.streaming.scheduler.{ConstantEstimator, RateTestInputDStream, RateTestReceiver}
-import org.apache.spark.util.{Clock, ManualClock, Utils}
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{MutableURLClassLoader, Clock, ManualClock, Utils}
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -579,6 +581,58 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  // This tests whether spark can deserialize array object
+  // refer to SPARK-5569
+  test("recovery from checkpoint contains array object") {
+    // create a class which is invisible to app class loader
+    val jar = TestUtils.createJarWithClasses(
+      classNames = Seq("testClz"),
+      toStringValue = "testStringValue"
+      )
+
+    // invisible to current class loader
+    val appClassLoader = getClass.getClassLoader
+    intercept[ClassNotFoundException](appClassLoader.loadClass("testClz"))
+
+    // visible to mutableURLClassLoader
+    val loader = new MutableURLClassLoader(
+      Array(jar), appClassLoader)
+    assert(loader.loadClass("testClz").newInstance().toString == "testStringValue")
+
+    // create and serialize Array[testClz]
+    // scalastyle:off classforname
+    val arrayObj = Class.forName("[LtestClz;", false, loader)
+    // scalastyle:on classforname
+    val bos = new ByteArrayOutputStream()
+    new ObjectOutputStream(bos).writeObject(arrayObj)
+
+    // deserialize the Array[testClz]
+    val ois = new ObjectInputStreamWithLoader(
+      new ByteArrayInputStream(bos.toByteArray), loader)
+    assert(ois.readObject().asInstanceOf[Class[_]].getName == "[LtestClz;")
+  }
+
+  test("SPARK-11267: the race condition of two checkpoints in a batch") {
+    val jobGenerator = mock(classOf[JobGenerator])
+    val checkpointDir = Utils.createTempDir().toString
+    val checkpointWriter =
+      new CheckpointWriter(jobGenerator, conf, checkpointDir, new Configuration())
+    val bytes1 = Array.fill[Byte](10)(1)
+    new checkpointWriter.CheckpointWriteHandler(
+      Time(2000), bytes1, clearCheckpointDataLater = false).run()
+    val bytes2 = Array.fill[Byte](10)(2)
+    new checkpointWriter.CheckpointWriteHandler(
+      Time(1000), bytes2, clearCheckpointDataLater = true).run()
+    val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir).reverse.map { path =>
+      new File(path.toUri)
+    }
+    assert(checkpointFiles.size === 2)
+    // Although bytes2 was written with an old time, it contains the latest status, so we should
+    // try to read from it at first.
+    assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
+    assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
+    checkpointWriter.stop()
+  }
 
   /**
    * Tests a streaming operation under checkpointing, by restarting the operation

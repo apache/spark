@@ -230,7 +230,7 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given bellow:
+that is equivalent to the provided example in Scala is given below:
 
 Refer to the [`SVMWithSGD` Java docs](api/java/org/apache/spark/mllib/classification/SVMWithSGD.html) and [`SVMModel` Java docs](api/java/org/apache/spark/mllib/classification/SVMModel.html) for details on the API.
 
@@ -612,7 +612,7 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
-the Scala snippet provided, is presented bellow:
+the Scala snippet provided, is presented below:
 
 Refer to the [`LinearRegressionWithSGD` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html) and [`LinearRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionModel.html) for details on the API.
 
