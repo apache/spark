@@ -35,6 +35,7 @@ import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.Message;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
+import org.apache.spark.network.protocol.OneWayMessage;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.RpcResponse;
@@ -84,6 +85,7 @@ public class ProtocolSuite {
     testClientToServer(new RpcRequest(12345, new byte[0]));
     testClientToServer(new RpcRequest(12345, new byte[100]));
     testClientToServer(new StreamRequest("abcde"));
+    testClientToServer(new OneWayMessage(new byte[100]));
   }
 
   @Test
