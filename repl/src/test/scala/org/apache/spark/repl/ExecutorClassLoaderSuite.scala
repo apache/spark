@@ -60,8 +60,9 @@ class ExecutorClassLoaderSuite
     url1 = "file://" + tempDir1
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
-    parentResourceNames.foreach(x =>
-      Files.write("resource".getBytes(StandardCharsets.UTF_8), new File(tempDir2, x)))
+    parentResourceNames.foreach { x =>
+      Files.write("resource".getBytes(StandardCharsets.UTF_8), new File(tempDir2, x))
+    }
     parentClassNames.foreach(TestUtils.createCompiledClass(_, tempDir2, "2"))
   }
 
@@ -110,27 +111,21 @@ class ExecutorClassLoaderSuite
   test("resource from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
-    val resourceName: String = "fake-resource.txt"
-    Option(classLoader.getResource(resourceName)) match {
-      case Some(url) => {
-        val fileReader = Source.fromInputStream(url.openStream()).bufferedReader()
-        assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
-      }
-      case None => fail(s"Resource $resourceName not found")
-    }
+    val resourceName: String = parentResourceNames.head
+    val is = classLoader.getResourceAsStream(resourceName)
+    assert(is != null, s"Resource $resourceName not found")
+    val content = Source.fromInputStream(is, "UTF-8").getLines().next()
+    assert(content.contains("resource"), "File doesn't contain 'resource'")
   }
 
   test("resources from parent") {
     val parentLoader = new URLClassLoader(urls2, null)
     val classLoader = new ExecutorClassLoader(new SparkConf(), url1, parentLoader, true)
-    val resourceName: String = "fake-resource.txt"
+    val resourceName: String = parentResourceNames.head
     val resources: util.Enumeration[URL] = classLoader.getResources(resourceName)
-    if (!resources.hasMoreElements) {
-      fail(s"Resource $resourceName not found")
-    } else {
-      val fileReader = Source.fromInputStream(resources.nextElement().openStream()).bufferedReader()
-      assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
-    }
+    assert(resources.hasMoreElements, s"Resource $resourceName not found")
+    val fileReader = Source.fromInputStream(resources.nextElement().openStream()).bufferedReader()
+    assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
   }
 
   test("failing to fetch classes from HTTP server should not leak resources (SPARK-6209)") {
