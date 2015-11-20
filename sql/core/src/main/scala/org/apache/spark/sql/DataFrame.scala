@@ -1241,17 +1241,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, colName))
-    if (shouldDrop) {
-      val colsAfterDrop = schema.filter { field =>
-        val name = field.name
-        !resolver(name, colName)
-      }.map(f => Column(f.name))
-      select(colsAfterDrop : _*)
-    } else {
-      this
-    }
+    drop(colName.toSeq)
   }
 
   /**
