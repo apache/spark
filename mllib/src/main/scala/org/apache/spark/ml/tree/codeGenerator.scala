@@ -75,12 +75,12 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     // Handle the different types of nodes
     root match {
       case node: InternalNode => {
-            // Handle trees that get too large
+        // Handle trees that get too large to fit in a single in-line java method
         depth match {
-          case 9 => {
+          case 8 => {
             val newFunctionName = freshName()
             val newFunction = nodeToFunction(root, newFunctionName)
-            ("return ${newFunctionName}();", newFunction)
+            (s"return ${newFunctionName}();", newFunction)
           }
           case _ => {
             val nodeSplit = node.split
@@ -127,12 +127,13 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
    * in-line method breaks it up into multiple methods.
    */
   def nodeToFunction(node: Node, name: String): String = {
-    val (code, function) = nodeToTree(node, 0)
+    val (code, extraFunctions) = nodeToTree(node, 0)
     s"""
      public double ${name}(Vector input) throws Exception {
        ${code}
      }
-     ${function}
+
+     ${functions}
      """
   }
 
