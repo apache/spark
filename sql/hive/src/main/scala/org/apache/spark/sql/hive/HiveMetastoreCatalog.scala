@@ -719,7 +719,7 @@ private[hive] case class MetastoreRelation
     (@transient private val sqlContext: HiveContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
-  private[hive] var pruningPredicates: Seq[Expression] = null
+  private[hive] var pruningPredicates: Seq[Expression] = Nil
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
