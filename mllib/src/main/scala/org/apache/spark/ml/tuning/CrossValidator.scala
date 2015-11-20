@@ -19,11 +19,12 @@ package org.apache.spark.ml.tuning
 
 import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
-import org.json4s.JsonAST.JObject
+import org.json4s.JsonAST.{JString, JNothing, JObject}
 import org.json4s.{JValue, DefaultFormats}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
+import org.apache.spark.ml.util.DefaultParamsReader.Metadata
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
@@ -155,38 +156,10 @@ object CrossValidator extends MLReadable[CrossValidator] {
 
   private[CrossValidator] class CrossValidatorWriter(instance: CrossValidator) extends MLWriter {
 
-    import org.json4s.JsonDSL._
-
     SharedReadWrite.validateParams(instance)
 
-    override protected def saveImpl(path: String): Unit = {
-      val uid = instance.uid
-      val cls = instance.getClass.getName
-      val estimatorParamMapsJson = compact(render(
-        instance.getEstimatorParamMaps.map { case paramMap =>
-          paramMap.toSeq.map { case ParamPair(p, v) =>
-            Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
-          }
-        }.toSeq
-      ))
-      val jsonParams = List(
-        "numFolds" -> parse(instance.numFolds.jsonEncode(instance.getNumFolds)),
-        "estimatorParamMaps" -> parse(estimatorParamMapsJson)
-      )
-      val metadata = ("class" -> cls) ~
-        ("timestamp" -> System.currentTimeMillis()) ~
-        ("sparkVersion" -> sc.version) ~
-        ("uid" -> uid) ~
-        ("paramMap" -> jsonParams)
-      val metadataPath = new Path(path, "metadata").toString
-      val metadataJson = compact(render(metadata))
-      sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
-
-      val evaluatorPath = new Path(path, "evaluator").toString
-      instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
-      val estimatorPath = new Path(path, "estimator").toString
-      instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
-    }
+    override protected def saveImpl(path: String): Unit =
+      SharedReadWrite.saveImpl(path, instance, sc, JNothing)
   }
 
   private class CrossValidatorReader extends MLReader[CrossValidator] {
@@ -195,52 +168,8 @@ object CrossValidator extends MLReadable[CrossValidator] {
     private val className = classOf[CrossValidator].getName
 
     override def load(path: String): CrossValidator = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-      implicit val format = DefaultFormats
-      val evaluatorPath = new Path(path, "evaluator").toString
-      val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
-      val estimatorPath = new Path(path, "estimator").toString
-      val estimator = DefaultParamsReader.loadParamsInstance[Estimator[_]](estimatorPath, sc)
-
-      val uidToParams = Map(evaluator.uid -> evaluator) ++ CrossValidatorReader.getUidMap(estimator)
-
-      val (numFolds: Int, estimatorParamMaps: Array[ParamMap]) = metadata.params match {
-        case JObject(pairs) =>
-          if (pairs.length != 2) {
-            // Should not happen unless file is corrupted or we have a bug.
-            throw new RuntimeException(s"CrossValidator read expected 2 Params (numFolds," +
-              s" estimatorParamMaps), but found ${pairs.length}.")
-          }
-          val numFolds = pairs.head match {
-            case ("numFolds", jsonValue) =>
-              jsonValue.extract[Int]
-            case (paramName, _) =>
-              // Should not happen unless file is corrupted or we have a bug.
-              throw new RuntimeException(s"CrossValidator read expected numFolds but encountered" +
-                s" unexpected Param $paramName in metadata: ${metadata.metadataStr}")
-          }
-          val estimatorParamMaps: Array[ParamMap] = pairs(1) match {
-            case ("estimatorParamMaps", epmJsonValue: JValue) =>
-              epmJsonValue.extract[Seq[Seq[Map[String, String]]]].map { pMap =>
-                val paramPairs = pMap.map { case pInfo: Map[String, String] =>
-                  val est = uidToParams(pInfo("parent"))
-                  val param = est.getParam(pInfo("name"))
-                  val value = param.jsonDecode(pInfo("value"))
-                  param -> value
-                }
-                ParamMap(paramPairs: _*)
-              }.toArray
-            case (paramName, _) =>
-              // Should not happen unless file is corrupted or we have a bug.
-              throw new RuntimeException(s"CrossValidator read expected estimatorParamMaps but" +
-                s" encountered unexpected Param $paramName in metadata: ${metadata.metadataStr}")
-          }
-          (numFolds, estimatorParamMaps)
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
-      }
+      val (metadata, estimator, evaluator, estimatorParamMaps, numFolds) =
+        SharedReadWrite.load(path, sc, className)
       new CrossValidator(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
@@ -293,6 +222,95 @@ object CrossValidator extends MLReadable[CrossValidator] {
         }
       }
     }
+
+    private[tuning] def saveImpl(
+        path: String,
+        instance: CrossValidatorParams,
+        sc: SparkContext,
+        extraMetadata: JValue): Unit = {
+      import org.json4s.JsonDSL._
+
+      val uid = instance.uid
+      val cls = instance.getClass.getName
+      val estimatorParamMapsJson = compact(render(
+        instance.getEstimatorParamMaps.map { case paramMap =>
+          paramMap.toSeq.map { case ParamPair(p, v) =>
+            Map("parent" -> p.parent, "name" -> p.name, "value" -> p.jsonEncode(v))
+          }
+        }.toSeq
+      ))
+      val jsonParams = List(
+        "numFolds" -> parse(instance.numFolds.jsonEncode(instance.getNumFolds)),
+        "estimatorParamMaps" -> parse(estimatorParamMapsJson)
+      )
+      val metadata = ("class" -> cls) ~
+        ("timestamp" -> System.currentTimeMillis()) ~
+        ("sparkVersion" -> sc.version) ~
+        ("uid" -> uid) ~
+        ("paramMap" -> jsonParams) ~
+        ("extraMetadata" -> extraMetadata)
+      val metadataPath = new Path(path, "metadata").toString
+      val metadataJson = compact(render(metadata))
+      sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+
+      val evaluatorPath = new Path(path, "evaluator").toString
+      instance.getEvaluator.asInstanceOf[MLWritable].save(evaluatorPath)
+      val estimatorPath = new Path(path, "estimator").toString
+      instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
+    }
+
+    private[tuning] def load[M <: Model[M]](
+        path: String,
+        sc: SparkContext,
+        expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap], Int) = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
+
+      implicit val format = DefaultFormats
+      val evaluatorPath = new Path(path, "evaluator").toString
+      val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
+      val estimatorPath = new Path(path, "estimator").toString
+      val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
+
+      val uidToParams = Map(evaluator.uid -> evaluator) ++ CrossValidatorReader.getUidMap(estimator)
+
+      val (numFolds: Int, estimatorParamMaps: Array[ParamMap]) = metadata.params match {
+        case JObject(pairs) =>
+          if (pairs.length != 2) {
+            // Should not happen unless file is corrupted or we have a bug.
+            throw new RuntimeException(s"CrossValidator read expected 2 Params (numFolds," +
+              s" estimatorParamMaps), but found ${pairs.length}.")
+          }
+          val numFolds = pairs.head match {
+            case ("numFolds", jsonValue) =>
+              jsonValue.extract[Int]
+            case (paramName, _) =>
+              // Should not happen unless file is corrupted or we have a bug.
+              throw new RuntimeException(s"CrossValidator read expected numFolds but encountered" +
+                s" unexpected Param $paramName in metadata: ${metadata.metadataStr}")
+          }
+          val estimatorParamMaps: Array[ParamMap] = pairs(1) match {
+            case ("estimatorParamMaps", epmJsonValue: JValue) =>
+              epmJsonValue.extract[Seq[Seq[Map[String, String]]]].map { pMap =>
+                val paramPairs = pMap.map { case pInfo: Map[String, String] =>
+                  val est = uidToParams(pInfo("parent"))
+                  val param = est.getParam(pInfo("name"))
+                  val value = param.jsonDecode(pInfo("value"))
+                  param -> value
+                }
+                ParamMap(paramPairs: _*)
+              }.toArray
+            case (paramName, _) =>
+              // Should not happen unless file is corrupted or we have a bug.
+              throw new RuntimeException(s"CrossValidator read expected estimatorParamMaps but" +
+                s" encountered unexpected Param $paramName in metadata: ${metadata.metadataStr}")
+          }
+          (numFolds, estimatorParamMaps)
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
+      }
+      (metadata, estimator, evaluator, estimatorParamMaps, numFolds)
+    }
   }
 }
 
@@ -309,7 +327,7 @@ class CrossValidatorModel private[ml] (
     override val uid: String,
     val bestModel: Model[_],
     val avgMetrics: Array[Double])
-  extends Model[CrossValidatorModel] with CrossValidatorParams {
+  extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
   override def validateParams(): Unit = {
     bestModel.validateParams()
@@ -330,5 +348,61 @@ class CrossValidatorModel private[ml] (
       bestModel.copy(extra).asInstanceOf[Model[_]],
       avgMetrics.clone())
     copyValues(copied, extra).setParent(parent)
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new CrossValidatorModel.CrossValidatorModelWriter(this)
+}
+
+@Since("1.6.0")
+object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
+
+  import CrossValidator.SharedReadWrite
+
+  @Since("1.6.0")
+  override def read: MLReader[CrossValidatorModel] = new CrossValidatorModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): CrossValidatorModel = super.load(path)
+
+  private[CrossValidatorModel]
+  class CrossValidatorModelWriter(instance: CrossValidatorModel) extends MLWriter {
+
+    SharedReadWrite.validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit = {
+      import org.json4s.JsonDSL._
+      val extraMetadata = compact(render(instance.avgMetrics.toSeq))
+      SharedReadWrite.saveImpl(path, instance, sc, extraMetadata)
+      val bestModelPath = new Path(path, "bestModel").toString
+      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+    }
+  }
+
+  private class CrossValidatorModelReader extends MLReader[CrossValidatorModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[CrossValidatorModel].getName
+
+    override def load(path: String): CrossValidatorModel = {
+      implicit val format = DefaultFormats
+
+      val (metadata, estimator, evaluator, estimatorParamMaps, numFolds) =
+        SharedReadWrite.load(path, sc, className)
+      val bestModelPath = new Path(path, "bestModel").toString
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val avgMetrics = metadata.extraMetadata match {
+        case Some(JString(extraMetaData: String)) =>
+          parse(extraMetaData).extract[Seq[Double]].toArray
+        case _ =>
+          throw new RuntimeException(s"CrossValidatorModel load could not find avgMetrics in" +
+            s" JSON metadata: ${metadata.metadataStr}")
+      }
+      val cv = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
+      cv.set(cv.estimator, estimator)
+        .set(cv.evaluator, evaluator)
+        .set(cv.estimatorParamMaps, estimatorParamMaps)
+        .set(cv.numFolds, numFolds)
+    }
   }
 }

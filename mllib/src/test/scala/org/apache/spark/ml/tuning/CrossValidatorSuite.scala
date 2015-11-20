@@ -21,12 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.HashingTF
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.{Pipeline, Estimator, Model}
-import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.classification.{LogisticRegressionModel, LogisticRegression}
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.param.{ParamPair, ParamMap}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.types.StructType
@@ -237,6 +238,56 @@ class CrossValidatorSuite
         cv.write
       }
     }
+  }
+
+  test("read/write: CrossValidatorModel") {
+    val lr = new LogisticRegression()
+      .setThreshold(0.6)
+    val lrModel = new LogisticRegressionModel(lr.uid, Vectors.dense(1.0, 2.0), 1.2)
+      .setThreshold(0.6)
+    val evaluator = new BinaryClassificationEvaluator()
+      .setMetricName("areaUnderPR")  // not default metric
+    val paramMaps = new ParamGridBuilder()
+        .addGrid(lr.regParam, Array(0.1, 0.2))
+        .build()
+    val cv = new CrossValidatorModel("cvUid", lrModel, Array(0.3, 0.6))
+    cv.set(cv.estimator, lr)
+      .set(cv.evaluator, evaluator)
+      .set(cv.numFolds, 20)
+      .set(cv.estimatorParamMaps, paramMaps)
+
+    val cv2 = testDefaultReadWrite(cv, testParams = false)
+
+    assert(cv.uid === cv2.uid)
+    assert(cv.getNumFolds === cv2.getNumFolds)
+
+    assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
+    val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
+    assert(evaluator.uid === evaluator2.uid)
+    assert(evaluator.getMetricName === evaluator2.getMetricName)
+
+    cv2.getEstimator match {
+      case lr2: LogisticRegression =>
+        assert(lr.uid === lr2.uid)
+        assert(lr.getThreshold === lr2.getThreshold)
+      case other =>
+        throw new AssertionError(s"Loaded CrossValidator expected estimator of type" +
+          s" LogisticRegression but found ${other.getClass.getName}")
+    }
+
+    CrossValidatorSuite.compareParamMaps(cv.getEstimatorParamMaps, cv2.getEstimatorParamMaps)
+
+    cv2.bestModel match {
+      case lrModel2: LogisticRegressionModel =>
+        assert(lrModel.uid === lrModel2.uid)
+        assert(lrModel.getThreshold === lrModel2.getThreshold)
+        assert(lrModel.coefficients === lrModel2.coefficients)
+        assert(lrModel.intercept === lrModel2.intercept)
+      case other =>
+        throw new AssertionError(s"Loaded CrossValidator expected bestModel of type" +
+          s" LogisticRegressionModel but found ${other.getClass.getName}")
+    }
+    assert(cv.avgMetrics === cv2.avgMetrics)
   }
 }
 
