@@ -339,6 +339,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         } else {
           rowWriters[n].write(col, bytes.array(), bytes.position(), len);
         }
+        rows[n].setNotNullAt(col);
       } else {
         rows[n].setNullAt(col);
       }
