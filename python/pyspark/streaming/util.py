@@ -64,6 +64,7 @@ class TransformFunction(object):
                 return r._jrdd
         except Exception:
             traceback.print_exc()
+            raise
 
     def __repr__(self):
         return "TransformFunction(%s)" % self.func
@@ -95,6 +96,7 @@ class TransformFunctionSerializer(object):
             return bytearray(self.serializer.dumps((func.func, func.deserializers)))
         except Exception:
             traceback.print_exc()
+            raise
 
     def loads(self, data):
         try:
@@ -102,6 +104,7 @@ class TransformFunctionSerializer(object):
             return TransformFunction(self.ctx, f, *deserializers)
         except Exception:
             traceback.print_exc()
+            raise
 
     def __repr__(self):
         return "TransformFunctionSerializer(%s)" % self.serializer
