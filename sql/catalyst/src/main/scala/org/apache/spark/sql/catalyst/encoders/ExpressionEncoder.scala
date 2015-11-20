@@ -28,9 +28,10 @@ import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtract
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, ObjectType, StructType}
 
 /**
  * A factory for constructing encoders that convert objects and primitives to and from the
@@ -210,26 +211,71 @@ case class ExpressionEncoder[T](
     })
   }
 
+  private def handleStruct(input: Expression, s: StructType): Expression = {
+    assert(input.isInstanceOf[NewInstance] || input.isInstanceOf[CreateExternalRow])
+    val children = input.children
+    assert(children.length == s.length)
+
+    val newChildren = children.zip(s.map(_.dataType)).map {
+      case (child, dt) => typeCast(child, dt)
+    }
+
+    input.withNewChildren(newChildren)
+  }
+
+  private def typeCast(input: Expression, expectedType: DataType): Expression = expectedType match {
+    case s: StructType =>
+      var continue = true
+      input transformDown {
+        case c: CreateExternalRow if continue =>
+          continue = false
+          handleStruct(c, s)
+        case n: NewInstance if continue =>
+          continue = false
+          handleStruct(n, s)
+      }
+
+    case _ =>
+      var continue = true
+      input transformDown {
+        case u: UnresolvedExtractValue if continue =>
+          continue = false
+          Cast(u, expectedType)
+        case g: GetInternalRowField if continue =>
+          continue = false
+          Cast(g, expectedType)
+        case u: UnresolvedAttribute if continue =>
+          continue = false
+          Cast(u, expectedType)
+        case a: AttributeReference if continue =>
+          continue = false
+          Cast(a, expectedType)
+      }
+  }
+
   /**
    * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
    * given schema.
    */
   def resolve(
-      schema: Seq[Attribute],
+      attrs: Seq[Attribute],
       outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(schema)
-    val unbound = fromRowExpression transform {
+    val positionToAttribute = AttributeMap.toIndex(attrs)
+    val unbound = fromRowExpression transformUp {
       case b: BoundReference => positionToAttribute(b.ordinal)
     }
 
-    val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
+    val withTypeCast = typeCast(unbound, if (flat) schema.head.dataType else schema)
+
+    val plan = Project(Alias(withTypeCast, "")() :: Nil, LocalRelation(attrs))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
+    val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),
     // we need an instance of the outer scope.  This rule substitues those outer objects into
     // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
     // registry.
-    copy(fromRowExpression = analyzedPlan.expressions.head.children.head transform {
+    copy(fromRowExpression = optimizedPlan.expressions.head.children.head transform {
       case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
         val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
         if (outer == null) {

@@ -384,7 +384,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
-  ignore("Java encoder self join") {
+  test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
@@ -393,6 +393,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("change encoder with compatible schema") {
+    val ds = Seq(2 -> 2.toByte, 3 -> 3.toByte).toDF("a", "b").as[ClassData]
+    assert(ds.collect().toSeq == Seq(ClassData("2", 2), ClassData("3", 3)))
   }
 }
 
