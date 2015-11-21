@@ -404,15 +404,13 @@ public class JavaDatasetSuite implements Serializable {
       grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
 
-    Dataset<Tuple4<String, Integer, Long, Long>> agged2 = grouped.agg(
-      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()),
-      expr("sum(_2)"),
-      count("*"))
-      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT(), Encoders.LONG(), Encoders.LONG()));
+    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(
+      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()))
+      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
     Assert.assertEquals(
       Arrays.asList(
-        new Tuple4<>("a", 3, 3L, 2L),
-        new Tuple4<>("b", 3, 3L, 1L)),
+        new Tuple2<>("a", 3),
+        new Tuple2<>("b", 3)),
       agged2.collectAsList());
   }
 

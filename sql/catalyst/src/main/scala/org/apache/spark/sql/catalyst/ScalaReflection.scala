@@ -670,14 +670,14 @@ trait ScalaReflection {
    * Unlike `schemaFor`, this method won't throw exception for un-supported type, it will return
    * `NullType` silently instead.
    */
-  private def silentSchemaFor(tpe: `Type`): Schema = try {
+  def silentSchemaFor(tpe: `Type`): Schema = try {
     schemaFor(tpe)
   } catch {
     case _: UnsupportedOperationException => Schema(NullType, nullable = true)
   }
 
   /** Returns the full class name for a type. */
-  private def getClassNameFromType(tpe: `Type`): String = {
+  def getClassNameFromType(tpe: `Type`): String = {
     tpe.erasure.typeSymbol.asClass.fullName
   }
 

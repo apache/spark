@@ -579,6 +579,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("null and non-null strings") {
+    // Create a dataset where the first values are NULL and then some non-null values. The
+    // number of non-nulls needs to be bigger than the ParquetReader batch size.
+    val data = sqlContext.range(200).map { i =>
+      if (i.getLong(0) < 150) Row(None)
+      else Row("a")
+    }
+    val df = sqlContext.createDataFrame(data, StructType(StructField("col", StringType) :: Nil))
+    assert(df.agg("col" -> "count").collect().head.getLong(0) == 50)
+
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/data"
+      df.write.parquet(path)
+
+      val df2 = sqlContext.read.parquet(path)
+      assert(df2.agg("col" -> "count").collect().head.getLong(0) == 50)
+    }
+  }
+
   test("read dictionary encoded decimals written as INT32") {
     checkAnswer(
       // Decimal column in this file is encoded using plain dictionary
