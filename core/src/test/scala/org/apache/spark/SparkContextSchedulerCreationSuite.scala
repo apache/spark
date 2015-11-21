@@ -175,6 +175,6 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos with zookeeper") {
-    testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
+    testMesos("mesos://zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
   }
 }
