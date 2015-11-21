@@ -459,7 +459,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),
       Row("mean", null, null),
-      Row("stddev", "NaN", "NaN"),
+      Row("stddev", null, null),
       Row("min", null, null),
       Row("max", null, null))
 
@@ -1110,9 +1110,37 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  // This test case is to verify a bug when making a new instance of LogicalRDD.
+  test("SPARK-11633: LogicalRDD throws TreeNode Exception: Failed to Copy Node") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
+      val df = sqlContext.createDataFrame(
+        rdd,
+        new StructType().add("f1", IntegerType).add("f2", IntegerType),
+        needsConversion = false).select($"F1", $"f2".as("f2"))
+      val df1 = df.as("a")
+      val df2 = df.as("b")
+      checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
+    }
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
     checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
+  }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val df = Seq(
+      new java.lang.Integer(22) -> "John",
+      null.asInstanceOf[java.lang.Integer] -> "Lucy").toDF("age", "name")
+
+    val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
+      (i: java.lang.Integer) => if (i == null) null else i * 2
+    }
+    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(null) :: Nil)
+
+    val primitiveUDF = udf((i: Int) => i * 2)
+    checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
 }

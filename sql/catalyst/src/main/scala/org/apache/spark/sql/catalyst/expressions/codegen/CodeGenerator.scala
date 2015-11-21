@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-
+import org.apache.spark.util.Utils
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -330,6 +330,18 @@ class CodeGenContext {
   }
 
   /**
+    * Generates code for greater of two expressions.
+    *
+    * @param dataType data type of the expressions
+    * @param c1 name of the variable of expression 1's output
+    * @param c2 name of the variable of expression 2's output
+    */
+  def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
+    case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
+    case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
    * List of java data types that have special accessors and setters in [[InternalRow]].
    */
   val primitiveTypes =
@@ -524,7 +536,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(

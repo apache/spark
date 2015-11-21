@@ -258,8 +258,15 @@ object SparkEnv extends Logging {
       if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
         rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
       } else {
+        val actorSystemPort = if (port == 0) 0 else rpcEnv.address.port + 1
         // Create a ActorSystem for legacy codes
-        AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)._1
+        AkkaUtils.createActorSystem(
+          actorSystemName + "ActorSystem",
+          hostname,
+          actorSystemPort,
+          conf,
+          securityManager
+        )._1
       }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
