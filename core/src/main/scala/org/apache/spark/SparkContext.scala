@@ -2188,7 +2188,7 @@ object SparkContext extends Logging {
    *
    * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
    */
-  private val activeContext: AtomicReference[SparkContext] =
+  private[spark] val activeContext: AtomicReference[SparkContext] =
     new AtomicReference[SparkContext](null)
 
   /**
