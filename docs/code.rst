@@ -128,6 +128,8 @@ Variable                            Description
                                     ``airflow.cfg``
 ``run_id``                          the ``run_id`` of the current DAG run
 ``dag_run``                         a reference to the DAG run object
+``test_mode``                       whether the task instance was called using
+                                    the CLI's test subcommand
 =================================   ====================================
 
 Note that you can access the object's attributes and methods with simple
