@@ -295,10 +295,10 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
  * Utility transformer for removing temporary columns from a DataFrame.
  * TODO(ekl) make this a public transformer
  */
-private[RFomula] class ColumnPruner(override val uid: String, val columnsToPrune: Set[String])
+private class ColumnPruner(override val uid: String, val columnsToPrune: Set[String])
   extends Transformer with MLWritable {
 
-  private[RFormula] def this(columnsToPrune: Set[String]) =
+  def this(columnsToPrune: Set[String]) =
     this(Identifiable.randomUID("columnPruner"), columnsToPrune)
 
   override def transform(dataset: DataFrame): DataFrame = {
@@ -317,7 +317,7 @@ private[RFomula] class ColumnPruner(override val uid: String, val columnsToPrune
 }
 
 @Since("1.6.0")
-object ColumnPruner extends MLReadable[ColumnPruner] {
+private object ColumnPruner extends MLReadable[ColumnPruner] {
 
   @Since("1.6.0")
   override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
@@ -368,7 +368,7 @@ object ColumnPruner extends MLReadable[ColumnPruner] {
  *                          map. When a key prefixes a name, the matching prefix will be replaced
  *                          by the value in the map.
  */
-private[ml] class VectorAttributeRewriter(
+private class VectorAttributeRewriter(
     override val uid: String,
     val vectorCol: String,
     val prefixesToRewrite: Map[String, String])
@@ -414,7 +414,7 @@ private[ml] class VectorAttributeRewriter(
 }
 
 @Since("1.6.0")
-object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
+private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewriter] {
 
   @Since("1.6.0")
   override def read: MLReader[VectorAttributeRewriter] = new VectorAttributeRewriterReader

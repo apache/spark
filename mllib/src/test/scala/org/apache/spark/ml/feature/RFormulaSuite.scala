@@ -20,10 +20,11 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
+class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new RFormula())
   }
@@ -213,5 +214,19 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
         new NumericAttribute(Some("a_foo:b_zq"), Some(3)),
         new NumericAttribute(Some("a_foo:b_zz"), Some(4))))
     assert(attrs === expectedAttrs)
+  }
+
+  test("read/write") {
+    def checkModelData(model: RFormulaModel, model2: RFormulaModel): Unit = {
+      assert(model.resolvedFormula === model2.resolvedFormula)
+      assert(model.pipelineModel === model2.pipelineModel)
+    }
+
+    val dataset = sqlContext.createDataFrame(
+      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))
+    ).toDF("id", "a", "b")
+
+    val rFormula = new RFormula().setFormula("id ~ a:b")
+    testEstimatorAndModelReadWrite(rFormula, dataset, Map[String, Any](), checkModelData)
   }
 }
