@@ -85,7 +85,7 @@ class VectorAssembler(override val uid: String)
             Array.fill(numAttrs)(NumericAttribute.defaultAttr)
           }
         case otherType =>
-          throw new SparkException("VectorAssembler does not support the %s type".format(otherType))
+          throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
     val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
