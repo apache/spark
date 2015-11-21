@@ -160,6 +160,28 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
       require(m.getThreshold === 0.1, "copy should handle extra model params")
     }
   }
+
+  test("read/write") {
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexed")
+
+    val indexedDataset = labelIndexer
+      .fit(dataset)
+      .transform(dataset)
+      .drop("label")
+      .withColumnRenamed("features", "f")
+
+    val ova = new OneVsRest()
+    ova.setClassifier(new LogisticRegression())
+      .setLabelCol(labelIndexer.getOutputCol)
+      .setFeaturesCol("f")
+      .setPredictionCol("p")
+
+    val ovaModel = ova.fit(indexedDataset)
+    ova.save("/Users/panda/data/ova")
+    ovaModel.save("/Users/panda/data/ovaModel")
+  }
 }
 
 private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {
