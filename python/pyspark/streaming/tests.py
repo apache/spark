@@ -403,6 +403,26 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
+    def test_update_state_by_key_initial_rdd(self):
+
+        def updater(vs, s):
+            if not s:
+                s = []
+            s.extend(vs)
+            return s
+
+        initial = [('k', [0, 1])]
+        initial = self.sc.parallelize(initial, 1)
+
+        input = [[('k', i)] for i in range(2, 5)]
+
+        def func(dstream):
+            return dstream.updateStateByKey(updater, initialRDD=initial)
+
+        expected = [[0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
+        expected = [[('k', v)] for v in expected]
+        self._test_func(input, func, expected)
+
 
 class StreamingListenerTests(PySparkStreamingTestCase):
 
