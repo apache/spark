@@ -379,7 +379,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("drop columns using drop") {
-    val src = Seq((1, 2, 3)).toDF("a", "b", "c")
+    val src = Seq((0, 2, 3)).toDF("a", "b", "c")
     val df = src.drop("a", "b")
     checkAnswer(
       df, src.collect().map(x => Row(x.getInt(2))).toSeq)
