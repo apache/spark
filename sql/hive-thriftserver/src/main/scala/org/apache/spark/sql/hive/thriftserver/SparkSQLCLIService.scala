@@ -40,10 +40,10 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
+  private val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
+
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
-
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
@@ -51,7 +51,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     if (UserGroupInformation.isSecurityEnabled) {
       try {
         HiveAuthFactory.loginFromKeytab(hiveConf)
-        sparkServiceUGI = Utils.getUGI()
+        sparkServiceUGI = Utils.getUGI
         setSuperField(this, "serviceUGI", sparkServiceUGI)
       } catch {
         case e @ (_: IOException | _: LoginException) =>
@@ -69,6 +69,77 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       case GetInfoType.CLI_DBMS_VER => new GetInfoValue(hiveContext.sparkContext.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
+  }
+
+  private def withMetadataHive[T](sessionHandle: SessionHandle)(f: => T): T = {
+    val sessionConf = sparkSqlSessionManager.getSession(sessionHandle).getHiveConf
+    val overridenVarnames = hiveContext.overridenExecutionHiveConfiguration.keys
+    val originalConfs = for {
+      varname <- overridenVarnames
+    } yield varname -> Option(sessionConf.get(varname))
+
+    overridenVarnames.foreach { varname =>
+      val value = hiveContext.metadataHive.getConf(varname, null)
+      if (value == null) sessionConf.unset(varname) else sessionConf.set(varname, value)
+    }
+
+    try hiveContext.metadataHive.withHiveState(f) finally {
+      originalConfs.foreach {
+        case (varname, Some(value)) => sessionConf.set(varname, value)
+        case (varname, _) => sessionConf.unset(varname)
+      }
+    }
+  }
+
+  override def getCatalogs(sessionHandle: SessionHandle): OperationHandle = {
+    withMetadataHive(sessionHandle) {
+      super.getCatalogs(sessionHandle)
+    }
+  }
+
+  override def getSchemas(
+      sessionHandle: SessionHandle,
+      catalogName: String,
+      schemaName: String): OperationHandle = {
+    withMetadataHive(sessionHandle) {
+      super.getSchemas(sessionHandle, catalogName, schemaName)
+    }
+  }
+
+  override def getTables(
+      sessionHandle: SessionHandle,
+      catalogName: String,
+      schemaName: String,
+      tableName: String,
+      tableTypes: JList[String]): OperationHandle = {
+    withMetadataHive(sessionHandle) {
+      super.getTables(sessionHandle, catalogName, schemaName, tableName, tableTypes)
+    }
+  }
+
+  override def getTableTypes(sessionHandle: SessionHandle): OperationHandle = {
+    withMetadataHive(sessionHandle) {
+      super.getTableTypes(sessionHandle)
+    }
+  }
+
+  override def getColumns(
+      sessionHandle: SessionHandle,
+      catalogName: String,
+      schemaName: String,
+      tableName: String,
+      columnName: String): OperationHandle = {
+    withMetadataHive(sessionHandle) {
+      super.getColumns(sessionHandle, catalogName, schemaName, tableName, columnName)
+    }
+  }
+
+  override def getFunctions(
+      sessionHandle: SessionHandle,
+      catalogName: String,
+      schemaName: String,
+      functionName: String): OperationHandle = {
+    super.getFunctions(sessionHandle, catalogName, schemaName, functionName)
   }
 }
 

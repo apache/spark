@@ -21,6 +21,8 @@ import java.io.PrintStream
 import java.util.{Map => JMap}
 import javax.annotation.Nullable
 
+import org.apache.hadoop.hive.ql.metadata.Hive
+
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
@@ -189,4 +191,6 @@ private[hive] trait ClientInterface {
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
+
+  def client: Hive
 }

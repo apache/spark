@@ -252,7 +252,7 @@ private[hive] class ClientWrapper(
     false
   }
 
-  def client: Hive = {
+  override def client: Hive = {
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {

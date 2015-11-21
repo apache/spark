@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.URL
-import java.sql.{Date, DriverManager, SQLException, Statement}
+import java.sql._
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -41,6 +41,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
@@ -92,7 +93,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("JDBC query execution") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "SET spark.sql.shuffle.partitions=3",
         "DROP TABLE IF EXISTS test",
@@ -111,7 +112,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("Checks Hive version") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
@@ -120,7 +121,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-3004 regression: result set containing NULL") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_null",
         "CREATE TABLE test_null(key INT, val STRING)",
@@ -141,7 +142,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-4292 regression: result set iterator issue") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_4292",
         "CREATE TABLE test_4292(key INT, val STRING)",
@@ -161,7 +162,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-4309 regression: Date type support") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_date",
         "CREATE TABLE test_date(key INT, value STRING)",
@@ -179,7 +180,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-4407 regression: Complex type support") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_map",
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -208,7 +209,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
 
-    withMultipleConnectionJdbcStatement(
+    withMultiSessionStatements(
       // create table
       { statement =>
 
@@ -349,7 +350,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test jdbc cancel") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_map",
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -385,7 +386,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test add jar") {
-    withMultipleConnectionJdbcStatement(
+    withMultiSessionStatements(
       {
         statement =>
           val jarFile =
@@ -439,7 +440,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("Checks Hive version via SET -v") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val resultSet = statement.executeQuery("SET -v")
 
       val conf = mutable.Map.empty[String, String]
@@ -452,7 +453,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("Checks Hive version via SET") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val resultSet = statement.executeQuery("SET")
 
       val conf = mutable.Map.empty[String, String]
@@ -465,7 +466,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val jarPath = "../hive/src/test/resources/TestUDTF.jar"
       val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
@@ -476,18 +477,12 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
          """.stripMargin
       ).foreach(statement.execute)
 
-      val rs1 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
-
-      assert(rs1.next())
-      assert(rs1.getString(1) === "Function: udtf_count2")
-
-      assert(rs1.next())
-      assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
-        rs1.getString(1)
-      }
-
-      assert(rs1.next())
-      assert(rs1.getString(1) === "Usage: To be added.")
+      checkResultSet(
+        statement.executeQuery("DESCRIBE FUNCTION udtf_count2"),
+        Seq(
+          Row("Function: udtf_count2"),
+          Row("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2"),
+          Row("Usage: To be added.")))
 
       val dataPath = "../hive/src/test/resources/data/files/kv1.txt"
 
@@ -496,17 +491,41 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         s"LOAD DATA LOCAL INPATH '$dataPath' OVERWRITE INTO TABLE test_udtf"
       ).foreach(statement.execute)
 
-      val rs2 = statement.executeQuery(
-        "SELECT key, cc FROM test_udtf LATERAL VIEW udtf_count2(value) dd AS cc")
-
-      assert(rs2.next())
-      assert(rs2.getInt(1) === 97)
-      assert(rs2.getInt(2) === 500)
-
-      assert(rs2.next())
-      assert(rs2.getInt(1) === 97)
-      assert(rs2.getInt(2) === 500)
+      checkResultSet(
+        statement.executeQuery(
+          "SELECT key, cc FROM test_udtf LATERAL VIEW udtf_count2(value) dd AS cc"),
+        Seq(
+          Row(97, 500),
+          Row(97, 500)))
     }
+  }
+
+  test("JDBC metadata") {
+//    withStatement { statement =>
+//      Seq(
+//        "CREATE TABLE test_table (col INT)",
+//
+//        "CREATE DATABASE test_db",
+//        "USE test_db",
+//        "CREATE TABLE test_table (col INT)"
+//      ).foreach(statement.executeUpdate)
+//    }
+
+    withConnection { connection =>
+      val schemas = connection.getMetaData.getSchemas
+      checkResultSet(
+        schemas,
+        Seq(
+          Row("default", null),
+          Row("test_db", null)))
+    }
+//
+//    withStatement { statement =>
+//      Seq(
+//        "DROP TABLE IF EXISTS test_table",
+//        "DROP DATABASE test_db"
+//      ).foreach(statement.execute)
+//    }
   }
 
   test("SPARK-11043 check operation log root directory") {
@@ -523,8 +542,8 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
     "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
 
   test("test single session") {
-    withMultipleConnectionJdbcStatement(
-      { statement =>
+    withMultiSessionStatements(
+      statement => {
         val jarPath = "../hive/src/test/resources/TestUDTF.jar"
         val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
@@ -539,25 +558,17 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
         ).foreach(statement.execute)
       },
 
-      { statement =>
-        val rs1 = statement.executeQuery("SET foo")
+      statement => {
+        checkResultSet(
+          statement.executeQuery("SET foo"),
+          Row("foo", "bar"))
 
-        assert(rs1.next())
-        assert(rs1.getString(1) === "foo")
-        assert(rs1.getString(2) === "bar")
-
-        val rs2 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
-
-        assert(rs2.next())
-        assert(rs2.getString(1) === "Function: udtf_count2")
-
-        assert(rs2.next())
-        assertResult("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2") {
-          rs2.getString(1)
-        }
-
-        assert(rs2.next())
-        assert(rs2.getString(1) === "Usage: To be added.")
+        checkResultSet(
+          statement.executeQuery("DESCRIBE FUNCTION udtf_count2"),
+          Seq(
+            Row("Function: udtf_count2"),
+            Row("Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2"),
+            Row("Usage: To be added.")))
       }
     )
   }
@@ -567,7 +578,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.http
 
   test("JDBC query execution") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val queries = Seq(
         "SET spark.sql.shuffle.partitions=3",
         "DROP TABLE IF EXISTS test",
@@ -577,20 +588,17 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
 
       queries.foreach(statement.execute)
 
-      assertResult(5, "Row count mismatch") {
-        val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
-        resultSet.next()
-        resultSet.getInt(1)
-      }
+      checkResultSet(
+        statement.executeQuery("SELECT COUNT(*) FROM test"),
+        Row(5))
     }
   }
 
   test("Checks Hive version") {
-    withJdbcStatement { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
-      resultSet.next()
-      assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
+    withStatement { statement =>
+      checkResultSet(
+        statement.executeQuery("SET spark.sql.hive.version"),
+        Row("spark.sql.hive.version", HiveContext.hiveExecutionVersion))
     }
   }
 }
@@ -612,21 +620,47 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"jdbc:hive2://localhost:$serverPort/"
   }
 
-  def withMultipleConnectionJdbcStatement(fs: (Statement => Unit)*) {
+  def withMultiConnections(fs: (Connection => Unit)*): Unit = {
     val user = System.getProperty("user.name")
-    val connections = fs.map { _ => DriverManager.getConnection(jdbcUri, user, "") }
-    val statements = connections.map(_.createStatement())
-
-    try {
-      statements.zip(fs).foreach { case (s, f) => f(s) }
-    } finally {
-      statements.foreach(_.close())
-      connections.foreach(_.close())
+    fs.foreach { f =>
+      val connection = DriverManager.getConnection(jdbcUri, user, "")
+      try {
+        f(connection)
+      } catch { case cause: Throwable =>
+        dumpLogs()
+        throw cause
+      } finally {
+        connection.close()
+      }
     }
   }
 
-  def withJdbcStatement(f: Statement => Unit) {
-    withMultipleConnectionJdbcStatement(f)
+  def withConnection(f: Connection => Unit): Unit = {
+    withMultiConnections(f)
+  }
+
+  def withMultiSessionStatements(fs: (Statement => Unit)*): Unit = {
+    withMultiConnections(fs.map { f =>
+      (connection: Connection) => {
+        val statement = connection.createStatement()
+        try f(statement) finally statement.close()
+      }
+    }: _*)
+  }
+
+  def withStatement(f: Statement => Unit): Unit = {
+    withMultiSessionStatements(f)
+  }
+
+  def checkResultSet(resultSet: ResultSet, row: Row): Unit = {
+    checkResultSet(resultSet, row :: Nil)
+  }
+
+  def checkResultSet(resultSet: ResultSet, rows: Seq[Row]): Unit = {
+    rows.zipWithIndex.foreach { case (row, index) =>
+      assert(resultSet.next(), s"Missing row $index")
+      assert(Row((1 to row.length).map(resultSet.getObject): _*) === row)
+    }
   }
 }
 
@@ -711,9 +745,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   val SERVER_STARTUP_TIMEOUT = 3.minutes
 
   private def startThriftServer(port: Int, attempt: Int) = {
-    warehousePath = Utils.createTempDir()
+    warehousePath = Utils.createTempDir(namePrefix = "thriftserver-warehouse")
     warehousePath.delete()
-    metastorePath = Utils.createTempDir()
+    metastorePath = Utils.createTempDir(namePrefix = "thriftserver-metastore")
     metastorePath.delete()
     operationLogPath = Utils.createTempDir()
     operationLogPath.delete()
@@ -803,7 +837,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     logTailingProcess = null
   }
 
-  private def dumpLogs(): Unit = {
+  protected def dumpLogs(): Unit = {
     logError(
       s"""
          |=====================================

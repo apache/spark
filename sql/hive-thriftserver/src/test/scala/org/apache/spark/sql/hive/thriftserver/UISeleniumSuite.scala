@@ -74,7 +74,7 @@ class UISeleniumSuite
   }
 
   ignore("thrift server ui test") {
-    withJdbcStatement { statement =>
+    withStatement { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
       val queries = Seq(
