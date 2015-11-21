@@ -544,6 +544,7 @@ class TaskInstance(Base):
         self.pool = task.pool
         self.priority_weight = task.priority_weight_total
         self.try_number = 1
+        self.test_mode = False  # can be changed when calling 'run'
         self.unixname = getpass.getuser()
         if state:
             self.state = state
