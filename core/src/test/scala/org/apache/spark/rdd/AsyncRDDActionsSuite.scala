@@ -198,8 +198,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     }
   }
 
-  private def testAsyncAction[R](action: RDD[Int] => FutureAction[R])
-    (starter: => Semaphore) : Unit = {
+  private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {
     val executionContextInvoked = Promise[Unit]
     val fakeExecutionContext = new ExecutionContext {
       override def execute(runnable: Runnable): Unit = {
@@ -207,6 +206,7 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       }
       override def reportFailure(t: Throwable): Unit = ()
     }
+    val starter = Smuggle(new Semaphore(0))
     starter.drainPermits()
     val rdd = sc.parallelize(1 to 100, 4).mapPartitions {itr => starter.acquire(1); itr}
     val f = action(rdd)
@@ -221,26 +221,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   }
 
   test("SimpleFutureAction callback must not consume a thread while waiting") {
-    testAsyncAction(_.countAsync())(AsyncRDDActionsSuite.simpleAsyncActionStart)
+    testAsyncAction(_.countAsync())
   }
 
   test("ComplexFutureAction callback must not consume a thread while waiting") {
-    testAsyncAction((_.takeAsync(100)))(AsyncRDDActionsSuite.complexAsyncActionStart)
+    testAsyncAction((_.takeAsync(100)))
   }
-}
-
-
-object AsyncRDDActionsSuite {
-  /*
-    These are used by the tests that verify that callbacks don't consume threads while waiting
-    to force the executors to wait for a "go" signal before processing, so that the job
-    doesn't complete before we've had a chance to verify that the ExecutionContext was not
-    invoked.
-
-    They must be placed here, in the companion object, rather than in the tests themselves,
-    so that they don't get serialized along with the tasks.
-    Each test gets its own semaphore so that the tests can be safely run in parallel if desired.
-   */
-  private val simpleAsyncActionStart = new Semaphore(0)
-  private val complexAsyncActionStart = new Semaphore(0)
 }
