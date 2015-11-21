@@ -216,10 +216,30 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(attrs === expectedAttrs)
   }
 
-  test("read/write") {
+  test("read/write: RFormula") {
+    val rFormula = new RFormula()
+      .setFormula("id ~ a:b")
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabels")
+
+    testDefaultReadWrite(rFormula)
+  }
+
+  test("read/write: RFormulaModel") {
     def checkModelData(model: RFormulaModel, model2: RFormulaModel): Unit = {
-      assert(model.resolvedFormula === model2.resolvedFormula)
-      assert(model.pipelineModel === model2.pipelineModel)
+      assert(model.uid === model2.uid)
+
+      assert(model.resolvedFormula.label === model2.resolvedFormula.label)
+      assert(model.resolvedFormula.terms === model2.resolvedFormula.terms)
+      assert(model.resolvedFormula.hasIntercept === model2.resolvedFormula.hasIntercept)
+
+      assert(model.pipelineModel.uid === model.pipelineModel.uid)
+
+      model.pipelineModel.stages.zip(model2.pipelineModel.stages).foreach {
+        case (transformer1, transformer2) =>
+          assert(transformer1.uid === transformer2.uid)
+          assert(transformer1.params === transformer2.params)
+      }
     }
 
     val dataset = sqlContext.createDataFrame(
@@ -227,6 +247,9 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ).toDF("id", "a", "b")
 
     val rFormula = new RFormula().setFormula("id ~ a:b")
-    testEstimatorAndModelReadWrite(rFormula, dataset, Map[String, Any](), checkModelData)
+
+    val model = rFormula.fit(dataset)
+    val newModel = testDefaultReadWrite(model)
+    checkModelData(model, newModel)
   }
 }
