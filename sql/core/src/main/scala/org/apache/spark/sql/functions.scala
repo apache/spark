@@ -1666,6 +1666,15 @@ object functions extends LegacyFunctions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * Returns a hash value of the arguments.
+   *
+   * @group misc_funcs
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def hash(exprs: Column*): Column = withExpr { Hash(exprs.map(_.expr): _*) }
+
+  /**
    * Calculates the MD5 digest of a binary column and returns the value
    * as a 32 character hex string.
    *

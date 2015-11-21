@@ -120,6 +120,7 @@ object FunctionRegistry {
     expression[Coalesce]("coalesce"),
     expression[Explode]("explode"),
     expression[Greatest]("greatest"),
+    expression[Hash]("hash"),
     expression[If]("if"),
     expression[IsNaN]("isnan"),
     expression[IsNull]("isnull"),

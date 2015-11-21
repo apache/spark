@@ -23,6 +23,7 @@ import java.util.zip.CRC32
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,6 +43,44 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     defineCodeGen(ctx, ev, c =>
       s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+  }
+}
+
+case class Hash(children: Expression*) extends Expression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
+  override def dataType: DataType = IntegerType
+
+  override def nullable: Boolean = children.exists(_.nullable)
+
+  @transient
+  private lazy val extractProjection = GenerateUnsafeProjection.generate(children)
+
+  def getProjection: UnsafeProjection = extractProjection
+
+  override def eval(input: InternalRow): Any = {
+    extractProjection(input).hashCode
+  }
+
+  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val hashExpressionClassName = classOf[Hash].getName
+    val projectionClassName = classOf[UnsafeProjection].getName
+
+    ctx.references += this
+    val hashExpressionTermIndex = ctx.references.size - 1
+
+    val projectionTerm = ctx.freshName("projection")
+    ctx.addMutableState(projectionClassName, projectionTerm,
+      s"this.$projectionTerm = ($projectionClassName)((($hashExpressionClassName)expressions" +
+        s"[$hashExpressionTermIndex]).getProjection());")
+
+    s"""
+      boolean ${ev.isNull} = false;
+      Integer ${ev.value} = $projectionTerm.apply(${ctx.INPUT_ROW}).hashCode();
+      if (${ev.value} == null) {
+        ${ev.isNull} = true;
+      }
+    """
   }
 }
 
