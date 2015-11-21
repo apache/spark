@@ -342,6 +342,9 @@ class ConfigParserWithDefaults(ConfigParser):
             return expand_env_var(d[section][key])
 
         else:
+            logging.warn("section/key [{section}/{key}] not found "
+                         "in config".format(**locals()))
+
             raise AirflowConfigException(
                 "section/key [{section}/{key}] not found "
                 "in config".format(**locals()))

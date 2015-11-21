@@ -835,11 +835,17 @@ class Airflow(BaseView):
         force = request.args.get('force') == "true"
         deps = request.args.get('deps') == "true"
 
-        from airflow.executors import DEFAULT_EXECUTOR as executor
-        from airflow.executors import CeleryExecutor
-        if not isinstance(executor, CeleryExecutor):
+        try:
+            from airflow.executors import DEFAULT_EXECUTOR as executor
+            from airflow.executors import CeleryExecutor
+            if not isinstance(executor, CeleryExecutor):
+                flash("Only works with the CeleryExecutor, sorry", "error")
+                return redirect(origin)
+        except ImportError:
+            # in case CeleryExecutor cannot be imported it is not active either
             flash("Only works with the CeleryExecutor, sorry", "error")
             return redirect(origin)
+
         ti = models.TaskInstance(task=task, execution_date=execution_date)
         executor.start()
         executor.queue_task_instance(
