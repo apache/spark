@@ -90,7 +90,7 @@ class EncoderResolveSuite extends PlanTest {
       ExpressionEncoder[Long])
     val cls = classOf[StringLongClass]
 
-    val structType = new StructType().add("a", StringType).add("b", ByteType, false)
+    val structType = new StructType().add("a", StringType).add("b", ByteType)
     val attrs = Seq('a.struct(structType), 'b.int)
     val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
     val expected: Expression = NewInstance(

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{DataType, StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
 
 /**
  * A factory for constructing encoders that convert objects and primitives to and from the
@@ -211,63 +211,19 @@ case class ExpressionEncoder[T](
     })
   }
 
-  private def handleStruct(input: Expression, s: StructType): Expression = {
-    assert(input.isInstanceOf[NewInstance] || input.isInstanceOf[CreateExternalRow])
-    val children = input.children
-    assert(children.length == s.length)
-
-    val newChildren = children.zip(s.map(_.dataType)).map {
-      case (child, dt) => typeCast(child, dt)
-    }
-
-    input.withNewChildren(newChildren)
-  }
-
-  private def typeCast(input: Expression, expectedType: DataType): Expression = expectedType match {
-    case s: StructType =>
-      var continue = true
-      input transformDown {
-        case c: CreateExternalRow if continue =>
-          continue = false
-          handleStruct(c, s)
-        case n: NewInstance if continue =>
-          continue = false
-          handleStruct(n, s)
-      }
-
-    case _ =>
-      var continue = true
-      input transformDown {
-        case u: UnresolvedExtractValue if continue =>
-          continue = false
-          Cast(u, expectedType)
-        case g: GetInternalRowField if continue =>
-          continue = false
-          Cast(g, expectedType)
-        case u: UnresolvedAttribute if continue =>
-          continue = false
-          Cast(u, expectedType)
-        case a: AttributeReference if continue =>
-          continue = false
-          Cast(a, expectedType)
-      }
-  }
-
   /**
    * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
    * given schema.
    */
   def resolve(
-      attrs: Seq[Attribute],
+      schema: Seq[Attribute],
       outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(attrs)
-    val unbound = fromRowExpression transformUp {
+    val positionToAttribute = AttributeMap.toIndex(schema)
+    val unbound = fromRowExpression transform {
       case b: BoundReference => positionToAttribute(b.ordinal)
     }
 
-    val withTypeCast = typeCast(unbound, if (flat) schema.head.dataType else schema)
-
-    val plan = Project(Alias(withTypeCast, "")() :: Nil, LocalRelation(attrs))
+    val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
