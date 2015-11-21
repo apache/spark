@@ -84,6 +84,8 @@ class VectorAssembler(override val uid: String)
             val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
             Array.fill(numAttrs)(NumericAttribute.defaultAttr)
           }
+        case otherType =>
+          throw new SparkException("VectorAssembler does not support the %s type".format(otherType))
       }
     }
     val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
