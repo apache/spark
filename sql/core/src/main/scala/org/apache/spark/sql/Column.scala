@@ -46,6 +46,8 @@ private[sql] object Column {
  * @tparam T The input type expected for this expression.  Can be `Any` if the expression is type
  *           checked by the analyzer instead of the compiler (i.e. `expr("sum(...)")`).
  * @tparam U The output type of this column.
+ *
+ * @since 1.6.0
  */
 class TypedColumn[-T, U](
     expr: Expression,

@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 /**
  * Type-inference utilities for POJOs and Java collections.
  */
-private [sql] object JavaTypeInference {
+object JavaTypeInference {
 
   private val iterableType = TypeToken.of(classOf[JIterable[_]])
   private val mapType = TypeToken.of(classOf[JMap[_, _]])
@@ -53,7 +53,6 @@ private [sql] object JavaTypeInference {
    * @return (SQL data type, nullable)
    */
   private def inferDataType(typeToken: TypeToken[_]): (DataType, Boolean) = {
-    // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
