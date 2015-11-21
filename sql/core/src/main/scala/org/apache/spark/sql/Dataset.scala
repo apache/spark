@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.util.Utils
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -433,6 +435,24 @@ class Dataset[T] private[sql](
       c4: TypedColumn[T, U4],
       c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
+
+  /**
+    * Returns a new [[Dataset]] by sampling a fraction of rows.
+    * @since 1.6.0
+    */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] = {
+    new Dataset[T](
+      sqlContext,
+      Sample(0.0, fraction, withReplacement, seed, logicalPlan))
+  }
+
+  /**
+    * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
+    * @since 1.6.0
+    */
+  def sample(withReplacement: Boolean, fraction: Double) : Dataset[T] = {
+    sample(withReplacement, fraction, Utils.random.nextLong)
+  }
 
   /* **************** *
    *  Set operations  *
