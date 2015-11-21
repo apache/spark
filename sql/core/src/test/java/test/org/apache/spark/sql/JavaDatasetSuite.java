@@ -409,8 +409,8 @@ public class JavaDatasetSuite implements Serializable {
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
     Assert.assertEquals(
       Arrays.asList(
-        new Tuple4<>("a", 3, 3L, 2L),
-        new Tuple4<>("b", 3, 3L, 1L)),
+        new Tuple2<>("a", 3),
+        new Tuple2<>("b", 3)),
       agged2.collectAsList());
   }
 
