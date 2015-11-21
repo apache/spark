@@ -101,27 +101,25 @@ class MultilayerPerceptronClassifierSuite
     assert(mlpMetrics.confusionMatrix ~== lrMetrics.confusionMatrix absTol 100)
   }
 
-  test("read/write") {
-    def checkModelData(
-        model: MultilayerPerceptronClassificationModel,
-        model2: MultilayerPerceptronClassificationModel): Unit = {
-      assert(model.layers === model2.layers)
-      assert(model.weights === model2.weights)
-    }
-    val mlp = new MultilayerPerceptronClassifier().setLayers(Array(2, 3, 2)).setMaxIter(5)
-    testEstimatorAndModelReadWrite(mlp, dataset,
-      MultilayerPerceptronClassifierSuite.allParamSettings, checkModelData)
+  test("read/write: MultilayerPerceptronClassifier") {
+    val mlp = new MultilayerPerceptronClassifier()
+      .setLayers(Array(2, 3, 2))
+      .setMaxIter(5)
+      .setBlockSize(2)
+      .setSeed(42)
+      .setTol(0.1)
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabel")
+      .setPredictionCol("myPrediction")
+
+    testDefaultReadWrite(mlp)
   }
-}
 
-object MultilayerPerceptronClassifierSuite {
-
-  /**
-   * Mapping from all Params to valid settings which differ from the defaults.
-   * This is useful for tests which need to exercise all Params, such as save/load.
-   * This excludes input columns to simplify some tests.
-   */
-  val allParamSettings: Map[String, Any] = Map(
-    "predictionCol" -> "myPrediction"
-  )
+  test("read/write: MultilayerPerceptronClassificationModel") {
+    val mlp = new MultilayerPerceptronClassifier().setLayers(Array(2, 3, 2)).setMaxIter(5)
+    val mlpModel = mlp.fit(dataset)
+    val newMlpModel = testDefaultReadWrite(mlpModel)
+    assert(newMlpModel.layers === mlpModel.layers)
+    assert(newMlpModel.weights === mlpModel.weights)
+  }
 }
