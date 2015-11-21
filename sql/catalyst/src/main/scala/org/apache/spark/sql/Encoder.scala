@@ -30,6 +30,8 @@ import org.apache.spark.sql.types._
  *
  * Encoders are not intended to be thread-safe and thus they are allow to avoid internal locking
  * and reuse internal buffers to improve performance.
+ *
+ * @since 1.6.0
  */
 trait Encoder[T] extends Serializable {
 
@@ -42,6 +44,8 @@ trait Encoder[T] extends Serializable {
 
 /**
  * Methods for creating encoders.
+ *
+ * @since 1.6.0
  */
 object Encoders {
 
