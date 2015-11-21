@@ -382,8 +382,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val src = Seq((1,2,3)).toDF("a", "b", "c")
     val df = src.drop("a", "b")
     checkAnswer(
-      df,
-      src.collect().map(x => Row(x.getInt(2))).toSeq)
+      df, src.collect().map(x => Row(x.getInt(2))).toSeq)
     assert(df.schema.map(_.name) === Seq("c"))
   }
 
