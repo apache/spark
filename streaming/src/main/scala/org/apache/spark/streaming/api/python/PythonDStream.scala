@@ -230,8 +230,18 @@ private[python] class PythonTransformed2DStream(
  */
 private[python] class PythonStateDStream(
     parent: DStream[Array[Byte]],
-    reduceFunc: PythonTransformFunction)
+    reduceFunc: PythonTransformFunction,
+    initialRDD: Option[RDD[Array[Byte]]])
   extends PythonDStream(parent, reduceFunc) {
+
+  def this(
+    parent: DStream[Array[Byte]],
+    reduceFunc: PythonTransformFunction) = this(parent, reduceFunc, None)
+
+  def this(
+    parent: DStream[Array[Byte]],
+    reduceFunc: PythonTransformFunction,
+    initialRDD: JavaRDD[Array[Byte]]) = this(parent, reduceFunc, Some(initialRDD.rdd))
 
   super.persist(StorageLevel.MEMORY_ONLY)
   override val mustCheckpoint = true
@@ -240,7 +250,7 @@ private[python] class PythonStateDStream(
     val lastState = getOrCompute(validTime - slideDuration)
     val rdd = parent.getOrCompute(validTime)
     if (rdd.isDefined) {
-      func(lastState, rdd, validTime)
+      func(lastState.orElse(initialRDD), rdd, validTime)
     } else {
       lastState
     }
