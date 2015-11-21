@@ -887,6 +887,7 @@ class TaskInstance(Base):
         """
         task = self.task
         self.pool = pool or task.pool
+        self.test_mode = test_mode
         session = settings.Session()
         self.refresh_from_db(session)
         session.commit()
@@ -1111,6 +1112,7 @@ class TaskInstance(Base):
             'ti': self,
             'task_instance_key_str': ti_key_str,
             'conf': configuration,
+            'test_mode': self.test_mode,
         }
 
     def render_templates(self):
@@ -2670,10 +2672,10 @@ class DagRun(Base):
     by the scheduler (for regular runs) or by an external trigger
     """
     __tablename__ = "dag_run"
-    
-    ID_PREFIX = 'scheduled__' 
+
+    ID_PREFIX = 'scheduled__'
     ID_FORMAT_PREFIX = ID_PREFIX + '{0}'
-    
+
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
     execution_date = Column(DateTime, default=datetime.now())
