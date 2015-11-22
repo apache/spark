@@ -40,6 +40,15 @@ private[sql] trait Queryable {
   }
 
   /**
+   * Prints the schema to the console in a nice tree format.
+   * @group basic
+   * @since 1.3.0
+   */
+  // scalastyle:off println
+  def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
+
+  /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    * @since 1.3.0
    */

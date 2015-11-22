@@ -110,7 +110,6 @@ private[sql] object DataFrame {
  * @groupname action Actions
  * @since 1.3.0
  */
-// TODO: Improve documentation.
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
@@ -298,15 +297,6 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def columns: Array[String] = schema.fields.map(_.name)
-
-  /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally
