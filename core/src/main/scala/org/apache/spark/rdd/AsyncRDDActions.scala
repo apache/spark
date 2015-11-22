@@ -65,6 +65,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
     val callSite = self.context.getCallSite
+    val localProperties = self.context.getLocalProperties
     // Cached thread pool to handle aggregation of subtasks.
     implicit val executionContext = AsyncRDDActions.futureExecutionContext
     val results = new ArrayBuffer[T](num)
@@ -102,6 +103,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
 
         val buf = new Array[Array[T]](p.size)
         self.context.setCallSite(callSite)
+        self.context.setLocalProperties(localProperties)
         val job = jobSubmitter.submitJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
