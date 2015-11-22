@@ -492,7 +492,7 @@ class HiveContext private[hive](
     //
     // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
     // to their output time units.
-    Seq(
+    val timeConfVars = Seq(
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
@@ -535,6 +535,14 @@ class HiveContext private[hive](
     ).map { case (confVar, unit) =>
       confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
     }.toMap
+
+    // SPARK-11783 When "hive.metastore.uris" is set, it overrides "javax.jdo.option.ConnectionURL",
+    // thus the execution Hive client connects to the actual remote Hive metastore instead of the
+    // Derby metastore created in the temporary directory.  Cleaning this configuration for
+    // the execution Hive client fixes this issue.
+    timeConfVars ++ Seq(
+      ConfVars.METASTOREURIS.varname -> ""
+    )
   }
 
   /**
