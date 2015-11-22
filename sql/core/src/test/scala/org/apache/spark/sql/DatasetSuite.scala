@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
@@ -211,6 +213,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
 
+  }
+
+  test("persist and unpersist") {
+    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS().select(expr("_2 + 1").as[Int])
+    val cached = ds.cache()
+    // count triggers the caching action. It should not throw.
+    cached.count()
+    // Make sure, the Dataset is indeed cached.
+    assert(sqlContext.cacheManager.lookupCachedData(cached).nonEmpty)
+    assertResult(1, "InMemoryRelation not found, testData should have been cached") {
+      cached.queryExecution.withCachedData.collect {
+        case r: InMemoryRelation => r
+      }.size
+    }
+    // Check result.
+    checkAnswer(
+      cached,
+      2, 3, 4)
+    // Drop the cache.
+    cached.unpersist()
   }
 
   test("groupBy function, keys") {
