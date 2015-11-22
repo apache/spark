@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
+import org.apache.hadoop.fs.Path
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasSeed, HasMaxIter}
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
     EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
     LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
@@ -322,7 +323,7 @@ sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
-  extends Model[LDAModel] with LDAParams with Logging {
+  extends Model[LDAModel] with LDAParams with Logging with MLWritable {
 
   // NOTE to developers:
   //  This abstraction should contain all important functionality for basic LDA usage.
@@ -486,6 +487,61 @@ class LocalLDAModel private[ml] (
 
   @Since("1.6.0")
   override def isDistributed: Boolean = false
+
+  @Since("1.6.0")
+  override def write: MLWriter = new LocalLDAModel.LocalLDAModelWriter(this)
+}
+
+
+@Since("1.6.0")
+object LocalLDAModel extends MLReadable[LocalLDAModel] {
+
+  private[LocalLDAModel]
+  class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
+
+    private case class Data(vocabSize: Int,
+        topicsMatrix: Matrix,
+        docConcentration: Vector,
+        topicConcentration: Double)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val oldModel = instance.oldLocalModel
+      val data = Data(instance.vocabSize,
+        oldModel.topicsMatrix,
+        oldModel.docConcentration,
+        oldModel.topicConcentration)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class LocalLDAModelReader extends MLReader[LocalLDAModel] {
+
+    private val className = classOf[LocalLDAModel].getName
+
+    override def load(path: String): LocalLDAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath)
+        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration")
+        .head()
+      val vocabSize = data.getAs[Int](0)
+      val topicsMatrix = data.getAs[Matrix](1)
+      val docConcentration = data.getAs[Vector](2)
+      val topicConcentration = data.getAs[Double](3)
+      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration)
+      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sqlContext)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[LocalLDAModel] = new LocalLDAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LocalLDAModel = super.load(path)
 }
 
 
@@ -562,6 +618,43 @@ class DistributedLDAModel private[ml] (
    */
   @Since("1.6.0")
   lazy val logPrior: Double = oldDistributedModel.logPrior
+
+  @Since("1.6.0")
+  override def write: MLWriter = new DistributedLDAModel.DistributedLDAModelWriter(this)
+}
+
+
+@Since("1.6.0")
+object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
+
+  private[DistributedLDAModel]
+  class DistributedLDAModelWriter(instance: DistributedLDAModel) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      instance.oldDistributedModel.save(sc, path)
+    }
+  }
+
+  private class DistributedLDAModelReader extends MLReader[DistributedLDAModel] {
+
+    private val className = classOf[DistributedLDAModel].getName
+
+    override def load(path: String): DistributedLDAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val oldModel = OldDistributedLDAModel.load(sc, path)
+      val model = new DistributedLDAModel(
+        metadata.uid, oldModel.vocabSize, oldModel, sqlContext, None)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[DistributedLDAModel] = new DistributedLDAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): DistributedLDAModel = super.load(path)
 }
 
 
@@ -593,7 +686,8 @@ class DistributedLDAModel private[ml] (
 @Since("1.6.0")
 @Experimental
 class LDA @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String) extends Estimator[LDAModel] with LDAParams {
+    @Since("1.6.0") override val uid: String) extends Estimator[LDAModel]
+    with LDAParams with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
@@ -695,7 +789,7 @@ class LDA @Since("1.6.0") (
 }
 
 
-private[clustering] object LDA {
+private[clustering] object LDA extends DefaultParamsReadable[LDA]{
 
   /** Get dataset for spark.mllib LDA */
   def getOldDataset(dataset: DataFrame, featuresCol: String): RDD[(Long, Vector)] = {
@@ -706,4 +800,6 @@ private[clustering] object LDA {
         (docId, features)
       }
   }
+
+  override def load(path: String): LDA = super.load(path)
 }

@@ -187,7 +187,7 @@ abstract class LDAModel private[clustering] extends Saveable {
  * @param topics Inferred topics (vocabSize x k matrix).
  */
 @Since("1.3.0")
-class LocalLDAModel private[clustering] (
+class LocalLDAModel private[spark] (
     @Since("1.3.0") val topics: Matrix,
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
