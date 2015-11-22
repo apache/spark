@@ -91,6 +91,14 @@ class State(object):
             return 'white'
 
     @classmethod
+    def color_fg(cls, state):
+        color = cls.color(state)
+        if color in ['green', 'red']:
+            return 'white'
+        else:
+            return 'black'
+
+    @classmethod
     def runnable(cls):
         return [
             None, cls.FAILED, cls.UP_FOR_RETRY, cls.UPSTREAM_FAILED,

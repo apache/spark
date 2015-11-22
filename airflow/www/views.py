@@ -599,6 +599,25 @@ class Airflow(BaseView):
             root=request.args.get('root'),
             demo_mode=configuration.getboolean('webserver', 'demo_mode'))
 
+    @expose('/dag_details')
+    @login_required
+    def dag_details(self):
+        dag_id = request.args.get('dag_id')
+        dag = dagbag.get_dag(dag_id)
+        title = "DAG details"
+
+        session = settings.Session()
+        TI = models.TaskInstance
+        states = (
+            session.query(TI.state, sqla.func.count(TI.dag_id))
+            .filter(TI.dag_id == dag_id)
+            .group_by(TI.state)
+            .all()
+        )
+        return self.render(
+            'airflow/dag_details.html',
+            dag=dag, title=title, states=states, State=utils.State)
+
     @current_app.errorhandler(404)
     def circles(self):
         return render_template(
