@@ -56,7 +56,7 @@ class CoreTest(unittest.TestCase):
         """
         Tests scheduling a dag with no previous runs
         """
-        dag = DAG(TEST_DAG_ID+'test_schedule_dag_no_previous_runs') 
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_no_previous_runs')
         dag.tasks = [models.BaseOperator(task_id="faketastic", owner='Also fake',
             start_date=datetime(2015, 1, 2, 0, 0))]
         dag_run = jobs.SchedulerJob(test_mode=True).schedule_dag(dag)
@@ -66,7 +66,7 @@ class CoreTest(unittest.TestCase):
         assert dag_run.run_id != ''
         assert dag_run.execution_date == datetime(2015, 1, 2, 0, 0), (
                 'dag_run.execution_date did not match expectation: {0}'
-                .format(dag_run.execution_date))        
+                .format(dag_run.execution_date))
         assert dag_run.state == models.State.RUNNING
         assert dag_run.external_trigger == False
 
@@ -98,16 +98,16 @@ class CoreTest(unittest.TestCase):
         assert dag_run.run_id != ''
         assert dag_run.execution_date == DEFAULT_DATE+delta, (
                 'dag_run.execution_date did not match expectation: {0}'
-                .format(dag_run.execution_date)) 
+                .format(dag_run.execution_date))
         assert dag_run.state == models.State.RUNNING
         assert dag_run.external_trigger == False
 
     def test_schedule_dag_once(self):
         """
         Tests scheduling a dag scheduled for @once - should be scheduled the first time
-        it is called, and not scheduled the second. 
+        it is called, and not scheduled the second.
         """
-        dag = DAG(TEST_DAG_ID+'test_schedule_dag_once') 
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_once')
         dag.schedule_interval = '@once'
         dag.tasks = [models.BaseOperator(task_id="faketastic", owner='Also fake',
             start_date=datetime(2015, 1, 2, 0, 0))]
@@ -449,9 +449,9 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/tree?num_runs=25&dag_id=example_bash_operator')
         assert "runme_0" in response.data.decode('utf-8')
-        # new Chartkick.LineChart(document.getElementById("chart-0"), [{"data": [["2015-11-17T16:53:08.652950", 9.866944444444444e-06]], "name": "run_after_loop"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002858047222222222], ["2015-11-17T16:56:09.698921", 0.00028737944444444445]], "name": "runme_0"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002863941666666666], ["2015-11-17T16:56:09.698921", 0.00029015249999999996]], "name": "runme_1"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002860847222222222], ["2015-11-17T16:56:09.698921", 0.00029001583333333335]], "name": "runme_2"}, {"data": [["2015-11-17T16:53:08.652950", 8.166944444444444e-06], ["2015-11-17T16:56:09.698921", 1.2806944444444445e-05]], "name": "also_run_this"}], {"library": {"yAxis": {"title": {"text": "hours"}}}, "height": "700px"}); 
+        # new Chartkick.LineChart(document.getElementById("chart-0"), [{"data": [["2015-11-17T16:53:08.652950", 9.866944444444444e-06]], "name": "run_after_loop"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002858047222222222], ["2015-11-17T16:56:09.698921", 0.00028737944444444445]], "name": "runme_0"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002863941666666666], ["2015-11-17T16:56:09.698921", 0.00029015249999999996]], "name": "runme_1"}, {"data": [["2015-11-17T16:53:08.652950", 0.0002860847222222222], ["2015-11-17T16:56:09.698921", 0.00029001583333333335]], "name": "runme_2"}, {"data": [["2015-11-17T16:53:08.652950", 8.166944444444444e-06], ["2015-11-17T16:56:09.698921", 1.2806944444444445e-05]], "name": "also_run_this"}], {"library": {"yAxis": {"title": {"text": "hours"}}}, "height": "700px"});
 
-        chartkick_regexp = 'new Chartkick.LineChart\(document.getElementById\("chart-\d+"\),(.+)\)\;' 
+        chartkick_regexp = 'new Chartkick.LineChart\(document.getElementById\("chart-\d+"\),(.+)\)\;'
         response = self.app.get(
             '/admin/airflow/duration?days=30&dag_id=example_bash_operator')
         assert "example_bash_operator" in response.data.decode('utf-8')
@@ -555,6 +555,9 @@ class WebUiTests(unittest.TestCase):
             '/admin/airflow/chart_data'
             '?chart_id={}&iteration_no=1'.format(chart_id))
         assert "example" in response.data.decode('utf-8')
+        response = self.app.get(
+            '/admin/airflow/dag_details?dag_id=example_branch_operator')
+        assert "run_this_first" in response.data.decode('utf-8')
 
     def tearDown(self):
         pass

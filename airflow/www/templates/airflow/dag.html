@@ -58,6 +58,12 @@
         </a>
       </li>
       <li>
+      <a href="{{ url_for("airflow.dag_details", dag_id=dag.dag_id) }}">
+          <span class="glyphicon glyphicon-list" aria-hidden="true"></span>
+          Details 
+        </a>
+      </li>
+      <li>
         <a href="{{ url_for("airflow.code", dag_id=dag.dag_id, root=root) }}">
           <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
           Code
