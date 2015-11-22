@@ -615,7 +615,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-    * @since 1.3.0
+    * @since 1.6.0
     */
   def unpersist(): this.type = unpersist(blocking = false)
 
