@@ -17,16 +17,16 @@
 
 package org.apache.spark
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{TimeUnit, SynchronousQueue, ScheduledFuture, Callable}
 
 import scala.collection.mutable
 import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
-import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.metrics.source.Source
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -123,7 +123,10 @@ private[spark] class ExecutorAllocationManager(
 
   // The desired number of executors at this moment in time. If all our executors were to die, this
   // is the number of executors we would immediately want from the cluster manager.
-  private var numExecutorsTarget = initialNumExecutors
+  private var numExecutorsTarget =
+    conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
+
+  private var prevNumExecutorsTarget = 0
 
   // Executors that have been requested to be removed but have not been killed yet
   private val executorsPendingToRemove = new mutable.HashSet[String]
@@ -131,42 +134,170 @@ private[spark] class ExecutorAllocationManager(
   // All known executors
   private val executorIds = new mutable.HashSet[String]
 
-  // A timestamp of when an addition should be triggered, or NOT_SET if it is not set
-  // This is set when pending tasks are added but not scheduled yet
-  private var addTime: Long = NOT_SET
-
-  // A timestamp for each executor of when the executor should be removed, indexed by the ID
-  // This is set when an executor is no longer running a task, or when it first registers
-  private val removeTimes = new mutable.HashMap[String, Long]
-
-  // Polling loop interval (ms)
-  private val intervalMillis: Long = 100
-
-  // Clock used to schedule when executors should be added and removed
-  private var clock: Clock = new SystemClock()
+  // A collection of futures that will kill idle executors after they timeout.
+  private val idleExecutors = new mutable.HashMap[String, ScheduledFuture[Unit]]
 
   // Listener for Spark events that impact the allocation policy
   private val listener = new ExecutorAllocationListener
 
   // Executor that handles the scheduling task.
   private val executor =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation")
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("spark-dynamic-executor-allocation-events")
+
+  // Executor that handles the scheduling task.
+  private val thread: Thread = new Thread("spark-dynamic-executor-allocation-state-machine") { override def run() = allocationManager.run }
 
   // Metric source for ExecutorAllocationManager to expose internal status to MetricsSystem.
   val executorAllocationManagerSource = new ExecutorAllocationManagerSource
-
-  // Whether we are still waiting for the initial set of executors to be allocated.
-  // While this is true, we will not cancel outstanding executor requests. This is
-  // set to false when:
-  //   (1) a stage is submitted, or
-  //   (2) an executor idle timeout has elapsed.
-  @volatile private var initializing: Boolean = true
 
   // Number of locality aware tasks, used for executor placement.
   private var localityAwareTasks = 0
 
   // Host to possible task running on it, used for executor placement.
   private var hostToLocalTaskCount: Map[String, Int] = Map.empty
+
+  private var _inbox = new SynchronousQueue[Message]
+
+  private var state: State = new GrowableState
+
+  private var workAvailable = false
+
+  sealed trait Message
+  case object ExecutorRemoved extends Message
+  case object Exit extends Message
+  case object Ping extends Message
+  case object Reset extends Message
+  case object Timeout extends Message
+  case object WorkAvailable extends Message
+  case object WorkFinished extends Message
+
+  // Case objects are lazy, and creating them would take a deadlock-prone
+  // lock from State to allocationManager. Accessing them here creates them
+  // eagerly so we don't have that problem.
+  ExecutorRemoved
+  Exit
+  Ping
+  Reset
+  Timeout
+  WorkAvailable
+  WorkFinished
+
+  class State(timeout: Long = 60*60) {
+    def execute(): State = {
+      val msg = inbox.poll(timeout, TimeUnit.SECONDS) match {
+        case null => Timeout
+        case m => m
+      }
+      val res = handle(msg)
+      logInfo(s"Transitioned to $res in response to $msg")
+      res
+    }
+
+    def handle(msg: Message): State = msg match {
+      case ExecutorRemoved => onExecutorRemoved
+      case Exit => onExit
+      case Ping => onPing
+      case Reset => onReset
+      case Timeout => onTimeout
+      case WorkAvailable => onWorkAvailable
+      case WorkFinished => onWorkFinished
+    }
+
+    def onExecutorRemoved(): State = {
+      numExecutorsTarget -= 1
+      return this
+    }
+
+    def onExit(): State = new StopState
+
+    def onPing(): State = this
+
+    def onReset(): State = {
+      numExecutorsTarget = 1
+      numExecutorsToAdd = 1
+
+      idleExecutors.clear
+      executorsPendingToRemove.clear
+
+      new GrowableState
+    }
+
+    def onTimeout(): State = this
+
+    def onWorkAvailable(): State = {
+      workAvailable = true
+      this
+    }
+
+    def onWorkFinished(): State = {
+      workAvailable = false
+      new GrowableState
+    }
+  }
+
+  class StopState extends State {
+    override def handle(msg: Message): State = {
+      logWarning(s"$this recieved $msg")
+      this
+    }
+  }
+
+  class StableState extends State {
+    override def execute(): State = {
+      numExecutorsToAdd = 1
+      super.execute()
+    }
+
+    override def onExecutorRemoved() = {
+      super.onExecutorRemoved()
+      new GrowableState
+    }
+
+    override def onWorkFinished(): State = {
+      super.onWorkFinished()
+      this
+    }
+  }
+
+  class GrowableState extends State {
+    override def execute(): State = {
+      numExecutorsToAdd = 1
+      if (numExecutorsTarget >= maxNumExecutors) {
+        // This shouldn't occur unless someone is giving us executors we didn't
+        // ask for.
+        logWarning(s"Too many executors. Have $numExecutorsTarget/$maxNumExecutors")
+        return new StableState
+      }
+      if (workAvailable) {
+        return new ThrottleGrowthState(sustainedSchedulerBacklogTimeoutS)
+      }
+      super.execute()
+    }
+
+    override def onWorkAvailable(): State = {
+      new ThrottleGrowthState(schedulerBacklogTimeoutS)
+    }
+  }
+
+  class ThrottleGrowthState(timeout: Long) extends State(timeout) {
+    override def onTimeout(): State = {
+      numExecutorsTarget += numExecutorsToAdd
+      numExecutorsToAdd *= 2
+
+      val next = if (numExecutorsTarget >= maxNumExecutors) {
+        numExecutorsTarget = maxNumExecutors
+        new StableState
+      } else if (numExecutorsTarget >= maxNumExecutorsNeeded) {
+        numExecutorsTarget = maxNumExecutorsNeeded
+        new GrowableState
+      } else {
+        new ThrottleGrowthState(sustainedSchedulerBacklogTimeoutS)
+      }
+
+      syncExecutorTarget()
+      return next
+    }
+  }
 
   /**
    * Verify that the settings specified through the config are valid.
@@ -205,55 +336,54 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Use a different clock for this allocation manager. This is mainly used for testing.
-   */
-  def setClock(newClock: Clock): Unit = {
-    clock = newClock
-  }
-
-  /**
    * Register for scheduler callbacks to decide when to add and remove executors, and start
    * the scheduling task.
    */
   def start(): Unit = {
     listenerBus.addListener(listener)
+    thread.start
+  }
 
-    val scheduleTask = new Runnable() {
-      override def run(): Unit = {
-        try {
-          schedule()
-        } catch {
-          case ct: ControlThrowable =>
-            throw ct
-          case t: Throwable =>
-            logWarning(s"Uncaught exception in thread ${Thread.currentThread().getName}", t)
-        }
-      }
-    }
-    executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
-
-    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
+  private def run(): Unit = {
+    while (!state.isInstanceOf[StopState])
+      state = state.execute()
   }
 
   /**
    * Stop the allocation manager.
    */
   def stop(): Unit = {
-    executor.shutdown()
-    executor.awaitTermination(10, TimeUnit.SECONDS)
+    val i = inbox
+
+    if (i != null) {
+      _inbox = null
+      i.offer(Exit, 10, TimeUnit.SECONDS)
+    }
+    executor.shutdown();
+
+    thread.join(10*1000)
+    executor.awaitTermination(10, TimeUnit.SECONDS);
+  }
+
+  private def inbox(): SynchronousQueue[Message] = {
+    if (Thread.holdsLock(allocationManager)) {
+      throw new IllegalStateException("Accessing the inbox while you are locking " +
+        "allocationManager will lead to deadlocks.")
+    }
+    _inbox
+  }
+
+  private def tryInbox[A](block: SynchronousQueue[Message] => A): A = inbox match {
+    case null => null.asInstanceOf[A]
+    case i => block(i)
   }
 
   /**
    * Reset the allocation manager to the initial state. Currently this will only be called in
    * yarn-client mode when AM re-registers after a failure.
    */
-  def reset(): Unit = synchronized {
-    initializing = true
-    numExecutorsTarget = initialNumExecutors
-    numExecutorsToAdd = 1
-
-    executorsPendingToRemove.clear()
-    removeTimes.clear()
+  def reset(): Unit = {
+    inbox.put(Reset)
   }
 
   /**
@@ -266,227 +396,106 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * This is called at a fixed interval to regulate the number of pending executor requests
-   * and number of executors running.
-   *
-   * First, adjust our requested executors based on the add time and our current needs.
-   * Then, if the remove time for an existing executor has expired, kill the executor.
-   *
-   * This is factored out into its own method for testing.
+   * Synchronize the number of requested executors to the desired target.
    */
-  private def schedule(): Unit = synchronized {
-    val now = clock.getTimeMillis
+  private def syncExecutorTarget(): Unit = synchronized {
+    var delta = numExecutorsTarget - prevNumExecutorsTarget
 
-    updateAndSyncNumExecutorsTarget(now)
-
-    removeTimes.retain { case (executorId, expireTime) =>
-      val expired = now >= expireTime
-      if (expired) {
-        initializing = false
-        removeExecutor(executorId)
-      }
-      !expired
-    }
-  }
-
-  /**
-   * Updates our target number of executors and syncs the result with the cluster manager.
-   *
-   * Check to see whether our existing allocation and the requests we've made previously exceed our
-   * current needs. If so, truncate our target and let the cluster manager know so that it can
-   * cancel pending requests that are unneeded.
-   *
-   * If not, and the add time has expired, see if we can request new executors and refresh the add
-   * time.
-   *
-   * @return the delta in the target number of executors.
-   */
-  private def updateAndSyncNumExecutorsTarget(now: Long): Int = synchronized {
-    val maxNeeded = maxNumExecutorsNeeded
-
-    if (initializing) {
-      // Do not change our target while we are still initializing,
-      // Otherwise the first job may have to ramp up unnecessarily
-      0
-    } else if (maxNeeded < numExecutorsTarget) {
-      // The target number exceeds the number we actually need, so stop adding new
-      // executors and inform the cluster manager to cancel the extra pending requests
-      val oldNumExecutorsTarget = numExecutorsTarget
-      numExecutorsTarget = math.max(maxNeeded, minNumExecutors)
-      numExecutorsToAdd = 1
-
-      // If the new target has not changed, avoid sending a message to the cluster manager
-      if (numExecutorsTarget < oldNumExecutorsTarget) {
-        client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
-        logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
-          s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
-      }
-      numExecutorsTarget - oldNumExecutorsTarget
-    } else if (addTime != NOT_SET && now >= addTime) {
-      val delta = addExecutors(maxNeeded)
-      logDebug(s"Starting timer to add more executors (to " +
-        s"expire in $sustainedSchedulerBacklogTimeoutS seconds)")
-      addTime += sustainedSchedulerBacklogTimeoutS * 1000
-      delta
-    } else {
-      0
-    }
-  }
-
-  /**
-   * Request a number of executors from the cluster manager.
-   * If the cap on the number of executors is reached, give up and reset the
-   * number of executors to add next round instead of continuing to double it.
-   *
-   * @param maxNumExecutorsNeeded the maximum number of executors all currently running or pending
-   *                              tasks could fill
-   * @return the number of additional executors actually requested.
-   */
-  private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
-    // Do not request more executors if it would put our target over the upper bound
-    if (numExecutorsTarget >= maxNumExecutors) {
-      logDebug(s"Not adding executors because our current target total " +
-        s"is already $numExecutorsTarget (limit $maxNumExecutors)")
-      numExecutorsToAdd = 1
-      return 0
-    }
-
-    val oldNumExecutorsTarget = numExecutorsTarget
-    // There's no point in wasting time ramping up to the number of executors we already have, so
-    // make sure our target is at least as much as our current allocation:
-    numExecutorsTarget = math.max(numExecutorsTarget, executorIds.size)
-    // Boost our target with the number to add for this round:
-    numExecutorsTarget += numExecutorsToAdd
-    // Ensure that our target doesn't exceed what we need at the present moment:
-    numExecutorsTarget = math.min(numExecutorsTarget, maxNumExecutorsNeeded)
-    // Ensure that our target fits within configured bounds:
-    numExecutorsTarget = math.max(math.min(numExecutorsTarget, maxNumExecutors), minNumExecutors)
-
-    val delta = numExecutorsTarget - oldNumExecutorsTarget
-
-    // If our target has not changed, do not send a message
-    // to the cluster manager and reset our exponential growth
-    if (delta == 0) {
-      numExecutorsToAdd = 1
-      return 0
-    }
+    if (delta == 0) return
 
     val addRequestAcknowledged = testing ||
       client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
-    if (addRequestAcknowledged) {
-      val executorsString = "executor" + { if (delta > 1) "s" else "" }
-      logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
-        s" (new desired total will be $numExecutorsTarget)")
-      numExecutorsToAdd = if (delta == numExecutorsToAdd) {
-        numExecutorsToAdd * 2
-      } else {
-        1
-      }
-      delta
-    } else {
+    if (!addRequestAcknowledged) {
       logWarning(
         s"Unable to reach the cluster manager to request $numExecutorsTarget total executors!")
-      numExecutorsTarget = oldNumExecutorsTarget
-      0
+      return
     }
+
+    val executorsString = if (delta == 1) "executor" else "executors"
+    logInfo(s"Modifying number of executors from $prevNumExecutorsTarget to $numExecutorsTarget (delta $delta)")
+
+    prevNumExecutorsTarget = numExecutorsTarget
   }
 
   /**
    * Request the cluster manager to remove the given executor.
    * Return whether the request is received.
    */
-  private def removeExecutor(executorId: String): Boolean = synchronized {
-    // Do not kill the executor if we are not aware of it (should never happen)
-    if (!executorIds.contains(executorId)) {
-      logWarning(s"Attempted to remove unknown executor $executorId!")
-      return false
-    }
+  private def removeIdleExecutor(executorId: String): Boolean = {
+    allocationManager.synchronized {
+      // Do not kill the executor if we are not aware of it (should never happen)
+      if (!executorIds.contains(executorId)) {
+        logWarning(s"Attempted to remove unknown executor $executorId!")
+        return false
+      }
 
-    // Do not kill the executor again if it is already pending to be killed (should never happen)
-    if (executorsPendingToRemove.contains(executorId)) {
-      logWarning(s"Attempted to remove executor $executorId " +
-        s"when it is already pending to be removed!")
-      return false
-    }
+      // Do not kill the executor again if it is already pending to be killed (should never happen)
+      if (executorsPendingToRemove.contains(executorId)) {
+        logWarning(s"Attempted to remove executor $executorId " +
+          s"when it is already pending to be removed!")
+        return false
+      }
 
-    // Do not kill the executor if we have already reached the lower bound
-    val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
-    if (numExistingExecutors - 1 < minNumExecutors) {
-      logDebug(s"Not removing idle executor $executorId because there are only " +
-        s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
-      return false
-    }
+      idleExecutors.remove(executorId).foreach(_.cancel(false))
 
-    // Send a request to the backend to kill this executor
-    val removeRequestAcknowledged = testing || client.killExecutor(executorId)
-    if (removeRequestAcknowledged) {
+      // Do not kill the executor if we have already reached the lower bound
+      val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
+      if (numExistingExecutors - 1 < minNumExecutors) {
+        logDebug(s"Not removing idle executor $executorId because there are only " +
+          s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
+        return false
+      }
+
+      // Send a request to the backend to kill this executor
+      if (!(testing || client.killExecutor(executorId))) {
+        logWarning(s"Unable to reach the cluster manager to kill executor $executorId!")
+        return false
+      }
+
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$executorIdleTimeoutS seconds (new desired total will be ${numExistingExecutors - 1})")
       executorsPendingToRemove.add(executorId)
-      true
-    } else {
-      logWarning(s"Unable to reach the cluster manager to kill executor $executorId," +
-        s"or no executor eligible to kill!")
-      false
     }
+
+    inbox.put(ExecutorRemoved)
+    true
   }
 
   /**
    * Callback invoked when the specified executor has been added.
    */
   private def onExecutorAdded(executorId: String): Unit = synchronized {
-    if (!executorIds.contains(executorId)) {
-      executorIds.add(executorId)
-      // If an executor (call this executor X) is not removed because the lower bound
-      // has been reached, it will no longer be marked as idle. When new executors join,
-      // however, we are no longer at the lower bound, and so we must mark executor X
-      // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
-      executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
-      logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
-    } else {
+    if (executorIds.contains(executorId)) {
       logWarning(s"Duplicate executor $executorId has registered")
+      return
     }
+
+    executorIds.add(executorId)
+    // If an executor (call this executor X) is not removed because the lower bound
+    // has been reached, it will no longer be marked as idle. When new executors join,
+    // however, we are no longer at the lower bound, and so we must mark executor X
+    // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
+    executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
+    logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
   }
 
   /**
    * Callback invoked when the specified executor has been removed.
    */
   private def onExecutorRemoved(executorId: String): Unit = synchronized {
-    if (executorIds.contains(executorId)) {
-      executorIds.remove(executorId)
-      removeTimes.remove(executorId)
-      logInfo(s"Existing executor $executorId has been removed (new total is ${executorIds.size})")
-      if (executorsPendingToRemove.contains(executorId)) {
-        executorsPendingToRemove.remove(executorId)
-        logDebug(s"Executor $executorId is no longer pending to " +
-          s"be removed (${executorsPendingToRemove.size} left)")
-      }
-    } else {
+    if (!executorIds.contains(executorId)) {
       logWarning(s"Unknown executor $executorId has been removed!")
+      return
     }
-  }
 
-  /**
-   * Callback invoked when the scheduler receives new pending tasks.
-   * This sets a time in the future that decides when executors should be added
-   * if it is not already set.
-   */
-  private def onSchedulerBacklogged(): Unit = synchronized {
-    if (addTime == NOT_SET) {
-      logDebug(s"Starting timer to add executors because pending tasks " +
-        s"are building up (to expire in $schedulerBacklogTimeoutS seconds)")
-      addTime = clock.getTimeMillis + schedulerBacklogTimeoutS * 1000
+    executorIds.remove(executorId)
+    idleExecutors.remove(executorId).foreach(_.cancel(false))
+    logInfo(s"Existing executor $executorId has been removed (new total is ${executorIds.size})")
+
+    if (executorsPendingToRemove.remove(executorId)) {
+      logDebug(s"Executor $executorId is no longer pending to " +
+        s"be removed (${executorsPendingToRemove.size} left)")
     }
-  }
-
-  /**
-   * Callback invoked when the scheduler queue is drained.
-   * This resets all variables used for adding executors.
-   */
-  private def onSchedulerQueueEmpty(): Unit = synchronized {
-    logDebug("Clearing timer to add executors because there are no more pending tasks")
-    addTime = NOT_SET
-    numExecutorsToAdd = 1
   }
 
   /**
@@ -495,29 +504,35 @@ private[spark] class ExecutorAllocationManager(
    * the executor is not already marked as idle.
    */
   private def onExecutorIdle(executorId: String): Unit = synchronized {
-    if (executorIds.contains(executorId)) {
-      if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
-        // Note that it is not necessary to query the executors since all the cached
-        // blocks we are concerned with are reported to the driver. Note that this
-        // does not include broadcast blocks.
-        val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)
-        val now = clock.getTimeMillis()
-        val timeout = {
-          if (hasCachedBlocks) {
-            // Use a different timeout if the executor has cached blocks.
-            now + cachedExecutorIdleTimeoutS * 1000
-          } else {
-            now + executorIdleTimeoutS * 1000
-          }
-        }
-        val realTimeout = if (timeout <= 0) Long.MaxValue else timeout // overflow
-        removeTimes(executorId) = realTimeout
-        logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-          s"scheduled to run on the executor (to expire in ${(realTimeout - now)/1000} seconds)")
-      }
-    } else {
+    if (!executorIds.contains(executorId)) {
       logWarning(s"Attempted to mark unknown executor $executorId idle")
+      return
     }
+    if (idleExecutors.contains(executorId)) {
+      // Already marked idle.
+      return
+    }
+    if (executorsPendingToRemove.contains(executorId)) {
+      // Already going to be removed.
+      return
+    }
+
+    // Note that it is not necessary to query the executors since all the cached
+    // blocks we are concerned with are reported to the driver. Note that this
+    // does not include broadcast blocks.
+    val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)
+
+    // Use a different timeout if the executor has cached blocks.
+    val timeout = if (hasCachedBlocks) cachedExecutorIdleTimeoutS else executorIdleTimeoutS
+
+    idleExecutors(executorId) = executor.schedule(new Callable[Unit] {
+      override def call(): Unit = {
+        removeIdleExecutor(executorId)
+      }
+    }, timeout, TimeUnit.SECONDS)
+
+    logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
+      s"scheduled to run on the executor (to expire in ${timeout} seconds)")
   }
 
   /**
@@ -526,7 +541,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def onExecutorBusy(executorId: String): Unit = synchronized {
     logDebug(s"Clearing idle timer for $executorId because it is now running a task")
-    removeTimes.remove(executorId)
+    idleExecutors.remove(executorId).foreach(_.cancel(false))
   }
 
   /**
@@ -551,12 +566,13 @@ private[spark] class ExecutorAllocationManager(
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
-      initializing = false
       val stageId = stageSubmitted.stageInfo.stageId
       val numTasks = stageSubmitted.stageInfo.numTasks
+
+      inbox.put(WorkAvailable)
+
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
-        allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
         var numTasksPending = 0
@@ -580,7 +596,7 @@ private[spark] class ExecutorAllocationManager(
 
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
       val stageId = stageCompleted.stageInfo.stageId
-      allocationManager.synchronized {
+      val empty = allocationManager.synchronized {
         stageIdToNumTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToExecutorPlacementHints -= stageId
@@ -588,14 +604,15 @@ private[spark] class ExecutorAllocationManager(
         // Update the executor placement hints
         updateExecutorPlacementHints()
 
-        // If this is the last stage with pending tasks, mark the scheduler queue as empty
-        // This is needed in case the stage is aborted for any reason
-        if (stageIdToNumTasks.isEmpty) {
-          allocationManager.onSchedulerQueueEmpty()
-          if (numRunningTasks != 0) {
-            logWarning("No stages are running, but numRunningTasks != 0")
-            numRunningTasks = 0
-          }
+        stageIdToNumTasks.isEmpty
+      }
+
+      if (empty) {
+        inbox.put(WorkFinished)
+
+        if (numRunningTasks != 0) {
+          logWarning("No stages are running, but numRunningTasks != 0")
+          numRunningTasks = 0
         }
       }
     }
@@ -606,25 +623,25 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskStart.taskInfo.index
       val executorId = taskStart.taskInfo.executorId
 
-      allocationManager.synchronized {
+      val empty = allocationManager.synchronized {
         numRunningTasks += 1
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
         // possible because these events are posted in different threads. (see SPARK-4951)
-        if (!allocationManager.executorIds.contains(executorId)) {
-          allocationManager.onExecutorAdded(executorId)
-        }
+        allocationManager.onExecutorAdded(executorId)
 
         // If this is the last pending task, mark the scheduler queue as empty
         stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
-        if (totalPendingTasks() == 0) {
-          allocationManager.onSchedulerQueueEmpty()
-        }
 
         // Mark the executor on which this task is scheduled as busy
         executorIdToTaskIds.getOrElseUpdate(executorId, new mutable.HashSet[Long]) += taskId
         allocationManager.onExecutorBusy(executorId)
+
+        totalPendingTasks() == 0
       }
+
+      if (empty)
+        inbox.put(WorkFinished)
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
@@ -632,7 +649,7 @@ private[spark] class ExecutorAllocationManager(
       val taskId = taskEnd.taskInfo.taskId
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
-      allocationManager.synchronized {
+      val newlyBacklogged = allocationManager.synchronized {
         numRunningTasks -= 1
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
@@ -647,12 +664,16 @@ private[spark] class ExecutorAllocationManager(
         // enough resources to run the resubmitted task, we need to mark the scheduler
         // as backlogged again if it's not already marked as such (SPARK-8366)
         if (taskEnd.reason != Success) {
-          if (totalPendingTasks() == 0) {
-            allocationManager.onSchedulerBacklogged()
-          }
           stageIdToTaskIndices.get(stageId).foreach { _.remove(taskIndex) }
+
+          totalPendingTasks() == 0
+        } else {
+          false
         }
       }
+
+      if (newlyBacklogged)
+        inbox.put(WorkAvailable)
     }
 
     override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = {
@@ -661,9 +682,7 @@ private[spark] class ExecutorAllocationManager(
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
         // possible because these events are posted in different threads. (see SPARK-4951)
-        if (!allocationManager.executorIds.contains(executorId)) {
-          allocationManager.onExecutorAdded(executorId)
-        }
+        allocationManager.onExecutorAdded(executorId)
       }
     }
 
@@ -686,7 +705,7 @@ private[spark] class ExecutorAllocationManager(
     /**
      * The number of tasks currently running across all stages.
      */
-    def totalRunningTasks(): Int = numRunningTasks
+    def totalRunningTasks(): Int = allocationManager.synchronized { numRunningTasks }
 
     /**
      * Return true if an executor is not currently running a task, and false otherwise.
