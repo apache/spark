@@ -369,6 +369,9 @@ case class MapObjects(
   private lazy val completeFunction = function(loopAttribute)
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case NullType =>
+      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
+      (i: String) => s".get($i, $nullTypeClassName)"
     case IntegerType => (i: String) => s".getInt($i)"
     case LongType => (i: String) => s".getLong($i)"
     case FloatType => (i: String) => s".getFloat($i)"

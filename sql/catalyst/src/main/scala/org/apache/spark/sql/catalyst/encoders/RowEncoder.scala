@@ -48,7 +48,7 @@ object RowEncoder {
   private def extractorsFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => inputObject
 
     case udt: UserDefinedType[_] =>
@@ -143,6 +143,7 @@ object RowEncoder {
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
+    case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
   private def constructorFor(schema: StructType): Expression = {
@@ -158,7 +159,7 @@ object RowEncoder {
   }
 
   private def constructorFor(input: Expression): Expression = input.dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
 
     case udt: UserDefinedType[_] =>
