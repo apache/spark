@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -169,18 +168,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("misc hash function") {
-    def projection(exprs: Expression*): UnsafeProjection =
-      GenerateUnsafeProjection.generate(exprs)
-    def getHashCode(inputs: Expression*): Int = projection(inputs: _*)(null).hashCode
-
     val df = Seq(("ABC", 3.7f)).toDF("a", "b")
     checkAnswer(
       df.select(hash($"a"), hash($"b")),
-      Row(getHashCode(Literal("ABC")), getHashCode(Literal(3.7f))))
+      Row(64578, 1080872141))
 
     checkAnswer(
       df.selectExpr("hash(a)", "hash(b)"),
-      Row(getHashCode(Literal("ABC")), getHashCode(Literal(3.7f))))
+      Row(64578, 1080872141))
   }
 
   test("misc sha1 function") {

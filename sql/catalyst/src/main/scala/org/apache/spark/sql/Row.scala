@@ -424,16 +424,34 @@ trait Row extends Serializable {
     true
   }
 
-  override def hashCode: Int = {
-    // Using Scala's Seq hash code implementation.
-    var n = 0
-    var h = MurmurHash3.seqSeed
-    val len = length
-    while (n < len) {
-      h = MurmurHash3.mix(h, apply(n).##)
-      n += 1
-    }
-    MurmurHash3.finalizeHash(h, n)
+  override def hashCode: Int = hashCode(this)
+
+  def hashCode(v: Any): Int = v match {
+    case null => 0
+    case b: Boolean => if (b) 1 else 0
+    case b: Byte => b.toInt
+    case s: Short => s.toInt
+    case i: Int => i
+    case l: Long => (l ^ (l >>> 32)).toInt
+    case f: Float => java.lang.Float.floatToIntBits(f)
+    case d: Double =>
+      val b = java.lang.Double.doubleToLongBits(d)
+      (b ^ (b >>> 32)).toInt
+    case a: Array[Byte] => java.util.Arrays.hashCode(a)
+    case s: String => s.getBytes.foldLeft(0) { (acc, n) => acc * 31 + n }
+    case a: Array[_] => a.foldLeft(0) { (acc, n) => acc * 31 + hashCode(n) }
+    case s: Seq[_] => s.foldLeft(0) { (acc, n) => acc * 31 + hashCode(n) }
+    case m: Map[_, _] =>
+      var r = 0
+      m.foreach { case (k, v) => r += hashCode(k) ^ hashCode(v) }
+      r
+    case r: Row =>
+      var res = 0
+      for (i <- 0 until r.length) {
+        res = 31 * res  + hashCode(r(i))
+      }
+      res
+    case other => other.hashCode()
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

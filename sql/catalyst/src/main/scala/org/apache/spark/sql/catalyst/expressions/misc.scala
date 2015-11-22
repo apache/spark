@@ -22,8 +22,10 @@ import java.util.zip.CRC32
 
 import org.apache.commons.codec.digest.DigestUtils
 
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -54,17 +56,28 @@ case class Hash(children: Expression*) extends Expression with ImplicitCastInput
   override def nullable: Boolean = children.exists(_.nullable)
 
   @transient
-  private lazy val extractProjection = GenerateUnsafeProjection.generate(children)
+  private lazy val extractProjection = GenerateSafeProjection.generate(children)
 
-  def getProjection: UnsafeProjection = extractProjection
+  lazy val schema = StructType(children.zipWithIndex.map { case (e, idx) =>
+    StructField(s"_c$idx", e.dataType)
+  })
+  @transient
+  private lazy val encoder = RowEncoder(schema)
+
+  def getProjection: Projection = extractProjection
+  def getEncoder: ExpressionEncoder[Row] = encoder
 
   override def eval(input: InternalRow): Any = {
-    extractProjection(input).hashCode
+    val internalRow: InternalRow = extractProjection(input)
+    encoder.fromRow(internalRow).hashCode
   }
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val hashExpressionClassName = classOf[Hash].getName
-    val projectionClassName = classOf[UnsafeProjection].getName
+    val projectionClassName = classOf[Projection].getName
+    val encoderClassName = classOf[ExpressionEncoder[Row]].getName
+    val internalRowClassName = classOf[InternalRow].getName
+    val rowClassName = classOf[Row].getName
 
     ctx.references += this
     val hashExpressionTermIndex = ctx.references.size - 1
@@ -74,9 +87,20 @@ case class Hash(children: Expression*) extends Expression with ImplicitCastInput
       s"this.$projectionTerm = ($projectionClassName)((($hashExpressionClassName)expressions" +
         s"[$hashExpressionTermIndex]).getProjection());")
 
+    val encoderTerm = ctx.freshName("encoder")
+    ctx.addMutableState(encoderClassName, encoderTerm,
+      s"this.$encoderTerm = ($encoderClassName)((($hashExpressionClassName)expressions" +
+        s"[$hashExpressionTermIndex]).getEncoder());")
+
+    val internalRowTerm = ctx.freshName("internalRow")
+    val rowTerm = ctx.freshName("row")
+
     s"""
       boolean ${ev.isNull} = false;
-      Integer ${ev.value} = $projectionTerm.apply(${ctx.INPUT_ROW}).hashCode();
+      ${internalRowClassName} ${internalRowTerm} =
+        (${internalRowClassName})${projectionTerm}.apply(${ctx.INPUT_ROW});
+      ${rowClassName} ${rowTerm} = (${rowClassName})${encoderTerm}.fromRow(${internalRowTerm});
+      Integer ${ev.value} = ${rowTerm}.hashCode();
       if (${ev.value} == null) {
         ${ev.isNull} = true;
       }

@@ -22,6 +22,7 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -35,35 +36,24 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("hash") {
-    def projection(exprs: Expression*): UnsafeProjection =
-      GenerateUnsafeProjection.generate(exprs)
-    def getHashCode(inputs: Expression*): Int = projection(inputs: _*)(null).hashCode
-
-    checkEvaluation(Hash(Literal(3)), getHashCode(Literal(3)))
-    checkEvaluation(Hash(Literal(3L)), getHashCode(Literal(3L)))
-    checkEvaluation(Hash(Literal(3.7d)), getHashCode(Literal(3.7d)))
-    checkEvaluation(Hash(Literal(3.7f)), getHashCode(Literal(3.7f)))
+    checkEvaluation(Hash(Literal.create(null, NullType)), 0)
+    checkEvaluation(Hash(Literal(3)), 3)
+    checkEvaluation(Hash(Literal(3L)), 3)
+    checkEvaluation(Hash(Literal(3.7d)), -644612093)
+    checkEvaluation(Hash(Literal(3.7f)), 1080872141)
     val v1: Byte = 3
     val v2: Short = 3
-    checkEvaluation(Hash(Literal(v1)), getHashCode(Literal(v1)))
-    checkEvaluation(Hash(Literal(v2)), getHashCode(Literal(v2)))
-    checkEvaluation(Hash(Literal(v1), Literal(v2)), getHashCode(Literal(v1), Literal(v2)))
-    checkEvaluation(Hash(Literal("ABC")), getHashCode(Literal("ABC")))
-    checkEvaluation(Hash(Literal(true)), getHashCode(Literal(true)))
-    checkEvaluation(Hash(Literal.create(Decimal(3.7), DecimalType.Unlimited)),
-      getHashCode(Literal.create(Decimal(3.7), DecimalType.Unlimited)))
-    checkEvaluation(Hash(Literal.create(java.sql.Date.valueOf("1991-12-07"), DateType)),
-      getHashCode(Literal.create(java.sql.Date.valueOf("1991-12-07"), DateType)))
-    checkEvaluation(
-      Hash(Literal.create(java.sql.Timestamp.valueOf("1991-12-07 12:00:00"), TimestampType)),
-      getHashCode(Literal.create(java.sql.Timestamp.valueOf("1991-12-07 12:00:00"), TimestampType)))
+    checkEvaluation(Hash(Literal(v1)), 3)
+    checkEvaluation(Hash(Literal(v2)), 3)
+    checkEvaluation(Hash(Literal(v1), Literal(v2)), 96)
+    checkEvaluation(Hash(Literal("ABC")), 64578)
+    checkEvaluation(Hash(Literal(true)), 1)
     checkEvaluation(Hash(Literal.create(Map[Int, Int](1 -> 2), MapType(IntegerType, IntegerType))),
-      getHashCode(Literal.create(Map[Int, Int](1 -> 2), MapType(IntegerType, IntegerType))))
+      3)
     checkEvaluation(Hash(Literal.create(Seq[Byte](1, 2, 3, 4, 5, 6), ArrayType(ByteType))),
-      getHashCode(Literal.create(Seq[Byte](1, 2, 3, 4, 5, 6), ArrayType(ByteType))))
+      30569571)
     checkEvaluation(Hash(Literal.create(Seq[Double](1.1, 2.2, 3.3, 4.4, 5.5, 6.6),
-      ArrayType(DoubleType))), getHashCode(Literal.create(Seq[Double](1.1, 2.2, 3.3, 4.4, 5.5, 6.6),
-        ArrayType(DoubleType))))
+      ArrayType(DoubleType))), 540728227)
   }
 
   test("sha1") {
