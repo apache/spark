@@ -402,7 +402,6 @@ def parameterized_config(template):
     current scope
     :param template: a config content templated with {{variables}}
     """
-
     FERNET_KEY = generate_fernet_key()
     all_vars = {k: v for d in [globals(), locals()] for k, v in d.items()}
     return template.format(**all_vars)
@@ -423,12 +422,6 @@ if not os.path.isfile(AIRFLOW_CONFIG):
     logging.info("Creating new airflow config file in: " + AIRFLOW_CONFIG)
     with open(AIRFLOW_CONFIG, 'w') as f:
         f.write(parameterized_config(DEFAULT_CONFIG))
-
-TEST_CONFIG_FILE = AIRFLOW_HOME + '/unittests.cfg'
-if not os.path.isfile(TEST_CONFIG_FILE):
-    logging.info("Creating new config file in: " + TEST_CONFIG_FILE)
-    with open(TEST_CONFIG_FILE, 'w') as f:
-        f.write(TEST_CONFIG.format(**locals()))
 
 logging.info("Reading the config from " + AIRFLOW_CONFIG)
 
