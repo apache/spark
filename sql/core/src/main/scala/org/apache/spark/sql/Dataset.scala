@@ -440,11 +440,8 @@ class Dataset[T] private[sql](
     * Returns a new [[Dataset]] by sampling a fraction of rows.
     * @since 1.6.0
     */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] = {
-    new Dataset[T](
-      sqlContext,
-      Sample(0.0, fraction, withReplacement, seed, logicalPlan))
-  }
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
 
   /**
     * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
