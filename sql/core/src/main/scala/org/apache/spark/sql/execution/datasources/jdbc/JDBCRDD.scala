@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Date, DriverManager, ResultSet, ResultSetMetaData, SQLException, Timestamp}
 import java.util.Properties
 
 import org.apache.commons.lang3.StringUtils
@@ -263,8 +263,8 @@ private[sql] class JDBCRDD(
    */
   private def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: java.sql.Timestamp => "'" + value + "'"
-    case dateValue: java.sql.Date => "'" + value + "'"
+    case timestampValue: Timestamp => "'" + value + "'"
+    case dateValue: Date => "'" + value + "'"
     case _ => value
   }
 
