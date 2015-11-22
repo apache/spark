@@ -95,7 +95,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *   Struct: Object[] / java.util.List / java POJO
  *   Union: class StandardUnion { byte tag; Object object }
  *
- * NOTICE: HiveVarchar/HiveChar is not supported by catalyst, it will be simply considered as String type.
+ * NOTICE: HiveVarchar/HiveChar is not supported by catalyst, it will be simply considered as
+ *  String type.
  *
  *
  * 2. Hive ObjectInspector is a group of flexible APIs to inspect value in different data
