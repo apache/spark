@@ -23,13 +23,14 @@ import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.{Matchers, BeforeAndAfterAll}
+import org.scalatest.concurrent.{Eventually, Timeouts}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 
-class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
+class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts
+  with Eventually with Matchers {
 
   @transient private var sc: SparkContext = _
 
@@ -226,5 +227,17 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
 
   test("ComplexFutureAction callback must not consume a thread while waiting") {
     testAsyncAction((_.takeAsync(100)))
+  }
+
+  test("getJobIdsForGroup() with takeAsync()") {
+    sc.setJobGroup("my-job-group2", "description")
+    sc.statusTracker.getJobIdsForGroup("my-job-group2") should be (Seq.empty)
+    val firstJobFuture = sc.parallelize(1 to 1000, 1).takeAsync(1)
+    val firstJobId = eventually(timeout(10 seconds)) {
+      firstJobFuture.jobIds.head
+    }
+    eventually(timeout(10 seconds)) {
+      sc.statusTracker.getJobIdsForGroup("my-job-group2") should be (Seq(firstJobId))
+    }
   }
 }
