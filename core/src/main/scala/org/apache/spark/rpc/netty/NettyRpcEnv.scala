@@ -188,14 +188,17 @@ private[netty] class NettyRpcEnv(
         case Success(response) =>
           val ack = response.asInstanceOf[Ack]
           logTrace(s"Received ack from ${ack.sender}")
-        case Failure(e) =>
-          logWarning(s"Exception when sending $message", e)
+        case Failure(e) => {
+          logWarning(s"Exception when sending $message")
+          logDebug("\tDetails", e)
+        }
       }(ThreadUtils.sameThread)
     } else {
       // Message to a remote RPC endpoint.
       postToOutbox(message.receiver, OutboxMessage(serialize(message),
         (e) => {
-          logWarning(s"Exception when sending $message", e)
+          logWarning(s"Exception when sending $message")
+          logDebug("\tDetails", e)
         },
         (client, response) => {
           val ack = deserialize[Ack](client, response)
