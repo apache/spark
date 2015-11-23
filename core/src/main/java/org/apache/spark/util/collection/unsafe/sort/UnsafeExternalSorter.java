@@ -474,7 +474,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         released += inMemSorter.getMemoryUsage();
         inMemSorter.free();
         inMemSorter = null;
-        logger.warn("released {} from {}", released, this);
         return released;
       }
     }
