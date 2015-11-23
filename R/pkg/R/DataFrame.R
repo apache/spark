@@ -2231,7 +2231,7 @@ setMethod("str",
             cachedCount <- nrow(object)
 
             # Get the first elements of the dataset. Limit number of columns accordingly
-            dataFrame <- if (ncol(object) > MAX_COLS) {
+            localDF <- if (ncol(object) > MAX_COLS) {
                            head(object[, c(1:MAX_COLS)])
                          } else {
                            head(object)
@@ -2254,15 +2254,15 @@ setMethod("str",
               ellipsis <- TRUE
             }
 
-            if (nrow(dataFrame) > 0) {
-              for (i in 1 : ncol(dataFrame)) {
+            if (nrow(localDF) > 0) {
+              for (i in 1 : ncol(localDF)) {
                 firstElements <- ""
 
                 # Get the first elements for each column
                 if (types[i] == "character") {
-                  firstElements <- paste(paste0("\"", dataFrame[,i], "\""), collapse = " ")
+                  firstElements <- paste(paste0("\"", localDF[,i], "\""), collapse = " ")
                 } else {
-                  firstElements <- paste(dataFrame[,i], collapse = " ")
+                  firstElements <- paste(localDF[,i], collapse = " ")
                 }
 
                 # Add the corresponding number of spaces for alignment
@@ -2288,8 +2288,8 @@ setMethod("str",
                 cat("\n")
               }
 
-              if (ncol(dataFrame) < ncol(object)) {
-                cat(paste0("\nDisplaying first ", ncol(dataFrame), " columns only."))
+              if (ncol(localDF) < ncol(object)) {
+                cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
               }
             }
           })
