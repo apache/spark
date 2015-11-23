@@ -57,14 +57,14 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
 
     /** Attach a reconstructed UI  */
-    override def attachSparkUI(ui: SparkUI, completed: Boolean): Unit  = {
+    override def attachSparkUI(ui: SparkUI, completed: Boolean): Unit = {
       attachCount += 1
       val name = ui.getAppName
       assert(name != null, s"no name for spark UI $ui")
       attached += (name -> ui)
     }
 
-    def create(name: String, completed: Boolean): SparkUI  = {
+    def create(name: String, completed: Boolean): SparkUI = {
       val ui = newUI(name, completed)
       instances += (name -> ui)
       ui
@@ -97,11 +97,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    */
   class FakeTicker(var now: Long) extends Ticker {
 
-    override def read(): Long = {
-      now
-    }
+    override def read(): Long =  now
 
-    def tick(): Unit =  {
+    def tick(): Unit = {
       now += 1
     }
 
@@ -110,7 +108,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
   }
 
-  def newUI(name: String, completed: Boolean) : SparkUI =  {
+  def newUI(name: String, completed: Boolean): SparkUI =  {
     val date = new Date(0)
     val info = new ApplicationInfo(name, name,
       Some(1), Some(1), Some(1), Some(64),
@@ -171,7 +169,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     // and in the map of attached
     assert(None !== operations.attached.get("1"), s"attached entry '1' from $cache")
 
-    //go forward in time
+    // go forward in time
     ticker.set(10)
     val cacheEntry2 = cache.get("1")
     // no more refresh as this is a completed app
@@ -186,7 +184,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     // there should have been a detachment here
     assert(1 === operations.detachCount, s"detach count from $cache")
-    /// and entry "1" no longer attached
+    // and entry "1" no longer attached
     assert(None === operations.attached.get("1"), s"get(1) in $cache")
 
   }
@@ -198,7 +196,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val operations = new StubCacheOperations()
     val ticker = new FakeTicker(1)
     val cache = new ApplicationCache(operations, 5, 10, ticker)
-    //operations.instances += ("1" ->(newUI("1"), true))
     // add the incomplete app
     operations.instances += ("inc" ->(newUI("inc", false)))
     val entry = cache.get("inc")
@@ -215,7 +212,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assert((ticker.read() - entry.timestamp) > cache.refreshInterval)
     val entry3 = cache.get("inc")
     assert(entry !== entry3, s"updated entry test from $cache")
-    assert(1 === operations.refreshCount,  s"refresh count in $cache")
+    assert(1 === operations.refreshCount, s"refresh count in $cache")
     assert(1 === operations.detachCount, s"detach count in $cache")
     assert(None !== operations.attached.get("inc"), s"attached['inc'] in $cache")
     assert(entry3.timestamp === 15)
