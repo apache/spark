@@ -75,6 +75,8 @@ class SQLContext(object):
         SQLContext in the JVM, instead we make all calls to this object.
     """
 
+    _instantiatedContext = None
+
     @ignore_unicode_prefix
     def __init__(self, sparkContext, sqlContext=None):
         """Creates a new SQLContext.
@@ -99,6 +101,7 @@ class SQLContext(object):
         self._scala_SQLContext = sqlContext
         _monkey_patch_RDD(self)
         install_exception_handler()
+        SQLContext._instantiatedContext = self
 
     @property
     def _ssql_ctx(self):
