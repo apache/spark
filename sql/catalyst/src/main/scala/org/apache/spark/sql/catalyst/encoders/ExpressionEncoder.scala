@@ -54,8 +54,13 @@ object ExpressionEncoder {
     val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
     val fromRowExpression = ScalaReflection.constructorFor[T]
 
+    val schema = ScalaReflection.schemaFor[T] match {
+      case ScalaReflection.Schema(s: StructType, _) => s
+      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
+    }
+
     new ExpressionEncoder[T](
-      toRowExpression.dataType,
+      schema,
       flat,
       toRowExpression.flatten,
       fromRowExpression,
@@ -71,7 +76,13 @@ object ExpressionEncoder {
     encoders.foreach(_.assertUnresolved())
 
     val schema = StructType(encoders.zipWithIndex.map {
-      case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)
+      case (e, i) =>
+        val (dataType, nullable) = if (e.flat) {
+          e.schema.head.dataType -> e.schema.head.nullable
+        } else {
+          e.schema -> true
+        }
+        StructField(s"_${i + 1}", dataType, nullable)
     })
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
