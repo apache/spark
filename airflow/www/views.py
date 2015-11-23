@@ -842,6 +842,7 @@ class Airflow(BaseView):
     @expose('/run')
     @login_required
     @wwwutils.action_logging
+    @wwwutils.notify_owner
     def run(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -878,6 +879,7 @@ class Airflow(BaseView):
     @expose('/clear')
     @login_required
     @wwwutils.action_logging
+    @wwwutils.notify_owner
     def clear(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
@@ -953,6 +955,7 @@ class Airflow(BaseView):
     @expose('/success')
     @login_required
     @wwwutils.action_logging
+    @wwwutils.notify_owner
     def success(self):
         dag_id = request.args.get('dag_id')
         task_id = request.args.get('task_id')
