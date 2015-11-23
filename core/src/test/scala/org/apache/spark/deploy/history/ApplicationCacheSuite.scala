@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 
+import scala.collection.mutable
+
 import com.google.common.base.Ticker
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.mockito.Mockito._
@@ -35,9 +37,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    */
   class StubCacheOperations extends ApplicationCacheOperations {
 
-    var instances = scala.collection.mutable.HashMap.empty[String, SparkUI]
+    val instances = mutable.HashMap.empty[String, SparkUI]
 
-    var attached = scala.collection.mutable.HashMap.empty[String, SparkUI]
+    val attached = mutable.HashMap.empty[String, SparkUI]
 
     var getCount = 0L
     var attachCount = 0L
@@ -110,8 +112,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
   def newUI(name: String, completed: Boolean): SparkUI =  {
     val date = new Date(0)
-    val info = new ApplicationInfo(name, name,
-      Some(1), Some(1), Some(1), Some(64),
+    val info = new ApplicationInfo(name, name, Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(None, date, date, "user", completed)))
     val ui = mock[SparkUI]
     when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
@@ -133,7 +134,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
     var cause = ex.getCause
     assert(cause !== null)
-    if(!cause.isInstanceOf[NoSuchElementException]) {
+    if (!cause.isInstanceOf[NoSuchElementException]) {
       throw cause;
     }
   }

@@ -35,6 +35,12 @@ private[spark] case class ApplicationHistoryInfo(
     name: String,
     attempts: List[ApplicationAttemptInfo])
 
+private[spark] case class LiveApplicationAttemptUI(
+  id: String,
+  name: String,
+  attempts: List[ApplicationAttemptInfo])
+
+
 private[history] abstract class ApplicationHistoryProvider {
 
   /**

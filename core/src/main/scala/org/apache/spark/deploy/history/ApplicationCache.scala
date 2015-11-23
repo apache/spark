@@ -45,23 +45,42 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val retainedApplications: Int,
     time: Ticker) extends RemovalListener[String, CacheEntry] with Logging {
 
+  /**
+   * Services the load request from the cache.
+   */
   private val appLoader = new CacheLoader[String, CacheEntry] {
     override def load(key: String): CacheEntry = {
       loadEntry(key)
     }
   }
 
+  /**
+   * The cache of applications.
+   */
   private val appCache: LoadingCache[String, CacheEntry] = CacheBuilder.newBuilder()
       .maximumSize(retainedApplications)
       .removalListener(this)
       .build(appLoader)
 
-  def loadEntry(key: String): CacheEntry = {
-    val parts = key.split("/")
-    require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
-    val appId = parts(0)
-    val attemptId = if (parts.length > 1) Some(parts(1)) else None
+  /**
+   * Build a cache entry from the [[operations]].
+   *
+   * @param appAndAttempt combined app/attempt key
+   * @return the cache entry
+   */
+  def loadEntry(appAndAttempt: String): CacheEntry = {
+    val parts = splitAppAndAttemptKey(appAndAttempt)
+    loadApplicationEntry(parts._1, parts._2)
+  }
 
+  /**
+   * Build a cache entry from the [[operations]].
+   *
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return the cache entry
+   */
+  def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
     operations.getAppUI(appId, attemptId) match {
       case Some(ui) =>
         val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
@@ -70,26 +89,40 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
         // build the cache entry
         CacheEntry(ui, completed, time.read())
       case None =>
-        throw new NoSuchElementException(s"no app with key $key")
+        throw new NoSuchElementException(s"no application $appId attempt $attemptId")
     }
+  }
+
+  /**
+   * Split up an `applicationId/attemptId` or `applicationId` key into the separate pieces.
+   *
+   * @param appAndAttempt combined key
+   * @return a tuple of the application ID and, if present, the attemptID
+   */
+  def splitAppAndAttemptKey(appAndAttempt: String): (String, Option[String]) = {
+    val parts = appAndAttempt.split("/")
+    require(parts.length == 1 || parts.length == 2, s"Invalid app key $appAndAttempt")
+    val appId = parts(0)
+    val attemptId = if (parts.length > 1) Some(parts(1)) else None
+    (appId, attemptId)
   }
 
   /**
    * Get the entry. Cache fetch/refresh will have taken place by
    * the time this method returns
-   * @param appId application to look up
+   * @param appAndAttempt application to look up
    * @return the entry
    */
-  def get(appId: String): Option[CacheEntry] = {
+  def get(appAndAttempt: String): Option[CacheEntry] = {
     try {
-      val entry = appCache.get(appId)
+      val entry = appCache.get(appAndAttempt)
       if (!entry.completed &&
           (time.read() - entry.timestamp) > refreshInterval) {
         // trigger refresh
-        logDebug(s"refreshing $appId")
-        operations.refreshTriggered(appId, entry.ui)
-        appCache.invalidate(appId)
-        get(appId)
+        logDebug(s"refreshing $appAndAttempt")
+        operations.refreshTriggered(appAndAttempt, entry.ui)
+        appCache.invalidate(appAndAttempt)
+        get(appAndAttempt)
       }
       Some(entry)
     } catch {
@@ -110,6 +143,11 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     operations.detachSparkUI(rm.getValue().ui)
   }
 
+  /**
+   * String operator dumps the cache entries.
+   *
+   * @return
+   */
   override def toString: String = {
     val sb = new StringBuilder(
       s"ApplicationCache($refreshInterval, $retainedApplications) size ${appCache.size() }")
@@ -121,7 +159,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
 }
 
 /**
- * An entry in the cache
+ * An entry in the cache.
+ *
  * @param ui Spark UI
  * @param completed: flag to indicated that the application has completed (and so
  *                 does not need refreshing)
@@ -130,7 +169,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
 private[history] case class CacheEntry(ui: SparkUI, completed: Boolean, timestamp: Long)
 
 /**
- * Callbacks for cache events
+ * API for cache events
  */
 private[history] trait ApplicationCacheOperations {
 
@@ -160,8 +199,8 @@ private[history] trait ApplicationCacheOperations {
   /**
    * Notification of a refresh. This will be followed by the normal
    * detach/attach operations
-   * @param attempID
-   * @param ui
+   * @param appAndAttempt app/attempt key
+   * @param ui UI to update
    */
-  def refreshTriggered(attempID: String, ui: SparkUI): Unit
+  def refreshTriggered(appAndAttempt: String, ui: SparkUI): Unit
 }
