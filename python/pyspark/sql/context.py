@@ -444,6 +444,15 @@ class SQLContext(object):
         else:
             raise ValueError("Can only register DataFrame as table")
 
+    @since(1.6)
+    def dropTempTable(self, tableName):
+        """ Remove the temp table from catalog
+        
+        >>> sqlContext.registerDataFrameAsTable(df, "table1")
+        >>> sqlContext.dropTempTable("table1")
+        """
+        self._ssql_ctx.dropTempTable(tableName)
+
     def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
