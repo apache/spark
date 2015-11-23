@@ -235,6 +235,36 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     cached.unpersist()
   }
 
+  test("persist and then rebind right encoder when join 2 datasets") {
+    val ds1 = Seq("1", "2").toDS().as("a")
+    val ds2 = Seq(2, 3).toDS().as("b")
+
+    ds1.persist()
+    ds2.persist()
+
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
+    checkAnswer(joined, ("2", 2))
+
+    ds1.unpersist()
+    ds2.unpersist()
+  }
+
+  test("persist and then groupBy columns asKey, map") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    ds.persist()
+
+    val grouped = ds.groupBy($"_1").keyAs[String]
+    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
+    agged.persist()
+
+    checkAnswer(
+      agged.filter(_._1 == "b"),
+      ("b", 3))
+
+    ds.unpersist()
+    agged.unpersist()
+  }
+
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
     val grouped = ds.groupBy(v => (1, v._2))
