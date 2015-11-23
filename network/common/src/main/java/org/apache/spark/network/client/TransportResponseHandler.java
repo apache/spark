@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
   private final Queue<StreamCallback> streamCallbacks;
+  private volatile boolean streamActive;
 
   /** Records the time (in system nanoseconds) that the last fetch or RPC request was sent. */
   private final AtomicLong timeOfLastRequestNs;
@@ -87,7 +89,13 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addStreamCallback(StreamCallback callback) {
+    timeOfLastRequestNs.set(System.nanoTime());
     streamCallbacks.offer(callback);
+  }
+
+  @VisibleForTesting
+  public void deactivateStream() {
+    streamActive = false;
   }
 
   /**
@@ -177,14 +185,16 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       StreamResponse resp = (StreamResponse) message;
       StreamCallback callback = streamCallbacks.poll();
       if (callback != null) {
-        StreamInterceptor interceptor = new StreamInterceptor(resp.streamId, resp.byteCount,
+        StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
           callback);
         try {
           TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
             channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
           frameDecoder.setInterceptor(interceptor);
+          streamActive = true;
         } catch (Exception e) {
           logger.error("Error installing stream handler.", e);
+          deactivateStream();
         }
       } else {
         logger.error("Could not find callback for StreamResponse.");
@@ -208,7 +218,8 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   /** Returns total number of outstanding requests (fetch requests + rpcs) */
   public int numOutstandingRequests() {
-    return outstandingFetches.size() + outstandingRpcs.size();
+    return outstandingFetches.size() + outstandingRpcs.size() + streamCallbacks.size() +
+      (streamActive ? 1 : 0);
   }
 
   /** Returns the time in nanoseconds of when the last request was sent out. */
