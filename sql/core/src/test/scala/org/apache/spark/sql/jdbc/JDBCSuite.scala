@@ -485,10 +485,10 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(derby.getTableExistsQuery(table) == defaultQuery)
   }
 
-  test("Test DataFrame.where for Date and Timestamp ") {
+  test("Test DataFrame.where for Date and Timestamp") {
     // Regression test for bug SPARK-11788
-    val timestamp =  java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
-    val date =  java.sql.Date.valueOf("1995-01-01")
+    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
+    val date = java.sql.Date.valueOf("1995-01-01")
     val jdbcDf = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
