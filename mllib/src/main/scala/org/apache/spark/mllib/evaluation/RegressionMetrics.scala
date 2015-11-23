@@ -27,11 +27,23 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @param predictionAndObservationsWithWeight an RDD of (prediction, observation, weight) tuples.
  */
 @Since("1.2.0")
 class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+    predictionAndObservationsWithWeight: => RDD[(Double, Double, Double)]) extends Logging {
+
+  /**
+    * An auxiliary constructor taking RDD without weights of sample datasets.
+    * In this case, the default weight of each sample should be 1.0
+    * as MultivariateOnlineSummarizer do so.
+    * @param predictionAndObservation an RDD of (prediction, observation) pairs
+    */
+  def this(predictionAndObservation: RDD[(Double, Double)]) {
+    this(predictionAndObservation.map({
+      case (prediction, observation) => (prediction, observation, 1.0)
+    }))
+  }
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -39,16 +51,17 @@ class RegressionMetrics @Since("1.2.0") (
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1), 1.0)))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
    */
   private lazy val summary: MultivariateStatisticalSummary = {
-    val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
-      case (prediction, observation) => Vectors.dense(observation, observation - prediction)
+    val summary: MultivariateStatisticalSummary = predictionAndObservationsWithWeight.map {
+      case (prediction, observation, weight) =>
+        (Vectors.dense(observation, observation - prediction), weight)
     }.aggregate(new MultivariateOnlineSummarizer())(
-        (summary, v) => summary.add(v),
+        (summary, sample) => summary.add(sample._1, sample._2),
         (sum1, sum2) => sum1.merge(sum2)
       )
     summary
@@ -57,8 +70,8 @@ class RegressionMetrics @Since("1.2.0") (
   private lazy val SStot = summary.variance(0) * (summary.count - 1)
   private lazy val SSreg = {
     val yMean = summary.mean(0)
-    predictionAndObservations.map {
-      case (prediction, _) => math.pow(prediction - yMean, 2)
+    predictionAndObservationsWithWeight.map {
+      case (prediction, _, _) => math.pow(prediction - yMean, 2)
     }.sum()
   }
 
