@@ -224,7 +224,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.map { case (g, iter) => (g._1, iter.map(_._2).sum) }
+    val agged = grouped.mapGroup { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -234,7 +234,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.flatMap { case (g, iter) => Iterator(g._1, iter.map(_._2).sum.toString) }
+    val agged = grouped.flatMapGroup { case (g, iter) =>
+      Iterator(g._1, iter.map(_._2).sum.toString)
+    }
 
     checkAnswer(
       agged,
@@ -253,7 +255,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1")
-    val agged = grouped.map { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
+    val agged = grouped.mapGroup { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -262,8 +264,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1").asKey[String]
-    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+    val grouped = ds.groupBy($"_1").keyAs[String]
+    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -272,8 +274,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey tuple, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1", lit(1)).asKey[(String, Int)]
-    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+    val grouped = ds.groupBy($"_1", lit(1)).keyAs[(String, Int)]
+    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -282,8 +284,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey class, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).asKey[ClassData]
-    val agged = grouped.map { case (g, iter) => (g, iter.map(_._2).sum) }
+    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
+    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -384,7 +386,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
-  ignore("Java encoder self join") {
+  test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
@@ -393,6 +395,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("SPARK-11894: Incorrect results are returned when using null") {
+    val nullInt = null.asInstanceOf[java.lang.Integer]
+    val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+    val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2, lit(true)),
+      ((nullInt, "1"), (nullInt, "1")),
+      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
+      ((nullInt, "1"), (new java.lang.Integer(22), "2")),
+      ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
   }
 }
 

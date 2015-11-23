@@ -21,6 +21,7 @@ import java.io._
 import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
+import java.nio.channels.Channels
 import java.util.concurrent._
 import java.util.{Locale, Properties, Random, UUID}
 import javax.net.ssl.HttpsURLConnection
@@ -535,6 +536,14 @@ private[spark] object Utils extends Logging {
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     Option(uri.getScheme).getOrElse("file") match {
+      case "spark" =>
+        if (SparkEnv.get == null) {
+          throw new IllegalStateException(
+            "Cannot retrieve files with 'spark' scheme without an active SparkEnv.")
+        }
+        val source = SparkEnv.get.rpcEnv.openChannel(url)
+        val is = Channels.newInputStream(source)
+        downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {
