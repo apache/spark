@@ -128,9 +128,11 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust spark.network.timeout if this " +
               "is wrong.", address, requestTimeoutNs / 1000 / 1000);
+            client.timeOut();
             ctx.close();
           } else if (closeIdleConnections) {
             // While CloseIdleConnections is enable, we also close idle connection
+            client.timeOut();
             ctx.close();
           }
         }
