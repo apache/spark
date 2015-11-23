@@ -676,8 +676,8 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
-            names <- columns(x)
-            ncol <- length(names)
+            dtypes <- dtypes(x)
+            ncol <- length(dtypes)
             if (ncol <= 0) {
               # empty data.frame with 0 columns and 0 rows
               data.frame()
@@ -705,19 +705,17 @@ setMethod("collect",
                 # Get a column of complex type returns a list.
                 # Get a cell from a column of complex type returns a list instead of a vector.
                 col <- listCols[[colIndex]]
+                colName <- dtypes[[colIndex]][[1]]
                 if (length(col) <= 0) {
-                  df[[names[colIndex]]] <- col
+                  df[[colName]] <- col
                 } else {
-                  # TODO: more robust check on column of primitive types
-                  if (!any(sapply(col, function(e) { length(e) > 1 }))) {
+                  colType <- dtypes[[colIndex]][[2]]
+                  if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
-                    if (class(vec) != "list") {
-                      df[[names[colIndex]]] <- vec
-                    } else {
-                      df[[names[colIndex]]] <- col
-                    }
+                    stopifnot (class(vec) != "list")
+                    df[[colName]] <- vec
                   } else {
-                    df[[names[colIndex]]] <- col
+                    df[[colName]] <- col
                   }
                 }
               }
