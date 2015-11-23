@@ -606,6 +606,10 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
+    >>> model.originalMin
+    DenseVector([0.0])
+    >>> model.originalMax
+    DenseVector([2.0])
     >>> model.transform(df).show()
     +-----+------+
     |    a|scaled|
@@ -687,6 +691,22 @@ class MinMaxScalerModel(JavaModel):
 
     .. versionadded:: 1.6.0
     """
+
+    @property
+    @since("1.6.0")
+    def originalMin(self):
+        """
+        Min value for each original column during fitting.
+        """
+        return self._call_java("originalMin")
+
+    @property
+    @since("1.6.0")
+    def originalMax(self):
+        """
+        Max value for each original column during fitting.
+        """
+        return self._call_java("originalMax")
 
 
 @inherit_doc
@@ -984,18 +1004,18 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     length.
     It returns an array of strings that can be empty.
 
-    >>> df = sqlContext.createDataFrame([("a b  c",)], ["text"])
+    >>> df = sqlContext.createDataFrame([("A B  c",)], ["text"])
     >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
     >>> # Change a parameter.
     >>> reTokenizer.setParams(outputCol="tokens").transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
     >>> # Temporarily modify a parameter.
     >>> reTokenizer.transform(df, {reTokenizer.outputCol: "words"}).head()
-    Row(text=u'a b  c', words=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', words=[u'a', u'b', u'c'])
     >>> reTokenizer.transform(df).head()
-    Row(text=u'a b  c', tokens=[u'a', u'b', u'c'])
+    Row(text=u'A B  c', tokens=[u'a', u'b', u'c'])
     >>> # Must use keyword arguments to specify params.
     >>> reTokenizer.setParams("text")
     Traceback (most recent call last):
@@ -1009,26 +1029,34 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)")
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing")
+    toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
+                        "lowercase before tokenizing, default is true")
 
     @keyword_only
-    def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
+    def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
+                 outputCol=None, toLowercase=True):
         """
-        __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
+        __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
+                 outputCol=None, toLowercase=True)
         """
         super(RegexTokenizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self.minTokenLength = Param(self, "minTokenLength", "minimum token length (>= 0)")
         self.gaps = Param(self, "gaps", "whether regex splits on gaps (True) or matches tokens")
         self.pattern = Param(self, "pattern", "regex pattern (Java dialect) used for tokenizing")
-        self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+")
+        self.toLowercase = Param(self, "toLowercase", "whether to convert all characters to " +
+                                 "lowercase before tokenizing, default is true")
+        self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None):
+    def setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
+                  outputCol=None, toLowercase=True):
         """
-        setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, outputCol=None)
+        setParams(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
+                  outputCol=None, toLowercase=True)
         Sets params for this RegexTokenizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -1078,6 +1106,21 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of pattern or its default value.
         """
         return self.getOrDefault(self.pattern)
+
+    @since("1.6.0")
+    def setToLowercase(self, value):
+        """
+        Sets the value of :py:attr:`toLowercase`.
+        """
+        self._paramMap[self.toLowercase] = value
+        return self
+
+    @since("1.6.0")
+    def getToLowercase(self):
+        """
+        Gets the value of toLowercase or its default value.
+        """
+        return self.getOrDefault(self.toLowercase)
 
 
 @inherit_doc
@@ -1999,6 +2042,15 @@ class PCAModel(JavaModel):
 
     .. versionadded:: 1.5.0
     """
+
+    @property
+    @since("1.6.0")
+    def pc(self):
+        """
+        Returns a principal components Matrix.
+        Each column is one principal component.
+        """
+        return self._call_java("pc")
 
 
 @inherit_doc
