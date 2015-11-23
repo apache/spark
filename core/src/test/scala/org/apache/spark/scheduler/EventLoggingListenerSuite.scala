@@ -122,6 +122,105 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
+  test("test event logger logging executor metrics") {
+    import org.apache.spark.scheduler.cluster._
+    import org.apache.spark.ui.memory._
+    val conf = EventLoggingListenerSuite.getLoggingConf(testDirPath)
+    val eventLogger = new EventLoggingListener("test-memListener", None, testDirPath.toUri(), conf)
+    val execId = "exec-1"
+    val hostName = "host-1"
+
+    eventLogger.start()
+    eventLogger.onExecutorAdded(SparkListenerExecutorAdded(
+      0L, execId, new ExecutorInfo(hostName, 1, Map.empty)))
+
+    // stage 1 and stage 2 submitted
+    eventLogger.onStageSubmitted(MemoryListenerSuite.createStageStartEvent(1))
+    eventLogger.onStageSubmitted(MemoryListenerSuite.createStageStartEvent(2))
+    val execMetrics1 = MemoryListenerSuite.createExecutorMetrics(hostName, 1L, 20, 10)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics1))
+    val execMetrics2 = MemoryListenerSuite.createExecutorMetrics(hostName, 2L, 30, 10)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics2))
+    // stage1 completed
+    eventLogger.onStageCompleted(MemoryListenerSuite.createStageEndEvent(1))
+    // stage3 submitted
+    eventLogger.onStageSubmitted(MemoryListenerSuite.createStageStartEvent(3))
+    val execMetrics3 = MemoryListenerSuite.createExecutorMetrics(hostName, 3L, 30, 30)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics3))
+    val execMetrics4 = MemoryListenerSuite.createExecutorMetrics(hostName, 4L, 20, 25)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics4))
+    // stage 2 completed
+    eventLogger.onStageCompleted(MemoryListenerSuite.createStageEndEvent(2))
+    val execMetrics5 = MemoryListenerSuite.createExecutorMetrics(hostName, 5L, 15, 15)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics5))
+    val execMetrics6 = MemoryListenerSuite.createExecutorMetrics(hostName, 6L, 25, 10)
+    eventLogger.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
+      execId, execMetrics6))
+    // stage 3 completed
+    eventLogger.onStageCompleted(MemoryListenerSuite.createStageEndEvent(3))
+
+    eventLogger.onExecutorRemoved(SparkListenerExecutorRemoved(7L, execId, ""))
+
+    // Totally there are 15 logged events, including:
+    // 2 events of executor Added/Removed
+    // 6 events of stage Submitted/Completed
+    // 7 events of executorMetrics update (3 combined metrics and 4 original metrics)
+    assert(eventLogger.loggedEvents.size === 15)
+    eventLogger.stop()
+
+    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    val lines = readLines(logData)
+    Utils.tryWithSafeFinally {
+      // totally there are 15 lines, including SparkListenerLogStart event and 14 other events
+      assert(lines.size === 16)
+
+      // 4 executor metrics that is the latest metrics updated before stage submit and complete
+      val jsonMetrics = JsonProtocol.sparkEventFromJson(parse(lines(5)))
+      assert(Utils.getFormattedClassName(jsonMetrics) === Utils.getFormattedClassName(
+        SparkListenerExecutorMetricsUpdate))
+      val jsonMetrics2 = jsonMetrics.asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      assert((execId, (hostName, 2L, 30, 10)) === (jsonMetrics2.execId, jsonMetrics2
+        .executorMetrics.metricsDetails))
+
+      val jsonMetrics4 = JsonProtocol.sparkEventFromJson(parse(lines(7)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      val jsonMetrics6 = JsonProtocol.sparkEventFromJson(parse(lines(10)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      val jsonMetrics8 = JsonProtocol.sparkEventFromJson(parse(lines(13)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      assert((execId, (hostName, 2L, 30, 10)) === (jsonMetrics4.execId, jsonMetrics4
+        .executorMetrics.metricsDetails))
+      assert((execId, (hostName, 4L, 20, 25)) === (jsonMetrics6.execId, jsonMetrics6
+        .executorMetrics.metricsDetails))
+      assert((execId, (hostName, 6L, 25, 10)) === (jsonMetrics8.execId, jsonMetrics8
+        .executorMetrics.metricsDetails))
+
+      // 3 executor metrics that is combined metrics that updated during each time segment
+      // There is no combined metrics before "jsonMetrics4" (lines(7)) because there is no
+      // metrics update between stage 1 complete and stage 3 submit. So only the last metrics
+      // update will be logged.
+      val jsonMetrics1 = JsonProtocol.sparkEventFromJson(parse(lines(4)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      val jsonMetrics5 = JsonProtocol.sparkEventFromJson(parse(lines(9)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      val jsonMetrics7 = JsonProtocol.sparkEventFromJson(parse(lines(12)))
+        .asInstanceOf[SparkListenerExecutorMetricsUpdate]
+      assert((execId, (hostName, 2L, 30, 10)) === (jsonMetrics1.execId, jsonMetrics1
+        .executorMetrics.metricsDetails))
+      assert((execId, (hostName, 3L, 30, 30)) === (jsonMetrics5.execId, jsonMetrics5
+        .executorMetrics.metricsDetails))
+      assert((execId, (hostName, 6L, 25, 15)) === (jsonMetrics7.execId, jsonMetrics7
+        .executorMetrics.metricsDetails))
+    } {
+      logData.close()
+    }
+  }
+
   /* ----------------- *
    * Actual test logic *
    * ----------------- */

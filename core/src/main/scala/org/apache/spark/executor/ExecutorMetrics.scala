@@ -41,6 +41,12 @@ class ExecutorMetrics extends Serializable {
   private[spark] def setTransportMetrics(value: TransportMetrics) = {
     _transportMetrics = value
   }
+
+  // for test only
+  def metricsDetails = {
+    (hostname, transportMetrics.timeStamp, transportMetrics.onHeapSize,
+      transportMetrics.offHeapSize)
+  }
 }
 
 /**
