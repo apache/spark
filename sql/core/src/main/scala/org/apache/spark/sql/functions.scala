@@ -1889,7 +1889,7 @@ object functions extends LegacyFunctions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr) }
+  def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr, Literal(' ')) }
 
   /**
    * Extract a specific(idx) group identified by a java regex, from the specified string column.
@@ -1954,7 +1954,7 @@ object functions extends LegacyFunctions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def rtrim(e: Column): Column = withExpr { StringTrimRight(e.expr) }
+  def rtrim(e: Column): Column = withExpr { StringTrimRight(e.expr, Literal(' ')) }
 
   /**
    * * Return the soundex code for the specified expression.
@@ -2018,7 +2018,7 @@ object functions extends LegacyFunctions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def trim(e: Column): Column = withExpr { StringTrim(e.expr) }
+  def trim(e: Column): Column = withExpr { StringTrim(e.expr, Literal(' ')) }
 
   /**
    * Converts a string column to upper case.

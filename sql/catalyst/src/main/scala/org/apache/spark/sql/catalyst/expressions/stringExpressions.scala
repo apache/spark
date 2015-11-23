@@ -349,11 +349,11 @@ case class StringTrim(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(token: Expression) = {
-    this(token, Literal(' '.toByte))
+    this(token, Literal(' '))
   }
 
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, ByteType)
 
   protected override def nullSafeEval(token: Any, ch: Any): Any =
     token.asInstanceOf[UTF8String].trim(ch.asInstanceOf[Byte])
@@ -372,11 +372,11 @@ case class StringTrimLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(token: Expression) = {
-    this(token, Literal(' '.toByte))
+    this(token, Literal(' '))
   }
 
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, ByteType)
 
   protected override def nullSafeEval(token: Any, ch: Any): Any =
     token.asInstanceOf[UTF8String].trimLeft(ch.asInstanceOf[Byte])
@@ -395,11 +395,11 @@ case class StringTrimRight(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   def this(token: Expression) = {
-    this(token, Literal(' '.toByte))
+    this(token, Literal(' '))
   }
 
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(StringType, BinaryType)
+  override def inputTypes: Seq[DataType] = Seq(StringType, ByteType)
 
   protected override def nullSafeEval(token: Any, ch: Any): Any =
     token.asInstanceOf[UTF8String].trimRight(ch.asInstanceOf[Byte])
