@@ -74,11 +74,11 @@ class GroupedData(object):
             or a list of :class:`Column`.
 
         >>> gdf = df.groupBy(df.name)
-        >>> sorted(gdf.agg({"*": "count"}).collect(), key = lambda r: r.name)
+        >>> gdf.agg({"*": "count"}).collect()
         [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
-        >>> sorted(gdf.agg(F.min(df.age)).collect(), key = lambda r: r.name)
+        >>> gdf.agg(F.min(df.age)).collect()
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
         """
         assert exprs, "exprs should not be empty"

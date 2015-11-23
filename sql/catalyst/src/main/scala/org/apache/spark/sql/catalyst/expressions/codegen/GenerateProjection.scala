@@ -129,7 +129,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         case DoubleType =>
             s"(int)(Double.doubleToLongBits($col) ^ (Double.doubleToLongBits($col) >>> 32))"
         case BinaryType => s"java.util.Arrays.hashCode($col)"
-        case StringType => s"$col.toString().hashCode()"
         case _ => s"$col.hashCode()"
       }
       s"isNullAt($i) ? 0 : ($nonNull)"
