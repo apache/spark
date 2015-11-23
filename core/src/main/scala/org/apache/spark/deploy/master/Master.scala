@@ -260,11 +260,6 @@ private[deploy] class Master(
             assert(oldState == ExecutorState.LAUNCHING,
               s"executor $execId state transfer from $oldState to RUNNING is illegal")
             appInfo.resetRetryCount()
-          }
-
-          if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to LAUNCHING is illegal")
             exec.application.driver.send(
               ExecutorAdded(exec.id, exec.worker.id, exec.worker.hostPort, exec.cores, exec.memory))
           }
