@@ -84,7 +84,12 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .map(_.getString(0))
       .countByValue()
+    // Because we treat null label as invalid,
+    // we will always filter it out first. By the time we get to transform stage,
+    // we will look at the value of handleInvalid then either filter out invalid records,
+    // or throw an error
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+      .filterNot({ case (v) => v == null })
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
@@ -151,10 +156,16 @@ class StringIndexerModel (
     }
 
     val indexer = udf { label: String =>
-      if (labelToIndex.contains(label)) {
-        labelToIndex(label)
+      if (label == null) {
+        // The default to handle null value is to throw an error
+        throw new SparkException("The input column contains null value." +
+          " You can use StringIndexer.setHandleInvalid(\"skip\") to filter out null value.")
       } else {
-        throw new SparkException(s"Unseen label: $label.")
+        if (labelToIndex.contains(label)) {
+          labelToIndex(label)
+        } else {
+          throw new SparkException(s"Unseen label: $label.")
+        }
       }
     }
 
@@ -164,7 +175,7 @@ class StringIndexerModel (
     val filteredDataset = (getHandleInvalid) match {
       case "skip" => {
         val filterer = udf { label: String =>
-          labelToIndex.contains(label)
+          label != null
         }
         dataset.where(filterer(dataset($(inputCol))))
       }
