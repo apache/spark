@@ -39,6 +39,9 @@ import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamFailure;
+import org.apache.spark.network.protocol.StreamRequest;
+import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
@@ -80,6 +83,7 @@ public class ProtocolSuite {
     testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, 2)));
     testClientToServer(new RpcRequest(12345, new byte[0]));
     testClientToServer(new RpcRequest(12345, new byte[100]));
+    testClientToServer(new StreamRequest("abcde"));
   }
 
   @Test
@@ -92,6 +96,10 @@ public class ProtocolSuite {
     testServerToClient(new RpcResponse(12345, new byte[1000]));
     testServerToClient(new RpcFailure(0, "this is an error"));
     testServerToClient(new RpcFailure(0, ""));
+    // Note: buffer size must be "0" since StreamResponse's buffer is written differently to the
+    // channel and cannot be tested like this.
+    testServerToClient(new StreamResponse("anId", 12345L, new TestManagedBuffer(0)));
+    testServerToClient(new StreamFailure("anId", "this is an error"));
   }
 
   /**

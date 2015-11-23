@@ -36,9 +36,13 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
     extends CoarseGrainedClusterMessage
 
-  case object RegisteredExecutor extends CoarseGrainedClusterMessage
+  sealed trait RegisterExecutorResponse
+
+  case class RegisteredExecutor(hostname: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   // Executors to driver
   case class RegisterExecutor(
@@ -47,9 +51,7 @@ private[spark] object CoarseGrainedClusterMessages {
       hostPort: String,
       cores: Int,
       logUrls: Map[String, String])
-    extends CoarseGrainedClusterMessage {
-    Utils.checkHostPort(hostPort, "Expected host port")
-  }
+    extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
@@ -94,7 +96,7 @@ private[spark] object CoarseGrainedClusterMessages {
       hostToLocalTaskCount: Map[String, Int])
     extends CoarseGrainedClusterMessage
 
-  // Check if an executor was force-killed but for a normal reason.
+  // Check if an executor was force-killed but for a reason unrelated to the running tasks.
   // This could be the case if the executor is preempted, for instance.
   case class GetExecutorLossReason(executorId: String) extends CoarseGrainedClusterMessage
 
@@ -102,9 +104,5 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // Used internally by executors to shut themselves down.
   case object Shutdown extends CoarseGrainedClusterMessage
-
-  // SPARK-10987: workaround for netty RPC issue; forces a connection from the driver back
-  // to the AM.
-  case object DriverHello extends CoarseGrainedClusterMessage
 
 }

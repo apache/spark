@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import java.util
-
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.CompactBuffer
-import scala.collection.mutable
 
 /**
- * :: DeveloperApi ::
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
  * partition. The aggregates are calculated for each row in the group. Special processing
  * instructions, frames, are used to calculate these aggregates. Frames are processed in the order
@@ -76,7 +71,6 @@ import scala.collection.mutable
  * Entire Partition, Sliding, Growing & Shrinking. Boundary evaluation is also delegated to a pair
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
-@DeveloperApi
 case class Window(
     projectList: Seq[Attribute],
     windowExpression: Seq[NamedExpression],
@@ -229,7 +223,7 @@ case class Window(
     // function result buffer.
     val framedWindowExprs = windowExprs.groupBy(_.windowSpec.frameSpecification)
     val factories = Array.ofDim[() => WindowFunctionFrame](framedWindowExprs.size)
-    val unboundExpressions = mutable.Buffer.empty[Expression]
+    val unboundExpressions = scala.collection.mutable.Buffer.empty[Expression]
     framedWindowExprs.zipWithIndex.foreach {
       case ((frame, unboundFrameExpressions), index) =>
         // Track the ordinal.
@@ -253,11 +247,7 @@ case class Window(
 
         // Get all relevant projections.
         val result = createResultProjection(unboundExpressions)
-        val grouping = if (child.outputsUnsafeRows) {
-          UnsafeProjection.create(partitionSpec, child.output)
-        } else {
-          newProjection(partitionSpec, child.output)
-        }
+        val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
         // Manage the stream and the grouping.
         var nextRow: InternalRow = EmptyRow
@@ -529,7 +519,7 @@ private[execution] final class SlidingWindowFunctionFrame(
   private[this] var inputLowIndex = 0
 
   /** Buffer used for storing prepared input for the window functions. */
-  private[this] val buffer = new util.ArrayDeque[Array[AnyRef]]
+  private[this] val buffer = new java.util.ArrayDeque[Array[AnyRef]]
 
   /** Index of the row we are currently writing. */
   private[this] var outputIndex = 0

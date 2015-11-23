@@ -25,7 +25,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -38,16 +38,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
-
 /**
- * :: Experimental ::
  * Represents a random forest model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
  */
 @Since("1.2.0")
-@Experimental
 class RandomForestModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel])
@@ -108,7 +105,6 @@ object RandomForestModel extends Loader[RandomForestModel] {
 }
 
 /**
- * :: Experimental ::
  * Represents a gradient boosted trees model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
@@ -116,7 +112,6 @@ object RandomForestModel extends Loader[RandomForestModel] {
  * @param treeWeights tree ensemble weights
  */
 @Since("1.2.0")
-@Experimental
 class GradientBoostedTreesModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel],

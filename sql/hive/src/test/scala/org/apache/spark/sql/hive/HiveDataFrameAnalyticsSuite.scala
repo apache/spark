@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.scalatest.BeforeAndAfterAll
@@ -32,12 +32,16 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
   private var testData: DataFrame = _
 
   override def beforeAll() {
-    testData = Seq((1, 2), (2, 4)).toDF("a", "b")
+    testData = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
     hiveContext.registerDataFrameAsTable(testData, "mytable")
+    hiveContext.sql("create schema usrdb")
+    hiveContext.sql("create table usrdb.test(c1 int)")
   }
 
   override def afterAll(): Unit = {
     hiveContext.dropTempTable("mytable")
+    hiveContext.sql("drop table usrdb.test")
+    hiveContext.sql("drop schema usrdb")
   }
 
   test("rollup") {
@@ -52,6 +56,17 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
     )
   }
 
+  test("collect functions") {
+    checkAnswer(
+      testData.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      testData.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
+    )
+  }
+
   test("cube") {
     checkAnswer(
       testData.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
@@ -62,5 +77,11 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
       testData.cube("a", "b").agg(sum("b")),
       sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
     )
+  }
+
+  // There was a bug in DataFrameFrameReader.table and it has problem for table with schema name,
+  // Before fix, it throw Exceptionorg.apache.spark.sql.catalyst.analysis.NoSuchTableException
+  test("table name with schema") {
+    hiveContext.read.table("usrdb.test")
   }
 }

@@ -153,7 +153,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home");
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.8.2.1-src.zip",
+        s"$sparkHome/python/lib/py4j-0.9-src.zip",
         s"$sparkHome/python")
     val extraEnv = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

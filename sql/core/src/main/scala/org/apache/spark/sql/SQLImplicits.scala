@@ -24,14 +24,42 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
  */
-private[sql] abstract class SQLImplicits {
+abstract class SQLImplicits {
   protected def _sqlContext: SQLContext
+
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
+
+  /**
+   * Creates a [[Dataset]] from an RDD.
+   * @since 1.6.0
+   */
+  implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(rdd))
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 1.6.0
+   */
+  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+    DatasetHolder(_sqlContext.createDataset(s))
+  }
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[Column]].

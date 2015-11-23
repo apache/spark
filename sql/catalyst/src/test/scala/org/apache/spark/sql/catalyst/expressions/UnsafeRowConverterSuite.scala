@@ -23,7 +23,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -296,13 +296,9 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     new ArrayBasedMapData(createArray(keys: _*), createArray(values: _*))
   }
 
-  private def arraySizeInRow(numBytes: Int): Int = roundedSize(4 + numBytes)
-
-  private def mapSizeInRow(numBytes: Int): Int = roundedSize(8 + numBytes)
-
   private def testArrayInt(array: UnsafeArrayData, values: Seq[Int]): Unit = {
     assert(array.numElements == values.length)
-    assert(array.getSizeInBytes == (4 + 4) * values.length)
+    assert(array.getSizeInBytes == 4 + (4 + 4) * values.length)
     values.zipWithIndex.foreach {
       case (value, index) => assert(array.getInt(index) == value)
     }
@@ -315,7 +311,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     testArrayInt(map.keyArray, keys)
     testArrayInt(map.valueArray, values)
 
-    assert(map.getSizeInBytes == map.keyArray.getSizeInBytes + map.valueArray.getSizeInBytes)
+    assert(map.getSizeInBytes == 4 + map.keyArray.getSizeInBytes + map.valueArray.getSizeInBytes)
   }
 
   test("basic conversion with array type") {
@@ -341,10 +337,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val nestedArray = unsafeArray2.getArray(0)
     testArrayInt(nestedArray, Seq(3, 4))
 
-    assert(unsafeArray2.getSizeInBytes == 4 + (4 + nestedArray.getSizeInBytes))
+    assert(unsafeArray2.getSizeInBytes == 4 + 4 + nestedArray.getSizeInBytes)
 
-    val array1Size = arraySizeInRow(unsafeArray1.getSizeInBytes)
-    val array2Size = arraySizeInRow(unsafeArray2.getSizeInBytes)
+    val array1Size = roundedSize(unsafeArray1.getSizeInBytes)
+    val array2Size = roundedSize(unsafeArray2.getSizeInBytes)
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + array1Size + array2Size)
   }
 
@@ -384,13 +380,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       val nestedMap = valueArray.getMap(0)
       testMapInt(nestedMap, Seq(5, 6), Seq(7, 8))
 
-      assert(valueArray.getSizeInBytes == 4 + (8 + nestedMap.getSizeInBytes))
+      assert(valueArray.getSizeInBytes == 4 + 4 + nestedMap.getSizeInBytes)
     }
 
-    assert(unsafeMap2.getSizeInBytes == keyArray.getSizeInBytes + valueArray.getSizeInBytes)
+    assert(unsafeMap2.getSizeInBytes == 4 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
 
-    val map1Size = mapSizeInRow(unsafeMap1.getSizeInBytes)
-    val map2Size = mapSizeInRow(unsafeMap2.getSizeInBytes)
+    val map1Size = roundedSize(unsafeMap1.getSizeInBytes)
+    val map2Size = roundedSize(unsafeMap2.getSizeInBytes)
     assert(unsafeRow.getSizeInBytes == 8 + 8 * 2 + map1Size + map2Size)
   }
 
@@ -414,7 +410,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val innerArray = field1.getArray(0)
     testArrayInt(innerArray, Seq(1))
 
-    assert(field1.getSizeInBytes == 8 + 8 + arraySizeInRow(innerArray.getSizeInBytes))
+    assert(field1.getSizeInBytes == 8 + 8 + roundedSize(innerArray.getSizeInBytes))
 
     val field2 = unsafeRow.getArray(1)
     assert(field2.numElements == 1)
@@ -427,10 +423,10 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       assert(innerStruct.getLong(0) == 2L)
     }
 
-    assert(field2.getSizeInBytes == 4 + innerStruct.getSizeInBytes)
+    assert(field2.getSizeInBytes == 4 + 4 + innerStruct.getSizeInBytes)
 
     assert(unsafeRow.getSizeInBytes ==
-      8 + 8 * 2 + field1.getSizeInBytes + arraySizeInRow(field2.getSizeInBytes))
+      8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
   test("basic conversion with struct and map") {
@@ -453,7 +449,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val innerMap = field1.getMap(0)
     testMapInt(innerMap, Seq(1), Seq(2))
 
-    assert(field1.getSizeInBytes == 8 + 8 + mapSizeInRow(innerMap.getSizeInBytes))
+    assert(field1.getSizeInBytes == 8 + 8 + roundedSize(innerMap.getSizeInBytes))
 
     val field2 = unsafeRow.getMap(1)
 
@@ -470,13 +466,13 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       assert(innerStruct.getSizeInBytes == 8 + 8)
       assert(innerStruct.getLong(0) == 4L)
 
-      assert(valueArray.getSizeInBytes == 4 + innerStruct.getSizeInBytes)
+      assert(valueArray.getSizeInBytes == 4 + 4 + innerStruct.getSizeInBytes)
     }
 
-    assert(field2.getSizeInBytes == keyArray.getSizeInBytes + valueArray.getSizeInBytes)
+    assert(field2.getSizeInBytes == 4 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
 
     assert(unsafeRow.getSizeInBytes ==
-      8 + 8 * 2 + field1.getSizeInBytes + mapSizeInRow(field2.getSizeInBytes))
+      8 + 8 * 2 + field1.getSizeInBytes + roundedSize(field2.getSizeInBytes))
   }
 
   test("basic conversion with array and map") {
@@ -499,7 +495,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val innerMap = field1.getMap(0)
     testMapInt(innerMap, Seq(1), Seq(2))
 
-    assert(field1.getSizeInBytes == 4 + (8 + innerMap.getSizeInBytes))
+    assert(field1.getSizeInBytes == 4 + 4 + innerMap.getSizeInBytes)
 
     val field2 = unsafeRow.getMap(1)
     assert(field2.numElements == 1)
@@ -518,9 +514,9 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       assert(valueArray.getSizeInBytes == 4 + (4 + innerArray.getSizeInBytes))
     }
 
-    assert(field2.getSizeInBytes == keyArray.getSizeInBytes + valueArray.getSizeInBytes)
+    assert(field2.getSizeInBytes == 4 + keyArray.getSizeInBytes + valueArray.getSizeInBytes)
 
     assert(unsafeRow.getSizeInBytes ==
-      8 + 8 * 2 + arraySizeInRow(field1.getSizeInBytes) + mapSizeInRow(field2.getSizeInBytes))
+      8 + 8 * 2 + roundedSize(field1.getSizeInBytes) + roundedSize(field2.getSizeInBytes))
   }
 }

@@ -944,7 +944,7 @@ The three additional functions exposed by the `EdgeRDD` are:
 {% highlight scala %}
 // Transform the edge attributes while preserving the structure
 def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
-// Revere the edges reusing both attributes and structure
+// Reverse the edges reusing both attributes and structure
 def reverse: EdgeRDD[ED]
 // Join two `EdgeRDD`s partitioned using the same partitioning strategy.
 def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]

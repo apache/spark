@@ -32,6 +32,7 @@ private[mllib] trait PMMLModelExport {
   @BeanProperty
   val pmml: PMML = new PMML
 
+  pmml.setVersion("4.2")
   setHeader(pmml)
 
   private def setHeader(pmml: PMML): Unit = {

@@ -22,7 +22,7 @@ import java.util.regex.{MatchResult, Pattern}
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 

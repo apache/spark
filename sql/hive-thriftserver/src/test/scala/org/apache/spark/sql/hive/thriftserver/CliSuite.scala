@@ -27,7 +27,7 @@ import scala.concurrent.{Await, Promise}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -36,21 +36,26 @@ import org.apache.spark.{Logging, SparkFunSuite}
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
  * Hive metastore and warehouse.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     warehousePath.delete()
     metastorePath.delete()
     scratchDirPath.delete()
   }
 
-  after {
-    warehousePath.delete()
-    metastorePath.delete()
-    scratchDirPath.delete()
+  override def afterAll(): Unit = {
+    try {
+      warehousePath.delete()
+      metastorePath.delete()
+      scratchDirPath.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**
@@ -58,7 +63,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
-   *                       is taken as an immediate error condition. That is: if a line beginning
+   *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
@@ -79,6 +84,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
+         |  --driver-java-options -Dderby.system.durability=test
+         |  --conf spark.ui.enabled=false
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
@@ -104,7 +111,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         }
       } else {
         errorResponses.foreach { r =>
-          if (line.startsWith(r)) {
+          if (line.contains(r)) {
             foundAllExpectedAnswers.tryFailure(
               new RuntimeException(s"Failed with error line '$line'"))
           }
@@ -217,6 +224,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         -> "OK",
       "DROP TABLE sourceTable;"
         -> "OK"
+    )
+  }
+
+  test("SPARK-11188 Analysis error reporting") {
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("AnalysisException"))(
+      "select * from nonexistent_table;"
+        -> "Error in query: Table not found: nonexistent_table;"
     )
   }
 }

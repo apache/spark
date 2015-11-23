@@ -21,16 +21,17 @@ import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -156,7 +157,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with Logging {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -378,11 +379,17 @@ class LogisticRegression(override val uid: String)
       model.transform(dataset),
       $(probabilityCol),
       $(labelCol),
+      $(featuresCol),
       objectiveHistory)
     model.setSummary(logRegSummary)
   }
 
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
+}
+
+object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
+
+  override def load(path: String): LogisticRegression = super.load(path)
 }
 
 /**
@@ -392,10 +399,13 @@ class LogisticRegression(override val uid: String)
 @Experimental
 class LogisticRegressionModel private[ml] (
     override val uid: String,
-    val weights: Vector,
+    val coefficients: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-  with LogisticRegressionParams {
+  with LogisticRegressionParams with MLWritable {
+
+  @deprecated("Use coefficients instead.", "1.6.0")
+  def weights: Vector = coefficients
 
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
@@ -407,7 +417,7 @@ class LogisticRegressionModel private[ml] (
 
   /** Margin (rawPrediction) for class label 1.  For binary classification only. */
   private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, weights) + intercept
+    BLAS.dot(features, coefficients) + intercept
   }
 
   /** Score (probability) for class label 1.  For binary classification only. */
@@ -416,7 +426,7 @@ class LogisticRegressionModel private[ml] (
     1.0 / (1.0 + math.exp(-m))
   }
 
-  override val numFeatures: Int = weights.size
+  override val numFeatures: Int = coefficients.size
 
   override val numClasses: Int = 2
 
@@ -449,7 +459,8 @@ class LogisticRegressionModel private[ml] (
    */
   // TODO: decide on a good name before exposing to public API
   private[classification] def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
-    new BinaryLogisticRegressionSummary(this.transform(dataset), $(probabilityCol), $(labelCol))
+    new BinaryLogisticRegressionSummary(
+      this.transform(dataset), $(probabilityCol), $(labelCol), $(featuresCol))
   }
 
   /**
@@ -483,7 +494,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def copy(extra: ParamMap): LogisticRegressionModel = {
-    val newModel = copyValues(new LogisticRegressionModel(uid, weights, intercept), extra)
+    val newModel = copyValues(new LogisticRegressionModel(uid, coefficients, intercept), extra)
     if (trainingSummary.isDefined) newModel.setSummary(trainingSummary.get)
     newModel.setParent(parent)
   }
@@ -505,7 +516,76 @@ class LogisticRegressionModel private[ml] (
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.
     if (probability(1) > getThreshold) 1 else 0
   }
+
+  /**
+   * Returns a [[MLWriter]] instance for this ML instance.
+   *
+   * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
+   * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
+   */
+  @Since("1.6.0")
+  override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
+
+
+@Since("1.6.0")
+object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LogisticRegressionModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[LogisticRegressionModel]] */
+  private[LogisticRegressionModel]
+  class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
+    extends MLWriter with Logging {
+
+    private case class Data(
+        numClasses: Int,
+        numFeatures: Int,
+        intercept: Double,
+        coefficients: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: numClasses, numFeatures, intercept, coefficients
+      val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
+        instance.coefficients)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class LogisticRegressionModelReader
+    extends MLReader[LogisticRegressionModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[LogisticRegressionModel].getName
+
+    override def load(path: String): LogisticRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+      // We will need numClasses, numFeatures in the future for multinomial logreg support.
+      // val numClasses = data.getInt(0)
+      // val numFeatures = data.getInt(1)
+      val intercept = data.getDouble(2)
+      val coefficients = data.getAs[Vector](3)
+      val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+}
+
 
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
@@ -528,7 +608,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
    * @return This MultilabelSummarizer
    */
   def add(label: Double, weight: Double = 1.0): this.type = {
-    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
     if (weight == 0.0) return this
 
@@ -611,8 +691,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /** Field in "predictions" which gives the calibrated probability of each instance as a vector. */
   def probabilityCol: String
 
-  /** Field in "predictions" which gives the the true label of each instance. */
+  /** Field in "predictions" which gives the true label of each instance. */
   def labelCol: String
+
+  /** Field in "predictions" which gives the features of each instance as a vector. */
+  def featuresCol: String
 
 }
 
@@ -623,6 +706,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Experimental
@@ -630,8 +714,9 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
     predictions: DataFrame,
     probabilityCol: String,
     labelCol: String,
+    featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol)
+  extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {
 
 }
@@ -643,12 +728,14 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * @param probabilityCol field in "predictions" which gives the calibrated probability of
  *                       each instance.
  * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
 @Experimental
 class BinaryLogisticRegressionSummary private[classification] (
     @transient override val predictions: DataFrame,
     override val probabilityCol: String,
-    override val labelCol: String) extends LogisticRegressionSummary {
+    override val labelCol: String,
+    override val featuresCol: String) extends LogisticRegressionSummary {
 
   private val sqlContext = predictions.sqlContext
   import sqlContext.implicits._
@@ -757,7 +844,7 @@ private class LogisticAggregator(
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 

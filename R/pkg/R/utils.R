@@ -605,3 +605,34 @@ structToList <- function(struct) {
   class(struct) <- "list"
   struct
 }
+
+# Convert a named list to an environment to be passed to JVM
+convertNamedListToEnv <- function(namedList) {
+  # Make sure each item in the list has a name
+  names <- names(namedList)
+  stopifnot(
+    if (is.null(names)) {
+      length(namedList) == 0
+    } else {
+      !any(is.na(names))
+    })
+
+  env <- new.env()
+  for (name in names) {
+    env[[name]] <- namedList[[name]]
+  }
+  env
+}
+
+# Assign a new environment for attach() and with() methods
+assignNewEnv <- function(data) {
+  stopifnot(class(data) == "DataFrame")
+  cols <- columns(data)
+  stopifnot(length(cols) > 0)
+
+  env <- new.env()
+  for (i in 1:length(cols)) {
+    assign(x = cols[i], value = data[, cols[i]], envir = env)
+  }
+  env
+}

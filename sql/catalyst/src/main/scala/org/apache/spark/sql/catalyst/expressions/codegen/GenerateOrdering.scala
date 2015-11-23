@@ -126,7 +126,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           ${initMutableStates(ctx)}
         }
 
-        @Override
         public int compare(InternalRow a, InternalRow b) {
           InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
           $comparisons

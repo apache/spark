@@ -88,8 +88,8 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, s: InputSplit)
  *
  * @param sc The SparkContext to associate the RDD with.
  * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
- *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
- *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
+ *   variable references an instance of JobConf, then that JobConf will be used for the Hadoop job.
+ *   Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
  * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
  *     creates.
  * @param inputFormatClass Storage format of the data to be read.
@@ -123,7 +123,7 @@ class HadoopRDD[K, V](
       sc,
       sc.broadcast(new SerializableConfiguration(conf))
         .asInstanceOf[Broadcast[SerializableConfiguration]],
-      None /* initLocalJobConfFuncOpt */,
+      initLocalJobConfFuncOpt = None,
       inputFormatClass,
       keyClass,
       valueClass,
@@ -184,8 +184,9 @@ class HadoopRDD[K, V](
   protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
     val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    if (newInputFormat.isInstanceOf[Configurable]) {
-      newInputFormat.asInstanceOf[Configurable].setConf(conf)
+    newInputFormat match {
+      case c: Configurable => c.setConf(conf)
+      case _ =>
     }
     newInputFormat
   }
@@ -195,9 +196,6 @@ class HadoopRDD[K, V](
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
     val inputFormat = getInputFormat(jobConf)
-    if (inputFormat.isInstanceOf[Configurable]) {
-      inputFormat.asInstanceOf[Configurable].setConf(jobConf)
-    }
     val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
@@ -214,6 +212,12 @@ class HadoopRDD[K, V](
       val jobConf = getJobConf()
 
       val inputMetrics = context.taskMetrics.getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+
+      // Sets the thread local variable for the file's name
+      split.inputSplit.value match {
+        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
+        case _ => SqlNewHadoopRDDState.unsetInputFileName()
+      }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
@@ -251,8 +255,22 @@ class HadoopRDD[K, V](
       }
 
       override def close() {
-        try {
-          reader.close()
+        if (reader != null) {
+          SqlNewHadoopRDDState.unsetInputFileName()
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
+            reader.close()
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
+              }
+          } finally {
+            reader = null
+          }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
@@ -264,12 +282,6 @@ class HadoopRDD[K, V](
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
-            }
-          }
-        } catch {
-          case e: Exception => {
-            if (!ShutdownHookManager.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
             }
           }
         }

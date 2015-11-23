@@ -72,6 +72,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setImpurity("gini")
       .setMaxDepth(2)
       .setMaxBins(100)
+      .setSeed(1)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)

@@ -594,11 +594,17 @@ class DAGSchedulerSuite
    * @param stageId - The current stageId
    * @param attemptIdx - The current attempt count
    */
-  private def completeNextResultStageWithSuccess(stageId: Int, attemptIdx: Int): Unit = {
+  private def completeNextResultStageWithSuccess(
+      stageId: Int,
+      attemptIdx: Int,
+      partitionToResult: Int => Int = _ => 42): Unit = {
     val stageAttempt = taskSets.last
     checkStageId(stageId, attemptIdx, stageAttempt)
     assert(scheduler.stageIdToStage(stageId).isInstanceOf[ResultStage])
-    complete(stageAttempt, stageAttempt.tasks.zipWithIndex.map(_ => (Success, 42)).toSeq)
+    val taskResults = stageAttempt.tasks.zipWithIndex.map { case (task, idx) =>
+      (Success, partitionToResult(idx))
+    }
+    complete(stageAttempt, taskResults.toSeq)
   }
 
   /**
@@ -1055,6 +1061,47 @@ class DAGSchedulerSuite
   }
 
   /**
+   * Run two jobs, with a shared dependency.  We simulate a fetch failure in the second job, which
+   * requires regenerating some outputs of the shared dependency.  One key aspect of this test is
+   * that the second job actually uses a different stage for the shared dependency (a "skipped"
+   * stage).
+   */
+  test("shuffle fetch failure in a reused shuffle dependency") {
+    // Run the first job successfully, which creates one shuffle dependency
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+    assertDataStructuresEmpty()
+
+    // submit another job w/ the shared dependency, and have a fetch failure
+    val reduce2 = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduce2, Array(0, 1))
+    // Note that the stage numbering here is only b/c the shared dependency produces a new, skipped
+    // stage.  If instead it reused the existing stage, then this would be stage 2
+    completeNextStageWithFetchFailure(3, 0, shuffleDep)
+    scheduler.resubmitFailedStages()
+
+    // the scheduler now creates a new task set to regenerate the missing map output, but this time
+    // using a different stage, the "skipped" one
+
+    // SPARK-9809 -- this stage is submitted without a task for each partition (because some of
+    // the shuffle map output is still available from stage 0); make sure we've still got internal
+    // accumulators setup
+    assert(scheduler.stageIdToStage(2).internalAccumulators.nonEmpty)
+    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
+    assert(results === Map(0 -> 1234, 1 -> 1235))
+
+    assertDataStructuresEmpty()
+  }
+
+  /**
    * This test runs a three stage job, with a fetch failure in stage 1.  but during the retry, we
    * have completions from both the first & second attempt of stage 1.  So all the map output is
    * available before we finish any task set for stage 1.  We want to make sure that we don't
@@ -1062,10 +1109,10 @@ class DAGSchedulerSuite
    */
   test("don't submit stage until its dependencies map outputs are registered (SPARK-5259)") {
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
     val firstShuffleId = firstShuffleDep.shuffleId
     val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
 
@@ -1175,7 +1222,7 @@ class DAGSchedulerSuite
    */
   test("register map outputs correctly after ExecutorLost and task Resubmitted") {
     val firstRDD = new MyRDD(sc, 3, Nil)
-    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
     val reduceRdd = new MyRDD(sc, 5, List(firstShuffleDep))
     submit(reduceRdd, Array(0))
 
@@ -1375,18 +1422,27 @@ class DAGSchedulerSuite
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 
+  /**
+   * The job will be failed on first task throwing a DAGSchedulerSuiteDummyException.
+   *  Any subsequent task WILL throw a legitimate java.lang.UnsupportedOperationException.
+   *  If multiple tasks, there exists a race condition between the SparkDriverExecutionExceptions
+   *  and their differing causes as to which will represent result for job...
+   */
   test("misbehaved resultHandler should not crash DAGScheduler and SparkContext") {
     val e = intercept[SparkDriverExecutionException] {
+      // Number of parallelized partitions implies number of tasks of job
       val rdd = sc.parallelize(1 to 10, 2)
       sc.runJob[Int, Int](
         rdd,
         (context: TaskContext, iter: Iterator[Int]) => iter.size,
-        Seq(0, 1),
+        // For a robust test assertion, limit number of job tasks to 1; that is,
+        // if multiple RDD partitions, use id of any one partition, say, first partition id=0
+        Seq(0),
         (part: Int, result: Int) => throw new DAGSchedulerSuiteDummyException)
     }
     assert(e.getCause.isInstanceOf[DAGSchedulerSuiteDummyException])
 
-    // Make sure we can still run commands
+    // Make sure we can still run commands on our SparkContext
     assert(sc.parallelize(1 to 10, 2).count() === 10)
   }
 

@@ -52,7 +52,7 @@ private[kafka] class KafkaTestUtils extends Logging {
   // Zookeeper related configurations
   private val zkHost = "localhost"
   private var zkPort: Int = 0
-  private val zkConnectionTimeout = 6000
+  private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 6000
 
   private var zookeeper: EmbeddedZookeeper = _

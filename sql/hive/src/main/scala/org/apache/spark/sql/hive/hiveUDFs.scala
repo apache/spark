@@ -41,21 +41,31 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.sql.types._
 
 
-private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
+private[hive] class HiveFunctionRegistry(
+    underlying: analysis.FunctionRegistry,
+    executionHive: ClientWrapper)
   extends analysis.FunctionRegistry with HiveInspectors {
 
-  def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
+  def getFunctionInfo(name: String): FunctionInfo = {
+    // Hive Registry need current database to lookup function
+    // TODO: the current database of executionHive should be consistent with metadataHive
+    executionHive.withHiveState {
+      FunctionRegistry.getFunctionInfo(name)
+    }
+  }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     Try(underlying.lookupFunction(name, children)).getOrElse {
       // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
       // not always serializable.
       val functionInfo: FunctionInfo =
-        Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+        Option(getFunctionInfo(name.toLowerCase)).getOrElse(
           throw new AnalysisException(s"undefined function $name"))
 
       val functionClassName = functionInfo.getFunctionClass.getName
@@ -64,7 +74,10 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
       // don't satisfy the hive UDF, such as type mismatch, input number mismatch, etc. Here we
       // catch the exception and throw AnalysisException instead.
       try {
-        if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
+        if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
+          HiveGenericUDF(
+            new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
+        } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveSimpleUDF(new HiveFunctionWrapper(functionClassName), children)
         } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveGenericUDF(new HiveFunctionWrapper(functionClassName), children)
@@ -106,7 +119,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     underlying.lookupFunction(name).orElse(
     Try {
-      val info = FunctionRegistry.getFunctionInfo(name)
+      val info = getFunctionInfo(name)
       val annotation = info.getFunctionClass.getAnnotation(classOf[Description])
       if (annotation != null) {
         Some(new ExpressionInfo(
@@ -115,7 +128,11 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
           annotation.value(),
           annotation.extended()))
       } else {
-        None
+        Some(new ExpressionInfo(
+          info.getFunctionClass.getCanonicalName,
+          name,
+          null,
+          null))
       }
     }.getOrElse(None))
   }
@@ -503,7 +520,7 @@ private[hive] case class HiveGenericUDTF(
   protected lazy val collector = new UDTFCollector
 
   override lazy val elementTypes = outputInspector.getAllStructFieldRefs.asScala.map {
-    field => (inspectorToDataType(field.getFieldObjectInspector), true)
+    field => (inspectorToDataType(field.getFieldObjectInspector), true, field.getFieldName)
   }
 
   @transient
@@ -553,10 +570,16 @@ private[hive] case class HiveGenericUDTF(
 private[hive] case class HiveUDAFFunction(
     funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression],
-    isUDAFBridgeRequired: Boolean = false)
+    isUDAFBridgeRequired: Boolean = false,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate with HiveInspectors {
 
-  def this() = this(null, null)
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+    copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   @transient
   private lazy val resolver =
@@ -614,7 +637,11 @@ private[hive] case class HiveUDAFFunction(
     buffer = function.getNewAggregationBuffer
   }
 
-  override def aggBufferAttributes: Seq[AttributeReference] = Nil
+  override val aggBufferAttributes: Seq[AttributeReference] = Nil
+
+  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
+  // in the superclass because that will lead to initialization ordering issues.
+  override val inputAggBufferAttributes: Seq[AttributeReference] = Nil
 
   // We rely on Hive to check the input data types, so use `AnyDataType` here to bypass our
   // catalyst type checking framework.

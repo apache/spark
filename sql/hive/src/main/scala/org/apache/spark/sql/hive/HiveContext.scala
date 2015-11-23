@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
@@ -35,7 +36,6 @@ import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.SQLConf.SQLConfEntry._
@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.{InternalRow, ParserDialect, SqlParser}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck}
+import org.apache.spark.sql.execution.datasources.{ResolveDataSource, DataSourceStrategy, PreInsertCastAndRename, PreWriteCheck}
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.execution.{CacheManager, ExecutedCommand, ExtractPythonUDFs, SetCommand}
 import org.apache.spark.sql.hive.client._
@@ -89,9 +89,9 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
 class HiveContext private[hive](
     sc: SparkContext,
     cacheManager: CacheManager,
-    @transient listener: SQLListener,
-    @transient execHive: ClientWrapper,
-    @transient metaHive: ClientInterface,
+    listener: SQLListener,
+    @transient private val execHive: ClientWrapper,
+    @transient private val metaHive: ClientInterface,
     isRootContext: Boolean)
   extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
@@ -189,6 +189,9 @@ class HiveContext private[hive](
    * hive thrift server use background spark sql thread pool to execute sql queries
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
+
+  protected[hive] def hiveThriftServerSingleSession: Boolean =
+    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -309,7 +312,8 @@ class HiveContext private[hive](
           .map(_.toURI.toURL)
 
       logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using $jars")
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
+          s"using ${jars.mkString(":")}")
       new IsolatedClientLoader(
         version = metaVersion,
         execJars = jars.toSeq,
@@ -355,10 +359,9 @@ class HiveContext private[hive](
    *
    * @since 1.2.0
    */
-  @Experimental
   def analyze(tableName: String) {
     val tableIdent = SqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent.toSeq))
+    val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -454,7 +457,7 @@ class HiveContext private[hive](
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
   override protected[sql] lazy val functionRegistry: FunctionRegistry =
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy())
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), this.executionHive)
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
   // can't access the SessionState of metadataHive.
@@ -473,7 +476,7 @@ class HiveContext private[hive](
         ExtractPythonUDFs ::
         ResolveHiveWindowFunction ::
         PreInsertCastAndRename ::
-        Nil
+        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(
         PreWriteCheck(catalog)
@@ -554,12 +557,6 @@ class HiveContext private[hive](
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  protected[sql] override def dialectClassName = if (conf.dialect == "hiveql") {
-    classOf[HiveQLDialect].getCanonicalName
-  } else {
-    super.dialectClassName
-  }
-
   protected[sql] override def getSQLDialect(): ParserDialect = {
     if (conf.dialect == "hiveql") {
       new HiveQLDialect(this)
@@ -582,20 +579,24 @@ class HiveContext private[hive](
       HiveTableScans,
       DataSinks,
       Scripts,
-      HashAggregation,
       Aggregation,
       LeftSemiJoin,
       EquiJoinSelection,
       BasicOperators,
+      BroadcastNestedLoop,
       CartesianProduct,
-      BroadcastNestedLoopJoin
+      DefaultJoin
     )
   }
 
+  private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
+    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
+
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
-    if (sql.toLowerCase.contains("create temporary function")) {
+    val command = sql.trim.toLowerCase
+    if (functionOrMacroDDLPattern(command).matches()) {
       executionHive.runSqlHive(sql)
-    } else if (sql.trim.toLowerCase.startsWith("set")) {
+    } else if (command.startsWith("set")) {
       metadataHive.runSqlHive(sql)
       executionHive.runSqlHive(sql)
     } else {
@@ -725,7 +726,8 @@ private[hive] object HiveContext {
     // We have to mask all properties in hive-site.xml that relates to metastore data source
     // as we used a local metastore here.
     HiveConf.ConfVars.values().foreach { confvar =>
-      if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")) {
+      if (confvar.varname.contains("datanucleus") || confvar.varname.contains("jdo")
+        || confvar.varname.contains("hive.metastore.rawstore.impl")) {
         propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }

@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, InsertIntoTable}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -167,15 +167,36 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    val partitions = partitioningColumns.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
+
+    // A partitioned relation's schema can be different from the input logicalPlan, since
+    // partition columns are all moved after data columns. We Project to adjust the ordering.
+    // TODO: this belongs to the analyzer.
+    val input = normalizedParCols.map { parCols =>
+      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
+        parCols.contains(attr.name)
+      }
+      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
+    }.getOrElse(df.logicalPlan)
+
     df.sqlContext.executePlan(
       InsertIntoTable(
-        UnresolvedRelation(tableIdent.toSeq),
+        UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        df.logicalPlan,
+        input,
         overwrite,
         ifNotExists = false)).toRdd
+  }
+
+  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
+    parCols.map { col =>
+      df.logicalPlan.output
+        .map(_.name)
+        .find(df.sqlContext.analyzer.resolver(_, col))
+        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
+          s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+    }
   }
 
   /**
@@ -201,7 +222,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent.toSeq)
+    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -244,6 +265,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
+   *
+   * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     val props = new Properties()
@@ -274,7 +297,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
-        conn.prepareStatement(sql).executeUpdate()
+        conn.createStatement.executeUpdate(sql)
       }
     } finally {
       conn.close()
@@ -316,6 +339,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @note Currently, this method can only be used together with `HiveContext`.
    */
   def orc(path: String): Unit = format("orc").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in a text file at the specified path.
+   * The DataFrame must have only one column that is of string type.
+   * Each row becomes a new line in the output file. For example:
+   * {{{
+   *   // Scala:
+   *   df.write.text("/path/to/output")
+   *
+   *   // Java:
+   *   df.write().text("/path/to/output")
+   * }}}
+   *
+   * @since 1.6.0
+   */
+  def text(path: String): Unit = format("text").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

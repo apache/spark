@@ -17,10 +17,11 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer, SynchronizedMap}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import org.apache.spark.SparkException
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
@@ -161,6 +162,14 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     }
   }
 
+  test("don't call ssc.stop in listener") {
+    ssc = new StreamingContext("local[2]", "ssc", Milliseconds(1000))
+    val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
+    inputStream.foreachRDD(_.count)
+
+    startStreamingContextAndCallStop(ssc)
+  }
+
   test("onBatchCompleted with successful batch") {
     ssc = new StreamingContext("local[2]", "test", Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
@@ -207,6 +216,17 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
     assert(failureReasons(1).contains("This is another failed job"))
   }
 
+  private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {
+    val contextStoppingCollector = new StreamingContextStoppingCollector(_ssc)
+    _ssc.addStreamingListener(contextStoppingCollector)
+    val batchCounter = new BatchCounter(_ssc)
+    _ssc.start()
+    // Make sure running at least one batch
+    batchCounter.waitUntilBatchesCompleted(expectedNumCompletedBatches = 1, timeout = 10000)
+    _ssc.stop()
+    assert(contextStoppingCollector.sparkExSeen)
+  }
+
   private def startStreamingContextAndCollectFailureReasons(
       _ssc: StreamingContext, isFailed: Boolean = false): Map[Int, String] = {
     val failureReasonsCollector = new FailureReasonsCollector()
@@ -221,7 +241,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     _ssc.stop()
-    failureReasonsCollector.failureReasons
+    failureReasonsCollector.failureReasons.toMap
   }
 
   /** Check if a sequence of numbers is in increasing order */
@@ -307,14 +327,30 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
 }
 
 /**
- * A StreamingListener that saves the latest `failureReasons` in `BatchInfo` to the `failureReasons`
- * field.
+ * A StreamingListener that saves all latest `failureReasons` in a batch.
  */
 class FailureReasonsCollector extends StreamingListener {
 
-  @volatile var failureReasons: Map[Int, String] = null
+  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String]
 
-  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
-    failureReasons = batchCompleted.batchInfo.failureReasons
+  override def onOutputOperationCompleted(
+      outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
+    outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
+      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+    }
+  }
+}
+/**
+ * A StreamingListener that calls StreamingContext.stop().
+ */
+class StreamingContextStoppingCollector(val ssc: StreamingContext) extends StreamingListener {
+  @volatile var sparkExSeen = false
+  override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) {
+    try {
+      ssc.stop()
+    } catch {
+      case se: SparkException =>
+        sparkExSeen = true
+    }
   }
 }

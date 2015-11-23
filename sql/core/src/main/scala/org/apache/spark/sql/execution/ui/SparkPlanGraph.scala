@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 private[ui] case class SparkPlanGraph(
     nodes: Seq[SparkPlanGraphNode], edges: Seq[SparkPlanGraphEdge]) {
 
-  def makeDotFile(metrics: Map[Long, Any]): String = {
+  def makeDotFile(metrics: Map[Long, String]): String = {
     val dotFile = new StringBuilder
     dotFile.append("digraph G {\n")
     nodes.foreach(node => dotFile.append(node.makeDotNode(metrics) + "\n"))
@@ -87,7 +87,7 @@ private[sql] object SparkPlanGraph {
 private[ui] case class SparkPlanGraphNode(
     id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
 
-  def makeDotNode(metricsValue: Map[Long, Any]): String = {
+  def makeDotNode(metricsValue: Map[Long, String]): String = {
     val values = {
       for (metric <- metrics;
            value <- metricsValue.get(metric.accumulatorId)) yield {

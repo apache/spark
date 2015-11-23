@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveContext}
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
@@ -38,18 +39,18 @@ private[hive] case class CreateViewAsSelect(
   assert(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   assert(tableDesc.viewText.isDefined)
 
+  val tableIdentifier = TableIdentifier(tableDesc.name, Some(tableDesc.database))
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val database = tableDesc.database
-    val viewName = tableDesc.name
 
-    if (hiveContext.catalog.tableExists(Seq(database, viewName))) {
+    if (hiveContext.catalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
         // view already exists, will do nothing, to keep consistent with Hive
       } else if (orReplace) {
         hiveContext.catalog.client.alertView(prepareTable())
       } else {
-        throw new AnalysisException(s"View $database.$viewName already exists. " +
+        throw new AnalysisException(s"View $tableIdentifier already exists. " +
           "If you want to update the view definition, please use ALTER VIEW AS or " +
           "CREATE OR REPLACE VIEW AS")
       }
