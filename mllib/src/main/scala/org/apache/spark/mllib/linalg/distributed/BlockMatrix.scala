@@ -319,15 +319,16 @@ class BlockMatrix @Since("1.3.0") (
   /**
    * For given matrices `this` and `other` of compatible dimensions and compatible block dimensions,
    * it applies an associative binary function on their corresponding blocks.
-   * 
+   *
    * @param other The BlockMatrix to operate on
-   * @param f An associative function taking two dense breeze matrices and returning
-   *          one dense breeze matrix
-   * @return A [[BlockMatrix]] whose blocks are the results of the specified binary map f on blocks
+   * @param binMap An associative function taking two dense breeze matrices and returning one
+   *               dense breeze matrix
+   * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
    *         of `this` and `other`.
    */
-  private[mllib] def blockMap(other: BlockMatrix,
-                                f: (BDM[Double], BDM[Double]) => BDM[Double]): BlockMatrix = {
+  private[mllib] def blockMap(
+      other: BlockMatrix,
+      binMap: (BDM[Double], BDM[Double]) => BDM[Double]): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
     require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
@@ -344,7 +345,7 @@ class BlockMatrix @Since("1.3.0") (
         } else if (b.isEmpty) {
           new MatrixBlock((blockRowIndex, blockColIndex), a.head)
         } else {
-          val result = f(a.head.toBreeze(), b.head.toBreeze())
+          val result = binMap(a.head.toBreeze(), b.head.toBreeze())
           new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
         }
       }
