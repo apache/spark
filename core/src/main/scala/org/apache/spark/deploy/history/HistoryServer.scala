@@ -193,24 +193,19 @@ class HistoryServer(
   def getProviderConfig(): Map[String, String] = provider.getConfig()
 
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
-    try {
-      val app_attempt_id = appId + attemptId.map { id => s"_$id" }.getOrElse("")
-      if (!loadedAppStatus.get(app_attempt_id).isDefined) {
-        loadedAppStatus.put(app_attempt_id, provider.getAppStatus(app_attempt_id))
-        appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
-      } else if (!loadedAppStatus.get(app_attempt_id).get) {
-        loadedAppStatus.update(app_attempt_id, provider.getAppStatus(app_attempt_id))
-        appCache.refresh(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
-      }
-      true
-    } catch {
-      case e: Exception => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          false
+    val app_attempt_id = appId + attemptId.map { id => s"/$id" }.getOrElse("")
+    loadedAppStatus.get(app_attempt_id) match {
+      case None =>
+        loadedAppStatus.put(app_attempt_id, provider.isCompleted(appId, attemptId))
+        appCache.refresh(app_attempt_id)
 
-        case cause: Exception => throw cause
-      }
+      case Some(false) =>
+        loadedAppStatus.update(app_attempt_id, provider.isCompleted(appId, attemptId))
+        appCache.refresh(app_attempt_id)
+
+      case Some(true) => // attempt has completed
     }
+    true
   }
 
 }
