@@ -226,12 +226,12 @@ class MemoryListenerSuite extends SparkFunSuite with LocalSparkContext {
 }
 
 object MemoryListenerSuite {
-  def createStageStartEvent(stageId: Int) = {
+  def createStageStartEvent(stageId: Int): SparkListenerStageSubmitted = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, Seq.empty, Seq.empty, "")
     SparkListenerStageSubmitted(stageInfo)
   }
 
-  def createStageEndEvent(stageId: Int, failed: Boolean = false) = {
+  def createStageEndEvent(stageId: Int, failed: Boolean = false): SparkListenerStageCompleted = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, Seq.empty, Seq.empty, "")
     if (failed) {
       stageInfo.failureReason = Some("Failed!")
@@ -241,7 +241,7 @@ object MemoryListenerSuite {
 
   def createExecutorMetricsUpdateEvent(
       execId: String,
-      executorMetrics: ExecutorMetrics) = {
+      executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
     SparkListenerExecutorMetricsUpdate(execId, executorMetrics, Seq.empty)
   }
 

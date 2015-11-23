@@ -43,7 +43,7 @@ class ExecutorMetrics extends Serializable {
   }
 
   // for test only
-  def metricsDetails = {
+  def metricsDetails: (String, Long, Long, Long) = {
     (hostname, transportMetrics.timeStamp, transportMetrics.onHeapSize,
       transportMetrics.offHeapSize)
   }
