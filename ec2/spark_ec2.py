@@ -595,7 +595,7 @@ def launch_cluster(conn, opts, cluster_name):
             dev = BlockDeviceType()
             dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
-            name = '/dev/sd' + string.letters[i + 1]
+            name = '/dev/sd' + string.ascii_letters[i + 1]
             block_map[name] = dev
 
     # Launch slaves
