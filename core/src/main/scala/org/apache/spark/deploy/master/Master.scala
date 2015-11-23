@@ -257,19 +257,19 @@ private[deploy] class Master(
           exec.state = state
 
           if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LOADING,
+            assert(oldState == ExecutorState.LAUNCHING,
               s"executor $execId state transfer from $oldState to RUNNING is illegal")
             appInfo.resetRetryCount()
           }
 
-          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
-
-          if (state == ExecutorState.LOADING) {
+          if (state == ExecutorState.RUNNING) {
             assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to LOADING is illegal")
+              s"executor $execId state transfer from $oldState to LAUNCHING is illegal")
             exec.application.driver.send(
               ExecutorAdded(exec.id, exec.worker.id, exec.worker.hostPort, exec.cores, exec.memory))
           }
+
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
 
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
