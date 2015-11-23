@@ -42,6 +42,7 @@ private[hive] case class HiveStorageDescriptor(
 
 private[hive] case class HivePartition(
     values: Seq[String],
+    properties: Map[String, String],
     storage: HiveStorageDescriptor)
 
 private[hive] case class HiveColumn(name: String, @Nullable hiveType: String, comment: String)

@@ -198,6 +198,12 @@ class HiveContext private[hive](
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
+  /*
+   * Calculate table statistics in runtime if needed.
+   */
+  protected[hive] def hiveCalculateStatsRuntime: Boolean =
+    getConf(HIVE_TABLE_CALCULATE_STATS_RUNTIME)
+
   protected[hive] def hiveThriftServerSingleSession: Boolean =
     sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
 
@@ -749,7 +755,11 @@ private[hive] object HiveContext {
 
   val HIVE_THRIFT_SERVER_ASYNC = booleanConf("spark.sql.hive.thriftServer.async",
     defaultValue = Some(true),
-    doc = "TODO")
+    doc = "hive thrift server use background spark sql thread pool to execute sql queries.")
+
+  val HIVE_TABLE_CALCULATE_STATS_RUNTIME = booleanConf("spark.sql.hive.calulcate.stats.runtime",
+    defaultValue = Some(false),
+    doc = "Calculate table statistics in runtime if needed.")
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(): Map[String, String] = {

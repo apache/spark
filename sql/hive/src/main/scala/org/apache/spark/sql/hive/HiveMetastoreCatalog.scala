@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.common.StatsSetupConst._
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -770,8 +772,6 @@ private[hive] case class MetastoreRelation
 
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-      val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.  An
@@ -782,10 +782,7 @@ private[hive] case class MetastoreRelation
         // When table is external,`totalSize` is always zero, which will influence join strategy
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we use default size
-        Option(totalSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(calculateInput().getLength).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes))))
+        calculateInput().filter(_ > 0).getOrElse(sqlContext.conf.defaultSizeInBytes))
     }
   )
 
@@ -820,6 +817,7 @@ private[hive] case class MetastoreRelation
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
       tPartition.setValues(p.values.asJava)
+      tPartition.setParameters(p.properties.asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
@@ -860,7 +858,19 @@ private[hive] case class MetastoreRelation
     }
   }
 
-  private def calculateInput(): ContentSummary = {
+  private def calculateInput(): Option[Long] = {
+    var partitions: Seq[Partition] = Nil
+    if (hiveQlTable.isPartitioned) {
+      partitions = getHiveQlPartitions(pruningPredicates)
+    }
+
+    // try with stats in table/partition properties
+    val fromStats = getFromStats(hiveQlTable, partitions, TOTAL_SIZE).orElse(
+                    getFromStats(hiveQlTable, partitions, RAW_DATA_SIZE))
+    if (fromStats.isDefined || !sqlContext.hiveCalculateStatsRuntime) {
+      return fromStats
+    }
+
     // create dummy mapwork
     val dummy: MapWork = new MapWork
     val alias: String = "_dummy"
@@ -870,7 +880,7 @@ private[hive] case class MetastoreRelation
     val pathToAliases = dummy.getPathToAliases
     val pathToPartition = dummy.getPathToPartitionInfo
     if (hiveQlTable.isPartitioned) {
-      for (partition <- getHiveQlPartitions(pruningPredicates)) {
+      for (partition <- partitions) {
         val partPath = getDnsPath(partition.getDataLocation, sqlContext.hiveconf).toString
         pathToAliases.put(partPath, new util.ArrayList(util.Arrays.asList(alias)))
         pathToPartition.put(partPath, new PartitionDesc(partition, tableDesc))
@@ -881,7 +891,24 @@ private[hive] case class MetastoreRelation
       pathToPartition.put(tablePath, new PartitionDesc(tableDesc, null))
     }
     // calculate summary
-    Utilities.getInputSummary(new Context(sqlContext.hiveconf), dummy, null)
+    Some(Utilities.getInputSummary(new Context(sqlContext.hiveconf), dummy, null).getLength)
+  }
+
+  private def getFromStats(table: Table, partitions: Seq[Partition], statKey: String):
+      Option[Long] = {
+    if (table.isPartitioned) {
+      var totalSize: Long = 0
+      for (partition <- partitions) {
+        val partSize = Option(partition.getParameters.get(statKey)).map(_.toLong).filter(_ > 0)
+        if (partSize.isEmpty) {
+          return None;
+        }
+        totalSize += partSize.get
+      }
+      Some(totalSize)
+    } else {
+      Option(table.getParameters.get(statKey)).map(_.toLong).filter(_ > 0)
+    }
   }
 
   private[this] def castFromString(value: String, dataType: DataType) = {
