@@ -57,11 +57,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = data.toDS()
 
     assert(ds.repartition(10).rdd.partitions.length == 10)
-    checkAnswer( ds.repartition(10),
+    checkAnswer(
+      ds.repartition(10),
       data: _*)
 
     assert(ds.coalesce(1).rdd.partitions.length == 1)
-    checkAnswer( ds.coalesce(1),
+    checkAnswer(
+      ds.coalesce(1),
       data: _*)
   }
 
