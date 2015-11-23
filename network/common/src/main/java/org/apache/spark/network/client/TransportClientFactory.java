@@ -170,8 +170,10 @@ public class TransportClientFactory implements Closeable {
   }
 
   /**
-   * Create a completely new {@link TransportClient} to the given remote host / port
-   * But this connection is not pooled.
+   * Create a completely new {@link TransportClient} to the given remote host / port.
+   * This connection is not pooled.
+   *
+   * As with {@link #createClient(String, int)}, this method is blocking.
    */
   public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
       throws IOException {
