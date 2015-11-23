@@ -69,6 +69,17 @@ class VectorAssemblerSuite
     }
   }
 
+  test("transform should throw an exception in case of unsupported type") {
+    val df = sqlContext.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("a", "b", "c"))
+      .setOutputCol("features")
+    val thrown = intercept[SparkException] {
+      assembler.transform(df)
+    }
+    assert(thrown.getMessage contains "VectorAssembler does not support the StringType type")
+  }
+
   test("ML attributes") {
     val browser = NominalAttribute.defaultAttr.withValues("chrome", "firefox", "safari")
     val hour = NumericAttribute.defaultAttr.withMin(0.0).withMax(24.0)
