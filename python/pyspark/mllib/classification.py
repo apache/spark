@@ -662,15 +662,20 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     vector must be provided.
 
     :param stepSize:
-      Step size for each iteration of gradient descent. (default: 0.1)
+      Step size for each iteration of gradient descent.
+      (default: 0.1)
     :param numIterations:
-      Number of iterations run for each batch of data. (default: 50)
+      Number of iterations run for each batch of data.
+      (default: 50)
     :param miniBatchFraction:
-      Fraction of each batch of data to use for updates. (default: 1.0)
+      Fraction of each batch of data to use for updates.
+      (default: 1.0)
     :param regParam:
-      L2 Regularization parameter. (default: 0.0)
+      L2 Regularization parameter.
+      (default: 0.0)
     :param convergenceTol:
-      Value used to determine when to terminate iterations. (default: 0.001)
+      Value used to determine when to terminate iterations.
+      (default: 0.001)
 
     .. versionadded:: 1.5.0
     """
