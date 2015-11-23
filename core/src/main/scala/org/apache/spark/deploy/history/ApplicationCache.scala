@@ -32,14 +32,15 @@ import org.apache.spark.ui.SparkUI
  * Completed applications are cached for as long as there is capacity for them.
  * Incompleted applications have their update time checked on every
  * retrieval; if the cached entry is out of date, it is refreshed.
+ * @param operations implementation of record access operations
  * @param refreshInterval interval between refreshes in nanoseconds.
  * @param retainedApplications number of retained applications
+ * @param time time source
  */
 private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
-    time: Ticker)
-    extends RemovalListener[String, CacheEntry] with Logging {
+    time: Ticker) extends RemovalListener[String, CacheEntry] with Logging {
 
   private val appLoader = new CacheLoader[String, CacheEntry] {
     override def load(key: String): CacheEntry = {
@@ -52,12 +53,12 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       .removalListener(this)
       .build(appLoader)
 
-
   def loadEntry(key: String): CacheEntry = {
     val parts = key.split("/")
     require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
     val appId = parts(0)
     val attemptId = if (parts.length > 1) Some(parts(1)) else None
+    
     operations.getAppUI(appId, attemptId) match {
       case Some(ui) =>
         val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
@@ -73,19 +74,19 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   /**
    * Get the entry. Cache fetch/refresh will have taken place by
    * the time this method returns
-   * @param key key to retrieve
+   * @param appId application to look up
    * @return the entry
    */
-  def get(key: String): Option[CacheEntry] = {
+  def get(appId: String): Option[CacheEntry] = {
     try {
-      val entry = appCache.get(key)
+      val entry = appCache.get(appId)
       if (!entry.completed &&
           (time.read() - entry.timestamp) > refreshInterval) {
         // trigger refresh
-        logDebug(s"refreshing $key")
-        operations.refreshTriggered(key, entry.ui)
-        appCache.invalidate(key)
-        get(key)
+        logDebug(s"refreshing $appId")
+        operations.refreshTriggered(appId, entry.ui)
+        appCache.invalidate(appId)
+        get(appId)
       }
       Some(entry)
     } catch {
@@ -105,7 +106,6 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   override def onRemoval(rm: RemovalNotification[String, CacheEntry]): Unit = {
     operations.detachSparkUI(rm.getValue().ui)
   }
-
 
   override def toString: String = {
     val sb = new StringBuilder(
@@ -139,23 +139,26 @@ private[history] trait ApplicationCacheOperations {
    */
   def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
 
-  /** Attach a reconstructed UI  */
-  def attachSparkUI(ui: SparkUI, completed: Boolean): Unit;
-
+  /**
+   *  Attach a reconstructed UI.
+   * 
+   * @param ui UI
+   * @param completed flag to indicate that the UI has completed
+   */
+  def attachSparkUI(ui: SparkUI, completed: Boolean): Unit
 
   /**
    *  Detach a reconstructed UI
    *
    * @param ui Spark UI
    */
-  def detachSparkUI(ui: SparkUI): Unit;
-
+  def detachSparkUI(ui: SparkUI): Unit
 
   /**
    * Notification of a refresh. This will be followed by the normal
    * detach/attach operations
-   * @param key
+   * @param attempID
    * @param ui
    */
-  def refreshTriggered(key: String, ui: SparkUI): Unit;
+  def refreshTriggered(attempID: String, ui: SparkUI): Unit
 }

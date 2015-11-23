@@ -64,7 +64,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       attached += (name -> ui)
     }
 
-
     def create(name: String, completed: Boolean): SparkUI  = {
       val ui = newUI(name, completed)
       instances += (name -> ui)
@@ -111,10 +110,10 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
   }
 
-
   def newUI(name: String, completed: Boolean) : SparkUI =  {
     val date = new Date(0)
     val info = new ApplicationInfo(name, name,
+      Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(None, date, date, "user", completed)))
     val ui = mock[SparkUI]
     when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
@@ -134,8 +133,11 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val ex = intercept[UncheckedExecutionException] {
       cache.get("key")
     }
-    assert(ex.getCause !== null)
-    ex.getCause.asInstanceOf[NoSuchElementException]
+    var cause = ex.getCause
+    assert(cause !== null)
+    if(!cause.isInstanceOf[NoSuchElementException]) {
+      throw cause;
+    }
   }
 
   /**
