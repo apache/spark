@@ -408,13 +408,17 @@ class BasicOperationTests(PySparkStreamingTestCase):
         input_stream = self.ssc.queueStream(input)
 
         def failed_func(i):
-            raise ValueError("failed")
+            raise ValueError("This is a special error")
 
         input_stream.map(failed_func).pprint()
         self.ssc.start()
         try:
             self.ssc.awaitTerminationOrTimeout(10)
         except:
+            import traceback
+            traceback.print_exc()
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
             return
 
         self.fail("a failed func should throw an error")
@@ -779,6 +783,34 @@ class CheckpointTests(unittest.TestCase):
             self.sc.stop()
         if self.cpd is not None:
             shutil.rmtree(self.cpd)
+
+    def test_transform_function_serializer_failure(self):
+        inputd = tempfile.mkdtemp()
+        self.cpd = tempfile.mkdtemp("test_transform_function_serializer_failure")
+
+        def setup():
+            conf = SparkConf().set("spark.default.parallelism", 1)
+            sc = SparkContext(conf=conf)
+            ssc = StreamingContext(sc, 0.5)
+
+            # A function that cannot be serialized
+            def process(time, rdd):
+                sc.parallelize(range(1, 10))
+
+            ssc.textFileStream(inputd).foreachRDD(process)
+            return ssc
+
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
+        try:
+            self.ssc.start()
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue(
+                "It appears that you are attempting to reference SparkContext" in failure)
+            return
+
+        self.fail("using SparkContext in process should fail because it's not Serializable")
 
     def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()

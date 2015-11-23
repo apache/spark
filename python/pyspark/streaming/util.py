@@ -38,6 +38,7 @@ class TransformFunction(object):
         self.func = func
         self.deserializers = deserializers
         self._rdd_wrapper = lambda jrdd, ctx, ser: RDD(jrdd, ctx, ser)
+        self.failure = None
 
     def rdd_wrapper(self, func):
         self._rdd_wrapper = func
@@ -62,9 +63,14 @@ class TransformFunction(object):
             r = self.func(t, *rdds)
             if r:
                 return r._jrdd
-        except Exception:
-            traceback.print_exc()
-            raise
+        except:
+            self.failure = traceback.format_exc()
+
+    def getFailure(self):
+        failure = self.failure
+        # Clear the failure
+        self.failure = None
+        return failure
 
     def __repr__(self):
         return "TransformFunction(%s)" % self.func
@@ -89,22 +95,27 @@ class TransformFunctionSerializer(object):
         self.serializer = serializer
         self.gateway = gateway or self.ctx._gateway
         self.gateway.jvm.PythonDStream.registerSerializer(self)
+        self.failure = None
 
     def dumps(self, id):
         try:
             func = self.gateway.gateway_property.pool[id]
             return bytearray(self.serializer.dumps((func.func, func.deserializers)))
-        except Exception:
-            traceback.print_exc()
-            raise
+        except:
+            self.failure = traceback.format_exc()
 
     def loads(self, data):
         try:
             f, deserializers = self.serializer.loads(bytes(data))
             return TransformFunction(self.ctx, f, *deserializers)
-        except Exception:
-            traceback.print_exc()
-            raise
+        except:
+            self.failure = traceback.format_exc()
+
+    def getFailure(self):
+        failure = self.failure
+        # Clear the failure
+        self.failure = None
+        return failure
 
     def __repr__(self):
         return "TransformFunctionSerializer(%s)" % self.serializer

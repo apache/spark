@@ -21,6 +21,8 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 
+import org.apache.spark.{SparkException, Logging}
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
@@ -40,6 +42,18 @@ import org.apache.spark.util.Utils
  */
 private[python] trait PythonTransformFunction {
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
+
+  /**
+   * After invoking `call`, the user should use `getFailure` to check if there is any failure in
+   * Python. If so, the user should handle properly, e.g., throw an exception with the failure
+   * message.
+   *
+   * Note: call this method only once after invoking `call` because calling this method will clear
+   * the failure message.
+   *
+   * @return the failure message, or null if there is no failure
+   */
+  def getFailure: String
 }
 
 /**
@@ -48,6 +62,18 @@ private[python] trait PythonTransformFunction {
 private[python] trait PythonTransformFunctionSerializer {
   def dumps(id: String): Array[Byte]
   def loads(bytes: Array[Byte]): PythonTransformFunction
+
+  /**
+   * After invoking `dumps` or `loads`, the user should use `getFailure` to check if there is any
+   * failure in Python. If so, the user should handle properly, e.g., throw an exception with the
+   * failure message.
+   *
+   * Note: call this method only once after invoking `dumps` or `loads` because calling this method
+   * will clear the failure message.
+   *
+   * @return the failure message, or null if there is no failure
+   */
+  def getFailure: String
 }
 
 /**
@@ -59,8 +85,12 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    Option(pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava))
-      .map(_.rdd)
+    val resultRDD = pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava)
+    val failure = pfunc.getFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    Option(resultRDD).map(_.rdd)
   }
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
@@ -93,7 +123,7 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
  * PythonTransformFunctionSerializer is logically a singleton that's happens to be
  * implemented as a Python object.
  */
-private[python] object PythonTransformFunctionSerializer {
+private[python] object PythonTransformFunctionSerializer extends Logging {
 
   /**
    * A serializer in Python, used to serialize PythonTransformFunction
@@ -103,23 +133,33 @@ private[python] object PythonTransformFunctionSerializer {
   /*
    * Register a serializer from Python, should be called during initialization
    */
-  def register(ser: PythonTransformFunctionSerializer): Unit = {
+  def register(ser: PythonTransformFunctionSerializer): Unit = synchronized {
     serializer = ser
   }
 
-  def serialize(func: PythonTransformFunction): Array[Byte] = {
+  def serialize(func: PythonTransformFunction): Array[Byte] = synchronized {
     require(serializer != null, "Serializer has not been registered!")
     // get the id of PythonTransformFunction in py4j
     val h = Proxy.getInvocationHandler(func.asInstanceOf[Proxy])
     val f = h.getClass().getDeclaredField("id")
     f.setAccessible(true)
     val id = f.get(h).asInstanceOf[String]
-    serializer.dumps(id)
+    val results = serializer.dumps(id)
+    val failure = serializer.getFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    results
   }
 
-  def deserialize(bytes: Array[Byte]): PythonTransformFunction = {
+  def deserialize(bytes: Array[Byte]): PythonTransformFunction = synchronized {
     require(serializer != null, "Serializer has not been registered!")
-    serializer.loads(bytes)
+    val pfunc = serializer.loads(bytes)
+    val failure = serializer.getFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    pfunc
   }
 }
 
