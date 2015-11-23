@@ -145,6 +145,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // an extremely small number of records then Spark SQL's default parallelism of 200 would
       // result in slower out-of-the-box performance due to these constant-factor overheads. This
       // optimization speeds up local microbenchmarking and SQL unit tests.
+      // However, we still create the file because the read code expects it to exist:
+      file.createNewFile();
       partitionWriters[i] =
         blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
     }
@@ -193,13 +195,6 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < numPartitions; i++) {
-        if (partitionWriters[i].fileSegment().length() == 0) {
-          // In insertAll(), we didn't create empty files for empty reduce partitions; this branch
-          // handles that case. Since we'll be skipping deletion of these files, verify that they
-          // don't exist:
-          assert(!partitionWriters[i].fileSegment().file().exists());
-          continue;
-        }
         final FileInputStream in = new FileInputStream(partitionWriters[i].fileSegment().file());
         boolean copyThrewException = true;
         try {
