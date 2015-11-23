@@ -73,10 +73,12 @@ public class TransportClient implements Closeable {
   private final Channel channel;
   private final TransportResponseHandler handler;
   @Nullable private String clientId;
+  private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
+    this.timedOut = false;
   }
 
   public Channel getChannel() {
@@ -84,7 +86,7 @@ public class TransportClient implements Closeable {
   }
 
   public boolean isActive() {
-    return channel.isOpen() || channel.isActive();
+    return !timedOut && (channel.isOpen() || channel.isActive());
   }
 
   public SocketAddress getSocketAddress() {
@@ -261,6 +263,11 @@ public class TransportClient implements Closeable {
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }
+  }
+
+  /** Mark this channel as having timed out. */
+  public void timeOut() {
+    this.timedOut = true;
   }
 
   @Override
