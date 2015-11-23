@@ -136,7 +136,7 @@ trait Logging {
         // overriding the root logger's config if they're different.
         val rootLogger = LogManager.getRootLogger()
         val replLogger = LogManager.getLogger("org.apache.spark.repl.Main")
-        val replLevel = if (replLogger.getLevel() != null) replLogger.getLevel() else Level.WARN
+        val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
         if (replLevel != rootLogger.getEffectiveLevel()) {
           System.err.printf("Setting default log level to \"%s\".\n", replLevel)
           System.err.println("To adjust logging level use sc.setLogLevel(newLevel).")
