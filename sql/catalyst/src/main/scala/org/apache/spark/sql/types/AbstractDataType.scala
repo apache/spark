@@ -84,6 +84,7 @@ private[sql] object TypeCollection {
    * Types that can be ordered/compared. In the long run we should probably make this a trait
    * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
    */
+  // TODO: Should we consolidate this with RowOrdering.isOrderable?
   val Ordered = TypeCollection(
     BooleanType,
     ByteType, ShortType, IntegerType, LongType,

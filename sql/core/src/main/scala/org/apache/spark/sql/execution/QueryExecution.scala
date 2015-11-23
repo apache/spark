@@ -77,7 +77,6 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |${stringOrError(optimizedPlan)}
        |== Physical Plan ==
        |${stringOrError(executedPlan)}
-       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
     """.stripMargin.trim
   }
 }

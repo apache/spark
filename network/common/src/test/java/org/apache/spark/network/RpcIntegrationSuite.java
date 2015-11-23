@@ -49,7 +49,7 @@ public class RpcIntegrationSuite {
 
   @BeforeClass
   public static void setUp() throws Exception {
-    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     rpcHandler = new RpcHandler() {
       @Override
       public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
