@@ -537,6 +537,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
       bus.replay(logInput, logPath.toString, !appCompleted)
+      appStatus.put(logPath.getName(), appCompleted)
 
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
       // try to show their UI. Some old versions of Spark generate logs without an app ID, so let
@@ -678,10 +679,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     method.invoke(dfs, action).asInstanceOf[Boolean]
   }
 
+   def getAppStatus(appid: String): Boolean = {
+     if (appStatus.keySet.contains(appid)) {
+       return true
+     }
+     else if (appStatus.contains(appid + EventLoggingListener.IN_PROGRESS)) {
+       return false
+     }
+    else {
+       val e = new NoSuchElementException(s"no app with key $appid.")
+       e.initCause(new NoSuchElementException)
+       throw e
+    }
+  }
+
 }
 
 private[history] object FsHistoryProvider {
   val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
+
+  private val appStatus = new mutable.HashMap[String, Boolean]()
 
   // Constants used to parse Spark 1.0.0 log directories.
   val LOG_PREFIX = "EVENT_LOG_"
