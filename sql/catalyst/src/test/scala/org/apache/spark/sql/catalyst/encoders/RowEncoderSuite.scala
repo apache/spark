@@ -80,11 +80,13 @@ class RowEncoderSuite extends SparkFunSuite {
   private val structOfString = new StructType().add("str", StringType)
   private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
   private val arrayOfString = ArrayType(StringType)
+  private val arrayOfNull = ArrayType(NullType)
   private val mapOfString = MapType(StringType, StringType)
   private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
 
   encodeDecodeTest(
     new StructType()
+      .add("null", NullType)
       .add("boolean", BooleanType)
       .add("byte", ByteType)
       .add("short", ShortType)
@@ -101,6 +103,7 @@ class RowEncoderSuite extends SparkFunSuite {
 
   encodeDecodeTest(
     new StructType()
+      .add("arrayOfNull", arrayOfNull)
       .add("arrayOfString", arrayOfString)
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))

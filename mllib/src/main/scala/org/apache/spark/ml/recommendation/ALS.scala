@@ -27,9 +27,8 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
@@ -185,7 +184,7 @@ class ALSModel private[ml] (
     val rank: Int,
     @transient val userFactors: DataFrame,
     @transient val itemFactors: DataFrame)
-  extends Model[ALSModel] with ALSModelParams with Writable {
+  extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   /** @group setParam */
   def setUserCol(value: String): this.type = set(userCol, value)
@@ -225,22 +224,22 @@ class ALSModel private[ml] (
   }
 
   @Since("1.6.0")
-  override def write: Writer = new ALSModel.ALSModelWriter(this)
+  override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 }
 
 @Since("1.6.0")
-object ALSModel extends Readable[ALSModel] {
+object ALSModel extends MLReadable[ALSModel] {
 
   @Since("1.6.0")
-  override def read: Reader[ALSModel] = new ALSModelReader
+  override def read: MLReader[ALSModel] = new ALSModelReader
 
   @Since("1.6.0")
-  override def load(path: String): ALSModel = read.load(path)
+  override def load(path: String): ALSModel = super.load(path)
 
-  private[recommendation] class ALSModelWriter(instance: ALSModel) extends Writer {
+  private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata = render("rank" -> instance.rank)
+      val extraMetadata = "rank" -> instance.rank
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
       instance.userFactors.write.format("parquet").save(userPath)
@@ -249,22 +248,15 @@ object ALSModel extends Readable[ALSModel] {
     }
   }
 
-  private[recommendation] class ALSModelReader extends Reader[ALSModel] {
+  private class ALSModelReader extends MLReader[ALSModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.recommendation.ALSModel"
+    private val className = classOf[ALSModel].getName
 
     override def load(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       implicit val format = DefaultFormats
-      val rank: Int = metadata.extraMetadata match {
-        case Some(m: JValue) =>
-          (m \ "rank").extract[Int]
-        case None =>
-          throw new RuntimeException(s"ALSModel loader could not read rank from JSON metadata:" +
-            s" ${metadata.metadataStr}")
-      }
-
+      val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
       val userFactors = sqlContext.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
@@ -309,7 +301,8 @@ object ALSModel extends Readable[ALSModel] {
  * preferences rather than explicit ratings given to items.
  */
 @Experimental
-class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams with Writable {
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams
+  with DefaultParamsWritable {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
@@ -391,9 +384,6 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams w
   }
 
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 
@@ -406,7 +396,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams w
  * than 2 billion.
  */
 @DeveloperApi
-object ALS extends Readable[ALS] with Logging {
+object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * :: DeveloperApi ::
@@ -416,10 +406,7 @@ object ALS extends Readable[ALS] with Logging {
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
 
   @Since("1.6.0")
-  override def read: Reader[ALS] = new DefaultParamsReader[ALS]
-
-  @Since("1.6.0")
-  override def load(path: String): ALS = read.load(path)
+  override def load(path: String): ALS = super.load(path)
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {

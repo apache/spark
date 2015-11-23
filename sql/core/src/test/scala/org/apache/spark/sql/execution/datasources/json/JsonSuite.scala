@@ -1410,6 +1410,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       val clonedConf = new Configuration(hadoopConfiguration)
       try {
+        // Setting it twice as the name of the propery has changed between hadoop versions.
+        hadoopConfiguration.setClass(
+          "mapred.input.pathFilter.class",
+          classOf[TestFileFilter],
+          classOf[PathFilter])
         hadoopConfiguration.setClass(
           "mapreduce.input.pathFilter.class",
           classOf[TestFileFilter],
