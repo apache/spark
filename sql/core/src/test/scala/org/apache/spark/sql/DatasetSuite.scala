@@ -170,17 +170,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(1, 2).toDS().as("b")
 
     checkAnswer(
-      ds1.joinWith(ds2, $"a.value" === $"b.value"),
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
       (1, 1), (2, 2))
   }
 
-  test("joinWith, expression condition") {
-    val ds1 = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-    val ds2 = Seq(("a", 1), ("b", 2)).toDS()
+  test("joinWith, expression condition, outer join") {
+    val nullInteger = null.asInstanceOf[Integer]
+    val nullString = null.asInstanceOf[String]
+    val ds1 = Seq(ClassData("a", new Integer(1)),
+      ClassData("c", new Integer(3))).toDS()
+    val ds2 = Seq(("a", new Integer(1)),
+      ("b", new Integer(2))).toDS()
 
     checkAnswer(
-      ds1.joinWith(ds2, $"_1" === $"a"),
-      (ClassData("a", 1), ("a", 1)), (ClassData("b", 2), ("b", 2)))
+      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
+      (ClassData("a", new Integer(1)), ("a", new Integer(1))),
+      (ClassData("c", new Integer(3)), (nullString, nullInteger)),
+      (ClassData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
   test("joinWith tuple with primitive, expression") {
@@ -350,7 +356,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
-    val joined = ds.joinWith(ds, lit(true))
+    val joined = ds.joinWith(ds)
     checkAnswer(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
@@ -370,7 +376,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds).collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
         (KryoData(1), KryoData(2)),
@@ -389,7 +395,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
-    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
+    assert(ds.joinWith(ds).collect().toSet ==
       Set(
         (JavaData(1), JavaData(1)),
         (JavaData(1), JavaData(2)),
@@ -403,7 +409,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
 
     checkAnswer(
-      ds1.joinWith(ds2, lit(true)),
+      ds1.joinWith(ds2),
       ((nullInt, "1"), (nullInt, "1")),
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),
@@ -412,7 +418,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 }
 
 
-case class ClassData(a: String, b: Int)
+case class ClassData(a: String, b: Integer)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

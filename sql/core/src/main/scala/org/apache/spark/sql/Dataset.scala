@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
@@ -26,7 +28,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
@@ -493,11 +495,12 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val left = this.logicalPlan
     val right = other.logicalPlan
 
-    val joined = sqlContext.executePlan(Join(left, right, Inner, Some(condition.expr)))
+    val joined = sqlContext.executePlan(Join(left, right, joinType =
+      JoinType(joinType), Some(condition.expr)))
     val leftOutput = joined.analyzed.output.take(left.output.length)
     val rightOutput = joined.analyzed.output.takeRight(right.output.length)
 
@@ -519,6 +522,25 @@ class Dataset[T] private[sql](
         joined.analyzed)
     }
   }
+
+  /**
+   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * where `condition` evaluates to true
+   *
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
+  }
+
+  /**
+   * Joins this [[Dataset]] returning a [[Tuple2]] for each pair using cartesian join
+   *
+   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
+   *
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U]): Dataset[(T, U)] = joinWith (other, lit(true), "inner")
 
   /* ************************** *
    *  Gather to Driver Actions  *
