@@ -723,7 +723,7 @@ Some of these advanced sources are as follows.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
-- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of tweets using
+- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j to get the public stream of tweets using
   [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
   can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
   Twitter4J library. You can either get the public stream, or get the filtered stream based on a
