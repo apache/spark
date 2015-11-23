@@ -69,7 +69,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addFetchRequest(StreamChunkId streamChunkId, ChunkReceivedCallback callback) {
-    timeOfLastRequestNs.set(System.nanoTime());
+    updateTimeOfLastRequest();
     outstandingFetches.put(streamChunkId, callback);
   }
 
@@ -78,7 +78,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   public void addRpcRequest(long requestId, RpcResponseCallback callback) {
-    timeOfLastRequestNs.set(System.nanoTime());
+    updateTimeOfLastRequest();
     outstandingRpcs.put(requestId, callback);
   }
 
@@ -214,6 +214,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   /** Returns the time in nanoseconds of when the last request was sent out. */
   public long getTimeOfLastRequestNs() {
     return timeOfLastRequestNs.get();
+  }
+
+  /** Updates the time of the last request to the current system time. */
+  public void updateTimeOfLastRequest() {
+    timeOfLastRequestNs.set(System.nanoTime());
   }
 
 }
