@@ -145,7 +145,9 @@ private[ml] object TreeTests extends SparkFunSuite {
     new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
   }
 
-  // In this data, feature 1 is very important.
+  /**
+   * Create some toy data for testing feature importances.
+   */
   def featureImportanceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 1, 0)),

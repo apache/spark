@@ -1092,8 +1092,6 @@ private[ml] object RandomForest extends Logging {
    *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    *
-   * Note: This should not be used with Gradient-Boosted Trees.  It only makes sense for
-   *       independently trained trees.
    * @param trees  Unweighted forest of trees
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
