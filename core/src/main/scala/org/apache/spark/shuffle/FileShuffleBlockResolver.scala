@@ -46,7 +46,7 @@ private[spark] trait ShuffleWriterGroup {
 private[spark] class FileShuffleBlockResolver(conf: SparkConf)
   extends ShuffleBlockResolver with Logging {
 
-  private val transportConf = SparkTransportConf.fromSparkConf(conf)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
   private lazy val blockManager = SparkEnv.get.blockManager
 

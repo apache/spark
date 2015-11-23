@@ -142,6 +142,10 @@ object MimaExcludes {
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
+      ) ++ Seq(
+        // SPARK-4557 Changed foreachRDD to use VoidFunction
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
       )
     case v if v.startsWith("1.5") =>
       Seq(

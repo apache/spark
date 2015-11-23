@@ -22,9 +22,10 @@ import java.io.File
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
+import org.scalatest.PrivateMethodTester._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.streaming.dstream.{TrackStateDStream, TrackStateDStreamImpl}
+import org.apache.spark.streaming.dstream.{InternalTrackStateDStream, TrackStateDStream, TrackStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
@@ -55,6 +56,12 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     val conf = new SparkConf().setMaster("local").setAppName("TrackStateByKeySuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
+  }
+
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
+    }
   }
 
   test("state - get, exists, update, remove, ") {
@@ -436,6 +443,41 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     assert(collectedStateSnapshots.last.toSet === Set(("a", 1)))
   }
 
+  test("trackStateByKey - checkpoint durations") {
+    val privateMethod = PrivateMethod[InternalTrackStateDStream[_, _, _, _]]('internalStream)
+
+    def testCheckpointDuration(
+        batchDuration: Duration,
+        expectedCheckpointDuration: Duration,
+        explicitCheckpointDuration: Option[Duration] = None
+      ): Unit = {
+      try {
+        ssc = new StreamingContext(sc, batchDuration)
+        val inputStream = new TestInputStream(ssc, Seq.empty[Seq[Int]], 2).map(_ -> 1)
+        val dummyFunc = (value: Option[Int], state: State[Int]) => 0
+        val trackStateStream = inputStream.trackStateByKey(StateSpec.function(dummyFunc))
+        val internalTrackStateStream = trackStateStream invokePrivate privateMethod()
+
+        explicitCheckpointDuration.foreach { d =>
+          trackStateStream.checkpoint(d)
+        }
+        trackStateStream.register()
+        ssc.start()  // should initialize all the checkpoint durations
+        assert(trackStateStream.checkpointDuration === null)
+        assert(internalTrackStateStream.checkpointDuration === expectedCheckpointDuration)
+      } finally {
+        StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+      }
+    }
+
+    testCheckpointDuration(Milliseconds(100), Seconds(1))
+    testCheckpointDuration(Seconds(1), Seconds(10))
+    testCheckpointDuration(Seconds(10), Seconds(100))
+
+    testCheckpointDuration(Milliseconds(100), Seconds(2), Some(Seconds(2)))
+    testCheckpointDuration(Seconds(1), Seconds(2), Some(Seconds(2)))
+    testCheckpointDuration(Seconds(10), Seconds(20), Some(Seconds(20)))
+  }
 
   private def testOperation[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],

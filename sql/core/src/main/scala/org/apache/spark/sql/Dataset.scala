@@ -73,7 +73,7 @@ class Dataset[T] private[sql](
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(queryExecution.analyzed.output)
+    unresolvedTEncoder.resolve(queryExecution.analyzed.output, OuterScopes.outerScopes)
 
   private implicit def classTag = resolvedTEncoder.clsTag
 
@@ -146,6 +146,12 @@ class Dataset[T] private[sql](
     }
   }
 
+  /**
+   * Returns the number of elements in the [[Dataset]].
+   * @since 1.6.0
+   */
+  def count(): Long = toDF().count()
+
   /* *********************** *
    *  Functional Operations  *
    * *********************** */
@@ -199,7 +205,6 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
-    encoderFor[T].assertUnresolved()
     new Dataset[U](
       sqlContext,
       MapPartitions[T, U](
@@ -369,7 +374,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          resolvedTEncoder,
+          resolvedTEncoder.bind(queryExecution.analyzed.output),
           queryExecution.analyzed.output).named :: Nil,
         logicalPlan))
   }
@@ -492,13 +497,17 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
+    val joined = sqlContext.executePlan(Join(left, right, Inner, Some(condition.expr)))
+    val leftOutput = joined.analyzed.output.take(left.output.length)
+    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
+
     val leftData = this.unresolvedTEncoder match {
-      case e if e.flat => Alias(left.output.head, "_1")()
-      case _ => Alias(CreateStruct(left.output), "_1")()
+      case e if e.flat => Alias(leftOutput.head, "_1")()
+      case _ => Alias(CreateStruct(leftOutput), "_1")()
     }
     val rightData = other.unresolvedTEncoder match {
-      case e if e.flat => Alias(right.output.head, "_2")()
-      case _ => Alias(CreateStruct(right.output), "_2")()
+      case e if e.flat => Alias(rightOutput.head, "_2")()
+      case _ => Alias(CreateStruct(rightOutput), "_2")()
     }
 
 
@@ -507,7 +516,7 @@ class Dataset[T] private[sql](
     withPlan[(T, U)](other) { (left, right) =>
       Project(
         leftData :: rightData :: Nil,
-        Join(left, right, Inner, Some(condition.expr)))
+        joined.analyzed)
     }
   }
 
@@ -519,7 +528,7 @@ class Dataset[T] private[sql](
    * Returns the first element in this [[Dataset]].
    * @since 1.6.0
    */
-  def first(): T = rdd.first()
+  def first(): T = take(1).head
 
   /**
    * Returns an array that contains all the elements in this [[Dataset]].
@@ -530,7 +539,14 @@ class Dataset[T] private[sql](
    * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
-  def collect(): Array[T] = rdd.collect()
+  def collect(): Array[T] = {
+    // This is different from Dataset.rdd in that it collects Rows, and then runs the encoders
+    // to convert the rows into objects of type T.
+    val tEnc = resolvedTEncoder
+    val input = queryExecution.analyzed.output
+    val bound = tEnc.bind(input)
+    queryExecution.toRdd.map(_.copy()).collect().map(bound.fromRow)
+  }
 
   /**
    * Returns an array that contains all the elements in this [[Dataset]].
@@ -541,7 +557,7 @@ class Dataset[T] private[sql](
    * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
-  def collectAsList(): java.util.List[T] = rdd.collect().toSeq.asJava
+  def collectAsList(): java.util.List[T] = collect().toSeq.asJava
 
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.
@@ -551,7 +567,7 @@ class Dataset[T] private[sql](
    *
    * @since 1.6.0
    */
-  def take(num: Int): Array[T] = rdd.take(num)
+  def take(num: Int): Array[T] = withPlan(Limit(Literal(num), _)).collect()
 
   /**
    * Returns the first `num` elements of this [[Dataset]] as an array.

@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
+import scala.util.DynamicVariable
 
 import org.apache.spark.SparkContext
 
@@ -60,25 +61,27 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
   private val listenerThread = new Thread(name) {
     setDaemon(true)
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
-      while (true) {
-        eventLock.acquire()
-        self.synchronized {
-          processingEvent = true
-        }
-        try {
-          val event = eventQueue.poll
-          if (event == null) {
-            // Get out of the while loop and shutdown the daemon thread
-            if (!stopped.get) {
-              throw new IllegalStateException("Polling `null` from eventQueue means" +
-                " the listener bus has been stopped. So `stopped` must be true")
-            }
-            return
-          }
-          postToAll(event)
-        } finally {
+      AsynchronousListenerBus.withinListenerThread.withValue(true) {
+        while (true) {
+          eventLock.acquire()
           self.synchronized {
-            processingEvent = false
+            processingEvent = true
+          }
+          try {
+            val event = eventQueue.poll
+            if (event == null) {
+              // Get out of the while loop and shutdown the daemon thread
+              if (!stopped.get) {
+                throw new IllegalStateException("Polling `null` from eventQueue means" +
+                  " the listener bus has been stopped. So `stopped` must be true")
+              }
+              return
+            }
+            postToAll(event)
+          } finally {
+            self.synchronized {
+              processingEvent = false
+            }
           }
         }
       }
@@ -177,3 +180,10 @@ private[spark] abstract class AsynchronousListenerBus[L <: AnyRef, E](name: Stri
    */
   def onDropEvent(event: E): Unit
 }
+
+private[spark] object AsynchronousListenerBus {
+  /* Allows for Context to check whether stop() call is made within listener thread
+  */
+  val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
+}
+

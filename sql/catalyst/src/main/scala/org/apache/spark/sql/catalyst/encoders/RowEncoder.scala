@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -47,7 +48,7 @@ object RowEncoder {
   private def extractorsFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => inputObject
 
     case udt: UserDefinedType[_] =>
@@ -132,17 +133,8 @@ object RowEncoder {
       CreateStruct(convertedFields)
   }
 
-  /**
-   * Returns true if the value of this data type is same between internal and external.
-   */
-  def isNativeType(dt: DataType): Boolean = dt match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => true
-    case _ => false
-  }
-
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
-    case _ if isNativeType(dt) => dt
+    case _ if ScalaReflection.isNativeType(dt) => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -151,6 +143,7 @@ object RowEncoder {
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
+    case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
   private def constructorFor(schema: StructType): Expression = {
@@ -166,7 +159,7 @@ object RowEncoder {
   }
 
   private def constructorFor(input: Expression): Expression = input.dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType => input
 
     case udt: UserDefinedType[_] =>

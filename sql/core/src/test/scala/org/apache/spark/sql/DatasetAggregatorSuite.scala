@@ -67,7 +67,7 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
 }
 
 case class AggData(a: Int, b: String)
-object ClassInputAgg extends Aggregator[AggData, Int, Int] with Serializable {
+object ClassInputAgg extends Aggregator[AggData, Int, Int] {
   /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
   override def zero: Int = 0
 
@@ -86,6 +86,28 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] with Serializable {
    * Merge two intermediate values
    */
   override def merge(b1: Int, b2: Int): Int = b1 + b2
+}
+
+object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
+  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
+  override def zero: (Int, AggData) = 0 -> AggData(0, "0")
+
+  /**
+   * Combine two values to produce a new value.  For performance, the function may modify `b` and
+   * return it instead of constructing new object for b.
+   */
+  override def reduce(b: (Int, AggData), a: AggData): (Int, AggData) = (b._1 + 1, a)
+
+  /**
+   * Transform the output of the reduction.
+   */
+  override def finish(reduction: (Int, AggData)): Int = reduction._1
+
+  /**
+   * Merge two intermediate values
+   */
+  override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
+    (b1._1 + b2._1, b1._2)
 }
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
@@ -167,5 +189,22 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
       ("one", 1))
+  }
+
+  test("typed aggregation: complex input") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+
+    checkAnswer(
+      ds.select(ComplexBufferAgg.toColumn),
+      2
+    )
+
+    checkAnswer(
+      ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
+      (1.5, 2))
+
+    checkAnswer(
+      ds.groupBy(_.b).agg(ComplexBufferAgg.toColumn),
+      ("one", 1), ("two", 1))
   }
 }

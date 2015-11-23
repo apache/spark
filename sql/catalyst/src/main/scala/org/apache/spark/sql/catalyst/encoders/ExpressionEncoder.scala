@@ -17,21 +17,23 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.util.concurrent.ConcurrentMap
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{AnalysisException, Encoder}
 import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
 
 /**
- * A factory for constructing encoders that convert objects and primitves to and from the
+ * A factory for constructing encoders that convert objects and primitives to and from the
  * internal row format using catalyst expressions and code generation.  By default, the
  * expressions used to retrieve values from an input row when producing an object will be created as
  * follows:
@@ -42,20 +44,26 @@ import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T : TypeTag](flat: Boolean = false): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
+    val flat = !classOf[Product].isAssignableFrom(cls)
 
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
-    val constructExpression = ScalaReflection.constructorFor[T]
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
+    val fromRowExpression = ScalaReflection.constructorFor[T]
+
+    val schema = ScalaReflection.schemaFor[T] match {
+      case ScalaReflection.Schema(s: StructType, _) => s
+      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
+    }
 
     new ExpressionEncoder[T](
-      extractExpression.dataType,
+      schema,
       flat,
-      extractExpression.flatten,
-      constructExpression,
+      toRowExpression.flatten,
+      fromRowExpression,
       ClassTag[T](cls))
   }
 
@@ -68,7 +76,13 @@ object ExpressionEncoder {
     encoders.foreach(_.assertUnresolved())
 
     val schema = StructType(encoders.zipWithIndex.map {
-      case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)
+      case (e, i) =>
+        val (dataType, nullable) = if (e.flat) {
+          e.schema.head.dataType -> e.schema.head.nullable
+        } else {
+          e.schema -> true
+        }
+        StructField(s"_${i + 1}", dataType, nullable)
     })
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
@@ -161,7 +175,9 @@ case class ExpressionEncoder[T](
 
   @transient
   private lazy val extractProjection = GenerateUnsafeProjection.generate(toRowExpressions)
-  private val inputRow = new GenericMutableRow(1)
+
+  @transient
+  private lazy val inputRow = new GenericMutableRow(1)
 
   @transient
   private lazy val constructProjection = GenerateSafeProjection.generate(fromRowExpression :: Nil)
@@ -209,7 +225,9 @@ case class ExpressionEncoder[T](
    * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
    * given schema.
    */
-  def resolve(schema: Seq[Attribute]): ExpressionEncoder[T] = {
+  def resolve(
+      schema: Seq[Attribute],
+      outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
     val positionToAttribute = AttributeMap.toIndex(schema)
     val unbound = fromRowExpression transform {
       case b: BoundReference => positionToAttribute(b.ordinal)
@@ -217,7 +235,23 @@ case class ExpressionEncoder[T](
 
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
-    copy(fromRowExpression = analyzedPlan.expressions.head.children.head)
+
+    // In order to construct instances of inner classes (for example those declared in a REPL cell),
+    // we need an instance of the outer scope.  This rule substitues those outer objects into
+    // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
+    // registry.
+    copy(fromRowExpression = analyzedPlan.expressions.head.children.head transform {
+      case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
+        val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
+        if (outer == null) {
+          throw new AnalysisException(
+            s"Unable to generate an encoder for inner class `${n.cls.getName}` without access " +
+            s"to the scope that this class was defined in. " + "" +
+             "Try moving this class out of its parent class.")
+        }
+
+        n.copy(outerPointer = Some(Literal.fromObject(outer)))
+    })
   }
 
   /**
