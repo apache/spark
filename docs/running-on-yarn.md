@@ -327,6 +327,15 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes AM will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
   <td>(none)</td>
   <td>
