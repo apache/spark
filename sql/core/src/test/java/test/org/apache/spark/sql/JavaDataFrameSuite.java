@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -207,6 +208,18 @@ public class JavaDataFrameSuite {
     DataFrame df = context.createDataFrame(rows, schema);
     Row[] result = df.collect();
     Assert.assertEquals(1, result.length);
+  }
+
+  @Test
+  public void testCreateStructTypeFromList(){
+    List<StructField> fields1 = new ArrayList<>();
+    fields1.add(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema1 = StructType$.MODULE$.apply(fields1);
+    Assert.assertEquals(0, schema1.fieldIndex("id"));
+
+    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    StructType schema2 = StructType$.MODULE$.apply(fields2);
+    Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
 
   private static final Comparator<Row> crosstabRowComparator = new Comparator<Row>() {

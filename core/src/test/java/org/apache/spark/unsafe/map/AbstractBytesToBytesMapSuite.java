@@ -117,7 +117,8 @@ public abstract class AbstractBytesToBytesMapSuite {
           (Integer) args[3],
           new CompressStream(),
           false,
-          (ShuffleWriteMetrics) args[4]
+          (ShuffleWriteMetrics) args[4],
+          (BlockId) args[0]
         );
       }
     });

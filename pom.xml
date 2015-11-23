@@ -162,6 +162,8 @@
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
+    <!-- managed up from 3.2.1 for SPARK-11652 -->
+    <commons.collections.version>3.2.2</commons.collections.version>
     <scala.version>2.10.5</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
@@ -393,6 +395,14 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
+           For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
+      <dependency>
+        <groupId>org.apache.xbean</groupId>
+        <artifactId>xbean-asm5-shaded</artifactId>
+        <version>4.4</version>
+      </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
            in the modules where we want the shaded classes to appear in the
@@ -466,6 +476,11 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-math3</artifactId>
         <version>${commons.math3.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>${commons.collections.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.ivy</groupId>
@@ -625,6 +640,11 @@
             <artifactId>protobuf-java</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.roaringbitmap</groupId>
+        <artifactId>RoaringBitmap</artifactId>
+        <version>0.5.11</version>
       </dependency>
       <dependency>
         <groupId>commons-net</groupId>
@@ -1938,7 +1958,6 @@
               <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
@@ -1977,7 +1996,6 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>

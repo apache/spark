@@ -102,16 +102,6 @@ abstract class UnsafeProjection extends Projection {
 
 object UnsafeProjection {
 
-  /*
-   * Returns whether UnsafeProjection can support given StructType, Array[DataType] or
-   * Seq[Expression].
-   */
-  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
-  def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
-  private def canSupport(types: Array[DataType]): Boolean = {
-    types.forall(GenerateUnsafeProjection.canSupport)
-  }
-
   /**
    * Returns an UnsafeProjection for given StructType.
    */

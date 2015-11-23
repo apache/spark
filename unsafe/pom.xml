@@ -36,6 +36,10 @@
   </properties>
 
   <dependencies>
+    <dependency>
+      <groupId>com.twitter</groupId>
+      <artifactId>chill_${scala.binary.version}</artifactId>
+    </dependency>
 
     <!-- Core dependencies -->
     <dependency>

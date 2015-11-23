@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.{SimpleCatalystConf, CatalystConf}
+import org.apache.spark.sql.catalyst.{ScalaReflection, SimpleCatalystConf, CatalystConf}
 import org.apache.spark.sql.types._
 
 /**
@@ -65,13 +65,13 @@ class Analyzer(
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
-      CTESubstitution ::
-      WindowsSubstitution ::
-      Nil : _*),
+      CTESubstitution,
+      WindowsSubstitution),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
       ResolveGroupingAnalytics ::
+      ResolvePivot ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -83,7 +83,10 @@ class Analyzer(
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
-      PullOutNondeterministic),
+      PullOutNondeterministic,
+      ComputeCurrentTime),
+    Batch("UDF", Once,
+      HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -166,6 +169,10 @@ class Analyzer(
       case g: GroupingAnalytics if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
         g.withNewAggs(assignAliases(g.aggregations))
 
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
+        if child.resolved && hasUnresolvedAlias(groupByExprs) =>
+        Pivot(assignAliases(groupByExprs), pivotColumn, pivotValues, aggregates, child)
+
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
     }
@@ -206,45 +213,72 @@ class Analyzer(
         GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations)
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-        // We will insert another Projection if the GROUP BY keys contains the
-        // non-attribute expressions. And the top operators can references those
-        // expressions by its alias.
-        // e.g. SELECT key%5 as c1 FROM src GROUP BY key%5 ==>
-        //      SELECT a as c1 FROM (SELECT key%5 AS a FROM src) GROUP BY a
 
-        // find all of the non-attribute expressions in the GROUP BY keys
-        val nonAttributeGroupByExpressions = new ArrayBuffer[Alias]()
-
-        // The pair of (the original GROUP BY key, associated attribute)
-        val groupByExprPairs = x.groupByExprs.map(_ match {
-          case e: NamedExpression => (e, e.toAttribute)
-          case other => {
-            val alias = Alias(other, other.toString)()
-            nonAttributeGroupByExpressions += alias // add the non-attributes expression alias
-            (other, alias.toAttribute)
-          }
-        })
-
-        // substitute the non-attribute expressions for aggregations.
-        val aggregation = x.aggregations.map(expr => expr.transformDown {
-          case e => groupByExprPairs.find(_._1.semanticEquals(e)).map(_._2).getOrElse(e)
-        }.asInstanceOf[NamedExpression])
-
-        // substitute the group by expressions.
-        val newGroupByExprs = groupByExprPairs.map(_._2)
-
-        val child = if (nonAttributeGroupByExpressions.length > 0) {
-          // insert additional projection if contains the
-          // non-attribute expressions in the GROUP BY keys
-          Project(x.child.output ++ nonAttributeGroupByExpressions, x.child)
-        } else {
-          x.child
+        // Expand works by setting grouping expressions to null as determined by the bitmasks. To
+        // prevent these null values from being used in an aggregate instead of the original value
+        // we need to create new aliases for all group by expressions that will only be used for
+        // the intended purpose.
+        val groupByAliases: Seq[Alias] = x.groupByExprs.map {
+          case e: NamedExpression => Alias(e, e.name)()
+          case other => Alias(other, other.toString)()
         }
 
+        val aggregations: Seq[NamedExpression] = x.aggregations.map {
+          // If an expression is an aggregate (contains a AggregateExpression) then we dont change
+          // it so that the aggregation is computed on the unmodified value of its argument
+          // expressions.
+          case expr if expr.find(_.isInstanceOf[AggregateExpression]).nonEmpty => expr
+          // If not then its a grouping expression and we need to use the modified (with nulls from
+          // Expand) value of the expression.
+          case expr => expr.transformDown {
+            case e => groupByAliases.find(_.child.semanticEquals(e)).map(_.toAttribute).getOrElse(e)
+          }.asInstanceOf[NamedExpression]
+        }
+
+        val child = Project(x.child.output ++ groupByAliases, x.child)
+        val groupByAttributes = groupByAliases.map(_.toAttribute)
+
         Aggregate(
-          newGroupByExprs :+ VirtualColumn.groupingIdAttribute,
-          aggregation,
-          Expand(x.bitmasks, newGroupByExprs, gid, child))
+          groupByAttributes :+ VirtualColumn.groupingIdAttribute,
+          aggregations,
+          Expand(x.bitmasks, groupByAttributes, gid, child))
+    }
+  }
+
+  object ResolvePivot extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: Pivot if !p.childrenResolved => p
+      case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
+        val singleAgg = aggregates.size == 1
+        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
+          def ifExpr(expr: Expression) = {
+            If(EqualTo(pivotColumn, value), expr, Literal(null))
+          }
+          aggregates.map { aggregate =>
+            val filteredAggregate = aggregate.transformDown {
+              // Assumption is the aggregate function ignores nulls. This is true for all current
+              // AggregateFunction's with the exception of First and Last in their default mode
+              // (which we handle) and possibly some Hive UDAF's.
+              case First(expr, _) =>
+                First(ifExpr(expr), Literal(true))
+              case Last(expr, _) =>
+                Last(ifExpr(expr), Literal(true))
+              case a: AggregateFunction =>
+                a.withNewChildren(a.children.map(ifExpr))
+            }
+            if (filteredAggregate.fastEquals(aggregate)) {
+              throw new AnalysisException(
+                s"Aggregate expression required for pivot, found '$aggregate'")
+            }
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+            Alias(filteredAggregate, name)()
+          }
+        }
+        val newGroupByExprs = groupByExprs.map {
+          case UnresolvedAlias(e) => e
+          case e => e
+        }
+        Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
     }
   }
 
@@ -1021,6 +1055,34 @@ class Analyzer(
         Project(p.output, newPlan.withNewChildren(newChild :: Nil))
     }
   }
+
+  /**
+   * Correctly handle null primitive inputs for UDF by adding extra [[If]] expression to do the
+   * null check.  When user defines a UDF with primitive parameters, there is no way to tell if the
+   * primitive parameter is null or not, so here we assume the primitive input is null-propagatable
+   * and we should return null if the input is null.
+   */
+  object HandleNullInputsForUDF extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case p if !p.resolved => p // Skip unresolved nodes.
+
+      case p => p transformExpressionsUp {
+
+        case udf @ ScalaUDF(func, _, inputs, _) =>
+          val parameterTypes = ScalaReflection.getParameterTypes(func)
+          assert(parameterTypes.length == inputs.length)
+
+          val inputsNullCheck = parameterTypes.zip(inputs)
+            // TODO: skip null handling for not-nullable primitive inputs after we can completely
+            // trust the `nullable` information.
+            // .filter { case (cls, expr) => cls.isPrimitive && expr.nullable }
+            .filter { case (cls, _) => cls.isPrimitive }
+            .map { case (_, expr) => IsNull(expr) }
+            .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
+          inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
+      }
+    }
+  }
 }
 
 /**
@@ -1088,5 +1150,22 @@ object CleanupAliases extends Rule[LogicalPlan] {
           c.copy(children = c.children.map(trimNonTopLevelAliases))
         case Alias(child, _) if !stop => child
       }
+  }
+}
+
+/**
+ * Computes the current date and time to make sure we return the same result in a single query.
+ */
+object ComputeCurrentTime extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val dateExpr = CurrentDate()
+    val timeExpr = CurrentTimestamp()
+    val currentDate = Literal.create(dateExpr.eval(EmptyRow), dateExpr.dataType)
+    val currentTime = Literal.create(timeExpr.eval(EmptyRow), timeExpr.dataType)
+
+    plan transformAllExpressions {
+      case CurrentDate() => currentDate
+      case CurrentTimestamp() => currentTime
+    }
   }
 }

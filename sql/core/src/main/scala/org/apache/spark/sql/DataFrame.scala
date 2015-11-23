@@ -23,7 +23,6 @@ import java.util.Properties
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
-import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.commons.lang3.StringUtils
@@ -35,11 +34,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.encoders.Encoder
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -112,7 +110,6 @@ private[sql] object DataFrame {
  * @groupname action Actions
  * @since 1.3.0
  */
-// TODO: Improve documentation.
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
@@ -300,36 +297,6 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def columns: Array[String] = schema.fields.map(_.name)
-
-  /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
-
-  /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    withPlan(explain).queryExecution.executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
-  }
-
-  /**
-   * Only prints the physical plan to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally
@@ -737,22 +704,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame = withPlan {
-    val namedExpressions = cols.map {
-      // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-      // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-      // make it a NamedExpression.
-      case Column(u: UnresolvedAttribute) => UnresolvedAlias(u)
-
-      case Column(expr: NamedExpression) => expr
-
-      // Leave an unaliased generator with an empty list of names since the analyzer will generate
-      // the correct defaults after the nested expression's type has been resolved.
-      case Column(explode: Explode) => MultiAlias(explode, Nil)
-      case Column(jt: JsonTuple) => MultiAlias(jt, Nil)
-
-      case Column(expr: Expression) => Alias(expr, expr.prettyString)()
-    }
-    Project(namedExpressions.toSeq, logicalPlan)
+    Project(cols.map(_.named), logicalPlan)
   }
 
   /**

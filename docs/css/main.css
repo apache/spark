@@ -39,8 +39,18 @@
   margin-left: 10px;
 }
 
+body .container-wrapper {
+  position: absolute;
+  width: 100%;
+  display: flex;
+}
+
 body #content {
+  position: relative;
+
   line-height: 1.6; /* Inspired by Github's wiki style */
+  background-color: white;
+  padding-left: 15px;
 }
 
 .title {
@@ -155,3 +165,30 @@ ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
  * AnchorJS (anchor links when hovering over headers)
  */
 a.anchorjs-link:hover { text-decoration: none; }
+
+
+/**
+ * The left navigation bar.
+ */
+.left-menu-wrapper {
+  position: absolute;
+  height: 100%;
+
+  width: 256px;
+  margin-top: -20px;
+  padding-top: 20px;
+  background-color: #F0F8FC;
+}
+
+.left-menu {
+  position: fixed;
+  max-width: 350px;
+
+  padding-right: 10px;
+  width: 256px;
+}
+
+.left-menu h3 {
+  margin-left: 10px;
+  line-height: 30px;
+}
