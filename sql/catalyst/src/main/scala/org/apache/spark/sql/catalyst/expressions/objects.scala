@@ -517,27 +517,6 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
   }
 }
 
-case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
-  extends UnaryExpression {
-
-  override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.isNullAt($ordinal)) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
-        }
-      """
-    })
-  }
-}
-
 /**
  * Serializes an input object using a generic serializer (Kryo or Java).
  * @param kryo if true, use Kryo. Otherwise, use Java.

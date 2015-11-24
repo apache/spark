@@ -220,7 +220,7 @@ object RowEncoder {
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
           Literal.create(null, externalDataTypeFor(f.dataType)),
-          constructorFor(GetInternalRowField(input, i, f.dataType)))
+          constructorFor(GetStructField(input, i)))
       }
       CreateExternalRow(convertedFields)
   }

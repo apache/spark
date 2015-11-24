@@ -206,7 +206,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyString: String = {
     transform {
-      case a: AttributeReference => PrettyAttribute(a.name)
+      case a: AttributeReference => PrettyAttribute(a.name, a.dataType)
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
