@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeFunction, LogicalPlan, ShowFunctions}
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StringType
-
 
 /**
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
@@ -32,7 +30,7 @@ import org.apache.spark.sql.types.StringType
  *
  * @param fallback A function that parses an input string to a logical plan
  */
-private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
+class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
 
   // A parser for the key-value part of the "SET [key = [value ]]" syntax
   private object SetCommandParser extends RegexParsers {

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
@@ -39,11 +37,11 @@ import org.apache.spark.util.Utils
  * "bridge" methods due to the use of covariant return types.
  *
  * {{{
- * In LegacyFunctions:
- * public abstract org.apache.spark.sql.Column avg(java.lang.String);
+ *   // In LegacyFunctions:
+ *   public abstract org.apache.spark.sql.Column avg(java.lang.String);
  *
- * In functions:
- * public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
+ *   // In functions:
+ *   public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
  * }}}
  *
  * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
@@ -2526,8 +2524,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function0[_], returnType: DataType): Column = withExpr {
     ScalaUDF(f, returnType, Seq())
   }
@@ -2539,8 +2538,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function1[_, _], returnType: DataType, arg1: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr))
   }
@@ -2552,8 +2552,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function2[_, _, _], returnType: DataType, arg1: Column, arg2: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr))
   }
@@ -2565,8 +2566,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function3[_, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr))
   }
@@ -2578,8 +2580,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function4[_, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr))
   }
@@ -2591,8 +2594,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function5[_, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr))
   }
@@ -2604,8 +2608,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function6[_, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr))
   }
@@ -2617,8 +2622,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function7[_, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr))
   }
@@ -2630,8 +2636,9 @@ object functions extends LegacyFunctions {
     * @group udf_funcs
     * @since 1.3.0
     * @deprecated As of 1.5.0, since it's redundant with udf()
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function8[_, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr))
   }
@@ -2642,9 +2649,10 @@ object functions extends LegacyFunctions {
     *
     * @group udf_funcs
     * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
+    * @deprecated As of 1.5.0, since it's redundant with udf().
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function9[_, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr))
   }
@@ -2655,9 +2663,10 @@ object functions extends LegacyFunctions {
     *
     * @group udf_funcs
     * @since 1.3.0
-    * @deprecated As of 1.5.0, since it's redundant with udf()
+    * @deprecated As of 1.5.0, since it's redundant with udf().
+   *              This will be removed in Spark 2.0.
     */
-  @deprecated("Use udf", "1.5.0")
+  @deprecated("Use udf. This will be removed in Spark 2.0.", "1.5.0")
   def callUDF(f: Function10[_, _, _, _, _, _, _, _, _, _, _], returnType: DataType, arg1: Column, arg2: Column, arg3: Column, arg4: Column, arg5: Column, arg6: Column, arg7: Column, arg8: Column, arg9: Column, arg10: Column): Column = withExpr {
     ScalaUDF(f, returnType, Seq(arg1.expr, arg2.expr, arg3.expr, arg4.expr, arg5.expr, arg6.expr, arg7.expr, arg8.expr, arg9.expr, arg10.expr))
   }
@@ -2698,9 +2707,10 @@ object functions extends LegacyFunctions {
    *
    * @group udf_funcs
    * @since 1.4.0
-   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF
+   * @deprecated As of 1.5.0, since it was not coherent to have two functions callUdf and callUDF.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use callUDF", "1.5.0")
+  @deprecated("Use callUDF. This will be removed in Spark 2.0.", "1.5.0")
   def callUdf(udfName: String, cols: Column*): Column = withExpr {
     // Note: we avoid using closures here because on file systems that are case-insensitive, the
     // compiled class file for the closure here will conflict with the one in callUDF (upper case).
