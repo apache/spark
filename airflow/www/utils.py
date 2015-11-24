@@ -134,7 +134,9 @@ def notify_owner(f):
                     if k != 'origin':
                         html += '<tr><td>{0}</td><td>{1}</td></tr>'.format(k, v)
                 html += '</table>'
-                utils.send_email(task.email, subject, html)
+                
+                if task.email:
+                    utils.send_email(task.email, subject, html)
 
         return f(*args, **kwargs)
     return wrapper
