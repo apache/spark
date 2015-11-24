@@ -397,11 +397,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Run parallel personalized PageRank for a given array of source vertices, such
    * that all random walks are started relative to the source vertices
    */
-  def staticParallelPersonalizedPageRank(sources : Array[VertexId], numIter: Int,
+  def staticParallelPersonalizedPageRank(sources: Array[VertexId], numIter: Int,
     resetProb: Double = 0.15) : Graph[BSV[Double], Double] = {
     PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
   }
-
 
   /**
    * Run Personalized PageRank for a fixed number of iterations with
