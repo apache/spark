@@ -55,9 +55,9 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  // configuration interval is in seconds; internally in nanoseconds
+  // configuration interval is in seconds; internally in milli
   private val incompleteApplicationRefreshInterval =
-    conf.getLong("spark.history.cache.interval", 60)* 1000000000
+    conf.getTimeAsMs("spark.history.cache.interval", "60 s")
 
 
   private val appCache = new ApplicationCache(this,
@@ -104,7 +104,7 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
-    appCache.get(appKey).map(_.ui)
+    Option(appCache.get(appKey))
   }
 
   initialize()
@@ -140,14 +140,14 @@ class HistoryServer(
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  override def attachSparkUI(ui: SparkUI, completed: Boolean) {
+  override def attachSparkUI(appId: String, attemptId: Option[String],ui: SparkUI, completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  override def detachSparkUI(ui: SparkUI) {
+  override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
   }
