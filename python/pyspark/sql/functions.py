@@ -1475,7 +1475,7 @@ def get_json_object(col, path):
 
 
 @since(1.6)
-def json_tuple(col, fields): Column = withExpr {
+def json_tuple(col, fields):
     """Creates a new row for a json column according to the given field names.
 
     :param col: string column in json format
