@@ -473,6 +473,14 @@ object functions extends LegacyFunctions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * @group window_funcs
+   * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `cume_dist`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use cume_dist. This will be removed in Spark 2.0.", "1.6.0")
+  def cumeDist(): Column = cume_dist()
+
+  /**
    * Window function: returns the cumulative distribution of values within a window partition,
    * i.e. the fraction of rows that are below the current row.
    *
@@ -481,13 +489,18 @@ object functions extends LegacyFunctions {
    *   cumeDist(x) = number of values before (and including) x / N
    * }}}
    *
-   *
-   * This is equivalent to the CUME_DIST function in SQL.
-   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def cume_dist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
+
+  /**
    * @group window_funcs
    * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `dense_rank`. This will be removed in Spark 2.0.
    */
-  def cumeDist(): Column = withExpr { UnresolvedWindowFunction("cume_dist", Nil) }
+  @deprecated("Use dense_rank. This will be removed in Spark 2.0.", "1.6.0")
+  def denseRank(): Column = dense_rank()
 
   /**
    * Window function: returns the rank of rows within a window partition, without any gaps.
@@ -497,12 +510,10 @@ object functions extends LegacyFunctions {
    * and had three people tie for second place, you would say that all three were in second
    * place and that the next person came in third.
    *
-   * This is equivalent to the DENSE_RANK function in SQL.
-   *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def denseRank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
+  def dense_rank(): Column = withExpr { UnresolvedWindowFunction("dense_rank", Nil) }
 
   /**
    * Window function: returns the value that is `offset` rows before the current row, and
@@ -621,6 +632,14 @@ object functions extends LegacyFunctions {
   def ntile(n: Int): Column = withExpr { UnresolvedWindowFunction("ntile", lit(n).expr :: Nil) }
 
   /**
+   * @group window_funcs
+   * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `percent_rank`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use percent_rank. This will be removed in Spark 2.0.", "1.6.0")
+  def percentRank(): Column = percent_rank()
+
+  /**
    * Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
    *
    * This is computed by:
@@ -631,9 +650,9 @@ object functions extends LegacyFunctions {
    * This is equivalent to the PERCENT_RANK function in SQL.
    *
    * @group window_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def percentRank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
+  def percent_rank(): Column = withExpr { UnresolvedWindowFunction("percent_rank", Nil) }
 
   /**
    * Window function: returns the rank of rows within a window partition.
@@ -651,14 +670,20 @@ object functions extends LegacyFunctions {
   def rank(): Column = withExpr { UnresolvedWindowFunction("rank", Nil) }
 
   /**
-   * Window function: returns a sequential number starting at 1 within a window partition.
-   *
-   * This is equivalent to the ROW_NUMBER function in SQL.
-   *
    * @group window_funcs
    * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `row_number`. This will be removed in Spark 2.0.
    */
-  def rowNumber(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
+  @deprecated("Use row_number. This will be removed in Spark 2.0.", "1.6.0")
+  def rowNumber(): Column = row_number()
+
+  /**
+   * Window function: returns a sequential number starting at 1 within a window partition.
+   *
+   * @group window_funcs
+   * @since 1.6.0
+   */
+  def row_number(): Column = withExpr { UnresolvedWindowFunction("row_number", Nil) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Non-aggregate functions
@@ -721,11 +746,20 @@ object functions extends LegacyFunctions {
   def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
 
   /**
+   * @group window_funcs
+   * @since 1.5.0
+   * @deprecated As of 1.6.0, replaced by `input_file_name`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use input_file_name. This will be removed in Spark 2.0.", "1.6.0")
+  def inputFileName(): Column = inputFileName()
+
+  /**
    * Creates a string column for the file name of the current Spark task.
    *
    * @group normal_funcs
+   * @since 1.6.0
    */
-  def inputFileName(): Column = withExpr { InputFileName() }
+  def input_file_name(): Column = withExpr { InputFileName() }
 
   /**
    * Return true iff the column is NaN.
@@ -733,7 +767,23 @@ object functions extends LegacyFunctions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def isNaN(e: Column): Column = withExpr { IsNaN(e.expr) }
+  def isNaN(e: Column): Column = isnan(e)
+
+  /**
+   * Return true iff the column is NaN.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnan(e: Column): Column = withExpr { IsNaN(e.expr) }
+
+  /**
+   * Return true iff the column is null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
 
   /**
    * A column expression that generates monotonically increasing 64-bit integers.
@@ -750,7 +800,24 @@ object functions extends LegacyFunctions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def monotonicallyIncreasingId(): Column = withExpr { MonotonicallyIncreasingID() }
+  def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
+
+  /**
+   * A column expression that generates monotonically increasing 64-bit integers.
+   *
+   * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
+   * The current implementation puts the partition ID in the upper 31 bits, and the record number
+   * within each partition in the lower 33 bits. The assumption is that the data frame has
+   * less than 1 billion partitions, and each partition has less than 8 billion records.
+   *
+   * As an example, consider a [[DataFrame]] with two partitions, each with 3 records.
+   * This expression would return the following IDs:
+   * 0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
 
   /**
    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
@@ -826,14 +893,22 @@ object functions extends LegacyFunctions {
   def randn(): Column = randn(Utils.random.nextLong)
 
   /**
+   * @group normal_funcs
+   * @since 1.4.0
+   * @deprecated As of 1.6.0, replaced by `spark_partition_id`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use cume_dist. This will be removed in Spark 2.0.", "1.6.0")
+  def sparkPartitionId(): Column = spark_partition_id()
+
+  /**
    * Partition ID of the Spark task.
    *
    * Note that this is indeterministic because it depends on data partitioning and task scheduling.
    *
    * @group normal_funcs
-   * @since 1.4.0
+   * @since 1.6.0
    */
-  def sparkPartitionId(): Column = withExpr { SparkPartitionID() }
+  def spark_partition_id(): Column = withExpr { SparkPartitionID() }
 
   /**
    * Computes the square root of the specified float value.
@@ -2306,6 +2381,17 @@ object functions extends LegacyFunctions {
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
 
   /**
+   * Extracts json object from a json string based on json path specified, and returns json string
+   * of the extracted json object. It will return null if the input json string is invalid.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  def get_json_object(e: Column, path: String): Column = withExpr {
+    GetJsonObject(e.expr, lit(path).expr)
+  }
+
+  /**
    * Creates a new row for a json column according to the given field names.
    *
    * @group collection_funcs
@@ -2313,7 +2399,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def json_tuple(json: Column, fields: String*): Column = withExpr {
-    require(fields.length > 0, "at least 1 field name should be given.")
+    require(fields.nonEmpty, "at least 1 field name should be given.")
     JsonTuple(json.expr +: fields.map(Literal.apply))
   }
 
