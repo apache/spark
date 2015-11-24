@@ -38,10 +38,10 @@ trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
    * param for the estimator to be validated
    * @group param
    */
-  val estimator: Param[Estimator[M]] = new Param(this, "estimator", "estimator for selection")
+  val estimator: Param[Estimator[M] with Controllable[M]] = new Param(this, "estimator", "estimator for selection")
 
   /** @group getParam */
-  def getEstimator: Estimator[M] = $(estimator)
+  def getEstimator: Estimator[M] with Controllable[M] = $(estimator)
 
   /**
    * param for estimator param maps
@@ -115,7 +115,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
   def copy(extra: ParamMap): BanditValidator[M] = {
     val copied = defaultCopy(extra).asInstanceOf[BanditValidator[M]]
     if (copied.isDefined(estimator)) {
-      copied.setEstimator(copied.getEstimator.copy(extra))
+      // copied.setEstimator(copied.getEstimator.copy(extra))
     }
     if (copied.isDefined(evaluator)) {
       copied.setEvaluator(copied.getEvaluator.copy(extra))
@@ -124,7 +124,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
   }
 
   /** @group setParam */
-  def setEstimator(value: Estimator[M]): this.type = set(estimator, value)
+  def setEstimator(value: Estimator[M] with Controllable[M]): this.type = set(estimator, value)
 
   /** @group setParam */
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
@@ -158,11 +158,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm[M]()
-          .setMaxIter($(stepsPerPulling))
-          .setEstimator(est)
-          .setEstimatorParamMap(parameter)
-          .setEvaluator(eval)
+        val arm = new Arm[M](est, None, parameter, eval, $(stepsPerPulling))
         arm
       }
 
@@ -204,6 +200,60 @@ class BanditValidatorModel[M <: Model[M]] private[ml] (
   override def copy(extra: ParamMap): BanditValidatorModel[M] = {
     val copied = new BanditValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[M]])
     copyValues(copied, extra)
+  }
+}
+
+/**
+ * Multi-bandit arm for hyper-parameter selection. An arm is a composition of an estimator, a model
+ * and an evaluator. Pulling an arm means performs a single iterative step for the estimator, which
+ * consumes a current model and produce a new one. The evaluator computes the error given a target
+ * column and a predicted column.
+ */
+class Arm[M <: Model[M]](
+    val estimator: Estimator[M] with Controllable[M],
+    val initialModel: Option[M],
+    val estimatorParamMap: ParamMap,
+    val evaluator: Evaluator,
+    val maxIter: Int) {
+
+  /**
+   * Inner model to record intermediate training result.
+   */
+  private var model: Option[M] = None
+
+  def getModel: M = model.get
+
+  /**
+   * Keep record of the number of pulls for computations in some search strategies.
+   */
+  private var numPulls: Int = 0
+
+  def getNumPulls: Int = numPulls
+
+  /**
+   * Pull the arm to perform maxIter steps of the iterative [Estimator]. Model will be updated
+   * after the pulling.
+   */
+  def pull(dataset: DataFrame): this.type = {
+    this.numPulls += 1
+    if (model.isEmpty && initialModel.isDefined) {
+      this.model = initialModel
+    }
+    estimator.setInitialModel(model)
+    estimator.setMaxIter(maxIter)
+    this.model = Some(estimator.fit(dataset, estimatorParamMap))
+    this
+  }
+
+  /**
+   * Evaluate the model according to a validation dataset.
+   */
+  def getValidationResult(validationSet: DataFrame): Double = {
+    if (model.isEmpty) {
+      throw new Exception("model is empty")
+    } else {
+      evaluator.evaluate(model.get.transform(validationSet))
+    }
   }
 }
 

@@ -66,7 +66,7 @@ object BanditValidatorExample {
     // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
     // This will allow us to jointly choose parameters for all Pipeline stages.
     // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-    val banditval = new BanditValidator[PipelineModel]()
+    val banditval = new BanditValidator[PipelineModel]("test")
       .setEstimator(pipeline)
       .setEvaluator(new BinaryClassificationEvaluator)
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
