@@ -224,14 +224,16 @@ class AnalysisSuite extends AnalysisTest {
     val c = testRelation2.output(2)
     val alias1 = a.as("a1")
     val alias2 = c.as("a2")
+    val alias3 = count(a).as("a3")
 
     val plan = testRelation2.
       groupBy('a, 'c) ('a.as("a1"), 'c.as("a2"), count('a).as("a3")).
       orderBy('a1.asc, 'c.asc)
 
     val expected = testRelation2.
-      groupBy(a, c) (alias1, alias2, count(a).as("a3")).
-      orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
+      groupBy(a, c) (alias1, alias2, alias3).
+      orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc).
+      select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
     checkAnalysis(plan, expected)
   }
 }
