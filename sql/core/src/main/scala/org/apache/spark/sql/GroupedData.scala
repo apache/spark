@@ -304,7 +304,7 @@ class GroupedData protected[sql](
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()
-      .sort(pivotColumn)
+      .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
       .map(_.get(0))
       .take(maxValues + 1)
       .toSeq
