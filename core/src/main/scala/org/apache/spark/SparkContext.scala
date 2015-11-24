@@ -2726,6 +2726,11 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      case zkUrl if zkUrl.startsWith("zk://") =>
+        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
+          "in the form mesos://zk://host:port.")
+        createTaskScheduler(sc, "mesos://" + zkUrl)
+
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
