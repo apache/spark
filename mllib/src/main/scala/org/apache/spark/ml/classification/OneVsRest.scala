@@ -23,12 +23,16 @@ import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, JObject}
+import org.json4s._
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.{ParamPair, Param, ParamMap, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.functions._
@@ -166,14 +170,13 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
     SharedReadWrite.validateParams(instance)
 
-    private case class Data(labelMetadata: Metadata)
+    private case class Data(labelMetadata: Map[String, Any])
 
     override protected def saveImpl(path: String): Unit = {
       import org.json4s.JsonDSL._
       // Save model data: labelMetadata
-      val data = Data(instance.labelMetadata)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sc.parallelize(Seq(instance.labelMetadata.json), 1).saveAsTextFile(dataPath)
       SharedReadWrite.saveImpl(path, instance, sc, Some("numClasses" -> instance.models.length))
     }
   }
@@ -186,14 +189,14 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     override def load(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
       val (metadata, _) = SharedReadWrite.load(path, sc, className)
-      val numClasses = (metadata.extraMetadata.get \ "numClasses").extract[Int]
+      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val models = Array(0, numClasses).map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
-        SharedReadWrite.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
+        DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
       }
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("labelMetadata").head()
-      val labelMetadata = data.getAs[Metadata](0)
+      val dataStr = sc.textFile(dataPath, 1).first()
+      val labelMetadata = Metadata.fromJson(dataStr)
       new OneVsRestModel(metadata.uid, labelMetadata, models)
     }
   }
@@ -317,9 +320,15 @@ private[classification] object SharedReadWrite extends MyClassifierType {
       sc: SparkContext,
       extraMetadata: Option[JObject] = None): Unit = {
 
-    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata)
+    val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+    val jsonParams = render(params
+      .filter { case ParamPair(p, v) => p.name != "classifier" }
+      .map { case ParamPair(p, v) => p.name -> parse(p.jsonEncode(v)) }
+      .toList)
 
-    val classifierPath = new Path(path, "classifier").toString
+    DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
+
+    val classifierPath = new Path(path, "metadata_classifier").toString
     instance.getClassifier.asInstanceOf[MLWritable].save(classifierPath)
 
     instance match {
@@ -334,12 +343,6 @@ private[classification] object SharedReadWrite extends MyClassifierType {
     }
   }
 
-  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc)
-    val cls = Utils.classForName(metadata.className)
-    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
-  }
-
   private[classification] def load(
       path: String,
       sc: SparkContext,
@@ -347,8 +350,8 @@ private[classification] object SharedReadWrite extends MyClassifierType {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
 
-    val classifierPath = new Path(path, "classifier").toString
-    val estimator = loadParamsInstance[ClassifierType](classifierPath, sc)
+    val classifierPath = new Path(path, "metadata_classifier").toString
+    val estimator = DefaultParamsReader.loadParamsInstance[ClassifierType](classifierPath, sc)
 
     (metadata, estimator)
   }
@@ -379,7 +382,9 @@ object OneVsRest extends MLReadable[OneVsRest] {
 
     override def load(path: String): OneVsRest = {
       val (metadata, classifier) = SharedReadWrite.load(path, sc, className)
-      new OneVsRest(metadata.uid).setClassifier(classifier)
+      val ova = new OneVsRest(metadata.uid)
+      DefaultParamsReader.getAndSetParams(ova, metadata)
+      ova.setClassifier(classifier)
     }
   }
 }
