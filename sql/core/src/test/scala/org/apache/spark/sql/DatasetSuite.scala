@@ -340,6 +340,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
   }
 
+  test("sample with replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      Seq(5, 10, 52, 73): _*)
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      Seq(3, 17, 27, 58, 62): _*)
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
