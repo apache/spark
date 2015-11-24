@@ -1020,7 +1020,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the executor to listen on. This is used for communicating with the driver.
-    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>
@@ -1028,7 +1027,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver's HTTP file server to listen on.
-    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>

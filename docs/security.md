@@ -149,8 +149,7 @@ configure those ports.
     <td>(random)</td>
     <td>Schedule tasks</td>
     <td><code>spark.executor.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Only used if Akka RPC backend is
-    configured.</td>
+    <td>Akka-based. Set to "0" to choose a port randomly.</td>
   </tr>
   <tr>
     <td>Executor</td>
@@ -158,7 +157,7 @@ configure those ports.
     <td>(random)</td>
     <td>File server for files and jars</td>
     <td><code>spark.fileserver.port</code></td>
-    <td>Jetty-based. Only used if Akka RPC backend is configured.</td>
+    <td>Jetty-based</td>
   </tr>
   <tr>
     <td>Executor</td>
