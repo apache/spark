@@ -44,6 +44,10 @@ class RowTest extends FunSpec with Matchers {
         noSchemaRow.getAs("col1")
       }
     }
+
+    it("None is returned when accessing via fieldName") {
+      noSchemaRow.getAsOpt("col1") shouldBe None
+    }
   }
 
   describe("Row (with schema)") {
@@ -55,6 +59,17 @@ class RowTest extends FunSpec with Matchers {
     it("getAs[T] retrieves a value by fieldname") {
       sampleRow.getAs[String]("col1") shouldBe "value1"
       sampleRow.getAs[Int]("col3") shouldBe 1
+    }
+
+    it("getAsOpt[T] retrieves an Optional value if the fieldName exists else returns None") {
+      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
+      sampleRow.getAsOpt[Int]("col3") shouldBe Some(1)
+      sampleRow.getAsOpt[String]("col4") shouldBe None
+    }
+
+    it("getAsOpt[T] retrieves an Optional value if class cast is successful else returns None") {
+      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
+      sampleRow.getAsOpt[Int]("col2") shouldBe None
     }
 
     it("Accessing non existent field throws an exception") {
