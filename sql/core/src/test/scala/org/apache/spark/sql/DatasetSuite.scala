@@ -340,6 +340,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1 -> "a#", 2 -> "#q", 3 -> "abcfoo#w", 5 -> "hello#er")
   }
 
+  test("cogroup with complex data") {
+    val ds1 = Seq(1 -> ClassData("a", 1), 2 -> ClassData("b", 2)).toDS()
+    val ds2 = Seq(2 -> ClassData("c", 3), 3 -> ClassData("d", 4)).toDS()
+    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+      Iterator(key -> (data1.map(_._2.a).mkString + data2.map(_._2.a).mkString))
+    }
+
+    checkAnswer(
+      cogrouped,
+      1 -> "a", 2 -> "bc", 3 -> "d")
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
