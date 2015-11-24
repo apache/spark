@@ -41,6 +41,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
+    // Create operation log root directory, if operation logging is enabled
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
+
     val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
     setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
     getAncestorField[Log](this, 3, "LOG").info(
