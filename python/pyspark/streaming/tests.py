@@ -404,6 +404,8 @@ class BasicOperationTests(PySparkStreamingTestCase):
         self._test_func(input, func, expected)
 
     def test_failed_func(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], time: Time)
         input = [self.sc.parallelize([d], 1) for d in range(4)]
         input_stream = self.ssc.queueStream(input)
 
@@ -411,6 +413,28 @@ class BasicOperationTests(PySparkStreamingTestCase):
             raise ValueError("This is a special error")
 
         input_stream.map(failed_func).pprint()
+        self.ssc.start()
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func2(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time)
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream1 = self.ssc.queueStream(input)
+        input_stream2 = self.ssc.queueStream(input)
+
+        def failed_func(rdd1, rdd2):
+            raise ValueError("This is a special error")
+
+        input_stream1.transformWith(failed_func, input_stream2, True).pprint()
         self.ssc.start()
         try:
             self.ssc.awaitTerminationOrTimeout(10)

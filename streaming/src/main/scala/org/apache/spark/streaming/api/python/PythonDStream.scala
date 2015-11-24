@@ -43,12 +43,9 @@ private[python] trait PythonTransformFunction {
   def call(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]]
 
   /**
-   * After invoking `call`, the user should use `getLastFailure` to check if there is any failure in
-   * Python. If so, the user should handle properly, e.g., throw an exception with the failure
-   * message.
+   * Get the failure, if any, in the last call to `call`.
    *
-   * @return the failure message. If there is no failure, the implementation should return `null` or
-   *         an empty string.
+   * @return the failure message if there was a failure, or `null` if there was no failure.
    */
   def getLastFailure: String
 }
@@ -61,12 +58,9 @@ private[python] trait PythonTransformFunctionSerializer {
   def loads(bytes: Array[Byte]): PythonTransformFunction
 
   /**
-   * After invoking `dumps` or `loads`, the user should use `getLastFailure` to check if there is
-   * any failure in Python. If so, the user should handle properly, e.g., throw an exception with
-   * the failure message.
+   * Get the failure, if any, in the last call to `dumps` or `loads`.
    *
-   * @return the failure message. If there is no failure, the implementation should return `null` or
-   *         an empty string.
+   * @return the failure message if there was a failure, or `null` if there was no failure.
    */
   def getLastFailure: String
 }
@@ -82,7 +76,7 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
     val resultRDD = pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava)
     val failure = pfunc.getLastFailure
-    if (failure != null && failure.nonEmpty) {
+    if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
     Option(resultRDD).map(_.rdd)
@@ -90,12 +84,22 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
     val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull, rdd2.map(JavaRDD.fromRDD(_)).orNull).asJava
-    Option(pfunc.call(time.milliseconds, rdds)).map(_.rdd)
+    val resultRDD = pfunc.call(time.milliseconds, rdds)
+    val failure = pfunc.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    Option(resultRDD).map(_.rdd)
   }
 
   // for function.Function2
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
-    pfunc.call(time.milliseconds, rdds)
+    val resultRDD = pfunc.call(time.milliseconds, rdds)
+    val failure = pfunc.getLastFailure
+    if (failure != null) {
+      throw new SparkException("An exception was raised by Python:\n" + failure)
+    }
+    resultRDD
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -141,7 +145,7 @@ private[python] object PythonTransformFunctionSerializer {
     val id = f.get(h).asInstanceOf[String]
     val results = serializer.dumps(id)
     val failure = serializer.getLastFailure
-    if (failure != null && failure.nonEmpty) {
+    if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
     results
@@ -151,7 +155,7 @@ private[python] object PythonTransformFunctionSerializer {
     require(serializer != null, "Serializer has not been registered!")
     val pfunc = serializer.loads(bytes)
     val failure = serializer.getLastFailure
-    if (failure != null && failure.nonEmpty) {
+    if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
     }
     pfunc
