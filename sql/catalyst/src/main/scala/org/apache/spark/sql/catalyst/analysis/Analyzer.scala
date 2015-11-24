@@ -88,7 +88,8 @@ class Analyzer(
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases,
+      RemoveUpCast)
   )
 
   /**
@@ -1166,6 +1167,37 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     plan transformAllExpressions {
       case CurrentDate() => currentDate
       case CurrentTimestamp() => currentTime
+    }
+  }
+}
+
+/**
+ * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
+ */
+object RemoveUpCast extends Rule[LogicalPlan] {
+  private def fail(from: DataType, to: DataType) = {
+    throw new AnalysisException(
+      s"Cannot up cast ${from.simpleString} to ${to.simpleString} as it may truncate")
+  }
+
+  private def checkNumericPrecedence(from: DataType, to: DataType): Boolean = {
+    val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
+    val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
+    if (toPrecedence > 0 && fromPrecedence > toPrecedence) {
+      false
+    } else {
+      true
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformAllExpressions {
+      case UpCast(child, dataType) => (child.dataType, dataType) match {
+        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => fail(from, to)
+        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => fail(from, to)
+        case (from, to) if !checkNumericPrecedence(from, to) => fail(from, to)
+        case _ => Cast(child, dataType)
+      }
     }
   }
 }

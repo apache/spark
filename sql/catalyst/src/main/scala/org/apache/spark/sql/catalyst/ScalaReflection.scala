@@ -18,9 +18,8 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, ArrayData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -128,7 +127,7 @@ object ScalaReflection extends ScalaReflection {
       val newPath = path
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
-      castToExpectedType(newPath, dataType)
+      upCastToExpectedType(newPath, dataType)
     }
 
     /** Returns the current path with a field at ordinal extracted. */
@@ -136,13 +135,13 @@ object ScalaReflection extends ScalaReflection {
       val newPath = path
         .map(p => GetStructField(p, new StructField("", dataType), ordinal))
         .getOrElse(BoundReference(ordinal, dataType, false))
-      castToExpectedType(newPath, dataType)
+      upCastToExpectedType(newPath, dataType)
     }
 
     /** Returns the current path or `BoundReference`. */
     def getPath: Expression = {
       val dataType = schemaFor(tpe).dataType
-      path.getOrElse(castToExpectedType(BoundReference(0, dataType, true), dataType))
+      path.getOrElse(upCastToExpectedType(BoundReference(0, dataType, true), dataType))
     }
 
     /**
@@ -153,16 +152,16 @@ object ScalaReflection extends ScalaReflection {
      * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
      * `Data` with int and long, because we lost the information that `b` should be a string.
      *
-     * This method help us "remember" the require data type by adding a `Cast`.  Note that we don't
-     * need to add `Cast` for struct type because there must be `UnresolvedExtractValue` or
-     * `GetStructField` wrapping it.
+     * This method help us "remember" the require data type by adding a `UpCast`.  Note that we
+     * don't need to cast struct type because there must be `UnresolvedExtractValue` or
+     * `GetStructField` wrapping it, and we will need to handle leaf type.
      *
      * TODO: this only works if the real type is compatible with the encoder's schema, we should
      * also handle error cases.
      */
-    def castToExpectedType(expr: Expression, expected: DataType): Expression = expected match {
+    def upCastToExpectedType(expr: Expression, expected: DataType): Expression = expected match {
       case _: StructType => expr
-      case _ => Cast(expr, expected)
+      case _ => UpCast(expr, expected)
     }
 
     tpe match {

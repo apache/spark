@@ -372,10 +372,10 @@ case class MapGroups[K, T, U](
  */
 case class CoGroup[K, Left, Right, R](
     func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
-    kEncoder: ExpressionEncoder[K],
+    keyEnc: ExpressionEncoder[K],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
-    rEncoder: ExpressionEncoder[R],
+    resultEnc: ExpressionEncoder[R],
     output: Seq[Attribute],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
@@ -392,15 +392,17 @@ case class CoGroup[K, Left, Right, R](
     left.execute().zipPartitions(right.execute()) { (leftData, rightData) =>
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
-      val groupKeyEncoder = kEncoder.bind(leftGroup)
+      val boundKeyEnc = keyEnc.bind(leftGroup)
+      val boundLeftEnc = leftEnc.bind(left.output)
+      val boundRightEnc = rightEnc.bind(right.output)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>
           val result = func(
-            groupKeyEncoder.fromRow(key),
-            leftResult.map(leftEnc.fromRow),
-            rightResult.map(rightEnc.fromRow))
-          result.map(rEncoder.toRow)
+            boundKeyEnc.fromRow(key),
+            leftResult.map(boundLeftEnc.fromRow),
+            rightResult.map(boundRightEnc.fromRow))
+          result.map(resultEnc.toRow)
       }
     }
   }

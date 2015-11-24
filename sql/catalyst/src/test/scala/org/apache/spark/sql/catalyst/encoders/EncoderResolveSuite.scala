@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.types._
 
 case class StringLongClass(a: String, b: Long)
+
+case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
 
@@ -117,5 +120,16 @@ class EncoderResolveSuite extends PlanTest {
 
   private def toExternalString(e: Expression): Expression = {
     Invoke(e, "toString", ObjectType(classOf[String]), Nil)
+  }
+
+  test("throw exception if real type is not compatible with encoder schema") {
+    intercept[AnalysisException] {
+      ExpressionEncoder[StringIntClass].resolve(Seq('a.string, 'b.long), null)
+    }
+
+    intercept[AnalysisException] {
+      val structType = new StructType().add("a", StringType).add("b", DecimalType.SYSTEM_DEFAULT)
+      ExpressionEncoder[ComplexClass].resolve(Seq('a.long, 'b.struct(structType)), null)
+    }
   }
 }
