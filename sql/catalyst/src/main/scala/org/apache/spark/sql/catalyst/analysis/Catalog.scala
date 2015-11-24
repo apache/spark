@@ -77,6 +77,64 @@ trait Catalog {
       tableIdent.table.toLowerCase
     }
   }
+
+  private[this] def toTableIdentifier(seq: Seq[String]): TableIdentifier =
+    seq match {
+      case table :: Nil => TableIdentifier(table, None)
+      case table :: database :: Nil => TableIdentifier(table, Some(database))
+      case _ => sys.error(s"Expected 1 or 2 components: ${seq.mkString(".")}")
+    }
+
+  @deprecated(since = "1.6.0")
+  def lookupRelation(
+                      tableIdentifier: Seq[String],
+                      alias: Option[String] = None): LogicalPlan =
+    lookupRelation(toTableIdentifier(tableIdentifier), alias)
+
+  @deprecated(since = "1.6.0")
+  def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit =
+    registerTable(toTableIdentifier(tableIdentifier), plan)
+
+  @deprecated(since = "1.6.0")
+  def tableExists(tableIdentifier: Seq[String]): Boolean =
+    tableExists(toTableIdentifier(tableIdentifier))
+
+  @deprecated(since = "1.6.0")
+  def unregisterTable(tableIdentifier: Seq[String]): Unit =
+    unregisterTable(toTableIdentifier(tableIdentifier))
+
+  @deprecated(since = "1.6.0")
+  protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
+    if (conf.caseSensitiveAnalysis) {
+      tableIdentifier
+    } else {
+      tableIdentifier.map(_.toLowerCase)
+    }
+  }
+
+  @deprecated(since = "1.6.0")
+  protected def getDbTableName(tableIdent: Seq[String]): String = {
+    val size = tableIdent.size
+    if (size <= 2) {
+      tableIdent.mkString(".")
+    } else {
+      tableIdent.slice(size - 2, size).mkString(".")
+    }
+  }
+
+  @deprecated(since = "1.6.0")
+  protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
+    (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
+  }
+
+  @deprecated(since = "1.6.0")
+  protected def checkTableIdentifier(tableIdentifier: Seq[String]): Unit = {
+    if (tableIdentifier.length > 1) {
+      throw new AnalysisException("Specifying database name or other qualifiers are not allowed " +
+        "for temporary tables. If the table name has dots (.) in it, please quote the " +
+        "table name with backticks (`).")
+    }
+  }
 }
 
 class SimpleCatalog(val conf: CatalystConf) extends Catalog {

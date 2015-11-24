@@ -28,6 +28,12 @@ private[sql] case class TableIdentifier(table: String, database: Option[String])
   def quotedString: String = database.map(db => s"`$db`.`$table`").getOrElse(s"`$table`")
 
   def unquotedString: String = database.map(db => s"$db.$table").getOrElse(table)
+
+  @deprecated(since = "1.6.0")
+  def toSeq: Seq[String] = database.toSeq :+ table
+
+  @deprecated(since = "1.6.0")
+  def withDatabase(database: String): TableIdentifier = this.copy(database = Some(database))
 }
 
 private[sql] object TableIdentifier {
