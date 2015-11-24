@@ -347,9 +347,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-          (Intercept)       5.260103
-          as.numeric.d1.V2. 3.725522
-          as.numeric.d1.V3. 5.711203
+         (Intercept)       5.260103
+         as.numeric.d1.V2. 3.725522
+         as.numeric.d1.V3. 5.711203
        */
       val interceptR1 = 5.260103
       val coefficientsR1 = Vectors.dense(3.725522, 5.711203)
@@ -363,9 +363,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-          (Intercept)       5.790885
-          as.numeric.d1.V2. 3.432373
-          as.numeric.d1.V3. 5.919196
+         (Intercept)       5.790885
+         as.numeric.d1.V2. 3.432373
+         as.numeric.d1.V3. 5.919196
        */
       val interceptR2 = 5.790885
       val coefficientsR2 = Vectors.dense(3.432373, 5.919196)
@@ -398,9 +398,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-          (Intercept)       .
-          as.numeric.d1.V2. 5.493430
-          as.numeric.d1.V3. 4.223082
+         (Intercept)       .
+         as.numeric.d1.V2. 5.493430
+         as.numeric.d1.V3. 4.223082
        */
       val interceptR1 = 0.0
       val coefficientsR1 = Vectors.dense(5.493430, 4.223082)
@@ -414,9 +414,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-          (Intercept)         .
-          as.numeric.d1.V2. 5.244324
-          as.numeric.d1.V3. 4.203106
+         (Intercept)         .
+         as.numeric.d1.V2. 5.244324
+         as.numeric.d1.V3. 4.203106
        */
       val interceptR2 = 0.0
       val coefficientsR2 = Vectors.dense(5.244324, 4.203106)
@@ -457,9 +457,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-            (Intercept)       5.689855
-            as.numeric.d1.V2. 3.661181
-            as.numeric.d1.V3. 6.000274
+           (Intercept)       5.689855
+           as.numeric.d1.V2. 3.661181
+           as.numeric.d1.V3. 6.000274
          */
         val interceptR1 = 5.689855
         val coefficientsR1 = Vectors.dense(3.661181, 6.000274)
@@ -473,9 +473,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-            (Intercept)       6.113890
-            as.numeric.d1.V2. 3.407021
-            as.numeric.d1.V3. 6.152512
+           (Intercept)       6.113890
+           as.numeric.d1.V2. 3.407021
+           as.numeric.d1.V3. 6.152512
          */
         val interceptR2 = 6.113890
         val coefficientsR2 = Vectors.dense(3.407021, 6.152512)
@@ -518,9 +518,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                       s0
-            (Intercept)       .
-            as.numeric.d1.V2. 5.643748
-            as.numeric.d1.V3. 4.331519
+           (Intercept)       .
+           as.numeric.d1.V2. 5.643748
+           as.numeric.d1.V3. 4.331519
          */
         val interceptR1 = 0.0
         val coefficientsR1 = Vectors.dense(5.643748, 4.331519)
@@ -534,9 +534,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-            (Intercept)         .
-            as.numeric.d1.V2. 5.455902
-            as.numeric.d1.V3. 4.312266
+           (Intercept)         .
+           as.numeric.d1.V2. 5.455902
+           as.numeric.d1.V3. 4.312266
 
          */
         val interceptR2 = 0.0
