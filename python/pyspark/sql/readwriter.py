@@ -130,7 +130,11 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            return self._df(self._jreader.load(path))
+            if type(path) == list:
+                return self._df(
+                    self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+            else:
+                return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
@@ -168,8 +172,10 @@ class DataFrameReader(object):
         """
         if schema is not None:
             self.schema(schema)
-        if isinstance(path, basestring) or type(path) == list:
+        if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        elif type(path) == list:
+            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             return self._df(self._jreader.json(path._jrdd))
         else:
@@ -211,7 +217,10 @@ class DataFrameReader(object):
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        return self._df(self._jreader.text(paths))
+        if type(paths) == list:
+            return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+        else:
+            return self._df(self._jreader.text(paths))
 
     @since(1.5)
     def orc(self, path):
