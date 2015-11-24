@@ -105,7 +105,7 @@ object PCA extends DefaultParamsReadable[PCA] {
 @Experimental
 class PCAModel private[ml] (
     override val uid: String,
-    val pc: DenseMatrix)
+    private[feature] val pc: DenseMatrix)
   extends Model[PCAModel] with PCAParams with MLWritable {
 
   import PCAModel._

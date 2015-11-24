@@ -44,7 +44,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
    * @group param
    */
   @Since("1.6.0")
-  final val statement: Param[String] = new Param[String](this, "statement", "SQL statement")
+  private final val statement: Param[String] = new Param[String](this, "statement", "SQL statement")
 
   /** @group setParam */
   @Since("1.6.0")
