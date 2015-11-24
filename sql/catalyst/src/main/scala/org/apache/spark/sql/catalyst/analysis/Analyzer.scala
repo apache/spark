@@ -635,7 +635,7 @@ class Analyzer(
           filter
         }
 
-      case sort@Sort(sortOrder, global, aggregate: Aggregate)
+      case sort @ Sort(sortOrder, global, aggregate: Aggregate)
         if aggregate.resolved =>
 
         // Try resolving the ordering as though it is in the aggregate clause.
