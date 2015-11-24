@@ -170,7 +170,7 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, Encoders.INT());
 
-    Dataset<String> mapped = grouped.mapGroup(new MapGroupFunction<Integer, String, String>() {
+    Dataset<String> mapped = grouped.mapGroups(new MapGroupsFunction<Integer, String, String>() {
       @Override
       public String call(Integer key, Iterator<String> values) throws Exception {
         StringBuilder sb = new StringBuilder(key.toString());
@@ -183,8 +183,8 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
 
-    Dataset<String> flatMapped = grouped.flatMapGroup(
-      new FlatMapGroupFunction<Integer, String, String>() {
+    Dataset<String> flatMapped = grouped.flatMapGroups(
+      new FlatMapGroupsFunction<Integer, String, String>() {
         @Override
         public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
@@ -249,8 +249,8 @@ public class JavaDatasetSuite implements Serializable {
     GroupedDataset<Integer, String> grouped =
       ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
 
-    Dataset<String> mapped = grouped.mapGroup(
-      new MapGroupFunction<Integer, String, String>() {
+    Dataset<String> mapped = grouped.mapGroups(
+      new MapGroupsFunction<Integer, String, String>() {
         @Override
         public String call(Integer key, Iterator<String> data) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());

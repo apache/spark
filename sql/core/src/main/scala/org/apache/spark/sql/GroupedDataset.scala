@@ -43,7 +43,7 @@ import org.apache.spark.sql.expressions.Aggregator
 @Experimental
 class GroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
-    tEncoder: Encoder[V],
+    vEncoder: Encoder[V],
     val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute]) extends Serializable {
@@ -53,12 +53,12 @@ class GroupedDataset[K, V] private[sql](
   // queryexecution.
 
   private implicit val unresolvedKEncoder = encoderFor(kEncoder)
-  private implicit val unresolvedTEncoder = encoderFor(tEncoder)
+  private implicit val unresolvedVEncoder = encoderFor(vEncoder)
 
   private val resolvedKEncoder =
     unresolvedKEncoder.resolve(groupingAttributes, OuterScopes.outerScopes)
-  private val resolvedTEncoder =
-    unresolvedTEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
+  private val resolvedVEncoder =
+    unresolvedVEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
   private def logicalPlan = queryExecution.analyzed
   private def sqlContext = queryExecution.sqlContext
@@ -76,7 +76,7 @@ class GroupedDataset[K, V] private[sql](
   def keyAs[L : Encoder]: GroupedDataset[L, V] =
     new GroupedDataset(
       encoderFor[L],
-      unresolvedTEncoder,
+      unresolvedVEncoder,
       queryExecution,
       dataAttributes,
       groupingAttributes)
@@ -110,13 +110,13 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroup[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
       MapGroups(
         f,
         resolvedKEncoder,
-        resolvedTEncoder,
+        resolvedVEncoder,
         groupingAttributes,
         logicalPlan))
   }
@@ -138,8 +138,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroup[U](f: FlatMapGroupFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
-    flatMapGroup((key, data) => f.call(key, data.asJava).asScala)(encoder)
+  def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
+    flatMapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
@@ -158,9 +158,9 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroup[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
     val func = (key: K, it: Iterator[V]) => Iterator(f(key, it))
-    flatMapGroup(func)
+    flatMapGroups(func)
   }
 
   /**
@@ -179,8 +179,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroup[U](f: MapGroupFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
-    mapGroup((key, data) => f.call(key, data.asJava))(encoder)
+  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
+    mapGroups((key, data) => f.call(key, data.asJava))(encoder)
   }
 
   /**
@@ -192,8 +192,8 @@ class GroupedDataset[K, V] private[sql](
   def reduce(f: (V, V) => V): Dataset[(K, V)] = {
     val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
 
-    implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedTEncoder)
-    flatMapGroup(func)
+    implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
+    flatMapGroups(func)
   }
 
   /**
@@ -213,7 +213,7 @@ class GroupedDataset[K, V] private[sql](
 
   private def withEncoder(c: Column): Column = c match {
     case tc: TypedColumn[_, _] =>
-      tc.withInputType(resolvedTEncoder.bind(dataAttributes), dataAttributes)
+      tc.withInputType(resolvedVEncoder.bind(dataAttributes), dataAttributes)
     case _ => c
   }
 
@@ -227,7 +227,7 @@ class GroupedDataset[K, V] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
-        _.withInputType(resolvedTEncoder, dataAttributes).named)
+        _.withInputType(resolvedVEncoder, dataAttributes).named)
     val keyColumn = if (groupingAttributes.length > 1) {
       Alias(CreateStruct(groupingAttributes), "key")()
     } else {
@@ -304,7 +304,7 @@ class GroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit def uEnc: Encoder[U] = other.unresolvedTEncoder
+    implicit def uEnc: Encoder[U] = other.unresolvedVEncoder
     new Dataset[R](
       sqlContext,
       CoGroup(
