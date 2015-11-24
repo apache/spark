@@ -736,6 +736,13 @@ private[hive] object HiveContext {
       s"jdbc:derby:;databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+
+    // SPARK-11783 When "hive.metastore.uris" is set, it overrides "javax.jdo.option.ConnectionURL",
+    // thus the execution Hive client connects to the actual remote Hive metastore instead of the
+    // Derby metastore created in the temporary directory.  Cleaning this configuration for
+    // the execution Hive client fixes this issue.
+    propMap.put(ConfVars.METASTOREURIS.varname, "")
+
     propMap.toMap
   }
 
