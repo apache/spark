@@ -145,7 +145,8 @@ def notify_owner(f):
                     {% endfor %}
                     </table>
                     ''').render(**locals())
-                utils.send_email(task.email, subject, content)
+                if task.email:
+                    utils.send_email(task.email, subject, content)
         return f(*args, **kwargs)
     return wrapper
 
