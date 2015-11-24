@@ -218,7 +218,7 @@ class DataFrameReader(object):
         [Row(value=u'hello'), Row(value=u'this')]
         """
         if isinstance(paths, basestring):
-            paths = [path]
+            paths = [paths]
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
