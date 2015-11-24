@@ -36,6 +36,14 @@ class KMeansModel(JavaModel):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
+    @since("1.6.0")
+    def computeCost(self, dataset):
+        """
+        Return the K-means cost (sum of squared distances of points to their nearest center)
+        for this model on the given data.
+        """
+        return self._java_obj.computeCost(dataset._jdf)
+
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed):
@@ -53,6 +61,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
+    >>> model.computeCost(df)
+    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
