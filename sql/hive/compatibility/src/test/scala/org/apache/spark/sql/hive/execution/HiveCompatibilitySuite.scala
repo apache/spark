@@ -27,6 +27,8 @@ import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.tags.ExtendedHiveTest
 
+// Test comment to trigger Hive tests.
+
 /**
  * Runs the test cases that are included in the hive distribution.
  */
