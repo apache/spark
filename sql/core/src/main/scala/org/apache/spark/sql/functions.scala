@@ -689,6 +689,7 @@ object functions extends LegacyFunctions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
     array((colName +: colNames).map(col) : _*)
   }
@@ -871,6 +872,7 @@ object functions extends LegacyFunctions {
    * @group normal_funcs
    * @since 1.4.0
    */
+  @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
     struct((colName +: colNames).map(col) : _*)
   }
