@@ -11,6 +11,7 @@ import json
 import os
 from flask import after_this_request, request, Response
 from flask.ext.login import current_user
+from jinja2 import Template
 import wtforms
 from wtforms.compat import text_type
 
@@ -128,13 +129,23 @@ def notify_owner(f):
                 subject = (
                     'Actions taken on DAG {0} by {1}'.format(
                         dag_id, user))
-                html = 'action: <i>{0}</i><br><br>'.format(f.__name__)
-                html += '<b>Parameters</b>:<br><table>'
-                for k, v in request.args.items():
-                    if k != 'origin':
-                        html += '<tr><td>{0}</td><td>{1}</td></tr>'.format(k, v)
-                html += '</table>'
-                utils.send_email(task.email, subject, html)
+                items = request.args.items()
+                content = Template('''
+                    action: <i>{{ f.__name__ }}</i><br>
+                    <br>
+                    <b>Parameters</b>:<br>
+                    <table>
+                    {% for k, v in items %}
+                        {% if k != 'origin' %}
+                            <tr>
+                                <td>{{ k }}</td>
+                                <td>{{ v }}</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                    </table>
+                    ''').render(**locals())
+                utils.send_email(task.email, subject, content)
 
         return f(*args, **kwargs)
     return wrapper
