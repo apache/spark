@@ -27,13 +27,15 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
@@ -182,7 +184,7 @@ class ALSModel private[ml] (
     val rank: Int,
     @transient val userFactors: DataFrame,
     @transient val itemFactors: DataFrame)
-  extends Model[ALSModel] with ALSModelParams {
+  extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   /** @group setParam */
   def setUserCol(value: String): this.type = set(userCol, value)
@@ -220,8 +222,53 @@ class ALSModel private[ml] (
     val copied = new ALSModel(uid, rank, userFactors, itemFactors)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new ALSModel.ALSModelWriter(this)
 }
 
+@Since("1.6.0")
+object ALSModel extends MLReadable[ALSModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[ALSModel] = new ALSModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): ALSModel = super.load(path)
+
+  private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val extraMetadata = "rank" -> instance.rank
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+      val userPath = new Path(path, "userFactors").toString
+      instance.userFactors.write.format("parquet").save(userPath)
+      val itemPath = new Path(path, "itemFactors").toString
+      instance.itemFactors.write.format("parquet").save(itemPath)
+    }
+  }
+
+  private class ALSModelReader extends MLReader[ALSModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[ALSModel].getName
+
+    override def load(path: String): ALSModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      implicit val format = DefaultFormats
+      val rank = (metadata.metadata \ "rank").extract[Int]
+      val userPath = new Path(path, "userFactors").toString
+      val userFactors = sqlContext.read.format("parquet").load(userPath)
+      val itemPath = new Path(path, "itemFactors").toString
+      val itemFactors = sqlContext.read.format("parquet").load(itemPath)
+
+      val model = new ALSModel(metadata.uid, rank, userFactors, itemFactors)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+}
 
 /**
  * :: Experimental ::
@@ -254,7 +301,8 @@ class ALSModel private[ml] (
  * preferences rather than explicit ratings given to items.
  */
 @Experimental
-class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
+class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams
+  with DefaultParamsWritable {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
@@ -338,6 +386,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
   override def copy(extra: ParamMap): ALS = defaultCopy(extra)
 }
 
+
 /**
  * :: DeveloperApi ::
  * An implementation of ALS that supports generic ID types, specialized for Int and Long. This is
@@ -347,7 +396,7 @@ class ALS(override val uid: String) extends Estimator[ALSModel] with ALSParams {
  * than 2 billion.
  */
 @DeveloperApi
-object ALS extends Logging {
+object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * :: DeveloperApi ::
@@ -355,6 +404,9 @@ object ALS extends Logging {
    */
   @DeveloperApi
   case class Rating[@specialized(Int, Long) ID](user: ID, item: ID, rating: Float)
+
+  @Since("1.6.0")
+  override def load(path: String): ALS = super.load(path)
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {

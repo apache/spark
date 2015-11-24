@@ -105,6 +105,10 @@ private[spark] class SparkUI private (
     Iterator(new ApplicationInfo(
       id = appId,
       name = appName,
+      coresGranted = None,
+      maxCores = None,
+      coresPerExecutor = None,
+      memoryPerExecutorMB = None,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
         startTime = new Date(startTime),

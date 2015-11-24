@@ -130,7 +130,7 @@ class DAGScheduler(
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
-  private[scheduler] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
+  private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
@@ -542,8 +542,7 @@ class DAGScheduler(
   }
 
   /**
-   * Submit an action job to the scheduler and get a JobWaiter object back. The JobWaiter object
-   * can be used to block until the the job finishes executing or can be used to cancel the job.
+   * Submit an action job to the scheduler.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -552,6 +551,11 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
+   * @return a JobWaiter object that can be used to block until the job finishes executing
+   *         or can be used to cancel the job.
+   *
+   * @throws IllegalArgumentException when partitions ids are illegal
    */
   def submitJob[T, U](
       rdd: RDD[T],
@@ -585,7 +589,7 @@ class DAGScheduler(
 
   /**
    * Run an action job on the given RDD and pass all the results to the resultHandler function as
-   * they arrive. Throws an exception if the job fials, or returns normally if successful.
+   * they arrive.
    *
    * @param rdd target RDD to run tasks on
    * @param func a function to run on each partition of the RDD
@@ -594,6 +598,8 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+   *
+   * @throws Exception when the job fails
    */
   def runJob[T, U](
       rdd: RDD[T],
@@ -1575,8 +1581,6 @@ class DAGScheduler(
     taskScheduler.stop()
   }
 
-  // Start the event thread and register the metrics source at the end of the constructor
-  env.metricsSystem.registerSource(metricsSource)
   eventProcessLoop.start()
 }
 

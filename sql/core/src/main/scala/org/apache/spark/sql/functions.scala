@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+
+
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 import scala.util.Try
@@ -24,10 +26,32 @@ import scala.util.Try
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.{SqlParser, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedFunction, Star}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+
+/**
+ * Ensures that java functions signatures for methods that now return a [[TypedColumn]] still have
+ * legacy equivalents in bytecode.  This compatibility is done by forcing the compiler to generate
+ * "bridge" methods due to the use of covariant return types.
+ *
+ * {{{
+ * In LegacyFunctions:
+ * public abstract org.apache.spark.sql.Column avg(java.lang.String);
+ *
+ * In functions:
+ * public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
+ * }}}
+ *
+ * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
+ * [[DataFrame]] operations when the return type for a given function is statically known.
+ */
+private[sql] abstract class LegacyFunctions {
+  def count(columnName: String): Column
+}
 
 /**
  * :: Experimental ::
@@ -48,10 +72,16 @@ import org.apache.spark.util.Utils
  */
 @Experimental
 // scalastyle:off
-object functions {
+object functions extends LegacyFunctions {
 // scalastyle:on
 
   private def withExpr(expr: Expression): Column = Column(expr)
+
+  private def withAggregateFunction(
+    func: AggregateFunction,
+    isDistinct: Boolean = false): Column = {
+    Column(func.toAggregateExpression(isDistinct))
+  }
 
   /**
    * Returns a [[Column]] based on the given column name.
@@ -128,7 +158,9 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column): Column = withExpr { ApproxCountDistinct(e.expr) }
+  def approxCountDistinct(e: Column): Column = withAggregateFunction {
+    HyperLogLogPlusPlus(e.expr)
+  }
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
@@ -144,8 +176,8 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def approxCountDistinct(e: Column, rsd: Double): Column = withExpr {
-    ApproxCountDistinct(e.expr, rsd)
+  def approxCountDistinct(e: Column, rsd: Double): Column = withAggregateFunction {
+    HyperLogLogPlusPlus(e.expr, rsd, 0, 0)
   }
 
   /**
@@ -164,7 +196,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def avg(e: Column): Column = withExpr { Average(e.expr) }
+  def avg(e: Column): Column = withAggregateFunction { Average(e.expr) }
 
   /**
    * Aggregate function: returns the average of the values in a group.
@@ -175,12 +207,32 @@ object functions {
   def avg(columnName: String): Column = avg(Column(columnName))
 
   /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * For now this is an alias for the collect_list Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_list(e: Column): Column = callUDF("collect_list", e)
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * For now this is an alias for the collect_set Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_set(e: Column): Column = callUDF("collect_set", e)
+
+  /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def corr(column1: Column, column2: Column): Column = withExpr {
+  def corr(column1: Column, column2: Column): Column = withAggregateFunction {
     Corr(column1.expr, column2.expr)
   }
 
@@ -200,7 +252,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(e: Column): Column = withExpr {
+  def count(e: Column): Column = withAggregateFunction {
     e.expr match {
       // Turn count(*) into count(1)
       case s: Star => Count(Literal(1))
@@ -214,7 +266,8 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def count(columnName: String): Column = count(Column(columnName))
+  def count(columnName: String): TypedColumn[Any, Long] =
+    count(Column(columnName)).as(ExpressionEncoder[Long])
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -223,8 +276,8 @@ object functions {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column = withExpr {
-    CountDistinct((expr +: exprs).map(_.expr))
+  def countDistinct(expr: Column, exprs: Column*): Column = {
+    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
   }
 
   /**
@@ -243,7 +296,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def first(e: Column): Column = withExpr { First(e.expr) }
+  def first(e: Column): Column = withAggregateFunction { new First(e.expr) }
 
   /**
    * Aggregate function: returns the first value of a column in a group.
@@ -259,7 +312,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def kurtosis(e: Column): Column = withExpr { Kurtosis(e.expr) }
+  def kurtosis(e: Column): Column = withAggregateFunction { Kurtosis(e.expr) }
 
   /**
    * Aggregate function: returns the last value in a group.
@@ -267,7 +320,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def last(e: Column): Column = withExpr { Last(e.expr) }
+  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
 
   /**
    * Aggregate function: returns the last value of the column in a group.
@@ -283,7 +336,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def max(e: Column): Column = withExpr { Max(e.expr) }
+  def max(e: Column): Column = withAggregateFunction { Max(e.expr) }
 
   /**
    * Aggregate function: returns the maximum value of the column in a group.
@@ -317,7 +370,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def min(e: Column): Column = withExpr { Min(e.expr) }
+  def min(e: Column): Column = withAggregateFunction { Min(e.expr) }
 
   /**
    * Aggregate function: returns the minimum value of the column in a group.
@@ -333,7 +386,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def skewness(e: Column): Column = withExpr { Skewness(e.expr) }
+  def skewness(e: Column): Column = withAggregateFunction { Skewness(e.expr) }
 
   /**
    * Aggregate function: alias for [[stddev_samp]].
@@ -341,16 +394,16 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev(e: Column): Column = withExpr { StddevSamp(e.expr) }
+  def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
-   * Aggregate function: returns the unbiased sample standard deviation of
+   * Aggregate function: returns the sample standard deviation of
    * the expression in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev_samp(e: Column): Column = withExpr { StddevSamp(e.expr) }
+  def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
    * Aggregate function: returns the population standard deviation of
@@ -359,7 +412,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def stddev_pop(e: Column): Column = withExpr { StddevPop(e.expr) }
+  def stddev_pop(e: Column): Column = withAggregateFunction { StddevPop(e.expr) }
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
@@ -367,7 +420,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def sum(e: Column): Column = withExpr { Sum(e.expr) }
+  def sum(e: Column): Column = withAggregateFunction { Sum(e.expr) }
 
   /**
    * Aggregate function: returns the sum of all values in the given column.
@@ -383,7 +436,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def sumDistinct(e: Column): Column = withExpr { SumDistinct(e.expr) }
+  def sumDistinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
 
   /**
    * Aggregate function: returns the sum of distinct values in the expression.
@@ -399,7 +452,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def variance(e: Column): Column = withExpr { VarianceSamp(e.expr) }
+  def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
    * Aggregate function: returns the unbiased variance of the values in a group.
@@ -407,7 +460,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_samp(e: Column): Column = withExpr { VarianceSamp(e.expr) }
+  def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
    * Aggregate function: returns the population variance of the values in a group.
@@ -415,7 +468,7 @@ object functions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def var_pop(e: Column): Column = withExpr { VariancePop(e.expr) }
+  def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
@@ -2251,6 +2304,18 @@ object functions {
    * @since 1.3.0
    */
   def explode(e: Column): Column = withExpr { Explode(e.expr) }
+
+  /**
+   * Creates a new row for a json column according to the given field names.
+   *
+   * @group collection_funcs
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def json_tuple(json: Column, fields: String*): Column = withExpr {
+    require(fields.length > 0, "at least 1 field name should be given.")
+    JsonTuple(json.expr +: fields.map(Literal.apply))
+  }
 
   /**
    * Returns length of array or map.

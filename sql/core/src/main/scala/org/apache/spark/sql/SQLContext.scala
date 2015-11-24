@@ -21,7 +21,6 @@ import java.beans.{BeanInfo, Introspector}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
-
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
@@ -34,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
@@ -506,6 +505,10 @@ class SQLContext private[sql](
     val plan = LogicalRDD(attributes, encoded)(self)
 
     new Dataset[T](this, plan)
+  }
+
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala)
   }
 
   /**
@@ -1226,7 +1229,7 @@ class SQLContext private[sql](
   // construction of the instance.
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      SQLContext.clearInstantiatedContext(self)
+      SQLContext.clearInstantiatedContext()
     }
   })
 
@@ -1267,13 +1270,13 @@ object SQLContext {
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     val ctx = activeContext.get()
-    if (ctx != null) {
+    if (ctx != null && !ctx.sparkContext.isStopped) {
       return ctx
     }
 
     synchronized {
       val ctx = instantiatedContext.get()
-      if (ctx == null) {
+      if (ctx == null || ctx.sparkContext.isStopped) {
         new SQLContext(sparkContext)
       } else {
         ctx
@@ -1281,12 +1284,17 @@ object SQLContext {
     }
   }
 
-  private[sql] def clearInstantiatedContext(sqlContext: SQLContext): Unit = {
-    instantiatedContext.compareAndSet(sqlContext, null)
+  private[sql] def clearInstantiatedContext(): Unit = {
+    instantiatedContext.set(null)
   }
 
   private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    instantiatedContext.compareAndSet(null, sqlContext)
+    synchronized {
+      val ctx = instantiatedContext.get()
+      if (ctx == null || ctx.sparkContext.isStopped) {
+        instantiatedContext.set(sqlContext)
+      }
+    }
   }
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {

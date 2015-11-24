@@ -39,7 +39,7 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
 
-import org.apache.spark.{SparkUserAppException, SPARK_VERSION}
+import org.apache.spark.{SparkException, SparkUserAppException, SPARK_VERSION}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -83,6 +83,7 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
+  private val R_PACKAGE_ARCHIVE = "rpkg.zip"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
@@ -362,22 +363,46 @@ object SparkSubmit {
       }
     }
 
-    // In YARN mode for an R app, add the SparkR package archive to archives
-    // that can be distributed with the job
+    // In YARN mode for an R app, add the SparkR package archive and the R package
+    // archive containing all of the built R libraries to archives so that they can
+    // be distributed with the job
     if (args.isR && clusterManager == YARN) {
-      val rPackagePath = RUtils.localSparkRPackagePath
-      if (rPackagePath.isEmpty) {
+      val sparkRPackagePath = RUtils.localSparkRPackagePath
+      if (sparkRPackagePath.isEmpty) {
         printErrorAndExit("SPARK_HOME does not exist for R application in YARN mode.")
       }
-      val rPackageFile =
-        RPackageUtils.zipRLibraries(new File(rPackagePath.get), SPARKR_PACKAGE_ARCHIVE)
-      if (!rPackageFile.exists()) {
+      val sparkRPackageFile = new File(sparkRPackagePath.get, SPARKR_PACKAGE_ARCHIVE)
+      if (!sparkRPackageFile.exists()) {
         printErrorAndExit(s"$SPARKR_PACKAGE_ARCHIVE does not exist for R application in YARN mode.")
       }
-      val localURI = Utils.resolveURI(rPackageFile.getAbsolutePath)
+      val sparkRPackageURI = Utils.resolveURI(sparkRPackageFile.getAbsolutePath).toString
 
+      // Distribute the SparkR package.
       // Assigns a symbol link name "sparkr" to the shipped package.
-      args.archives = mergeFileLists(args.archives, localURI.toString + "#sparkr")
+      args.archives = mergeFileLists(args.archives, sparkRPackageURI + "#sparkr")
+
+      // Distribute the R package archive containing all the built R packages.
+      if (!RUtils.rPackages.isEmpty) {
+        val rPackageFile =
+          RPackageUtils.zipRLibraries(new File(RUtils.rPackages.get), R_PACKAGE_ARCHIVE)
+        if (!rPackageFile.exists()) {
+          printErrorAndExit("Failed to zip all the built R packages.")
+        }
+
+        val rPackageURI = Utils.resolveURI(rPackageFile.getAbsolutePath).toString
+        // Assigns a symbol link name "rpkg" to the shipped package.
+        args.archives = mergeFileLists(args.archives, rPackageURI + "#rpkg")
+      }
+    }
+
+    // TODO: Support distributing R packages with standalone cluster
+    if (args.isR && clusterManager == STANDALONE && !RUtils.rPackages.isEmpty) {
+      printErrorAndExit("Distributing R packages with standalone cluster is not supported.")
+    }
+
+    // TODO: Support SparkR with mesos cluster
+    if (args.isR && clusterManager == MESOS) {
+      printErrorAndExit("SparkR is not supported for Mesos cluster.")
     }
 
     // If we're running a R app, set the main class to our specific R runner
@@ -521,8 +546,19 @@ object SparkSubmit {
         sysProps.put("spark.yarn.isPython", "true")
       }
       if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when the keytab is specified")
-        UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        require(args.keytab != null, "Keytab must be specified when principal is specified")
+        if (!new File(args.keytab).exists()) {
+          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+        } else {
+          // Add keytab and principal configurations in sysProps to make them available
+          // for later use; e.g. in spark sql, the isolated class loader used to talk
+          // to HiveMetastore will use these settings. They will be set as Java system
+          // properties and then loaded by SparkConf
+          sysProps.put("spark.yarn.keytab", args.keytab)
+          sysProps.put("spark.yarn.principal", args.principal)
+
+          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        }
       }
     }
 

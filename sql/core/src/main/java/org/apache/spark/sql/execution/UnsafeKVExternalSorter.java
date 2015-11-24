@@ -85,8 +85,9 @@ public final class UnsafeKVExternalSorter {
     } else {
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underline array for in-memory sorter (it's always large enough).
+      // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        taskMemoryManager, recordComparator, prefixComparator, map.getArray());
+        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray());
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest {
@@ -45,7 +46,7 @@ class AnalysisSuite extends AnalysisTest {
     val explode = Explode(AttributeReference("a", IntegerType, nullable = true)())
     assert(!Project(Seq(Alias(explode, "explode")()), testRelation).resolved)
 
-    assert(!Project(Seq(Alias(Count(Literal(1)), "count")()), testRelation).resolved)
+    assert(!Project(Seq(Alias(count(Literal(1)), "count")()), testRelation).resolved)
   }
 
   test("analyze project") {
@@ -173,5 +174,86 @@ class AnalysisSuite extends AnalysisTest {
       LocalRelation()
     )
     assertAnalysisError(plan, Seq("data type mismatch: Arguments must be same type"))
+  }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val string = testRelation2.output(0)
+    val double = testRelation2.output(2)
+    val short = testRelation2.output(4)
+    val nullResult = Literal.create(null, StringType)
+
+    def checkUDF(udf: Expression, transformed: Expression): Unit = {
+      checkAnalysis(
+        Project(Alias(udf, "")() :: Nil, testRelation2),
+        Project(Alias(transformed, "")() :: Nil, testRelation2)
+      )
+    }
+
+    // non-primitive parameters do not need special null handling
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val expected1 = udf1
+    checkUDF(udf1, expected1)
+
+    // only primitive parameter needs special null handling
+    val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil)
+    val expected2 = If(IsNull(double), nullResult, udf2)
+    checkUDF(udf2, expected2)
+
+    // special null handling should apply to all primitive parameters
+    val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil)
+    val expected3 = If(
+      IsNull(short) || IsNull(double),
+      nullResult,
+      udf3)
+    checkUDF(udf3, expected3)
+
+    // we can skip special null handling for primitive parameters that are not nullable
+    // TODO: this is disabled for now as we can not completely trust `nullable`.
+    val udf4 = ScalaUDF(
+      (s: Short, d: Double) => "x",
+      StringType,
+      short :: double.withNullability(false) :: Nil)
+    val expected4 = If(
+      IsNull(short),
+      nullResult,
+      udf4)
+    // checkUDF(udf4, expected4)
+  }
+
+  test("analyzer should replace current_timestamp with literals") {
+    val in = Project(Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
+      LocalRelation())
+
+    val min = System.currentTimeMillis() * 1000
+    val plan = in.analyze.asInstanceOf[Project]
+    val max = (System.currentTimeMillis() + 1) * 1000
+
+    val lits = new scala.collection.mutable.ArrayBuffer[Long]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[Long]
+      e
+    }
+    assert(lits.size == 2)
+    assert(lits(0) >= min && lits(0) <= max)
+    assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should replace current_date with literals") {
+    val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
+
+    val min = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val plan = in.analyze.asInstanceOf[Project]
+    val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
+
+    val lits = new scala.collection.mutable.ArrayBuffer[Int]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[Int]
+      e
+    }
+    assert(lits.size == 2)
+    assert(lits(0) >= min && lits(0) <= max)
+    assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
   }
 }

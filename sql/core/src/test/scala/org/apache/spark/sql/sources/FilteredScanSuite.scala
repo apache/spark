@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-
 import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-
+import org.apache.spark.unsafe.types.UTF8String
 
 class FilteredScanSource extends RelationProvider {
   override def createRelation(
@@ -130,7 +129,7 @@ object ColumnsRequired {
   var set: Set[String] = Set.empty
 }
 
-class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
+class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
   protected override lazy val sql = caseInsensitiveContext.sql _
 
   override def beforeAll(): Unit = {
@@ -144,9 +143,6 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
         |  to '10'
         |)
       """.stripMargin)
-
-    // UDF for testing filter push-down
-    caseInsensitiveContext.udf.register("udf_gt3", (_: Int) > 3)
   }
 
   sqlTest(
@@ -258,7 +254,11 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a IN (1,3,5)", 3, Set("a", "b", "c"))
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0, Set("a", "b", "c"))
-  testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10, Set("a", "b", "c"))
+  testPushDown(
+    "SELECT * FROM oneToTenFiltered WHERE b = 1",
+    10,
+    Set("a", "b", "c"),
+    Set(EqualTo("b", 1)))
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 5 AND a > 1", 3, Set("a", "b", "c"))
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a < 3 OR a > 8", 4, Set("a", "b", "c"))
@@ -276,22 +276,34 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1, Set("c"))
   testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1, Set("c"))
 
-  // Columns only referenced by UDF filter must be required, as UDF filters can't be pushed down.
-  testPushDown("SELECT c FROM oneToTenFiltered WHERE udf_gt3(A)", 10, Set("a", "c"))
+  // Filters referencing multiple columns are not convertible, all referenced columns must be
+  // required.
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE A + b > 9", 10, Set("a", "b", "c"))
 
-  // A query with an unconvertible filter, an unhandled filter, and a handled filter.
+  // A query with an inconvertible filter, an unhandled filter, and a handled filter.
   testPushDown(
     """SELECT a
       |  FROM oneToTenFiltered
-      | WHERE udf_gt3(b)
+      | WHERE a + b > 9
       |   AND b < 16
       |   AND c IN ('bbbbbBBBBB', 'cccccCCCCC', 'dddddDDDDD', 'foo')
-    """.stripMargin.split("\n").map(_.trim).mkString(" "), 3, Set("a", "b"))
+    """.stripMargin.split("\n").map(_.trim).mkString(" "),
+    3,
+    Set("a", "b"),
+    Set(LessThan("b", 16)))
 
   def testPushDown(
-      sqlString: String,
-      expectedCount: Int,
-      requiredColumnNames: Set[String]): Unit = {
+    sqlString: String,
+    expectedCount: Int,
+    requiredColumnNames: Set[String]): Unit = {
+    testPushDown(sqlString, expectedCount, requiredColumnNames, Set.empty[Filter])
+  }
+
+  def testPushDown(
+    sqlString: String,
+    expectedCount: Int,
+    requiredColumnNames: Set[String],
+    expectedUnhandledFilters: Set[Filter]): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {
       val queryExecution = sql(sqlString).queryExecution
       val rawPlan = queryExecution.executedPlan.collect {
@@ -303,15 +315,13 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
       val rawCount = rawPlan.execute().count()
       assert(ColumnsRequired.set === requiredColumnNames)
 
-      assert {
-        val table = caseInsensitiveContext.table("oneToTenFiltered")
-        val relation = table.queryExecution.logical.collectFirst {
-          case LogicalRelation(r, _) => r
-        }.get
+      val table = caseInsensitiveContext.table("oneToTenFiltered")
+      val relation = table.queryExecution.logical.collectFirst {
+        case LogicalRelation(r, _) => r
+      }.get
 
-        // `relation` should be able to handle all pushed filters
-        relation.unhandledFilters(FiltersPushed.list.toArray).isEmpty
-      }
+      assert(
+        relation.unhandledFilters(FiltersPushed.list.toArray).toSet === expectedUnhandledFilters)
 
       if (rawCount != expectedCount) {
         fail(

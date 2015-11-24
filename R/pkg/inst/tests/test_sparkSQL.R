@@ -229,7 +229,7 @@ test_that("create DataFrame from list or data.frame", {
   df <- createDataFrame(sqlContext, l, c("a", "b"))
   expect_equal(columns(df), c("a", "b"))
 
-  l <- list(list(a=1, b=2), list(a=3, b=4))
+  l <- list(list(a = 1, b = 2), list(a = 3, b = 4))
   df <- createDataFrame(sqlContext, l)
   expect_equal(columns(df), c("a", "b"))
 
@@ -242,6 +242,14 @@ test_that("create DataFrame from list or data.frame", {
   expect_equal(count(df), 3)
   ldf2 <- collect(df)
   expect_equal(ldf$a, ldf2$a)
+
+  irisdf <- createDataFrame(sqlContext, iris)
+  iris_collected <- collect(irisdf)
+  expect_equivalent(iris_collected[,-5], iris[,-5])
+  expect_equal(iris_collected$Species, as.character(iris$Species))
+
+  mtcarsdf <- createDataFrame(sqlContext, mtcars)
+  expect_equivalent(collect(mtcarsdf), mtcars)
 })
 
 test_that("create DataFrame with different data types", {
@@ -281,6 +289,18 @@ test_that("create DataFrame with complex types", {
   expect_equal(class(s), "struct")
   expect_equal(s$a, "aa")
   expect_equal(s$b, 3L)
+})
+
+test_that("create DataFrame from a data.frame with complex types", {
+  ldf <- data.frame(row.names = 1:2)
+  ldf$a_list <- list(list(1, 2), list(3, 4))
+  ldf$an_envir <- c(as.environment(list(a = 1, b = 2)), as.environment(list(c = 3)))
+
+  sdf <- createDataFrame(sqlContext, ldf)
+  collected <- collect(sdf)
+
+  expect_identical(ldf[, 1, FALSE], collected[, 1, FALSE])
+  expect_equal(ldf$an_envir, collected$an_envir)
 })
 
 # For test map type and struct type in DataFrame
@@ -413,6 +433,10 @@ test_that("table() returns a new DataFrame", {
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
   dropTempTable(sqlContext, "table1")
+
+  # Test base::table is working
+  #a <- letters[1:3]
+  #expect_equal(class(table(a, sample(a))), "table")
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -647,12 +671,15 @@ test_that("sample on a DataFrame", {
   sampled <- sample(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
   expect_is(sampled, "DataFrame")
-  sampled2 <- sample(df, FALSE, 0.1)
+  sampled2 <- sample(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled2) < 3)
 
   # Also test sample_frac
-  sampled3 <- sample_frac(df, FALSE, 0.1)
+  sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
+
+  # Test base::sample is working
+  #expect_equal(length(sample(1:12)), 12)
 })
 
 test_that("select operators", {
@@ -733,6 +760,9 @@ test_that("subsetting", {
   df6 <- subset(df, df$age %in% c(30), c(1,2))
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
+
+  # Test base::subset is working
+  expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
 })
 
 test_that("selectExpr() on a DataFrame", {
@@ -826,12 +856,13 @@ test_that("column functions", {
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
   c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c)
-  c9 <- signum(c) + sin(c) + sinh(c) + size(c) + soundex(c) + sqrt(c) + sum(c)
+  c9 <- signum(c) + sin(c) + sinh(c) + size(c) + stddev(c) + soundex(c) + sqrt(c) + sum(c)
   c10 <- sumDistinct(c) + tan(c) + tanh(c) + toDegrees(c) + toRadians(c)
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
-  c12 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
-  c13 <- cumeDist() + ntile(1)
-  c14 <- denseRank() + percentRank() + rank() + rowNumber()
+  c12 <- variance(c)
+  c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
+  c14 <- cumeDist() + ntile(1)
+  c15 <- denseRank() + percentRank() + rank() + rowNumber()
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
@@ -849,8 +880,27 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  expect_equal(collect(select(df, sum(df$age)))[1, 1], 49)
+
+  expect_true(abs(collect(select(df, stddev(df$age)))[1, 1] - 7.778175) < 1e-6)
+
+  expect_equal(collect(select(df, var_pop(df$age)))[1, 1], 30.25)
+
   df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
   expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+
+  # Test array_contains() and sort_array()
+  df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
+  result <- collect(select(df, array_contains(df[[1]], 1L)))[[1]]
+  expect_equal(result, c(TRUE, FALSE))
+
+  result <- collect(select(df, sort_array(df[[1]], FALSE)))[[1]]
+  expect_equal(result, list(list(3L, 2L, 1L), list(6L, 5L, 4L)))
+  result <- collect(select(df, sort_array(df[[1]])))[[1]]
+  expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
+
+  # Test that stats::lag is working
+  expect_equal(length(lag(ldeaths, 12)), 72)
 })
 #
 test_that("column binary mathfunctions", {
@@ -875,9 +925,9 @@ test_that("column binary mathfunctions", {
   expect_equal(collect(select(df, shiftRight(df$b, 1)))[4, 1], 4)
   expect_equal(collect(select(df, shiftRightUnsigned(df$b, 1)))[4, 1], 4)
   expect_equal(class(collect(select(df, rand()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, rand(1)))[1, 1], 0.45, tolerance = 0.01)
+  expect_equal(collect(select(df, rand(1)))[1, 1], 0.134, tolerance = 0.01)
   expect_equal(class(collect(select(df, randn()))[2, 1]), "numeric")
-  expect_equal(collect(select(df, randn(1)))[1, 1], -0.0111, tolerance = 0.01)
+  expect_equal(collect(select(df, randn(1)))[1, 1], -1.03, tolerance = 0.01)
 })
 
 test_that("string operators", {
@@ -976,7 +1026,7 @@ test_that("when(), otherwise() and ifelse() on a DataFrame", {
   expect_equal(collect(select(df, ifelse(df$a > 1 & df$b > 2, 0, 1)))[, 1], c(1, 0))
 })
 
-test_that("group by", {
+test_that("group by, agg functions", {
   df <- jsonFile(sqlContext, jsonPath)
   df1 <- agg(df, name = "max", age = "sum")
   expect_equal(1, count(df1))
@@ -997,20 +1047,64 @@ test_that("group by", {
   expect_is(df_summarized, "DataFrame")
   expect_equal(3, count(df_summarized))
 
-  df3 <- agg(gd, age = "sum")
+  df3 <- agg(gd, age = "stddev")
   expect_is(df3, "DataFrame")
-  expect_equal(3, count(df3))
+  df3_local <- collect(df3)
+  expect_true(is.nan(df3_local[df3_local$name == "Andy",][1, 2]))
 
-  df3 <- agg(gd, age = sum(df$age))
-  expect_is(df3, "DataFrame")
-  expect_equal(3, count(df3))
-  expect_equal(columns(df3), c("name", "age"))
-
-  df4 <- sum(gd, "age")
+  df4 <- agg(gd, sumAge = sum(df$age))
   expect_is(df4, "DataFrame")
   expect_equal(3, count(df4))
-  expect_equal(3, count(mean(gd, "age")))
-  expect_equal(3, count(max(gd, "age")))
+  expect_equal(columns(df4), c("name", "sumAge"))
+
+  df5 <- sum(gd, "age")
+  expect_is(df5, "DataFrame")
+  expect_equal(3, count(df5))
+
+  expect_equal(3, count(mean(gd)))
+  expect_equal(3, count(max(gd)))
+  expect_equal(30, collect(max(gd))[1, 2])
+  expect_equal(1, collect(count(gd))[1, 2])
+
+  mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
+                  "{\"name\":\"ID1\", \"value\": \"10\"}",
+                  "{\"name\":\"ID1\", \"value\": \"22\"}",
+                  "{\"name\":\"ID2\", \"value\": \"-3\"}")
+  jsonPath2 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines2, jsonPath2)
+  gd2 <- groupBy(jsonFile(sqlContext, jsonPath2), "name")
+  df6 <- agg(gd2, value = "sum")
+  df6_local <- collect(df6)
+  expect_equal(42, df6_local[df6_local$name == "ID1",][1, 2])
+  expect_equal(-3, df6_local[df6_local$name == "ID2",][1, 2])
+
+  df7 <- agg(gd2, value = "stddev")
+  df7_local <- collect(df7)
+  expect_true(abs(df7_local[df7_local$name == "ID1",][1, 2] - 6.928203) < 1e-6)
+  expect_true(is.nan(df7_local[df7_local$name == "ID2",][1, 2]))
+
+  mockLines3 <- c("{\"name\":\"Andy\", \"age\":30}",
+                  "{\"name\":\"Andy\", \"age\":30}",
+                  "{\"name\":\"Justin\", \"age\":19}",
+                  "{\"name\":\"Justin\", \"age\":1}")
+  jsonPath3 <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  writeLines(mockLines3, jsonPath3)
+  df8 <- jsonFile(sqlContext, jsonPath3)
+  gd3 <- groupBy(df8, "name")
+  gd3_local <- collect(sum(gd3))
+  expect_equal(60, gd3_local[gd3_local$name == "Andy",][1, 2])
+  expect_equal(20, gd3_local[gd3_local$name == "Justin",][1, 2])
+
+  expect_true(abs(collect(agg(df, sd(df$age)))[1, 1] - 7.778175) < 1e-6)
+  gd3_local <- collect(agg(gd3, var(df8$age)))
+  expect_equal(162, gd3_local[gd3_local$name == "Justin",][1, 2])
+
+  # Test stats::sd, stats::var are working
+  expect_true(abs(sd(1:2) - 0.7071068) < 1e-6)
+  expect_true(abs(var(1:5, 1:5) - 2.5) < 1e-6)
+
+  unlink(jsonPath2)
+  unlink(jsonPath3)
 })
 
 test_that("arrange() and orderBy() on a DataFrame", {
@@ -1057,6 +1151,9 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered5), 1)
   filtered6 <- where(df, df$age %in% c(19, 30))
   expect_equal(count(filtered6), 2)
+
+  # Test stats::filter is working
+  #expect_true(is.ts(filter(1:100, rep(1, 3))))
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1203,6 +1300,12 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   expect_is(unioned, "DataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")
+
+  # Test base::rbind is working
+  expect_equal(length(rbind(1:4, c = 2, a = 10, 10, deparse.level = 0)), 16)
+
+  # Test base::intersect is working
+  expect_equal(length(intersect(1:20, 3:23)), 18)
 })
 
 test_that("withColumn() and withColumnRenamed()", {
@@ -1238,7 +1341,7 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(transformedDF)[4], "newAge2")
   expect_equal(first(filter(transformedDF, transformedDF$name == "Andy"))$newAge, -30)
 
-  # test if transform on local data frames works
+  # test if base::transform on local data frames works
   # ensure the proper signature is used - otherwise this will fail to run
   attach(airquality)
   result <- transform(Ozone, logOzone = log(Ozone))
@@ -1284,6 +1387,9 @@ test_that("describe() and summarize() on a DataFrame", {
   stats2 <- summary(df)
   expect_equal(collect(stats2)[4, "name"], "Andy")
   expect_equal(collect(stats2)[5, "age"], "30")
+
+  # Test base::summary is working
+  expect_equal(length(summary(attenu, digits = 4)), 35)
 })
 
 test_that("dropna() and na.omit() on a DataFrame", {
@@ -1367,6 +1473,9 @@ test_that("dropna() and na.omit() on a DataFrame", {
   expect_identical(expected, actual)
   actual <- collect(na.omit(df, minNonNulls = 3, cols = c("name", "age", "height")))
   expect_identical(expected, actual)
+
+  # Test stats::na.omit is working
+  expect_equal(nrow(na.omit(data.frame(x = c(0, 10, NA)))), 2)
 })
 
 test_that("fillna() on a DataFrame", {
@@ -1429,6 +1538,9 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
   result <- corr(df, "singles", "doubles", "pearson")
   expect_true(abs(result - 1.0) < 1e-12)
+
+  # Test stats::cov is working
+  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
 })
 
 test_that("freqItems() on a DataFrame", {
@@ -1458,8 +1570,8 @@ test_that("sampleBy() on a DataFrame", {
   fractions <- list("0" = 0.1, "1" = 0.2)
   sample <- sampleBy(df, "key", fractions, 0)
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
-  expect_identical(as.list(result[1, ]), list(key = "0", count = 2))
-  expect_identical(as.list(result[2, ]), list(key = "1", count = 10))
+  expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
+  expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
 })
 
 test_that("SQL error message is returned from JVM", {
@@ -1467,8 +1579,9 @@ test_that("SQL error message is returned from JVM", {
   expect_equal(grepl("Table not found: blah", retError), TRUE)
 })
 
+irisDF <- createDataFrame(sqlContext, iris)
+
 test_that("Method as.data.frame as a synonym for collect()", {
-  irisDF <- createDataFrame(sqlContext, iris)
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
@@ -1501,6 +1614,27 @@ test_that("with() on a DataFrame", {
   expect_equal(collect(sum1[[1]])[1, "Sepal_Length"], "150")
   sum2 <- with(df, distinct(Sepal_Length))
   expect_equal(nrow(sum2), 35)
+})
+
+test_that("Method coltypes() to get R's data types of a DataFrame", {
+  expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
+
+  data <- data.frame(c1=c(1,2,3),
+                     c2=c(T,F,T),
+                     c3=c("2015/01/01 10:00:00", "2015/01/02 10:00:00", "2015/01/03 10:00:00"))
+
+  schema <- structType(structField("c1", "byte"),
+                       structField("c3", "boolean"),
+                       structField("c4", "timestamp"))
+
+  # Test primitive types
+  DF <- createDataFrame(sqlContext, data, schema)
+  expect_equal(coltypes(DF), c("integer", "logical", "POSIXct"))
+
+  # Test complex types
+  x <- createDataFrame(sqlContext, list(list(as.environment(
+    list("a"="b", "c"="d", "e"="f")))))
+  expect_equal(coltypes(x), "map<string,string>")
 })
 
 unlink(parquetPath)

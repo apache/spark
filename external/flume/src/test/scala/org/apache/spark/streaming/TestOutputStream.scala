@@ -37,7 +37,7 @@ class TestOutputStream[T: ClassTag](parent: DStream[T],
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
-  }) {
+  }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])

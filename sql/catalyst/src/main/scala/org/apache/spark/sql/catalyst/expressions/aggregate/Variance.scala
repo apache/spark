@@ -24,6 +24,8 @@ case class VarianceSamp(child: Expression,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
 
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -34,18 +36,27 @@ case class VarianceSamp(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0 || n == 1.0) Double.NaN else moments(2) / (n - 1.0)
+    if (n == 0.0) {
+      null
+    } else if (n == 1.0) {
+      Double.NaN
+    } else {
+      moments(2) / (n - 1.0)
+    }
   }
 }
 
-case class VariancePop(child: Expression,
+case class VariancePop(
+    child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends CentralMomentAgg(child) {
+
+  def this(child: Expression) = this(child, mutableAggBufferOffset = 0, inputAggBufferOffset = 0)
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -57,10 +68,14 @@ case class VariancePop(child: Expression,
 
   override protected val momentOrder = 2
 
-  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Double = {
+  override def getStatistic(n: Double, mean: Double, moments: Array[Double]): Any = {
     require(moments.length == momentOrder + 1,
       s"$prettyName requires ${momentOrder + 1} central moment, received: ${moments.length}")
 
-    if (n == 0.0) Double.NaN else moments(2) / n
+    if (n == 0.0) {
+      null
+    } else {
+      moments(2) / n
+    }
   }
 }

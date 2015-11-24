@@ -517,7 +517,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       topicConcentration: Double,
       seed: java.lang.Long,
       checkpointInterval: Int,
-      optimizer: String): LDAModel = {
+      optimizer: String): LDAModelWrapper = {
     val algo = new LDA()
       .setK(k)
       .setMaxIterations(maxIterations)
@@ -535,7 +535,16 @@ private[python] class PythonMLLibAPI extends Serializable {
         case _ => throw new IllegalArgumentException("input values contains invalid type value.")
       }
     }
-    algo.run(documents)
+    val model = algo.run(documents)
+    new LDAModelWrapper(model)
+  }
+
+  /**
+   * Load a LDA model
+   */
+  def loadLDAModel(jsc: JavaSparkContext, path: String): LDAModelWrapper = {
+    val model = DistributedLDAModel.load(jsc.sc, path)
+    new LDAModelWrapper(model)
   }
 
 
