@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -321,14 +321,14 @@ class BlockMatrix @Since("1.3.0") (
    * it applies an associative binary function on their corresponding blocks.
    *
    * @param other The BlockMatrix to operate on
-   * @param binMap An associative function taking two dense breeze matrices and returning one
+   * @param binMap An associative function taking two dense breeze matrices and returning a
    *               dense breeze matrix
    * @return A [[BlockMatrix]] whose blocks are the results of a specified binary map on blocks
    *         of `this` and `other`.
    */
   private[mllib] def blockMap(
       other: BlockMatrix,
-      binMap: (BDM[Double], BDM[Double]) => BDM[Double]): BlockMatrix = {
+      binMap: (BM[Double], BM[Double]) => BM[Double]): BlockMatrix = {
     require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
       s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
     require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
@@ -345,7 +345,7 @@ class BlockMatrix @Since("1.3.0") (
         } else if (b.isEmpty) {
           new MatrixBlock((blockRowIndex, blockColIndex), a.head)
         } else {
-          val result = binMap(a.head.toBreeze(), b.head.toBreeze())
+          val result = binMap(a.head.toBreeze, b.head.toBreeze)
           new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
         }
       }
@@ -364,7 +364,7 @@ class BlockMatrix @Since("1.3.0") (
    */
   @Since("1.3.0")
   def add(other: BlockMatrix): BlockMatrix =
-    blockMap(other, (x: BDM[Double], y: BDM[Double]) => x + y)
+    blockMap(other, (x: BM[Double], y: BM[Double]) => x + y)
 
   /**
    * Subtracts two block matrices together. The matrices must have the same size and matching
@@ -375,7 +375,7 @@ class BlockMatrix @Since("1.3.0") (
    */
   @Since("1.6.0")
   def subtract(other: BlockMatrix): BlockMatrix =
-    blockMap(other, (x: BDM[Double], y: BDM[Double]) => x - y)
+    blockMap(other, (x: BM[Double], y: BM[Double]) => x - y)
 
   /** Block (i,j) --> Set of destination partitions */
   private type BlockDestinations = Map[(Int, Int), Set[Int]]
