@@ -59,7 +59,7 @@ private[netty] class NettyRpcEnv(
     if (conf.getBoolean("spark.rpc.useNettyFileServer", false)) {
       streamManager
     } else {
-      new HttpBasedFileServer()
+      new HttpBasedFileServer(conf, securityManager)
     }
 
   private val transportContext = new TransportContext(transportConf,
@@ -409,42 +409,6 @@ private[netty] class NettyRpcEnv(
       logError(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
-    }
-
-  }
-
-  private class HttpBasedFileServer extends RpcEnvFileServer {
-
-    @volatile private var httpFileServer: HttpFileServer = _
-
-    override def addFile(file: File): String = {
-      getFileServer().addFile(file)
-    }
-
-    override def addJar(file: File): String = {
-      getFileServer().addJar(file)
-    }
-
-    def shutdown(): Unit = {
-      if (httpFileServer != null) {
-        httpFileServer.stop()
-      }
-    }
-
-    private def getFileServer(): HttpFileServer = {
-      if (httpFileServer == null) synchronized {
-        if (httpFileServer == null) {
-          httpFileServer = startFileServer()
-        }
-      }
-      httpFileServer
-    }
-
-    private def startFileServer(): HttpFileServer = {
-      val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-      val server = new HttpFileServer(conf, securityManager, fileServerPort)
-      server.initialize()
-      server
     }
 
   }
