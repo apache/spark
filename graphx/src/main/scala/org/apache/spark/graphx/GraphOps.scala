@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.graphx.lib._
 
-import breeze.linalg.SparseVector
+import breeze.linalg.{SparseVector => BSV}
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -391,7 +391,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * that all random walks are started relative to the source vertices
    */
   def staticParallelPersonalizedPageRank(sources : Array[VertexId], numIter: Int,
-    resetProb: Double = 0.15) : Graph[SparseVector[Double], Double] = {
+    resetProb: Double = 0.15) : Graph[BSV[Double], Double] = {
     PageRank.runParallelPersonalizedPageRank(graph, numIter, resetProb, sources)
   }
 
