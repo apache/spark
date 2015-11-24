@@ -32,6 +32,8 @@ import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
 
+import scala.collection.mutable
+
 /**
  * A web server that renders SparkUIs of completed applications.
  *
@@ -49,6 +51,8 @@ class HistoryServer(
     securityManager: SecurityManager,
     port: Int)
   extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+
+  private val loadedAppStatus = new mutable.HashMap[String, Boolean]()
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -103,7 +107,7 @@ class HistoryServer(
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI() + "/ui"))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -189,17 +193,19 @@ class HistoryServer(
   def getProviderConfig(): Map[String, String] = provider.getConfig()
 
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
-    try {
-      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
-      true
-    } catch {
-      case e: Exception => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          false
+    val app_attempt_id = appId + attemptId.map { id => s"/$id" }.getOrElse("")
+    loadedAppStatus.get(app_attempt_id) match {
+      case None =>
+        loadedAppStatus.put(app_attempt_id, provider.isCompleted(appId, attemptId))
+        appCache.refresh(app_attempt_id)
 
-        case cause: Exception => throw cause
-      }
+      case Some(false) =>
+        loadedAppStatus.update(app_attempt_id, provider.isCompleted(appId, attemptId))
+        appCache.refresh(app_attempt_id)
+
+      case Some(true) => // attempt has completed
     }
+    true
   }
 
 }

@@ -73,4 +73,7 @@ private[history] abstract class ApplicationHistoryProvider {
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
+  @throws(classOf[NoSuchElementException])
+  def isCompleted(appId: String, attemptId: Option[String]): Boolean
+
 }
