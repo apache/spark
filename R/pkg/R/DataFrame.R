@@ -1116,8 +1116,8 @@ setMethod("subset", signature(x = "DataFrame"),
 setMethod("select", signature(x = "DataFrame"),
           function(x, ...) {
             newEnv <- columnIntoNewEnv(x, FALSE)
-            args <- append(list(x), eval(substitute(list(...)), envir = newEnv, enclos = newEnv))
-            do.call(selectInternal, args)
+            attach(newEnv)
+            tryCatch(selectInternal(x, ...), finally = detach())
           })
 #' Select
 #'
@@ -1465,13 +1465,17 @@ setMethod("orderBy",
 #' filter(df, df$col2 != "abcdefg")
 #' }
 setMethod("filter",
-          signature(x = "DataFrame", condition = "characterOrColumn"),
+          signature(x = "DataFrame"),
           function(x, condition) {
-            if (class(condition) == "Column") {
-              condition <- condition@jc
-            }
-            sdf <- callJMethod(x@sdf, "filter", condition)
-            dataFrame(sdf)
+            newEnv <- columnIntoNewEnv(x, FALSE)
+            attach(newEnv)
+            tryCatch({
+              if (class(condition) == "Column") {
+                condition <- condition@jc
+              }
+              sdf <- callJMethod(x@sdf, "filter", condition)
+              dataFrame(sdf)
+            },  finally = detach())
           })
 
 #' @family DataFrame functions

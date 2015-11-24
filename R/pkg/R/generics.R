@@ -433,7 +433,7 @@ setGeneric("fillna", function(x, value, cols = NULL) { standardGeneric("fillna")
 
 #' @rdname filter
 #' @export
-setGeneric("filter", function(x, condition) { standardGeneric("filter") })
+setGeneric("filter", function(x, ...) { standardGeneric("filter") })
 
 #' @rdname groupBy
 #' @export
