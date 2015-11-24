@@ -23,6 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.feature.Instance
@@ -157,7 +158,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with DefaultParamsWritable with Logging {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging
+  with Controllable[LogisticRegressionModel] {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -184,7 +186,7 @@ class LogisticRegression(override val uid: String)
    * Default is 100.
    * @group setParam
    */
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
+  // def setMaxIter(value: Int): this.type = set(maxIter, value)
   setDefault(maxIter -> 100)
 
   /**

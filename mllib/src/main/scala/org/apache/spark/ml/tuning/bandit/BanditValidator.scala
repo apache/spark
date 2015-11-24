@@ -148,20 +148,24 @@ class BanditValidator[M <: Model[M]](override val uid: String)
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
+    // Get all parameters first
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
+
+    // Split data into k-fold
     val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
+
+    // Find the best arm with k-fold bandit validation
     val bestArms = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      val arms = epm.map { parameter =>
-        val arm = new Arm[M](est, None, parameter, eval, $(stepsPerPulling))
-        arm
-      }
+      // For each parameter map, create a corresponding arm
+      val arms = epm.map(new Arm[M](est, None, _, eval, $(stepsPerPulling)))
 
+      // Find the best arm with pre-defined search strategies
       val bestArm = $(searchStrategy).search($(maxIter), arms, trainingDataset, validationDataset)
       (bestArm, bestArm.getValidationResult(validationDataset))
     }
