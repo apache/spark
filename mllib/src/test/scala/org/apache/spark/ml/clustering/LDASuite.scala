@@ -48,7 +48,7 @@ object LDASuite {
    */
   val allParamSettings: Map[String, Any] = Map(
     "k" -> 3,
-    "maxIter" -> 10,
+    "maxIter" -> 2,
     "checkpointInterval" -> 30,
     "learningOffset" -> 1023.0,
     "learningDecay" -> 0.52,
@@ -244,5 +244,18 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+  }
+
+  test("read/write DistributedLDAModel") {
+    def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
+      assert(model.vocabSize === model2.vocabSize)
+      assert(Vectors.dense(model.topicsMatrix.toArray) ~==
+        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+      assert(Vectors.dense(model.getDocConcentration) ~==
+        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+    }
+    val lda = new LDA()
+    testEstimatorAndModelReadWrite(lda, dataset,
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
   }
 }

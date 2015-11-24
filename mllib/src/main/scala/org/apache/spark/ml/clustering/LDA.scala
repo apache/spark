@@ -499,18 +499,18 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
   private[LocalLDAModel]
   class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
 
-    private case class Data(vocabSize: Int,
+    private case class Data(
+        vocabSize: Int,
         topicsMatrix: Matrix,
         docConcentration: Vector,
-        topicConcentration: Double)
+        topicConcentration: Double,
+        gammaShape: Double)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
-      val data = Data(instance.vocabSize,
-        oldModel.topicsMatrix,
-        oldModel.docConcentration,
-        oldModel.topicConcentration)
+      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
+        oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -524,13 +524,16 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
       val data = sqlContext.read.parquet(dataPath)
-        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration")
+        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration",
+          "gammaShape")
         .head()
       val vocabSize = data.getAs[Int](0)
       val topicsMatrix = data.getAs[Matrix](1)
       val docConcentration = data.getAs[Vector](2)
       val topicConcentration = data.getAs[Double](3)
-      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration)
+      val gammaShape = data.getAs[Double](4)
+      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
+        gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sqlContext)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -620,7 +623,7 @@ class DistributedLDAModel private[ml] (
   lazy val logPrior: Double = oldDistributedModel.logPrior
 
   @Since("1.6.0")
-  override def write: MLWriter = new DistributedLDAModel.DistributedLDAModelWriter(this)
+  override def write: MLWriter = new DistributedLDAModel.DistributedWriter(this)
 }
 
 
@@ -628,11 +631,12 @@ class DistributedLDAModel private[ml] (
 object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
   private[DistributedLDAModel]
-  class DistributedLDAModelWriter(instance: DistributedLDAModel) extends MLWriter {
+  class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      instance.oldDistributedModel.save(sc, path)
+      val modelPath = new Path(path, "oldModel").toString
+      instance.oldDistributedModel.save(sc, modelPath)
     }
   }
 
@@ -642,7 +646,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 
     override def load(path: String): DistributedLDAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-      val oldModel = OldDistributedLDAModel.load(sc, path)
+      val modelPath = new Path(path, "oldModel").toString
+      val oldModel = OldDistributedLDAModel.load(sc, modelPath)
       val model = new DistributedLDAModel(
         metadata.uid, oldModel.vocabSize, oldModel, sqlContext, None)
       DefaultParamsReader.getAndSetParams(model, metadata)
@@ -686,8 +691,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
 @Since("1.6.0")
 @Experimental
 class LDA @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String) extends Estimator[LDAModel]
-    with LDAParams with DefaultParamsWritable {
+    @Since("1.6.0") override val uid: String)
+  extends Estimator[LDAModel] with LDAParams with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
@@ -789,7 +794,7 @@ class LDA @Since("1.6.0") (
 }
 
 
-private[clustering] object LDA extends DefaultParamsReadable[LDA]{
+private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
   def getOldDataset(dataset: DataFrame, featuresCol: String): RDD[(Long, Vector)] = {
@@ -801,5 +806,6 @@ private[clustering] object LDA extends DefaultParamsReadable[LDA]{
       }
   }
 
+  @Since("1.6.0")
   override def load(path: String): LDA = super.load(path)
 }
