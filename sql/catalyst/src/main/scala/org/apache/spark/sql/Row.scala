@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
+import scala.util.Try
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -316,6 +317,18 @@ trait Row extends Serializable {
   }
 
   /**
+   * Returns the Optional value at position i.
+   * If the value is null or if it cannot be cast to the requested type, None is returned.
+   */
+  def getAsOpt[T](i: Int): Option[T] = {
+    val value = {
+      if (isNullAt(i)) None
+      else Try(getAs[T](i)).toOption
+    }
+    value.asInstanceOf[Option[T]]
+  }
+
+  /**
    * Returns the value at position i.
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
@@ -323,6 +336,20 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getAs[T](i: Int): T = get(i).asInstanceOf[T]
+
+  /**
+   * Returns the Optional value of a given fieldName.
+   * If the value is null or if it cannot be cast to the requested type, None is returned. None is
+   * also returned if either the schema is not defined or else the given fieldName does not exist
+   * in the schema.
+   */
+  def getAsOpt[T](fieldName: String): Option[T] = {
+    val value = {
+      if (isNullAt(fieldIndex(fieldName))) None
+      else Try(getAs[T](fieldName)).toOption
+    }
+    value.asInstanceOf[Option[T]]
+  }
 
   /**
    * Returns the value of a given fieldName.
