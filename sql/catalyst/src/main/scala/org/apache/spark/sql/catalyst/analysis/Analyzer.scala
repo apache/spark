@@ -610,9 +610,9 @@ class Analyzer(
    */
   object ResolveAggregateFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case filter@Filter(havingCondition,
-      aggregate@Aggregate(grouping, originalAggExprs, child))
-        if aggregate.resolved =>
+      case filter @ Filter(havingCondition,
+             aggregate @ Aggregate(grouping, originalAggExprs, child))
+          if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         val aggregatedCondition =
@@ -644,12 +644,8 @@ class Analyzer(
           val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
-          val sortOrdersMap = unresolvedSortOrders.map(
-            new TreeNodeRef(_)).zip(resolvedAggregate.aggregateExpressions).toMap
-          val finalSortOrders = sortOrder.map(
-            s => sortOrdersMap.getOrElse(new TreeNodeRef(s), Alias(s.child, "aggOrder")()))
           val resolvedAliasedOrdering: Seq[Alias] =
-            finalSortOrders.asInstanceOf[Seq[Alias]]
+            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
 
           // If we pass the analysis check, then the ordering expressions should only reference to
           // aggregate expressions or grouping expressions, and it's safe to push them down to
@@ -666,9 +662,7 @@ class Analyzer(
           val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
             case (evaluated, order) =>
               val index = originalAggExprs.indexWhere {
-                case a@Alias(child, _) =>
-                  (child semanticEquals evaluated.child) ||
-                    a.exprId == evaluated.child.asInstanceOf[AttributeReference].exprId
+                case Alias(child, _) => child semanticEquals evaluated.child
                 case other => other semanticEquals evaluated.child
               }
 
@@ -680,13 +674,18 @@ class Analyzer(
               }
           }
 
+          val sortOrdersMap = unresolvedSortOrders.map(
+            new TreeNodeRef(_)).zip(evaluatedOrderings).toMap
+          val finalSortOrders = sortOrder.map(
+            s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
+
           // Since we don't rely on sort.resolved as the stop condition for this rule,
           // we need to check this and prevent applying this rule multiple times
-          if (sortOrder == evaluatedOrderings) {
+          if (sortOrder == finalSortOrders) {
             sort
           } else {
             Project(aggregate.output,
-              Sort(evaluatedOrderings, global,
+              Sort(finalSortOrders, global,
                 aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
           }
         } catch {
