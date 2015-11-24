@@ -52,6 +52,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.takeAsList(1).get(0) == item)
   }
 
+  test("coalesce, repartition") {
+    val data = (1 to 100).map(i => ClassData(i.toString, i))
+    val ds = data.toDS()
+
+    assert(ds.repartition(10).rdd.partitions.length == 10)
+    checkAnswer(
+      ds.repartition(10),
+      data: _*)
+
+    assert(ds.coalesce(1).rdd.partitions.length == 1)
+    checkAnswer(
+      ds.coalesce(1),
+      data: _*)
+  }
+
   test("as tuple") {
     val data = Seq(("a", 1), ("b", 2)).toDF("a", "b")
     checkAnswer(
