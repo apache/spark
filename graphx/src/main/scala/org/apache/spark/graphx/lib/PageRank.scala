@@ -183,15 +183,14 @@ object PageRank extends Logging {
    */
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
     numIter: Int, resetProb: Double = 0.15,
-    sources : Array[VertexId]): Graph[BSV[Double], Double] =
-  {
+    sources: Array[VertexId]): Graph[BSV[Double], Double] = {
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
     val zero = new BSV[Double](Array(), Array(), sources.size)
-    val sourcesInitMap = sources.zipWithIndex.map{case (vid, i) => {
+    val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
       val v = new BSV[Double](Array(i), Array(resetProb), sources.size)
       (vid, v)
-    }}.toMap
+    }.toMap
     val sc = graph.vertices.sparkContext
     val sourcesInitMapBC = sc.broadcast(sourcesInitMap)
     // Initialize the PageRank graph with each edge attribute having
@@ -200,14 +199,14 @@ object PageRank extends Logging {
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) { (vid, vdata, deg) => deg.getOrElse(0) }
       // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr, TripletFields.Src )
-      .mapVertices( (vid, attr) => {
-      if (sourcesInitMapBC.value contains vid) {
-        sourcesInitMapBC.value(vid)
-      } else {
-        zero
+      .mapTriplets(e => 1.0 / e.srcAttr, TripletFields.Src)
+      .mapVertices { (vid, attr) =>
+        if (sourcesInitMapBC.value contains vid) {
+          sourcesInitMapBC.value(vid)
+        } else {
+          zero
+        }
       }
-    })
 
     var i = 0
     while (i < numIter) {
@@ -216,18 +215,18 @@ object PageRank extends Logging {
       // and adding start nodes back in with activation resetProb
       val rankUpdates = rankGraph.aggregateMessages[BSV[Double]](
         ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a : BSV[Double], b : BSV[Double]) => a :+ b, TripletFields.Src)
+        (a: BSV[Double], b: BSV[Double]) => a :+ b, TripletFields.Src)
 
       rankGraph = rankGraph.joinVertices(rankUpdates) {
-        (vid, oldRank, msgSum) => {
-          val popActivations : BSV[Double] = msgSum :* (1.0 - resetProb)
+        (vid, oldRank, msgSum) =>
+          val popActivations: BSV[Double] = msgSum :* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
             sourcesInitMapBC.value(vid)
           } else {
             zero
           }
           popActivations :+ resetActivations
-        }}.cache()
+        }.cache()
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       prevRankGraph.vertices.unpersist(false)
