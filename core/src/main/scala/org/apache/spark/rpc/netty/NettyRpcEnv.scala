@@ -30,7 +30,7 @@ import scala.reflect.ClassTag
 import scala.util.{DynamicVariable, Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, HttpFileServer, SecurityManager, SparkConf}
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.client._
 import org.apache.spark.network.netty.SparkTransportConf
@@ -54,6 +54,13 @@ private[netty] class NettyRpcEnv(
   private val dispatcher: Dispatcher = new Dispatcher(this)
 
   private val streamManager = new NettyStreamManager(this)
+
+  private val _fileServer =
+    if (conf.getBoolean("spark.rpc.useNettyFileServer", false)) {
+      streamManager
+    } else {
+      new HttpBasedFileServer()
+    }
 
   private val transportContext = new TransportContext(transportConf,
     new NettyRpcHandler(dispatcher, this, streamManager))
@@ -316,7 +323,7 @@ private[netty] class NettyRpcEnv(
     }
   }
 
-  override def fileServer: RpcEnvFileServer = streamManager
+  override def fileServer: RpcEnvFileServer = _fileServer
 
   override def openChannel(uri: String): ReadableByteChannel = {
     val parsedUri = new URI(uri)
@@ -402,6 +409,42 @@ private[netty] class NettyRpcEnv(
       logError(s"Error downloading stream $streamId.", cause)
       source.setError(cause)
       sink.close()
+    }
+
+  }
+
+  private class HttpBasedFileServer extends RpcEnvFileServer {
+
+    @volatile private var httpFileServer: HttpFileServer = _
+
+    override def addFile(file: File): String = {
+      getFileServer().addFile(file)
+    }
+
+    override def addJar(file: File): String = {
+      getFileServer().addJar(file)
+    }
+
+    def shutdown(): Unit = {
+      if (httpFileServer != null) {
+        httpFileServer.stop()
+      }
+    }
+
+    private def getFileServer(): HttpFileServer = {
+      if (httpFileServer == null) synchronized {
+        if (httpFileServer == null) {
+          httpFileServer = startFileServer()
+        }
+      }
+      httpFileServer
+    }
+
+    private def startFileServer(): HttpFileServer = {
+      val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+      val server = new HttpFileServer(conf, securityManager, fileServerPort)
+      server.initialize()
+      server
     }
 
   }
