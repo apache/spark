@@ -166,11 +166,11 @@ class MultilayerPerceptronClassifier(override val uid: String)
   }
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object MultilayerPerceptronClassifier
   extends DefaultParamsReadable[MultilayerPerceptronClassifier] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): MultilayerPerceptronClassifier = super.load(path)
 }
 
@@ -214,20 +214,20 @@ class MultilayerPerceptronClassificationModel private[ml] (
     copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def write: MLWriter =
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object MultilayerPerceptronClassificationModel
   extends MLReadable[MultilayerPerceptronClassificationModel] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def read: MLReader[MultilayerPerceptronClassificationModel] =
     new MultilayerPerceptronClassificationModelReader
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): MultilayerPerceptronClassificationModel = super.load(path)
 
   /** [[MLWriter]] instance for [[MultilayerPerceptronClassificationModel]] */
