@@ -88,6 +88,9 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
+  // Message when cluster manager re-register itself to driver.
+  case class ReregisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running
   case class RequestExecutors(

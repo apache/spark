@@ -583,7 +583,14 @@ private[spark] class ApplicationMaster(
     extends RpcEndpoint with Logging {
 
     override def onStart(): Unit = {
-      driver.send(RegisterClusterManager(self))
+      val attemptId = client.getAttemptId().getAttemptId
+      if (attemptId == 1 || isClusterMode) {
+        driver.send(RegisterClusterManager(self))
+      } else {
+        // only send rereigster message when application master is reattempted to start and
+        // current running mode is yarn-client mode.
+        driver.send(ReregisterClusterManager(self))
+      }
     }
 
     override def receive: PartialFunction[Any, Unit] = {
