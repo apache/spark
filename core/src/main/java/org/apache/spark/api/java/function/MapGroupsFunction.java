@@ -23,6 +23,6 @@ import java.util.Iterator;
 /**
  * Base interface for a map function used in GroupedDataset's mapGroup function.
  */
-public interface MapGroupFunction<K, V, R> extends Serializable {
+public interface MapGroupsFunction<K, V, R> extends Serializable {
   R call(K key, Iterator<V> values) throws Exception;
 }
