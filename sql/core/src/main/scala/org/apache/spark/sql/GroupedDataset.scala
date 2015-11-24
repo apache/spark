@@ -304,11 +304,13 @@ class GroupedDataset[K, V] private[sql](
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
-    implicit def uEnc: Encoder[U] = other.unresolvedVEncoder
     new Dataset[R](
       sqlContext,
       CoGroup(
         f,
+        this.resolvedKEncoder,
+        this.resolvedVEncoder,
+        other.resolvedVEncoder,
         this.groupingAttributes,
         other.groupingAttributes,
         this.logicalPlan,
