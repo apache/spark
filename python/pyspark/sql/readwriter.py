@@ -109,7 +109,7 @@ class DataFrameReader(object):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class`DataFrame`.
 
-        :param path: optional string for file-system backed data sources.
+        :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
@@ -118,6 +118,7 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+
         >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
         ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
@@ -129,13 +130,7 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) == list:
-                paths = path
-                gateway = self._sqlContext._sc._gateway
-                jpaths = utils.toJArray(gateway, gateway.jvm.java.lang.String, paths)
-                return self._df(self._jreader.load(jpaths))
-            else:
-                return self._df(self._jreader.load(path))
+            return self._df(self._jreader.load(path))
         else:
             return self._df(self._jreader.load())
 
@@ -173,7 +168,7 @@ class DataFrameReader(object):
         """
         if schema is not None:
             self.schema(schema)
-        if isinstance(path, basestring):
+        if isinstance(path, basestring) or type(path) == list:
             return self._df(self._jreader.json(path))
         elif isinstance(path, RDD):
             return self._df(self._jreader.json(path._jrdd))
@@ -205,16 +200,18 @@ class DataFrameReader(object):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, path):
+    def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
 
         Each line in the text file is a new row in the resulting DataFrame.
+
+        :param paths: string, or list of strings, for input path(s).
 
         >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        return self._df(self._jreader.text(path))
+        return self._df(self._jreader.text(paths))
 
     @since(1.5)
     def orc(self, path):
