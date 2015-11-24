@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.graphx._
 import org.apache.spark.internal.Logging
 
-import breeze.linalg.SparseVector
+import breeze.linalg.{SparseVector => BSV}
 
 /**
  * PageRank algorithm implementation. There are two implementations of PageRank implemented.
@@ -183,13 +183,13 @@ object PageRank extends Logging {
    */
   def runParallelPersonalizedPageRank[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
     numIter: Int, resetProb: Double = 0.15,
-    sources : Array[VertexId]): Graph[SparseVector[Double], Double] =
+    sources : Array[VertexId]): Graph[BSV[Double], Double] =
   {
     // TODO if one sources vertex id is outside of the int range
     // we won't be able to store its activations in a sparse vector
-    val zero = new SparseVector[Double](Array(), Array(), sources.size)
+    val zero = new BSV[Double](Array(), Array(), sources.size)
     val sourcesInitMap = sources.zipWithIndex.map{case (vid, i) => {
-      val v = new SparseVector[Double](Array(i), Array(resetProb), sources.size)
+      val v = new BSV[Double](Array(i), Array(resetProb), sources.size)
       (vid, v)
     }}.toMap
     val sc = graph.vertices.sparkContext
@@ -214,13 +214,13 @@ object PageRank extends Logging {
       val prevRankGraph = rankGraph
       // Propagates the message along outbound edges
       // and adding start nodes back in with activation resetProb
-      val rankUpdates = rankGraph.aggregateMessages[SparseVector[Double]](
+      val rankUpdates = rankGraph.aggregateMessages[BSV[Double]](
         ctx => ctx.sendToDst(ctx.srcAttr :* ctx.attr),
-        (a : SparseVector[Double], b : SparseVector[Double]) => a :+ b, TripletFields.Src)
+        (a : BSV[Double], b : BSV[Double]) => a :+ b, TripletFields.Src)
 
       rankGraph = rankGraph.joinVertices(rankUpdates) {
         (vid, oldRank, msgSum) => {
-          val popActivations : SparseVector[Double] = msgSum :* (1.0 - resetProb)
+          val popActivations : BSV[Double] = msgSum :* (1.0 - resetProb)
           val resetActivations = if (sourcesInitMapBC.value contains vid) {
             sourcesInitMapBC.value(vid)
           } else {
