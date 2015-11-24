@@ -82,6 +82,18 @@ case class CreateTableUsingAsSelect(
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
+case class CreateTableLike(
+    tableIdent: TableIdentifier,
+    provider: String,
+    temporary: Boolean,
+    partitionColumns: Array[String],
+    mode: SaveMode,
+    options: Map[String, String],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+}
+
+
 case class CreateTempTableUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
