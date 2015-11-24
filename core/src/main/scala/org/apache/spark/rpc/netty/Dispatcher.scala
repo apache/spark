@@ -106,8 +106,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     val iter = endpoints.keySet().iterator()
     while (iter.hasNext) {
       val name = iter.next
-      postMessage(name, message,
-        (e) => logWarning(s"Message $message dropped.", e))
+      postMessage(name, message, (e) => logWarning(s"Message $message dropped.", e))
     }
   }
 
