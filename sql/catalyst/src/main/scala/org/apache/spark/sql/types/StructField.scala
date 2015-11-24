@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import org.json4s.JsonAST.JValue
+import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 
 /**
@@ -46,8 +46,18 @@ case class StructField(
   override def toString: String = s"StructField($name,$dataType,$nullable)"
 
   private[sql] def jsonValue: JValue = {
+    val typeAsString: Option[String] = dataType.jsonValue match {
+      case JObject(fields) =>
+        val typeField = dataType.jsonValue.findField {
+          case JField("type", JString(_)) => true
+          case _ => false
+        }
+        typeField.map(_._2.asInstanceOf[JString].s)
+      case JString(s) => Some(s)
+      case _ => None
+    }
     ("name" -> name) ~
-      ("type" -> dataType.jsonValue) ~
+      ("type" -> typeAsString) ~
       ("nullable" -> nullable) ~
       ("metadata" -> metadata.jsonValue)
   }
