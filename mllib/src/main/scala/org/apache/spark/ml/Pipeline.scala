@@ -89,7 +89,8 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @Experimental
-class Pipeline(override val uid: String) extends Estimator[PipelineModel] with MLWritable with Controllable[PipelineModel] {
+class Pipeline(override val uid: String)
+  extends Estimator[PipelineModel] with MLWritable with Controllable[PipelineModel] {
 
   def this() = this(Identifiable.randomUID("pipeline"))
 
