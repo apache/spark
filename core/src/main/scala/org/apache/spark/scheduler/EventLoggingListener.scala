@@ -92,8 +92,7 @@ private[spark] class EventLoggingListener(
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(
-    logBaseDir, appId, appAttemptId, compressionCodecName)
+  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
   private val executorIdToLatestMetrics = new HashMap[String, SparkListenerExecutorMetricsUpdate]
   private val executorIdToModifiedMaxMetrics = new
