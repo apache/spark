@@ -125,8 +125,13 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
+    var supportsTransactions = true
     try {
-      conn.setAutoCommit(false) // Everything in the same db transaction.
+      supportsTransactions = conn.getMetaData().supportsDataManipulationTransactionsOnly() ||  conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
+    }
+    try {
+      if (supportsTransactions)
+        conn.setAutoCommit(false) // Everything in the same db transaction.
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
@@ -175,14 +180,16 @@ object JdbcUtils extends Logging {
       } finally {
         stmt.close()
       }
-      conn.commit()
+      if (supportsTransactions)
+        conn.commit()
       committed = true
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
-        conn.rollback()
+        if (supportsTransactions)
+          conn.rollback()
         conn.close()
       } else {
         // The stage must succeed.  We cannot propagate any exception close() might throw.
