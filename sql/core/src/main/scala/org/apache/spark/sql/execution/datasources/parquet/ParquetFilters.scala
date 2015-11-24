@@ -211,7 +211,9 @@ private[sql] object ParquetFilters {
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
+    val dataTypeOf = schema.filter { f =>
+      !f.metadata.contains("oneSide") || f.metadata.getBoolean("oneSide")
+    }.map(f => f.name -> f.dataType).toMap
 
     relaxParquetValidTypeMap
 
@@ -231,29 +233,29 @@ private[sql] object ParquetFilters {
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
-      case sources.IsNull(name) =>
+      case sources.IsNull(name) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
       case sources.IsNotNull(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) =>
+      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
       case sources.Not(sources.EqualTo(name, value)) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) =>
+      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) =>
+      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) =>
+      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
         makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) =>
+      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
         makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) =>
+      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>

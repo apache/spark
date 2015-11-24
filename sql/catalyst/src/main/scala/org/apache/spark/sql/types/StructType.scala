@@ -352,24 +352,33 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
+        val oneSide = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
+              oneSide.putBoolean("oneSide", false)
               leftField.copy(
                 dataType = merge(leftType, rightType),
-                nullable = leftNullable || rightNullable)
+                nullable = leftNullable || rightNullable,
+                metadata = oneSide.build())
             }
-              .orElse(Some(leftField))
+              .orElse {
+                oneSide.putBoolean("oneSide", true)
+                Some(leftField.copy(metadata = oneSide.build()))
+              }
               .foreach(newFields += _)
         }
 
         val leftMapped = fieldsMap(leftFields)
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach(newFields += _)
+          .foreach { f =>
+            oneSide.putBoolean("oneSide", true)
+            newFields += f.copy(metadata = oneSide.build())
+          }
 
         StructType(newFields)
 
