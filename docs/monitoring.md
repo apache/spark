@@ -102,7 +102,7 @@ follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.cache.interval</td>
+    <td>spark.history.cache.window</td>
     <td>60</td>
     <td>
       Time in seconds between checks for changes in the history of incomplete applications. 

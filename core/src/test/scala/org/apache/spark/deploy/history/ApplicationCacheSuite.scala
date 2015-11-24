@@ -38,9 +38,10 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    */
   class StubCacheOperations extends ApplicationCacheOperations with Logging {
 
-    // map to UI instances, including timestamps, which are used in update probes
+    /** map to UI instances, including timestamps, which are used in update probes */
     val instances = mutable.HashMap.empty[CacheKey, CacheEntry]
 
+    /** Map of attached spark UIs */
     val attached = mutable.HashMap.empty[CacheKey, SparkUI]
 
     var getAppUICount = 0L
@@ -138,36 +139,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
   }
 
   /**
-   * Assert that a key wasn't found in cache or loaded.
-   *
-   * Looks for the specific nested exception raised by [[ApplicationCache]]
-   * @param cache
-   * @param appId
-   */
-  def assertNotFound(cache: ApplicationCache, appId: String, attemptId: Option[String]) {
-    val ex = intercept[UncheckedExecutionException] {
-      cache.get(appId, attemptId)
-    }
-    var cause = ex.getCause
-    assert(cause !== null)
-    if (!cause.isInstanceOf[NoSuchElementException]) {
-      throw cause;
-    }
-  }
-
-  /**
-   * Now verify that incomplete applications are refreshed
-   */
-  def assertLookupFails(cache: ApplicationCache, appId: String, attemptId: Option[String]): Unit = {
-    val ex = intercept[UncheckedExecutionException] {
-      cache.get(appId, attemptId)
-    }
-    if (ex.getCause == null || !ex.getCause.isInstanceOf[scala.NoSuchElementException]) {
-      throw ex;
-    }
-  }
-
-  /**
    * Test operations on completed UIs: they are loaded on demand, entries
    * are removed on overload.
    *
@@ -201,9 +172,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     // assert about queries made of the opereations
     assert(1 === operations.getAppUICount, "getAppUICount")
     assert(1 === operations.attachCount, "attachCount")
-    // and the metrics of the cache
-
-
 
     // and in the map of attached
     assert(operations.getAttached(app1, None).isDefined, s"attached entry '1' from $cache")
@@ -235,6 +203,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(cache, appId, None)
   }
 
+  /**
+   * Test that if an attempt ID is is set, it must be used in lookups
+   */
   test("Naming") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
@@ -242,13 +213,15 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val appId = "app1"
     val attemptId = Some("_01")
     operations.putAppUI(appId, attemptId, false,  clock.getTimeMillis(), 0, 0)
-    assertLookupFails(cache, appId, None)
+    assertNotFound(cache, appId, None)
   }
 
   test("Incomplete apps refreshed") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(50)
-    val cache = new ApplicationCache(operations, 500, 5, clock)
+    val window = 500
+    val halfw = window / 2
+    val cache = new ApplicationCache(operations, window, 5, clock)
     // add the incomplete app
     // add the entry
     val started = clock.getTimeMillis()
@@ -258,67 +231,70 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val firstEntry = cache.lookupCacheEntry(appId, attemptId)
     assert(started === firstEntry.timestamp, s"timestamp in $firstEntry")
     assert(!firstEntry.completed, s"entry is complete: $firstEntry")
-    assertCount(cache, "lookupCount", cache.lookupCount, 1)
+    assertCounter(cache, "lookupCount", cache.lookupCount, 1)
 
     assert(0 === operations.updateProbeCount, "expected no update probe on that first get")
 
     // lookups within the refresh window returns the same value
-    clock.setTime(100)
+    clock.setTime(halfw)
     assertCacheEntryEquals(cache, appId, attemptId, firstEntry)
-    assertCount(cache, "updateProbeCount", cache.updateProbeCount, 0)
-    assertCount(cache, "lookupCount", cache.lookupCount, 2)
+    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 0)
+    assertCounter(cache, "lookupCount", cache.lookupCount, 2)
     assert(0 === operations.updateProbeCount, "expected no updated probe within the time window")
 
     // but now move the ticker past that refresh
-    val checkTime = 1000
+    val checkTime = window * 2
     clock.setTime(checkTime)
     assert((clock.getTimeMillis() - firstEntry.timestamp) > cache.refreshInterval)
     val entry3 = cache.lookupCacheEntry(appId, attemptId)
     assert(firstEntry !== entry3, s"updated entry test from $cache")
-    assertCount(cache, "lookupCount", cache.lookupCount, 3)
-    assertCount(cache, "updateProbeCount", cache.updateProbeCount, 1)
-    assertCount(cache, "updateTriggeredCount", cache.updateTriggeredCount, 0)
+    assertCounter(cache, "lookupCount", cache.lookupCount, 3)
+    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 1)
+    assertCounter(cache, "updateTriggeredCount", cache.updateTriggeredCount, 0)
     assert(1 === operations.updateProbeCount, s"refresh count in $cache")
     assert(0 === operations.detachCount, s"detach count")
     assert(entry3.timestamp === checkTime)
 
-    val updateTime = clock.getTimeMillis()
+    val updateTime = window * 2 + halfw
     // update the cached value. This won't get picked up on until after the refresh interval
-    val completedUI = operations.putAppUI(appId, attemptId, true, started, updateTime, updateTime)
+    val updatedApp = operations.putAppUI(appId, attemptId, true, started, updateTime, updateTime)
 
     // go a little bit forward again and the refresh window means no new probe
-    clock.setTime(1300)
+    clock.setTime(updateTime + 1)
     assertCacheEntryEquals(cache, appId, attemptId, entry3)
-    assertCount(cache, "lookupCount", cache.lookupCount, 4)
-    assertCount(cache, "updateProbeCount", cache.updateProbeCount, 1)
+    assertCounter(cache, "lookupCount", cache.lookupCount, 4)
+    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 1)
 
-    // and a short time later, and again the entry can be updated.
-    // here with a now complete entry
-    val endTime = 60000
+    // and but once past the window again, a probe is triggered and the change collected
+    val endTime = window * 10
     clock.setTime(endTime)
-
-
     logDebug(s"Before operation = $cache")
     val entry5 = cache.lookupCacheEntry(appId, attemptId)
-
-    assertCount(cache, "lookupCount", cache.lookupCount, 5)
-    assertCount(cache, "updateProbeCount", cache.updateProbeCount, 2)
-    assertCount(cache, "updateTriggeredCount", cache.updateTriggeredCount, 1)
-    assert(entry5.completed, s"$entry5 is not completed in $cache")
-    assert(completedUI === entry5.ui, s"UI {$completedUI} did not match entry {$entry5} in $cache")
+    assertCounter(cache, "lookupCount", cache.lookupCount, 5)
+    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 2)
+    // the update was triggered
+    assertCounter(cache, "updateTriggeredCount", cache.updateTriggeredCount, 1)
+    assert(updatedApp === entry5.ui, s"UI {$updatedApp} did not match entry {$entry5} in $cache")
 
     // at which point, the refreshes stop
-    clock.setTime(180000)
+    clock.setTime(window * 20)
     assertCacheEntryEquals(cache, appId, attemptId, entry5)
-
+    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 2)
   }
 
-  def assertCount(cache: ApplicationCache, name: String, c: Counter, expected: Long): Unit = {
-    if (c.getCount != expected) {
+  /**
+   * Assert that a counter in the cache has a specific value
+   * @param cache cache
+   * @param name counter name (for exceptions)
+   * @param counter counter
+   * @param expected expected value.
+   */
+  def assertCounter(cache: ApplicationCache, name: String, counter: Counter, expected: Long): Unit = {
+    val actual = counter.getCount
+    if (actual != expected) {
       // this is here because Scalatest loses stack depth
-      logError(s"Wrong counter value for $name in $cache", new Exception())
+      throw new Exception(s"Wrong $name value - expected $expected but got $actual in $cache");
     }
-    assertResult(expected, s"Wrong counter value for $name in $cache") { c.getCount }
   }
 
   /**
@@ -330,9 +306,28 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       expected: CacheEntry): Unit = {
     val actual = cache.lookupCacheEntry(appId, attemptId)
     val errorText = s"Expected get($appId, $attemptId) -> $expected, but got $actual from $cache"
-    logDebug(errorText, new Exception(errorText))
+    // here for failures where scalatest hides the stack logDebug(errorText, new Exception(errorText))
     assert(expected.ui === actual.ui, errorText + " SparkUI reference")
     assert(expected.completed === actual.completed, errorText + " -completed flag")
     assert(expected.timestamp === actual.timestamp, errorText + " -timestamp")
   }
+
+  /**
+   * Assert that a key wasn't found in cache or loaded.
+   *
+   * Looks for the specific nested exception raised by [[ApplicationCache]]
+   * @param cache
+   * @param appId
+   */
+  def assertNotFound(cache: ApplicationCache, appId: String, attemptId: Option[String]): Unit = {
+    val ex = intercept[UncheckedExecutionException] {
+      cache.get(appId, attemptId)
+    }
+    var cause = ex.getCause
+    assert(cause !== null)
+    if (!cause.isInstanceOf[NoSuchElementException]) {
+      throw cause;
+    }
+  }
+
 }

@@ -21,7 +21,7 @@ import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
 
-import com.codahale.metrics.{Timer, Counter, MetricRegistry}
+import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 
 import org.apache.spark.Logging
@@ -57,10 +57,13 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     }
   }
 
+  /**
+   * Handler for callbacks from the cache of entry removal.
+   */
   private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
 
     /**
-     * Removal event notifies the provider to detach the UI
+     * Removal event notifies the provider to detach the UI.
      * @param rm removal notification
      */
     override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
@@ -77,6 +80,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       .removalListener(removalListener)
       .build(appLoader)
 
+  /* metrics: counters and timers */
   val lookupCount = new Counter()
   val lookupFailureCount = new Counter()
   val removalCount = new Counter()
@@ -86,6 +90,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   val updateProbeTimer = new Timer()
   val updateTriggeredCount = new Counter()
 
+  /** all the counters: for registration and string conversion. */
   private val counters = Seq(
     ("lookup.count", lookupCount),
     ("lookup.failure.count", lookupFailureCount),
@@ -94,85 +99,34 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     ("update.probe.count", updateProbeCount),
     ("update.triggered.count", updateTriggeredCount))
 
+  /** all metrics, including timers */
   private val metrics = counters ++ Seq(
     ("load.timer", loadTimer),
     ("update.probe.timer", updateProbeTimer))
 
+  /**
+   * Name of metric source
+   */
   override val sourceName = "ApplicationCache"
 
-  override def metricRegistry = new MetricRegistry;
+  override def metricRegistry: MetricRegistry = new MetricRegistry
 
   // init operations
   init()
 
+  /**
+   * Startup actions.
+   * This includes registering metrics with [[metricRegistry]]
+   */
   private def init(): Unit = {
     metrics.foreach( e =>
       metricRegistry.register(MetricRegistry.name("history.cache", e._1), e._2))
   }
 
-  private def time[T](t: Timer)(f: => T): T = {
-    val timeCtx = t.time()
-    try {
-      f
-    } finally {
-      timeCtx.close()
-    }
-  }
-
-  /**
-   * Load a cache entry, including registering the UI
-   *
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @return the cache entry
-   */
-  def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    logDebug(s"Loading application Entry $appId/$attemptId")
-    loadCount.inc()
-    time(loadTimer) {
-      operations.getAppUI(appId, attemptId) match {
-        case Some(ui) =>
-          val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
-          // attach the spark UI
-          operations.attachSparkUI(appId, attemptId, ui, completed)
-          // build the cache entry
-          new CacheEntry(ui, completed, clock.getTimeMillis())
-        case None =>
-          lookupFailureCount.inc()
-          throw new NoSuchElementException(s"no application with application Id '$appId'" +
-              attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
-      }
-    }
-  }
-
-  /**
-   * Split up an `applicationId/attemptId` or `applicationId` key into the separate pieces.
-   *
-   * @param appAndAttempt combined key
-   * @return a tuple of the application ID and, if present, the attemptID
-   */
-  def splitAppAndAttemptKey(appAndAttempt: String): (String, Option[String]) = {
-    val parts = appAndAttempt.split("/")
-    require(parts.length == 1 || parts.length == 2, s"Invalid app key $appAndAttempt")
-    val appId = parts(0)
-    val attemptId = if (parts.length > 1) Some(parts(1)) else None
-    (appId, attemptId)
-  }
-
-  /**
-   * Merge an appId and optional attempt ID into a key of the form `applicationId/attemptId`
-   * if there is an attempt ID; `applicationId` if not
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @return a unified string
-   */
-  def mergeAppAndAttemptToKey(appId: String, attemptId: Option[String]) : String = {
-    appId + attemptId.map { id => s"/$id" }.getOrElse("")
-  }
 
   /**
    * Get the entry. Cache fetch/refresh will have taken place by
-   * the time this method returns
+   * the time this method returns.
    * @param appAndAttempt application to look up
    * @return the entry
    */
@@ -183,7 +137,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
 
   /**
    * Get the associated spark UI. Cache fetch/refresh will have taken place by
-   * the time this method returns
+   * the time this method returns.
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @return the entry
@@ -193,12 +147,10 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   }
 
   /**
-   * Look up the entry; update it if needed. Returns the underlying cache entry -which
-   * can have its timestamp changed
-   * the time this method returns
+   * Look up the entry; update it if needed.
    * @param appId application ID
    * @param attemptId optional attempt ID
-   * @return the entry
+   * @return the underlying cache entry -which can have its timestamp changed.
    */
   private def lookupAndUpdate(appId: String, attemptId: Option[String]): CacheEntry = {
     lookupCount.inc()
@@ -243,8 +195,80 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   }
 
   /**
-   * String operator dumps the cache entries and metrics
-   * Warning: no concurrency guarantees.
+   * Time a closure, returning its output.
+   * @param t timer
+   * @param f function
+   * @tparam T type of return value of time
+   * @return the result of the function.
+   */
+  private def time[T](t: Timer)(f: => T): T = {
+    val timeCtx = t.time()
+    try {
+      f
+    } finally {
+      timeCtx.close()
+    }
+  }
+
+  /**
+   * Load the Spark UI via [[ApplicationCacheOperations.getAppUI()]],
+   * then attach it to the web UI via [[ApplicationCacheOperations.attachSparkUI()]].
+   *
+   * The generated entry contains the UI and the current timestamp.
+   * The timer [[loadTimer]] tracks the time taken to load the UI.
+   *
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return the cache entry
+   * @throws NoSuchElementException if there
+   */
+  @throws[NoSuchElementException]
+  def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
+    logDebug(s"Loading application Entry $appId/$attemptId")
+    loadCount.inc()
+    time(loadTimer) {
+      operations.getAppUI(appId, attemptId) match {
+        case Some(ui) =>
+          val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
+          // attach the spark UI
+          operations.attachSparkUI(appId, attemptId, ui, completed)
+          // build the cache entry
+          new CacheEntry(ui, completed, clock.getTimeMillis())
+        case None =>
+          lookupFailureCount.inc()
+          throw new NoSuchElementException(s"no application with application Id '$appId'" +
+              attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
+      }
+    }
+  }
+
+  /**
+   * Split up an `applicationId/attemptId` or `applicationId` key into the separate pieces.
+   *
+   * @param appAndAttempt combined key
+   * @return a tuple of the application ID and, if present, the attemptID
+   */
+  def splitAppAndAttemptKey(appAndAttempt: String): (String, Option[String]) = {
+    val parts = appAndAttempt.split("/")
+    require(parts.length == 1 || parts.length == 2, s"Invalid app key $appAndAttempt")
+    val appId = parts(0)
+    val attemptId = if (parts.length > 1) Some(parts(1)) else None
+    (appId, attemptId)
+  }
+
+  /**
+   * Merge an appId and optional attempt Id into a key of the form `applicationId/attemptId`
+   * if there is an `attemptId`; `applicationId` if not.
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return a unified string
+   */
+  def mergeAppAndAttemptToKey(appId: String, attemptId: Option[String]): String = {
+    appId + attemptId.map { id => s"/$id" }.getOrElse("")
+  }
+
+  /**
+   * String operator dumps the cache entries and metrics.
    * @return a string value, primarily for testing and diagnostics
    */
   override def toString: String = {
@@ -272,7 +296,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
  *                 does not need refreshing)
  * @param timestamp timestamp in milliseconds. This may be updated during probes
  */
-private[history] final class CacheEntry(val ui: SparkUI, val completed: Boolean, var timestamp: Long) {
+private[history] final class CacheEntry(val ui: SparkUI, val completed: Boolean,
+    var timestamp: Long) {
 
   /** string value is for test assertions */
   override def toString: String = {
@@ -282,7 +307,7 @@ private[history] final class CacheEntry(val ui: SparkUI, val completed: Boolean,
 
 /**
  * Cache key: compares on App Id and then, if non-empty, attemptId.
- * Hash code is similar
+ * The [[hashCode()]] function uses the same fields.
  * @param appId application ID
  * @param attemptId attempt ID
  */
@@ -292,7 +317,7 @@ private[history] final case class CacheKey(appId: String, attemptId: Option[Stri
     appId.hashCode() + attemptId.map(_.hashCode).getOrElse(0)
   }
 
-  override def equals(obj: scala.Any): Boolean = {
+  override def equals(obj: Any): Boolean = {
     val that = obj.asInstanceOf[CacheKey]
     that.appId == appId && that.attemptId == attemptId
   }
@@ -309,7 +334,7 @@ private[history] final case class CacheKey(appId: String, attemptId: Option[Stri
 private[history] trait ApplicationCacheOperations {
 
   /**
-   * Get the application UI
+   * Get the application UI.
    * @param appId application ID
    * @param attemptId attempt ID
    * @return The Spark UI
@@ -317,7 +342,7 @@ private[history] trait ApplicationCacheOperations {
   def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
 
   /**
-   *  Attach a reconstructed UI.
+   * Attach a reconstructed UI.
    * @param appId application ID
    * @param attemptId attempt ID
    * @param ui UI
@@ -326,14 +351,14 @@ private[history] trait ApplicationCacheOperations {
   def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI, completed: Boolean): Unit
 
   /**
-   *  Detach a reconstructed UI
+   *  Detach a Spark UI.
    *
    * @param ui Spark UI
    */
   def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit
 
   /**
-   * Probe for an update to an (incompleted) application
+   * Probe for an update to an (incompleted) application.
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
