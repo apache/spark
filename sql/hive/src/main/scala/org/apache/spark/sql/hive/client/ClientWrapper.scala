@@ -169,10 +169,8 @@ private[hive] class ClientWrapper(
       } else {
         logInfo("Attempting to login to Kerberos" +
           s" using principal: ${principalName} and keytab: ${keytabFileName}")
-        val hadoopConfiguration = new Configuration()
-        hadoopConfiguration.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
-          "kerberos")
-        UserGroupInformation.setConfiguration(hadoopConfiguration)
+        // make sure the core-site.xml is provided in your classpath
+        // (with hadoop.security.authentication=kerberos)
         UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
       }
     }
