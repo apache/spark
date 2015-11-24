@@ -28,7 +28,7 @@ import org.apache.spark.rpc.RpcAddress
 
 private[netty] sealed trait OutboxMessage {
 
-  def send(client: TransportClient): Unit
+  def sendWith(client: TransportClient): Unit
 
   def onFailure(e: Throwable): Unit
 
@@ -37,7 +37,7 @@ private[netty] sealed trait OutboxMessage {
 private[netty] case class OneWayOutboxMessage(content: Array[Byte]) extends OutboxMessage
   with Logging {
 
-  override def send(client: TransportClient): Unit = {
+  override def sendWith(client: TransportClient): Unit = {
     client.send(content)
   }
 
@@ -47,20 +47,18 @@ private[netty] case class OneWayOutboxMessage(content: Array[Byte]) extends Outb
 
 }
 
-private[netty] case class RpcOutboxMessage(content: Array[Byte],
-  _onFailure: (Throwable) => Unit,
-  _onSuccess: (TransportClient, Array[Byte]) => Unit) extends OutboxMessage {
+private[netty] case class RpcOutboxMessage(
+    content: Array[Byte],
+    _onFailure: (Throwable) => Unit,
+    _onSuccess: (TransportClient, Array[Byte]) => Unit)
+  extends OutboxMessage with RpcResponseCallback {
 
   private var client: TransportClient = _
   private var requestId: Long = _
 
-  override def send(client: TransportClient): Unit = {
+  override def sendWith(client: TransportClient): Unit = {
     this.client = client
-    this.requestId = client.sendRpc(content, createCallback(client))
-  }
-
-  override def onFailure(e: Throwable): Unit = {
-    _onFailure(e)
+    this.requestId = client.sendRpc(content, this)
   }
 
   def onTimeout(): Unit = {
@@ -68,14 +66,12 @@ private[netty] case class RpcOutboxMessage(content: Array[Byte],
     client.removeRpcRequest(requestId)
   }
 
-  def createCallback(client: TransportClient): RpcResponseCallback = new RpcResponseCallback() {
-    override def onFailure(e: Throwable): Unit = {
-      _onFailure(e)
-    }
+  override def onFailure(e: Throwable): Unit = {
+    _onFailure(e)
+  }
 
-    override def onSuccess(response: Array[Byte]): Unit = {
-      _onSuccess(client, response)
-    }
+  override def onSuccess(response: Array[Byte]): Unit = {
+    _onSuccess(client, response)
   }
 
 }
@@ -160,7 +156,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       try {
         val _client = synchronized { client }
         if (_client != null) {
-          message.send(_client)
+          message.sendWith(_client)
         } else {
           assert(stopped == true)
         }

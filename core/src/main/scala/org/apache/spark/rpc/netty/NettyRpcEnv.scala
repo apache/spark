@@ -150,7 +150,7 @@ private[netty] class NettyRpcEnv(
 
   private def postToOutbox(receiver: NettyRpcEndpointRef, message: OutboxMessage): Unit = {
     if (receiver.client != null) {
-      message.send(receiver.client)
+      message.sendWith(receiver.client)
     } else {
       require(receiver.address != null,
         "Cannot send message to client endpoint with no listen address.")
@@ -182,7 +182,7 @@ private[netty] class NettyRpcEnv(
     val remoteAddr = message.receiver.address
     if (remoteAddr == address) {
       // Message to a local RPC endpoint.
-      dispatcher.postLocalMessage(message)
+      dispatcher.postOneWayMessage(message)
     } else {
       // Message to a remote RPC endpoint.
       postToOutbox(message.receiver, OneWayOutboxMessage(serialize(message)))
@@ -558,7 +558,7 @@ private[netty] class NettyRpcHandler(
       client: TransportClient,
       message: Array[Byte]): Unit = {
     val messageToDispatch = internalReceive(client, message)
-    dispatcher.postRemoteMessage(messageToDispatch)
+    dispatcher.postOneWayMessage(messageToDispatch)
   }
 
   private def internalReceive(client: TransportClient, message: Array[Byte]): RequestMessage = {
