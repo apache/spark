@@ -736,6 +736,21 @@ private[hive] object HiveContext {
       s"jdbc:derby:;databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+
+    // SPARK-11783: When "hive.metastore.uris" is set, the metastore connection mode will be
+    // remote (https://cwiki.apache.org/confluence/display/Hive/AdminManual+MetastoreAdmin
+    // mentions that "If hive.metastore.uris is empty local mode is assumed, remote otherwise").
+    // Remote means that the metastore server is running in its own process.
+    // When the mode is remote, configurations like "javax.jdo.option.ConnectionURL" will not be
+    // used (because they are used by remote metastore server that talks to the database).
+    // Because execution Hive should always connects to a embedded derby metastore.
+    // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
+    // to the actual embedded derby metastore instead of the remote metastore.
+    // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).
+    // Then, you will find that the local metastore mode is only set to true when
+    // hive.metastore.uris is not set.
+    propMap.put(ConfVars.METASTOREURIS.varname, "")
+
     propMap.toMap
   }
 
