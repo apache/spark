@@ -184,10 +184,10 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)         .
-         as.numeric.data.V2. 6.995908
-         as.numeric.data.V3. 5.275131
+         as.numeric.data.V2. 6.973403
+         as.numeric.data.V3. 5.284370
        */
-      val coefficientsR = Vectors.dense(6.995908, 5.275131)
+      val coefficientsR = Vectors.dense(6.973403, 5.284370)
 
       assert(model1.intercept ~== 0 absTol 1E-3)
       assert(model1.coefficients ~= coefficientsR relTol 1E-3)
@@ -235,12 +235,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                     s0
-           (Intercept)         6.24300
-           as.numeric.data.V2. 4.024821
-           as.numeric.data.V3. 6.679841
+           (Intercept)       6.242284
+           as.numeric.d1.V2. 4.019605
+           as.numeric.d1.V3. 6.679538
          */
-        val interceptR1 = 6.24300
-        val coefficientsR1 = Vectors.dense(4.024821, 6.679841)
+        val interceptR1 = 6.242284
+        val coefficientsR1 = Vectors.dense(4.019605, 6.679538)
         assert(model1.intercept ~== interceptR1 relTol 1E-3)
         assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
@@ -296,11 +296,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)          .
-           as.numeric.data.V2. 6.299752
-           as.numeric.data.V3. 4.772913
+           as.numeric.data.V2. 6.272927
+           as.numeric.data.V3. 4.782604
          */
         val interceptR1 = 0.0
-        val coefficientsR1 = Vectors.dense(6.299752, 4.772913)
+        val coefficientsR1 = Vectors.dense(6.272927, 4.782604)
 
         assert(model1.intercept ~== interceptR1 absTol 1E-3)
         assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
@@ -312,11 +312,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)         .
-           as.numeric.data.V2. 6.232193
-           as.numeric.data.V3. 4.764229
+           as.numeric.data.V2. 6.207817
+           as.numeric.data.V3. 4.775780
          */
         val interceptR2 = 0.0
-        val coefficientsR2 = Vectors.dense(6.232193, 4.764229)
+        val coefficientsR2 = Vectors.dense(6.207817, 4.775780)
 
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
@@ -347,12 +347,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         5.269376
-         as.numeric.data.V2. 3.736216
-         as.numeric.data.V3. 5.712356)
+            (Intercept)       5.260103
+            as.numeric.d1.V2. 3.725522
+            as.numeric.d1.V3. 5.711203
        */
-      val interceptR1 = 5.269376
-      val coefficientsR1 = Vectors.dense(3.736216, 5.712356)
+      val interceptR1 = 5.260103
+      val coefficientsR1 = Vectors.dense(3.725522, 5.711203)
 
       assert(model1.intercept ~== interceptR1 relTol 1E-3)
       assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
@@ -363,12 +363,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         5.791109
-         as.numeric.data.V2. 3.435466
-         as.numeric.data.V3. 5.910406
+            (Intercept)       5.790885
+            as.numeric.d1.V2. 3.432373
+            as.numeric.d1.V3. 5.919196
        */
-      val interceptR2 = 5.791109
-      val coefficientsR2 = Vectors.dense(3.435466, 5.910406)
+      val interceptR2 = 5.790885
+      val coefficientsR2 = Vectors.dense(3.432373, 5.919196)
 
       assert(model2.intercept ~== interceptR2 relTol 1E-3)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
@@ -398,12 +398,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         .
-         as.numeric.data.V2. 5.522875
-         as.numeric.data.V3. 4.214502
+         (Intercept)       .
+         as.numeric.d1.V2. 5.493430
+         as.numeric.d1.V3. 4.223082
        */
       val interceptR1 = 0.0
-      val coefficientsR1 = Vectors.dense(5.522875, 4.214502)
+      val coefficientsR1 = Vectors.dense(5.493430, 4.223082)
 
       assert(model1.intercept ~== interceptR1 absTol 1E-3)
       assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
@@ -415,11 +415,11 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)         .
-         as.numeric.data.V2. 5.263704
-         as.numeric.data.V3. 4.187419
+         as.numeric.d1.V2. 5.244324
+         as.numeric.d1.V3. 4.203106
        */
       val interceptR2 = 0.0
-      val coefficientsR2 = Vectors.dense(5.263704, 4.187419)
+      val coefficientsR2 = Vectors.dense(5.244324, 4.203106)
 
       assert(model2.intercept ~== interceptR2 absTol 1E-3)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
@@ -457,12 +457,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-           (Intercept)         6.324108
-           as.numeric.data.V2. 3.168435
-           as.numeric.data.V3. 5.200403
+           (Intercept)       5.689855
+           as.numeric.d1.V2. 3.661181
+           as.numeric.d1.V3. 6.000274
          */
-        val interceptR1 = 5.696056
-        val coefficientsR1 = Vectors.dense(3.670489, 6.001122)
+        val interceptR1 = 5.689855
+        val coefficientsR1 = Vectors.dense(3.661181, 6.000274)
 
         assert(model1.intercept ~== interceptR1 relTol 1E-3)
         assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
@@ -473,12 +473,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-           (Intercept)         6.114723
-           as.numeric.data.V2. 3.409937
-           as.numeric.data.V3. 6.146531
+            (Intercept)       6.113890
+            as.numeric.d1.V2. 3.407021
+            as.numeric.d1.V3. 6.152512
          */
-        val interceptR2 = 6.114723
-        val coefficientsR2 = Vectors.dense(3.409937, 6.146531)
+        val interceptR2 = 6.113890
+        val coefficientsR2 = Vectors.dense(3.407021, 6.152512)
 
         assert(model2.intercept ~== interceptR2 relTol 1E-3)
         assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
@@ -518,12 +518,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                       s0
-           (Intercept)         .
-           as.numeric.dataM.V2. 5.673348
-           as.numeric.dataM.V3. 4.322251
+           (Intercept)       .
+           as.numeric.d1.V2. 5.643748
+           as.numeric.d1.V3. 4.331519
          */
         val interceptR1 = 0.0
-        val coefficientsR1 = Vectors.dense(5.673348, 4.322251)
+        val coefficientsR1 = Vectors.dense(5.643748, 4.331519)
 
         assert(model1.intercept ~== interceptR1 absTol 1E-3)
         assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
@@ -535,11 +535,12 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)         .
-           as.numeric.data.V2. 5.477988
-           as.numeric.data.V3. 4.297622
+           as.numeric.d1.V2. 5.455902
+           as.numeric.d1.V3. 4.312266
+
          */
         val interceptR2 = 0.0
-        val coefficientsR2 = Vectors.dense(5.477988, 4.297622)
+        val coefficientsR2 = Vectors.dense(5.455902, 4.312266)
 
         assert(model2.intercept ~== interceptR2 absTol 1E-3)
         assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
@@ -598,17 +599,19 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
          # as described before the beforeAll() method.
          d1 <- read.csv("path/part-00000", header=FALSE, stringsAsFactors=FALSE)
          fit <- glm(V1 ~ V2 + V3, data = d1, family = "gaussian")
+         names(f1)[1] = c("V2")
+         names(f1)[2] = c("V3")
          f1 <- data.frame(as.numeric(d1$V2), as.numeric(d1$V3))
          predictions <- predict(fit, newdata=f1)
          l1 <- as.numeric(d1$V1)
 
          residuals <- l1 - predictions
          > mean(residuals^2)           # MSE
-         [1] 0.009925853
+         [1] 0.00985449
          > mean(abs(residuals))        # MAD
-         [1] 00.07975305
-         > cor(predictions, label)^2   # r^2
-         [1] 0.9998722
+         [1] 0.07961668
+         > cor(predictions, l1)^2   # r^2
+         [1] 0.9998737
 
          > summary(fit)
 
@@ -617,19 +620,20 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
           Deviance Residuals:
                Min        1Q    Median        3Q       Max
-          -0.38568  -0.06770   0.00022   0.06724   0.39246
+          -0.47082  -0.06797   0.00002   0.06725   0.34635
 
           Coefficients:
                        Estimate Std. Error t value Pr(>|t|)
-          (Intercept) 6.2988232  0.0018684    3371   <2e-16 ***
-          V2          4.7015664  0.0011880    3958   <2e-16 ***
-          V3          7.1995670  0.0009127    7888   <2e-16 ***
+          (Intercept) 6.3022157  0.0018600    3388   <2e-16 ***
+          V2          4.6982442  0.0011805    3980   <2e-16 ***
+          V3          7.1994344  0.0009044    7961   <2e-16 ***
           ---
+
           ....
        */
-      assert(model.summary.meanSquaredError ~== 0.009925853 relTol 1E-5)
-      assert(model.summary.meanAbsoluteError ~== 0.07975305 relTol 1E-5)
-      assert(model.summary.r2 ~== 0.9998722 relTol 1E-5)
+      assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-5)
+      assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-5)
+      assert(model.summary.r2 ~== 0.9998737 relTol 1E-5)
 
       // Normal solver uses "WeightedLeastSquares". This algorithm does not generate
       // objective history because it does not run through iterations.
@@ -644,9 +648,9 @@ class LinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         // To clalify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
-        val devianceResidualsR = Array(-0.38568, 0.39246)
-        val seCoefR = Array(0.0011880, 0.0009127, 0.0018684)
-        val tValsR = Array(3958, 7888, 3371)
+        val devianceResidualsR = Array(-0.47082, 0.34635)
+        val seCoefR = Array(0.0011805, 0.0009044, 0.0018600)
+        val tValsR = Array(3980, 7961, 3388)
         val pValsR = Array(0, 0, 0)
         model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
           assert(x._1 ~== x._2 absTol 1E-5) }
