@@ -74,27 +74,22 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
   extends function.Function2[JList[JavaRDD[_]], Time, JavaRDD[Array[Byte]]] {
 
   def apply(rdd: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
-    val resultRDD = pfunc.call(time.milliseconds, List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava)
-    val failure = pfunc.getLastFailure
-    if (failure != null) {
-      throw new SparkException("An exception was raised by Python:\n" + failure)
-    }
-    Option(resultRDD).map(_.rdd)
+    val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull).asJava
+    Option(callPythonTransformFunction(time.milliseconds, rdds)).map(_.rdd)
   }
 
   def apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time): Option[RDD[Array[Byte]]] = {
     val rdds = List(rdd.map(JavaRDD.fromRDD(_)).orNull, rdd2.map(JavaRDD.fromRDD(_)).orNull).asJava
-    val resultRDD = pfunc.call(time.milliseconds, rdds)
-    val failure = pfunc.getLastFailure
-    if (failure != null) {
-      throw new SparkException("An exception was raised by Python:\n" + failure)
-    }
-    Option(resultRDD).map(_.rdd)
+    Option(callPythonTransformFunction(time.milliseconds, rdds)).map(_.rdd)
   }
 
   // for function.Function2
   def call(rdds: JList[JavaRDD[_]], time: Time): JavaRDD[Array[Byte]] = {
-    val resultRDD = pfunc.call(time.milliseconds, rdds)
+    callPythonTransformFunction(time.milliseconds, rdds)
+  }
+
+  private def callPythonTransformFunction(time: Long, rdds: JList[_]): JavaRDD[Array[Byte]] = {
+    val resultRDD = pfunc.call(time, rdds)
     val failure = pfunc.getLastFailure
     if (failure != null) {
       throw new SparkException("An exception was raised by Python:\n" + failure)
