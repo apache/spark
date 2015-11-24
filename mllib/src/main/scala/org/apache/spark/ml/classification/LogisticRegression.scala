@@ -755,23 +755,35 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns the receiver operating characteristic (ROC) curve,
    * which is an Dataframe having two fields (FPR, TPR)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
    * Returns the precision-recall curve, which is an Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val fMeasureByThreshold: DataFrame = {
     binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
@@ -781,6 +793,9 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns a dataframe with two fields (threshold, precision) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val precisionByThreshold: DataFrame = {
     binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
@@ -790,6 +805,9 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns a dataframe with two fields (threshold, recall) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
