@@ -37,14 +37,14 @@ import org.apache.spark.util.Clock
  * retrieval; if the cached entry is out of date, it is refreshed.
  *
  * @param operations implementation of record access operations
- * @param refreshInterval interval between refreshes in nanoseconds.
+ * @param refreshInterval interval between refreshes in milliseconds.
  * @param retainedApplications number of retained applications
- * @param time time source
+ * @param clock time source
  */
 private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
-    time: Clock) extends Logging with Source {
+    clock: Clock) extends Logging with Source {
 
   /**
    * Services the load request from the cache.
@@ -136,7 +136,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
           // attach the spark UI
           operations.attachSparkUI(appId, attemptId, ui, completed)
           // build the cache entry
-          new CacheEntry(ui, completed, time.getTimeMillis())
+          new CacheEntry(ui, completed, clock.getTimeMillis())
         case None =>
           lookupFailureCount.inc()
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
@@ -208,7 +208,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       // no entry, so fetch without any post-fetch probes for out-of-dateness
       entry = appCache.get(cacheKey)
     } else if (!entry.completed) {
-      val now = time.getTimeMillis()
+      val now = clock.getTimeMillis()
       if (now - entry.timestamp > refreshInterval) {
         log.debug(s"Probing for updated application $cacheKey")
         updateProbeCount.inc()
@@ -249,7 +249,9 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
    */
   override def toString: String = {
     val sb = new StringBuilder(
-      s"ApplicationCache($refreshInterval, $retainedApplications) size ${appCache.size()}\n")
+      s"ApplicationCache($refreshInterval, $retainedApplications)")
+    sb.append(s"; time = ${clock.getTimeMillis()}")
+    sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
       case(key, entry) => sb.append(s"    $key -> $entry\n")
