@@ -474,7 +474,6 @@ object functions extends LegacyFunctions {
 
   /**
    * @group window_funcs
-   * @since 1.4.0
    * @deprecated As of 1.6.0, replaced by `cume_dist`. This will be removed in Spark 2.0.
    */
   @deprecated("Use cume_dist. This will be removed in Spark 2.0.", "1.6.0")
@@ -496,7 +495,6 @@ object functions extends LegacyFunctions {
 
   /**
    * @group window_funcs
-   * @since 1.4.0
    * @deprecated As of 1.6.0, replaced by `dense_rank`. This will be removed in Spark 2.0.
    */
   @deprecated("Use dense_rank. This will be removed in Spark 2.0.", "1.6.0")
@@ -633,7 +631,6 @@ object functions extends LegacyFunctions {
 
   /**
    * @group window_funcs
-   * @since 1.4.0
    * @deprecated As of 1.6.0, replaced by `percent_rank`. This will be removed in Spark 2.0.
    */
   @deprecated("Use percent_rank. This will be removed in Spark 2.0.", "1.6.0")
@@ -671,7 +668,6 @@ object functions extends LegacyFunctions {
 
   /**
    * @group window_funcs
-   * @since 1.4.0
    * @deprecated As of 1.6.0, replaced by `row_number`. This will be removed in Spark 2.0.
    */
   @deprecated("Use row_number. This will be removed in Spark 2.0.", "1.6.0")
@@ -746,8 +742,7 @@ object functions extends LegacyFunctions {
   def coalesce(e: Column*): Column = withExpr { Coalesce(e.map(_.expr)) }
 
   /**
-   * @group window_funcs
-   * @since 1.5.0
+   * @group normal_funcs
    * @deprecated As of 1.6.0, replaced by `input_file_name`. This will be removed in Spark 2.0.
    */
   @deprecated("Use input_file_name. This will be removed in Spark 2.0.", "1.6.0")
@@ -762,11 +757,10 @@ object functions extends LegacyFunctions {
   def input_file_name(): Column = withExpr { InputFileName() }
 
   /**
-   * Return true iff the column is NaN.
-   *
    * @group normal_funcs
-   * @since 1.5.0
+   * @deprecated As of 1.6.0, replaced by `isnan`. This will be removed in Spark 2.0.
    */
+  @deprecated("Use isnan. This will be removed in Spark 2.0.", "1.6.0")
   def isNaN(e: Column): Column = isnan(e)
 
   /**
