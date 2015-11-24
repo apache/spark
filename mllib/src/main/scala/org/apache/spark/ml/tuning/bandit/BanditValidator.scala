@@ -22,7 +22,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, _}
-import org.apache.spark.ml.tuning.{bandit, ValidatorParams}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.util.MLUtils
@@ -38,7 +37,8 @@ trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
    * param for the estimator to be validated
    * @group param
    */
-  val estimator: Param[Estimator[M] with Controllable[M]] = new Param(this, "estimator", "estimator for selection")
+  val estimator: Param[Estimator[M] with Controllable[M]] =
+    new Param(this, "estimator", "estimator for selection")
 
   /** @group getParam */
   def getEstimator: Estimator[M] with Controllable[M] = $(estimator)
