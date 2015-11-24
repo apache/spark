@@ -319,7 +319,9 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+    // started + completed can be > total when there are speculative tasks
+    val boundedStarted = math.min(started, total - completed)
+    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
