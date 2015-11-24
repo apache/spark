@@ -159,7 +159,6 @@ object LinearDataGenerator {
     }
   }
 
-
   /**
    * Generate an RDD containing sample data for Linear Regression models - including Ridge, Lasso,
    * and uregularized variants.
