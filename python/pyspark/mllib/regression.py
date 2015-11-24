@@ -734,17 +734,27 @@ class StreamingLinearAlgorithm(object):
 @inherit_doc
 class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Run LinearRegression with SGD on a batch of data.
+    Train or predict a linear regression model on streaming data. Training uses
+    Stochastic Gradient Descent to update the model based on each new batch of
+    incoming data from a DStream (see `LinearRegressionWithSGD` for model equation).
 
-    The problem minimized is (1 / n_samples) * (y - weights'X)**2.
-    After training on a batch of data, the weights obtained at the end of
-    training are used as initial weights for the next batch.
+    Each batch of data is assumed to be an RDD of LabeledPoints.
+    The number of data points per batch can vary, but the number
+    of features must be constant. An initial weight
+    vector must be provided.
 
-    :param stepSize: Step size for each iteration of gradient descent.
-    :param numIterations: Total number of iterations run.
-    :param miniBatchFraction: Fraction of data on which SGD is run for each
-                              iteration.
-    :param convergenceTol: A condition which decides iteration termination.
+    :param stepSize:
+      Step size for each iteration of gradient descent.
+      (default: 0.1)
+    :param numIterations:
+      Number of iterations run for each batch of data.
+      (default: 50)
+    :param miniBatchFraction:
+      Fraction of each batch of data to use for updates.
+      (default: 1.0)
+    :param convergenceTol:
+      Value used to determine when to terminate iterations.
+      (default: 0.001)
 
     .. versionadded:: 1.5.0
     """
