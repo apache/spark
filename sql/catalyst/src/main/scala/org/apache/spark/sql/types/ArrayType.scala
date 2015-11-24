@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
@@ -86,7 +86,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   }
 
   @transient
-  private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
+  private[sql] lazy val interpretedOrdering: Ordering[util.ArrayData] = new Ordering[util.ArrayData] {
     private[this] val elementOrdering: Ordering[Any] = elementType match {
       case dt: AtomicType => dt.ordering.asInstanceOf[Ordering[Any]]
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
@@ -95,7 +95,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
         throw new IllegalArgumentException(s"Type $other does not support ordered operations")
     }
 
-    def compare(x: ArrayData, y: ArrayData): Int = {
+    def compare(x: util.ArrayData, y: util.ArrayData): Int = {
       val leftArray = x
       val rightArray = y
       val minLength = scala.math.min(leftArray.numElements(), rightArray.numElements())

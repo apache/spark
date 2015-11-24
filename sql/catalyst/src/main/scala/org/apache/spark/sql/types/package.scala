@@ -21,4 +21,24 @@ package org.apache.spark.sql
  * Contains a type system for attributes produced by relations, including complex types like
  * structs, arrays and maps.
  */
-package object types
+package object types {
+
+  /* Aliases for backwards compatibility. See SPARK-11780. */
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.ArrayBasedMapData", since = "1.6.0")
+  type ArrayBasedMapData = org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.ArrayBasedMapData", since = "1.6.0")
+  val ArrayBasedMapData = org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.ArrayData", since = "1.6.0")
+  type ArrayData = org.apache.spark.sql.catalyst.util.ArrayData
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.DataTypeException", since = "1.6.0")
+  type DataTypeException = org.apache.spark.sql.catalyst.util.DataTypeException
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.DataTypeParser", since = "1.6.0")
+  type DataTypeParser = org.apache.spark.sql.catalyst.util.DataTypeParser
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.DataTypeParser", since = "1.6.0")
+  val DataTypeParser = org.apache.spark.sql.catalyst.util.DataTypeParser
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.GenericArrayData", since = "1.6.0")
+  type GenericArrayData = org.apache.spark.sql.catalyst.util.GenericArrayData
+  @deprecated("Moved to org.apache.spark.sql.catalyst.util.MapData", since = "1.6.0")
+  type MapData = org.apache.spark.sql.catalyst.util.MapData
+
+}
