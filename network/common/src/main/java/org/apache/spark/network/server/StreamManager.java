@@ -47,6 +47,19 @@ public abstract class StreamManager {
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
+   * Called in response to a stream() request. The returned data is streamed to the client
+   * through a single TCP connection.
+   *
+   * Note the <code>streamId</code> argument is not related to the similarly named argument in the
+   * {@link #getChunk(long, int)} method.
+   *
+   * @param streamId id of a stream that has been previously registered with the StreamManager.
+   */
+  public ManagedBuffer openStream(String streamId) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Associates a stream with a single client connection, which is guaranteed to be the only reader
    * of the stream. The getChunk() method will be called serially on this connection and once the
    * connection is closed, the stream will never be used again, enabling cleanup.

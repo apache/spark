@@ -149,7 +149,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             total = sparkJob.numTasks - sparkJob.numSkippedTasks)
         }
       </td>
-      {failureReasonCell(lastFailureReason, rowspan = 1)}
+      {UIUtils.failureReasonCell(lastFailureReason)}
     </tr>
   }
 
@@ -243,48 +243,6 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
         <pre>{outputOp.description}</pre>
       </div>
     </div>
-  }
-
-  private def failureReasonCell(
-      failureReason: String,
-      rowspan: Int,
-      includeFirstLineInExpandDetails: Boolean = true): Seq[Node] = {
-    val isMultiline = failureReason.indexOf('\n') >= 0
-    // Display the first line by default
-    val failureReasonSummary = StringEscapeUtils.escapeHtml4(
-      if (isMultiline) {
-        failureReason.substring(0, failureReason.indexOf('\n'))
-      } else {
-        failureReason
-      })
-    val failureDetails =
-      if (isMultiline && !includeFirstLineInExpandDetails) {
-        // Skip the first line
-        failureReason.substring(failureReason.indexOf('\n') + 1)
-      } else {
-        failureReason
-      }
-    val details = if (isMultiline) {
-      // scalastyle:off
-      <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
-            class="expand-details">
-        +details
-      </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{failureDetails}</pre>
-        </div>
-      // scalastyle:on
-    } else {
-      ""
-    }
-
-    if (rowspan == 1) {
-      <td valign="middle" style="max-width: 300px">{failureReasonSummary}{details}</td>
-    } else {
-      <td valign="middle" style="max-width: 300px" rowspan={rowspan.toString}>
-        {failureReasonSummary}{details}
-      </td>
-    }
   }
 
   private def getJobData(sparkJobId: SparkJobId): Option[JobUIData] = {
@@ -434,8 +392,9 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def outputOpStatusCell(outputOp: OutputOperationUIData, rowspan: Int): Seq[Node] = {
     outputOp.failureReason match {
       case Some(failureReason) =>
-        val failureReasonForUI = generateOutputOperationStatusForUI(failureReason)
-        failureReasonCell(failureReasonForUI, rowspan, includeFirstLineInExpandDetails = false)
+        val failureReasonForUI = UIUtils.createOutputOperationFailureForUI(failureReason)
+        UIUtils.failureReasonCell(
+          failureReasonForUI, rowspan, includeFirstLineInExpandDetails = false)
       case None =>
         if (outputOp.endTime.isEmpty) {
           <td rowspan={rowspan.toString}>-</td>

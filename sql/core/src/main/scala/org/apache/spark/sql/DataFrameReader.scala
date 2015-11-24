@@ -29,7 +29,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.json.{JSONOptions, JSONRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
@@ -227,6 +227,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
+   * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
+   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
+   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
+   * </li>
+   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
+   * (e.g. 00012)</li>
+   *
    * @param path input path
    * @since 1.4.0
    */
@@ -255,9 +264,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
+      new JSONRelation(
+        Some(jsonRDD),
+        maybeDataSchema = userSpecifiedSchema,
+        maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
+    )
   }
 
   /**
@@ -299,8 +313,25 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
+    DataFrame(sqlContext,
+      sqlContext.catalog.lookupRelation(SqlParser.parseTableIdentifier(tableName)))
   }
+
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "text".
+   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * {{{
+   *   // Scala:
+   *   sqlContext.read.text("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   sqlContext.read().text("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param path input path
+   * @since 1.6.0
+   */
+  def text(path: String): DataFrame = format("text").load(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

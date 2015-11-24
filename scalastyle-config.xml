@@ -150,6 +150,13 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
+    <customMessage><![CDATA[
+      @VisibleForTesting auses classpath issues. Please note this in the java doc instead (SPARK-11615).
+    ]]></customMessage>
+  </check>
+
   <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Class\.forName</parameter></parameters>
     <customMessage><![CDATA[

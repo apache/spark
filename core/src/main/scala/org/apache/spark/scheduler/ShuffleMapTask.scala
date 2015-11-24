@@ -27,11 +27,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
 
 /**
-* A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
-* specified in the ShuffleDependency).
-*
-* See [[org.apache.spark.scheduler.Task]] for more information.
-*
+ * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
+ * specified in the ShuffleDependency).
+ *
+ * See [[org.apache.spark.scheduler.Task]] for more information.
+ *
  * @param stageId id of the stage this task belongs to
  * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).

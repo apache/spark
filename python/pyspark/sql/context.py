@@ -318,13 +318,7 @@ class SQLContext(object):
                     struct.names[i] = name
             schema = struct
 
-        elif isinstance(schema, StructType):
-            # take the first few rows to verify schema
-            rows = rdd.take(10)
-            for row in rows:
-                _verify_type(row, schema)
-
-        else:
+        elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
@@ -421,7 +415,7 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
-        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):

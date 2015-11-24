@@ -34,11 +34,24 @@ connExists <- function(env) {
 sparkR.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
-    # cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")
       rm(".sparkRjsc", envir = env)
+
+      if (exists(".sparkRSQLsc", envir = env)) {
+        rm(".sparkRSQLsc", envir = env)
+      }
+
+      if (exists(".sparkRHivesc", envir = env)) {
+        rm(".sparkRHivesc", envir = env)
+      }
+    }
+
+    # Remove the R package lib path from .libPaths()
+    if (exists(".libPath", envir = env)) {
+      libPath <- get(".libPath", envir = env)
+      .libPaths(.libPaths()[.libPaths() != libPath])
     }
 
     if (exists(".backendLaunched", envir = env)) {
@@ -69,7 +82,9 @@ sparkR.stop <- function() {
 
 #' Initialize a new Spark Context.
 #'
-#' This function initializes a new SparkContext.
+#' This function initializes a new SparkContext. For details on how to initialize
+#' and use SparkR, refer to SparkR programming guide at
+#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
 #' @param master The Spark master URL.
 #' @param appName Application name to register with cluster manager
@@ -85,7 +100,7 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="1g"))
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
-#'                  list(spark.executor.memory="1g"),
+#'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("jarfile1.jar","jarfile2.jar"))
 #'}
@@ -115,16 +130,21 @@ sparkR.init <- function(
     uriSep <- "////"
   }
 
+  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
+
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
     backendPort <- existingPort
   } else {
     path <- tempfile(pattern = "backend_port")
+    submitOps <- getClientModeSparkSubmitOpts(
+        Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        sparkEnvirMap)
     launchBackend(
         args = path,
         sparkHome = sparkHome,
         jars = jars,
-        sparkSubmitOpts = Sys.getenv("SPARKR_SUBMIT_ARGS", "sparkr-shell"),
+        sparkSubmitOpts = submitOps,
         packages = sparkPackages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
@@ -141,14 +161,20 @@ sparkR.init <- function(
     f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
+    rLibPath <- readString(f)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
-        length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0 ||
+        length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
+    if (rLibPath != "") {
+      assign(".libPath", rLibPath, envir = .sparkREnv)
+      .libPaths(c(rLibPath, .libPaths()))
+    }
   }
 
   .sparkREnv$backendPort <- backendPort
@@ -162,8 +188,6 @@ sparkR.init <- function(
   if (nchar(sparkHome) != 0) {
     sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
-
-  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
   sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
   if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
@@ -311,4 +335,34 @@ clearJobGroup <- function(sc) {
 
 cancelJobGroup <- function(sc, groupId) {
   callJMethod(sc, "cancelJobGroup", groupId)
+}
+
+sparkConfToSubmitOps <- new.env()
+sparkConfToSubmitOps[["spark.driver.memory"]]           <- "--driver-memory"
+sparkConfToSubmitOps[["spark.driver.extraClassPath"]]   <- "--driver-class-path"
+sparkConfToSubmitOps[["spark.driver.extraJavaOptions"]] <- "--driver-java-options"
+sparkConfToSubmitOps[["spark.driver.extraLibraryPath"]] <- "--driver-library-path"
+
+# Utility function that returns Spark Submit arguments as a string
+#
+# A few Spark Application and Runtime environment properties cannot take effect after driver
+# JVM has started, as documented in:
+# http://spark.apache.org/docs/latest/configuration.html#application-properties
+# When starting SparkR without using spark-submit, for example, from Rstudio, add them to
+# spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS so that they can be effective.
+getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
+  envirToOps <- lapply(ls(sparkConfToSubmitOps), function(conf) {
+    opsValue <- sparkEnvirMap[[conf]]
+    # process only if --option is not already specified
+    if (!is.null(opsValue) &&
+        nchar(opsValue) > 1 &&
+        !grepl(sparkConfToSubmitOps[[conf]], submitOps)) {
+      # put "" around value in case it has spaces
+      paste0(sparkConfToSubmitOps[[conf]], " \"", opsValue, "\" ")
+    } else {
+      ""
+    }
+  })
+  # --option must be before the application class "sparkr-shell" in submitOps
+  paste0(paste0(envirToOps, collapse = ""), submitOps)
 }

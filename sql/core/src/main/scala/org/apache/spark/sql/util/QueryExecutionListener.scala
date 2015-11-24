@@ -19,36 +19,38 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.collection.mutable.ListBuffer
+import scala.util.control.NonFatal
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.Logging
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.sql.execution.QueryExecution
 
 
 /**
+ * :: Experimental ::
  * The interface of query execution listener that can be used to analyze execution metrics.
  *
- * Note that implementations should guarantee thread-safety as they will be used in a non
- * thread-safe way.
+ * Note that implementations should guarantee thread-safety as they can be invoked by
+ * multiple different threads.
  */
 @Experimental
 trait QueryExecutionListener {
 
   /**
    * A callback function that will be called when a query executed successfully.
-   * Implementations should guarantee thread-safe.
+   * Note that this can be invoked by multiple different threads.
    *
-   * @param funcName the name of the action that triggered this query.
+   * @param funcName name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
-   * @param duration the execution time for this query in nanoseconds.
+   * @param durationNs the execution time for this query in nanoseconds.
    */
   @DeveloperApi
-  def onSuccess(funcName: String, qe: QueryExecution, duration: Long)
+  def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
 
   /**
    * A callback function that will be called when a query execution failed.
-   * Implementations should guarantee thread-safe.
+   * Note that this can be invoked by multiple different threads.
    *
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
@@ -56,13 +58,72 @@ trait QueryExecutionListener {
    * @param exception the exception that failed this query.
    */
   @DeveloperApi
-  def onFailure(funcName: String, qe: QueryExecution, exception: Exception)
+  def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
 }
 
+
+/**
+ * :: Experimental ::
+ *
+ * Manager for [[QueryExecutionListener]]. See [[org.apache.spark.sql.SQLContext.listenerManager]].
+ */
 @Experimental
-class ExecutionListenerManager extends Logging {
+class ExecutionListenerManager private[sql] () extends Logging {
+
+  /**
+   * Registers the specified [[QueryExecutionListener]].
+   */
+  @DeveloperApi
+  def register(listener: QueryExecutionListener): Unit = writeLock {
+    listeners += listener
+  }
+
+  /**
+   * Unregisters the specified [[QueryExecutionListener]].
+   */
+  @DeveloperApi
+  def unregister(listener: QueryExecutionListener): Unit = writeLock {
+    listeners -= listener
+  }
+
+  /**
+   * Removes all the registered [[QueryExecutionListener]].
+   */
+  @DeveloperApi
+  def clear(): Unit = writeLock {
+    listeners.clear()
+  }
+
+  private[sql] def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+    readLock {
+      withErrorHandling { listener =>
+        listener.onSuccess(funcName, qe, duration)
+      }
+    }
+  }
+
+  private[sql] def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+    readLock {
+      withErrorHandling { listener =>
+        listener.onFailure(funcName, qe, exception)
+      }
+    }
+  }
+
   private[this] val listeners = ListBuffer.empty[QueryExecutionListener]
+
+  /** A lock to prevent updating the list of listeners while we are traversing through them. */
   private[this] val lock = new ReentrantReadWriteLock()
+
+  private def withErrorHandling(f: QueryExecutionListener => Unit): Unit = {
+    for (listener <- listeners) {
+      try {
+        f(listener)
+      } catch {
+        case NonFatal(e) => logWarning("Error executing query execution listener", e)
+      }
+    }
+  }
 
   /** Acquires a read lock on the cache for the duration of `f`. */
   private def readLock[A](f: => A): A = {
@@ -79,58 +140,6 @@ class ExecutionListenerManager extends Logging {
     wl.lock()
     try f finally {
       wl.unlock()
-    }
-  }
-
-  /**
-   * Registers the specified QueryExecutionListener.
-   */
-  @DeveloperApi
-  def register(listener: QueryExecutionListener): Unit = writeLock {
-    listeners += listener
-  }
-
-  /**
-   * Unregisters the specified QueryExecutionListener.
-   */
-  @DeveloperApi
-  def unregister(listener: QueryExecutionListener): Unit = writeLock {
-    listeners -= listener
-  }
-
-  /**
-   * clears out all registered QueryExecutionListeners.
-   */
-  @DeveloperApi
-  def clear(): Unit = writeLock {
-    listeners.clear()
-  }
-
-  private[sql] def onSuccess(
-      funcName: String,
-      qe: QueryExecution,
-      duration: Long): Unit = readLock {
-    withErrorHandling { listener =>
-      listener.onSuccess(funcName, qe, duration)
-    }
-  }
-
-  private[sql] def onFailure(
-      funcName: String,
-      qe: QueryExecution,
-      exception: Exception): Unit = readLock {
-    withErrorHandling { listener =>
-      listener.onFailure(funcName, qe, exception)
-    }
-  }
-
-  private def withErrorHandling(f: QueryExecutionListener => Unit): Unit = {
-    for (listener <- listeners) {
-      try {
-        f(listener)
-      } catch {
-        case e: Exception => logWarning("error executing query execution listener", e)
-      }
     }
   }
 }

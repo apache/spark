@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.scheduler.ReceiverState._
 
 private[streaming] case class ReceiverErrorInfo(
@@ -28,7 +29,7 @@ private[streaming] case class ReceiverErrorInfo(
  *
  * @param receiverId the unique receiver id
  * @param state the current Receiver state
- * @param scheduledExecutors the scheduled executors provided by ReceiverSchedulingPolicy
+ * @param scheduledLocations the scheduled locations provided by ReceiverSchedulingPolicy
  * @param runningExecutor the running executor if the receiver is active
  * @param name the receiver name
  * @param endpoint the receiver endpoint. It can be used to send messages to the receiver
@@ -37,8 +38,8 @@ private[streaming] case class ReceiverErrorInfo(
 private[streaming] case class ReceiverTrackingInfo(
     receiverId: Int,
     state: ReceiverState,
-    scheduledExecutors: Option[Seq[String]],
-    runningExecutor: Option[String],
+    scheduledLocations: Option[Seq[TaskLocation]],
+    runningExecutor: Option[ExecutorCacheTaskLocation],
     name: Option[String] = None,
     endpoint: Option[RpcEndpointRef] = None,
     errorInfo: Option[ReceiverErrorInfo] = None) {
@@ -47,7 +48,8 @@ private[streaming] case class ReceiverTrackingInfo(
     receiverId,
     name.getOrElse(""),
     state == ReceiverState.ACTIVE,
-    location = runningExecutor.getOrElse(""),
+    location = runningExecutor.map(_.host).getOrElse(""),
+    executorId = runningExecutor.map(_.executorId).getOrElse(""),
     lastErrorMessage = errorInfo.map(_.lastErrorMessage).getOrElse(""),
     lastError = errorInfo.map(_.lastError).getOrElse(""),
     lastErrorTime = errorInfo.map(_.lastErrorTime).getOrElse(-1L)

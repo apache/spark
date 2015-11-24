@@ -54,13 +54,13 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .startApplication()
 
     try {
-      eventually(timeout(10 seconds), interval(100 millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getAppId() should not be (null)
       }
 
       handle.stop()
 
-      eventually(timeout(10 seconds), interval(100 millis)) {
+      eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {

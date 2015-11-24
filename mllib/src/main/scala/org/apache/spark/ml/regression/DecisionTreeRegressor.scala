@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
@@ -36,31 +36,42 @@ import org.apache.spark.sql.DataFrame
  * for regression.
  * It supports both continuous and categorical features.
  */
+@Since("1.4.0")
 @Experimental
-final class DecisionTreeRegressor(override val uid: String)
+final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeParams with TreeRegressorParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
 
   // Override parameter setters from parent trait for Java API compatibility.
-
+  @Since("1.4.0")
   override def setMaxDepth(value: Int): this.type = super.setMaxDepth(value)
 
+  @Since("1.4.0")
   override def setMaxBins(value: Int): this.type = super.setMaxBins(value)
 
+  @Since("1.4.0")
   override def setMinInstancesPerNode(value: Int): this.type =
     super.setMinInstancesPerNode(value)
 
+  @Since("1.4.0")
   override def setMinInfoGain(value: Double): this.type = super.setMinInfoGain(value)
 
+  @Since("1.4.0")
   override def setMaxMemoryInMB(value: Int): this.type = super.setMaxMemoryInMB(value)
 
+  @Since("1.4.0")
   override def setCacheNodeIds(value: Boolean): this.type = super.setCacheNodeIds(value)
 
+  @Since("1.4.0")
   override def setCheckpointInterval(value: Int): this.type = super.setCheckpointInterval(value)
 
+  @Since("1.4.0")
   override def setImpurity(value: String): this.type = super.setImpurity(value)
+
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -68,7 +79,7 @@ final class DecisionTreeRegressor(override val uid: String)
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
+      seed = $(seed), parentUID = Some(uid))
     trees.head.asInstanceOf[DecisionTreeRegressionModel]
   }
 
@@ -78,9 +89,11 @@ final class DecisionTreeRegressor(override val uid: String)
       subsamplingRate = 1.0)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeRegressor = defaultCopy(extra)
 }
 
+@Since("1.4.0")
 @Experimental
 object DecisionTreeRegressor {
   /** Accessor for supported impurities: variance */
@@ -93,6 +106,7 @@ object DecisionTreeRegressor {
  * It supports both continuous and categorical features.
  * @param rootNode  Root of the decision tree
  */
+@Since("1.4.0")
 @Experimental
 final class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
@@ -115,10 +129,12 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): DecisionTreeRegressionModel = {
     copyValues(new DecisionTreeRegressionModel(uid, rootNode, numFeatures), extra).setParent(parent)
   }
 
+  @Since("1.4.0")
   override def toString: String = {
     s"DecisionTreeRegressionModel (uid=$uid) of depth $depth with $numNodes nodes"
   }

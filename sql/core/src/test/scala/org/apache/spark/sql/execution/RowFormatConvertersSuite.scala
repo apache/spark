@@ -21,8 +21,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute, Literal, IsNull}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{GenericArrayData, ArrayType, StringType}
+import org.apache.spark.sql.types.{ArrayType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
@@ -32,9 +33,9 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     case c: ConvertToSafe => c
   }
 
-  private val outputsSafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsSafe = ReferenceSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(!outputsSafe.outputsUnsafeRows)
-  private val outputsUnsafe = TungstenSort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
+  private val outputsUnsafe = Sort(Nil, false, PhysicalRDD(Seq.empty, null, "name"))
   assert(outputsUnsafe.outputsUnsafeRows)
 
   test("planner should insert unsafe->safe conversions when required") {
