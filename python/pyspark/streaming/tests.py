@@ -416,7 +416,31 @@ class BasicOperationTests(PySparkStreamingTestCase):
             self.ssc.awaitTerminationOrTimeout(10)
         except:
             import traceback
-            traceback.print_exc()
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func_with_reseting_failure(self):
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream = self.ssc.queueStream(input)
+
+        def failed_func(i):
+            if i == 1:
+                # Make it fail in the second batch
+                raise ValueError("This is a special error")
+            else:
+                return i
+
+        # We should be able to see the results of the 3rd and 4th batches even if the second batch
+        # fails
+        expected = [[0], [2], [3]]
+        self.assertEqual(expected, self._collect(input_stream.map(failed_func), 3))
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
             failure = traceback.format_exc()
             self.assertTrue("This is a special error" in failure)
             return

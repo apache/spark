@@ -45,6 +45,8 @@ class TransformFunction(object):
         return self
 
     def call(self, milliseconds, jrdds):
+        # Clear the failure
+        self.failure = None
         try:
             if self.ctx is None:
                 self.ctx = SparkContext._active_spark_context
@@ -66,11 +68,8 @@ class TransformFunction(object):
         except:
             self.failure = traceback.format_exc()
 
-    def getFailure(self):
-        failure = self.failure
-        # Clear the failure
-        self.failure = None
-        return failure
+    def getLastFailure(self):
+        return self.failure
 
     def __repr__(self):
         return "TransformFunction(%s)" % self.func
@@ -98,6 +97,8 @@ class TransformFunctionSerializer(object):
         self.failure = None
 
     def dumps(self, id):
+        # Clear the failure
+        self.failure = None
         try:
             func = self.gateway.gateway_property.pool[id]
             return bytearray(self.serializer.dumps((func.func, func.deserializers)))
@@ -105,17 +106,16 @@ class TransformFunctionSerializer(object):
             self.failure = traceback.format_exc()
 
     def loads(self, data):
+        # Clear the failure
+        self.failure = None
         try:
             f, deserializers = self.serializer.loads(bytes(data))
             return TransformFunction(self.ctx, f, *deserializers)
         except:
             self.failure = traceback.format_exc()
 
-    def getFailure(self):
-        failure = self.failure
-        # Clear the failure
-        self.failure = None
-        return failure
+    def getLastFailure(self):
+        return self.failure
 
     def __repr__(self):
         return "TransformFunctionSerializer(%s)" % self.serializer
