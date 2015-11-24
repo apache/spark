@@ -19,16 +19,17 @@ package org.apache.spark.ml.tuning.bandit
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.ml.Model
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.DataFrame
 
 abstract class Search {
-  def search(
+  def search[M <: Model[M]](
       totalBudgets: Int,
-      arms: Array[Arm],
+      arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm
+      validationData: DataFrame): Arm[M]
 }
 
 /**
@@ -36,11 +37,11 @@ abstract class Search {
  */
 class StaticSearch extends Search {
 
-  override def search(
+  override def search[M <: Model[M]](
       totalBudgets: Int,
-      arms: Array[Arm],
+      arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm = {
+      validationData: DataFrame): Arm[M] = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
@@ -59,11 +60,11 @@ class StaticSearch extends Search {
  * Simple search strategy that ...
  */
 class SimpleBanditSearch extends Search {
-  override def search(
+  override def search[M <: Model[M]](
       totalBudgets: Int,
-      arms: Array[Arm],
+      arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm = {
+      validationData: DataFrame): Arm[M] = {
 
     val numArms = arms.length
     val alpha = 0.3
@@ -88,6 +89,8 @@ class SimpleBanditSearch extends Search {
     bestArm
   }
 }
+
+/*
 
 /**
  * Exponential weight search strategy that ...
@@ -404,4 +407,5 @@ class SuccessiveEliminationSearch extends Search {
     bestArm
   }
 }
+  */
 

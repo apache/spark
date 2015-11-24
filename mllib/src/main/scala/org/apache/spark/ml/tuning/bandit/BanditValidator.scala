@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[BanditValidator]] and [[BanditValidatorModel]].
  */
-trait BanditValidatorParams extends HasMaxIter {
+trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
 
   /**
    * param for the estimator to be validated
@@ -103,8 +103,8 @@ trait BanditValidatorParams extends HasMaxIter {
  * Multi-arm bandit hyper-parameters selection.
  */
 @Experimental
-class BanditValidator(override val uid: String)
-  extends Estimator[BanditValidatorModel] with BanditValidatorParams with Logging {
+class BanditValidator[M <: Model[M]](override val uid: String)
+  extends Estimator[BanditValidatorModel[M]] with BanditValidatorParams[M] with Logging {
 
   def this() = this(Identifiable.randomUID("bandit validation"))
 
@@ -112,8 +112,8 @@ class BanditValidator(override val uid: String)
     $(estimator).transformSchema(schema)
   }
 
-  def copy(extra: ParamMap): BanditValidator = {
-    val copied = defaultCopy(extra).asInstanceOf[BanditValidator]
+  def copy(extra: ParamMap): BanditValidator[M] = {
+    val copied = defaultCopy(extra).asInstanceOf[BanditValidator[M]]
     if (copied.isDefined(estimator)) {
       copied.setEstimator(copied.getEstimator.copy(extra))
     }
@@ -144,7 +144,7 @@ class BanditValidator(override val uid: String)
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  override def fit(dataset: DataFrame): BanditValidatorModel = {
+  override def fit(dataset: DataFrame): BanditValidatorModel[M] = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -158,7 +158,7 @@ class BanditValidator(override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm()
+        val arm = new Arm[M]()
           .setMaxIter($(stepsPerPulling))
           .setEstimator(est)
           .setEstimatorParamMap(parameter)
@@ -173,7 +173,7 @@ class BanditValidator(override val uid: String)
     val bestArm = bestArms.minBy(_._2)._1
     val bestModel = bestArm.getModel
 
-    copyValues(new BanditValidatorModel(uid, bestModel).setParent(this))
+    copyValues(new BanditValidatorModel[M](uid, bestModel).setParent(this))
   }
 }
 
@@ -183,10 +183,10 @@ class BanditValidator(override val uid: String)
  *
  * @param bestModel The best model selected from multi-arm bandit validation.
  */
-class BanditValidatorModel private[ml] (
+class BanditValidatorModel[M <: Model[M]] private[ml] (
     override val uid: String,
-    val bestModel: Model[_])
-  extends Model[BanditValidatorModel] with BanditValidatorParams {
+    val bestModel: Model[M])
+  extends Model[BanditValidatorModel[M]] with BanditValidatorParams[M] {
 
   override def validateParams(): Unit = {
     bestModel.validateParams()
@@ -201,8 +201,8 @@ class BanditValidatorModel private[ml] (
     bestModel.transformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): BanditValidatorModel = {
-    val copied = new BanditValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[_]])
+  override def copy(extra: ParamMap): BanditValidatorModel[M] = {
+    val copied = new BanditValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[M]])
     copyValues(copied, extra)
   }
 }

@@ -27,7 +27,7 @@ import org.apache.spark.sql.DataFrame
 /**
  * Params for [[Arm]].
  */
-trait ArmParams extends Params with HasMaxIter {
+trait ArmParams[M <: Model[M]] extends Params with HasMaxIter {
 
   /**
    * param for the estimator to be validated
@@ -78,7 +78,7 @@ trait ArmParams extends Params with HasMaxIter {
  * consumes a current model and produce a new one. The evaluator computes the error given a target
  * column and a predicted column.
  */
-class Arm(override val uid: String) extends ArmParams {
+class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
 
   def this() = this(Identifiable.randomUID("arm"))
 
@@ -133,8 +133,8 @@ class Arm(override val uid: String) extends ArmParams {
     }
   }
 
-  override def copy(extra: ParamMap): Arm = {
-    val copied = defaultCopy(extra).asInstanceOf[Arm]
+  override def copy(extra: ParamMap): Arm[M] = {
+    val copied = defaultCopy(extra).asInstanceOf[Arm[M]]
     copied
   }
 }

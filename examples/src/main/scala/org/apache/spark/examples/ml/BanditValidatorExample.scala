@@ -19,7 +19,7 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.tuning.bandit.{SimpleBanditSearch, BanditValidator}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.{PipelineModel, Pipeline}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
@@ -66,7 +66,7 @@ object BanditValidatorExample {
     // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
     // This will allow us to jointly choose parameters for all Pipeline stages.
     // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-    val banditval = new BanditValidator()
+    val banditval = new BanditValidator[PipelineModel]()
       .setEstimator(pipeline)
       .setEvaluator(new BinaryClassificationEvaluator)
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
