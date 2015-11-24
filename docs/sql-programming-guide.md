@@ -1820,6 +1820,7 @@ the Data Sources API.  The following options are supported:
       register itself with the JDBC subsystem.
     </td>
   </tr>
+  
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
     <td>
@@ -1829,6 +1830,13 @@ the Data Sources API.  The following options are supported:
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned.
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code>fetchSize</code></td>
+    <td>
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
 </table>
