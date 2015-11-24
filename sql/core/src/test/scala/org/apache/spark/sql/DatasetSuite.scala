@@ -224,7 +224,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.mapGroup { case (g, iter) => (g._1, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -234,7 +234,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy(v => (v._1, "word"))
-    val agged = grouped.flatMapGroup { case (g, iter) =>
+    val agged = grouped.flatMapGroups { case (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
@@ -255,7 +255,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1")
-    val agged = grouped.mapGroup { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -265,7 +265,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1").keyAs[String]
-    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -275,7 +275,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy columns asKey tuple, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1", lit(1)).keyAs[(String, Int)]
-    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
@@ -285,7 +285,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("groupBy columns asKey class, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
-    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
+    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
       agged,
