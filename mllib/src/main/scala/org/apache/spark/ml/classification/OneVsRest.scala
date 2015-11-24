@@ -188,16 +188,19 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
     override def load(path: String): OneVsRestModel = {
       implicit val format = DefaultFormats
-      val (metadata, _) = SharedReadWrite.load(path, sc, className)
+      val (metadata, classifier) = SharedReadWrite.load(path, sc, className)
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
-      val models = Array(0, numClasses).map { idx =>
+      val models = Range(0, numClasses).toArray.map { idx =>
         val modelPath = new Path(path, s"model_$idx").toString
         DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
       }
       val dataPath = new Path(path, "data").toString
       val dataStr = sc.textFile(dataPath, 1).first()
       val labelMetadata = Metadata.fromJson(dataStr)
-      new OneVsRestModel(metadata.uid, labelMetadata, models)
+      val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
+      DefaultParamsReader.getAndSetParams(ovrModel, metadata)
+      ovrModel.set("classifier", classifier)
+      ovrModel
     }
   }
 }
