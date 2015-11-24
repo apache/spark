@@ -92,8 +92,10 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  // TODO: These aren't really the same attributes as nullability etc might change.
-  final override def output: Seq[Attribute] = left.output
+  override def output: Seq[Attribute] =
+    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
+    }
 
   final override lazy val resolved: Boolean =
     childrenResolved &&
@@ -115,7 +117,10 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(lef
 
 case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
 
-case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+  /** We don't use right.output because those rows get excluded from the set. */
+  override def output: Seq[Attribute] = left.output
+}
 
 case class Join(
   left: LogicalPlan,
