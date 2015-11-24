@@ -384,10 +384,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .map { app =>
           val attempts =
             app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
+          var sortedAttempts = attempts.sortWith(compareAttemptInfo)
           new FsApplicationHistoryInfo(attempt.appId, attempt.name,
-            attempts.sortWith(compareAttemptInfo))
+            sortedAttempts, sortedAttempts.head.lastUpdated)
         }
-        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt)))
+        .getOrElse(new FsApplicationHistoryInfo(attempt.appId, attempt.name, List(attempt),
+          attempt.lastUpdated))
       newAppMap(attempt.appId) = appInfo
     }
 
@@ -443,7 +445,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appsToRetain += (app.id -> app)
         } else if (toRetain.nonEmpty) {
           appsToRetain += (app.id ->
-            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList))
+            new FsApplicationHistoryInfo(app.id, app.name, toRetain.toList, app.lastUpdated))
         }
       }
 
@@ -564,6 +566,51 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET)
   }
 
+/*
+  def isCompleted(appId: String, attemptId: Option[String]): Boolean = {
+
+    val name = appId + attemptId.map { id => s"_$id" }.getOrElse("")
+    if (isAppCompleted.keySet.contains(name)) {
+      true
+    } else if (isAppCompleted.contains(name + EventLoggingListener.IN_PROGRESS)) {
+      false
+    } else {
+      throw new NoSuchElementException(s"no app with key $appId/$attemptId.")
+    }
+  }
+*/
+
+  /**
+   * Has an application attempt completed?
+   *
+   * The default returns the completed state of the history info
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param applicationHistoryInfo the application being probed.
+   * @return true if the application is considered to have completed
+   */
+  override def isCompleted(appId: String,
+    attemptId: Option[String],
+    applicationHistoryInfo: ApplicationHistoryInfo): Boolean = {
+    super.isCompleted(appId, attemptId, applicationHistoryInfo)
+  }
+
+  /**
+   * Probe for an update to an (incompleted) application.
+   * Here the check is "is the currently cached history info more up to date than the current one"
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @return true if the application was updated since `updateTimeMillis`
+   */
+  override def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long)
+    : Boolean = {
+
+    applications.get(appId).exists {
+      _.attempts.find(_.attemptId == attemptId)
+        .exists(_.lastUpdated > updateTimeMillis)
+    }
+  }
 }
 
 private[history] object FsHistoryProvider {
@@ -586,5 +633,6 @@ private class FsApplicationAttemptInfo(
 private class FsApplicationHistoryInfo(
     id: String,
     override val name: String,
-    override val attempts: List[FsApplicationAttemptInfo])
+    override val attempts: List[FsApplicationAttemptInfo],
+    val lastUpdated: Long)
   extends ApplicationHistoryInfo(id, name, attempts)

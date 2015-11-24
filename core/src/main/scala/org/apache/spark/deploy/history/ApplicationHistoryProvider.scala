@@ -21,6 +21,7 @@ import java.util.zip.ZipOutputStream
 
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Clock
 
 private[spark] case class ApplicationAttemptInfo(
     attemptId: Option[String],
@@ -34,12 +35,6 @@ private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
     attempts: List[ApplicationAttemptInfo])
-
-private[spark] case class LiveApplicationAttemptUI(
-  id: String,
-  name: String,
-  attempts: List[ApplicationAttemptInfo])
-
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -78,5 +73,34 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
+
+  /**
+   * Has an application attempt completed?
+   *
+   * The default returns the completed state of the history info
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param applicationHistoryInfo the application being probed.
+   * @throws java.util.NoSuchElementException if there is no current record of the application
+   * @return true if the application is considered to have completed
+   */
+  @throws(classOf[NoSuchElementException])
+  def isCompleted(appId: String,
+    attemptId: Option[String],
+    applicationHistoryInfo: ApplicationHistoryInfo): Boolean = {
+    applicationHistoryInfo.attempts.nonEmpty && applicationHistoryInfo.attempts.head.completed
+  }
+
+  /**
+   * Probe for an update to an (incompleted) application
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @return true if the application was updated since `updateTimeMillis`
+   */
+  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long): Boolean = {
+    false
+  }
+
 
 }

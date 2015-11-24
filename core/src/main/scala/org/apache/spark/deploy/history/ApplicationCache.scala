@@ -20,13 +20,12 @@ package org.apache.spark.deploy.history
 import java.util.NoSuchElementException
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
-import com.google.common.base.Ticker
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.Clock
 
 /**
  * Cache for applications.
@@ -43,7 +42,7 @@ import org.apache.spark.ui.SparkUI
 private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
-    time: Ticker) extends RemovalListener[String, CacheEntry] with Logging {
+    time: Clock) extends RemovalListener[String, CacheEntry] with Logging {
 
   /**
    * Services the load request from the cache.
@@ -63,7 +62,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       .build(appLoader)
 
   /**
-   * Build a cache entry from the [[operations]].
+   * Load a cache entry, including registering the UI
    *
    * @param appAndAttempt combined app/attempt key
    * @return the cache entry
@@ -74,7 +73,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   }
 
   /**
-   * Build a cache entry from the [[operations]].
+   * Load a cache entry, including registering the UI
    *
    * @param appId application ID
    * @param attemptId optional attempt ID
@@ -87,7 +86,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
         // attach the spark UI
         operations.attachSparkUI(ui, completed)
         // build the cache entry
-        CacheEntry(ui, completed, time.read())
+        CacheEntry(ui, completed, time.getTimeMillis())
       case None =>
         throw new NoSuchElementException(s"no application $appId attempt $attemptId")
     }
@@ -108,30 +107,43 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   }
 
   /**
+   * Merge an appId and optional attempt ID into a key of the form `applicationId/attemptId`
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return
+   */
+  def mergeAppAndAttemptToKey(appId: String, attemptId: Option[String]) : String = {
+    appId + attemptId.map { id => s"/$id" }.getOrElse("")
+  }
+
+  /**
    * Get the entry. Cache fetch/refresh will have taken place by
    * the time this method returns
    * @param appAndAttempt application to look up
    * @return the entry
    */
-  def get(appAndAttempt: String): Option[CacheEntry] = {
-    try {
-      val entry = appCache.get(appAndAttempt)
-      if (!entry.completed &&
-          (time.read() - entry.timestamp) > refreshInterval) {
-        // trigger refresh
-        logDebug(s"refreshing $appAndAttempt")
-        operations.refreshTriggered(appAndAttempt, entry.ui)
-        appCache.invalidate(appAndAttempt)
-        get(appAndAttempt)
-      }
-      Some(entry)
-    } catch {
-      case NonFatal(e) => e.getCause() match {
-        case nsee: NoSuchElementException =>
-          None
+  @Deprecated
+  def get(appAndAttempt: String): CacheEntry = {
+    val parts = splitAppAndAttemptKey(appAndAttempt)
+    get(parts._1, parts._2)
+  }
 
-        case cause: Exception => throw cause
-      }
+  /**
+   * Get the entry. Cache fetch/refresh will have taken place by
+   * the time this method returns
+   * @return the entry
+   */
+  def get(appId: String, attemptId: Option[String]): CacheEntry = {
+    val appAndAttempt = mergeAppAndAttemptToKey(appId, attemptId)
+    val entry = appCache.get(appAndAttempt)
+    if (!entry.completed &&
+        (time.getTimeMillis() - entry.timestamp) > refreshInterval
+        && operations.isUpdated(appId, attemptId, entry.timestamp)) {
+        logDebug(s"refreshing $appAndAttempt")
+        appCache.invalidate(appAndAttempt)
+        appCache.get(appAndAttempt)
+    } else {
+      entry
     }
   }
 
@@ -168,6 +180,16 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
  */
 private[history] case class CacheEntry(ui: SparkUI, completed: Boolean, timestamp: Long)
 
+private[history] case class CacheKey(appId: String, attemptId: Option[String]) {
+  override def hashCode(): Int = appId.hashCode()
+    + attemptId.map(_.hashCode).getOrElse(0)
+
+  override def equals(obj: scala.Any): Boolean = {
+    val that = obj.asInstanceOf[CacheKey]
+    that.appId == appId && that.attemptId == attemptId
+  }
+}
+
 /**
  * API for cache events
  */
@@ -197,10 +219,11 @@ private[history] trait ApplicationCacheOperations {
   def detachSparkUI(ui: SparkUI): Unit
 
   /**
-   * Notification of a refresh. This will be followed by the normal
-   * detach/attach operations
-   * @param appAndAttempt app/attempt key
-   * @param ui UI to update
+   * Probe for an update to an (incompleted) application
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @return true if the application was updated since `updateTimeMillis`
    */
-  def refreshTriggered(appAndAttempt: String, ui: SparkUI): Unit
+  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long): Boolean
 }
