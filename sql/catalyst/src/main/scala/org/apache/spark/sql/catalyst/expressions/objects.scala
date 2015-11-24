@@ -236,11 +236,6 @@ case class NewInstance(
     }
 
     if (propagateNull) {
-      val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-        s"${ev.isNull} = ${ev.value} == null;"
-      } else {
-        ""
-      }
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -369,6 +364,9 @@ case class MapObjects(
   private lazy val completeFunction = function(loopAttribute)
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case NullType =>
+      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
+      (i: String) => s".get($i, $nullTypeClassName)"
     case IntegerType => (i: String) => s".getInt($i)"
     case LongType => (i: String) => s".getLong($i)"
     case FloatType => (i: String) => s".getFloat($i)"
@@ -528,15 +526,15 @@ case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataTy
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val row = child.gen(ctx)
-    s"""
-      ${row.code}
-      final boolean ${ev.isNull} = ${row.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
-      }
-    """
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"""
+        if ($eval.isNullAt($ordinal)) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+        }
+      """
+    })
   }
 }
 
