@@ -74,7 +74,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       attachSparkUI(appId, attemptId, ui, completed)
       ui
     }
-    
+
     def putAppUI(appId: String, attemptId: Option[String], completed: Boolean, started: Long,
         ended: Long, timestamp: Long): SparkUI = {
       val ui = newUI(appId, attemptId, completed, started, ended)
@@ -128,7 +128,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * `org.apache.spark.status.api.v1`, not the near-equivalents from the history package
    */
   def newUI(name: String, attemptId: Option[String], completed: Boolean, started: Long,
-      ended: Long): SparkUI =  {
+      ended: Long): SparkUI = {
     val info = new ApplicationInfo(name, name, Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(attemptId, new Date(started), new Date(ended), "user", completed)))
     val ui = mock[SparkUI]
@@ -212,7 +212,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val cache = new ApplicationCache(operations, 5, 10, clock)
     val appId = "app1"
     val attemptId = Some("_01")
-    operations.putAppUI(appId, attemptId, false,  clock.getTimeMillis(), 0, 0)
+    operations.putAppUI(appId, attemptId, false, clock.getTimeMillis(), 0, 0)
     assertNotFound(cache, appId, None)
   }
 
@@ -289,11 +289,12 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * @param counter counter
    * @param expected expected value.
    */
-  def assertCounter(cache: ApplicationCache, name: String, counter: Counter, expected: Long): Unit = {
+  def assertCounter(cache: ApplicationCache, name: String, counter: Counter, expected: Long)
+      : Unit = {
     val actual = counter.getCount
     if (actual != expected) {
       // this is here because Scalatest loses stack depth
-      throw new Exception(s"Wrong $name value - expected $expected but got $actual in $cache");
+      throw new Exception(s"Wrong $name value - expected $expected but got $actual in $cache")
     }
   }
 
@@ -306,7 +307,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       expected: CacheEntry): Unit = {
     val actual = cache.lookupCacheEntry(appId, attemptId)
     val errorText = s"Expected get($appId, $attemptId) -> $expected, but got $actual from $cache"
-    // here for failures where scalatest hides the stack logDebug(errorText, new Exception(errorText))
     assert(expected.ui === actual.ui, errorText + " SparkUI reference")
     assert(expected.completed === actual.completed, errorText + " -completed flag")
     assert(expected.timestamp === actual.timestamp, errorText + " -timestamp")
@@ -326,7 +326,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     var cause = ex.getCause
     assert(cause !== null)
     if (!cause.isInstanceOf[NoSuchElementException]) {
-      throw cause;
+      throw cause
     }
   }
 
