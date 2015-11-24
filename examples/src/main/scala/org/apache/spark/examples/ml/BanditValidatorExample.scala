@@ -31,7 +31,7 @@ import org.apache.spark.sql.{Row, SQLContext}
 object BanditValidatorExample {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("CrossValidatorExample")
+    val conf = new SparkConf().setAppName("CrossValidatorExample").setMaster("local[2]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
