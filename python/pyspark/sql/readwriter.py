@@ -217,10 +217,9 @@ class DataFrameReader(object):
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        if type(paths) == list:
-            return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
-        else:
-            return self._df(self._jreader.text(paths))
+        if isinstance(paths, basestring):
+            paths = [path]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
     def orc(self, path):
