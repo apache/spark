@@ -21,13 +21,12 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.lang.reflect.Proxy
 import java.util.{ArrayList => JArrayList, List => JList}
 
-import org.apache.spark.{SparkException, Logging}
-
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import py4j.GatewayServer
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.java._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -123,7 +122,7 @@ private[python] class TransformFunction(@transient var pfunc: PythonTransformFun
  * PythonTransformFunctionSerializer is logically a singleton that's happens to be
  * implemented as a Python object.
  */
-private[python] object PythonTransformFunctionSerializer extends Logging {
+private[python] object PythonTransformFunctionSerializer {
 
   /**
    * A serializer in Python, used to serialize PythonTransformFunction
