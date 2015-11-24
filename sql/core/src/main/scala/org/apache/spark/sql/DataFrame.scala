@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -1704,6 +1705,12 @@ class DataFrame private[sql](
     val structType = schema  // capture it for closure
     val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
     EvaluatePython.javaToPython(rdd)
+  }
+
+  protected[sql] def collectToPython(): Int = {
+    withNewExecutionId {
+      PythonRDD.collectAndServe(javaToPython.rdd)
+    }
   }
 
   ////////////////////////////////////////////////////////////////////////////
