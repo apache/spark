@@ -386,7 +386,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
-  ignore("Java encoder self join") {
+  test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
     assert(ds.joinWith(ds, lit(true)).collect().toSet ==
@@ -395,6 +395,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("SPARK-11894: Incorrect results are returned when using null") {
+    val nullInt = null.asInstanceOf[java.lang.Integer]
+    val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+    val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2, lit(true)),
+      ((nullInt, "1"), (nullInt, "1")),
+      ((new java.lang.Integer(22), "2"), (nullInt, "1")),
+      ((nullInt, "1"), (new java.lang.Integer(22), "2")),
+      ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
   }
 }
 
