@@ -27,7 +27,8 @@ import org.apache.spark.sql.DataFrame
 /**
  * Params for [[Arm]].
  */
-trait ArmParams[M <: Model[M]] extends Params with HasMaxIter {
+trait ArmParams extends Params with HasMaxIter {
+
   /**
    * param for the estimator to be validated
    * @group param
@@ -41,11 +42,11 @@ trait ArmParams[M <: Model[M]] extends Params with HasMaxIter {
    * Param for the initial model of a given estimator. Default None.
    * @group param
    */
-  val initialModel: Param[Option[Model[M]]] =
+  val initialModel: Param[Option[M]] =
     new Param(this, "initialModel", "initial model for warm-start")
 
   /** @group getParam */
-  val getInitialModel: Option[Model[M]] = $(initialModel)
+  val getInitialModel: Option[M] = $(initialModel)
 
   /**
    * param for estimator param maps
@@ -77,7 +78,7 @@ trait ArmParams[M <: Model[M]] extends Params with HasMaxIter {
  * consumes a current model and produce a new one. The evaluator computes the error given a target
  * column and a predicted column.
  */
-class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
+class Arm(override val uid: String) extends ArmParams {
 
   def this() = this(Identifiable.randomUID("arm"))
 
@@ -85,7 +86,7 @@ class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
   def setEstimator(value: Estimator[M]): this.type = set(estimator, value)
 
   /** @group setParam */
-  def setInitialModel(value: Option[Model[M]]): this.type = set(initialModel, value)
+  def setInitialModel(value: Option[M]): this.type = set(initialModel, value)
 
   /** @group setParam */
   def setEstimatorParamMap(value: ParamMap): this.type = set(estimatorParamMap, value)
@@ -99,9 +100,9 @@ class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
   /**
    * Inner model to record intermediate training result.
    */
-  private var model: Option[Model[M]] = $(initialModel)
+  private var model: Option[M] = $(initialModel)
 
-  def getModel: Model[M] = model.get
+  def getModel: M = model.get
 
   /**
    * Keep record of the number of pulls for computations in some search strategies.
@@ -132,8 +133,8 @@ class Arm[M <: Model[M]](override val uid: String) extends ArmParams[M] {
     }
   }
 
-  override def copy(extra: ParamMap): Arm[M] = {
-    val copied = defaultCopy(extra).asInstanceOf[Arm[M]]
+  override def copy(extra: ParamMap): Arm = {
+    val copied = defaultCopy(extra).asInstanceOf[Arm]
     copied
   }
 }

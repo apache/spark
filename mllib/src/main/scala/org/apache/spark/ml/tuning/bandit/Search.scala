@@ -26,9 +26,9 @@ import org.apache.spark.sql.DataFrame
 abstract class Search {
   def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_]
+      validationData: DataFrame): Arm
 }
 
 /**
@@ -38,9 +38,9 @@ class StaticSearch extends Search {
 
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
@@ -61,9 +61,9 @@ class StaticSearch extends Search {
 class SimpleBanditSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
     val alpha = 0.3
@@ -95,9 +95,9 @@ class SimpleBanditSearch extends Search {
 class ExponentialWeightsSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
     val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
@@ -124,9 +124,9 @@ class ExponentialWeightsSearch extends Search {
 class LILUCBSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
 
@@ -177,9 +177,9 @@ class LILUCBSearch extends Search {
 class LUCBSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
 
@@ -249,9 +249,9 @@ class LUCBSearch extends Search {
 class SuccessiveHalvingSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
     val numOfHalvingIter = math.ceil(Utils.log2(numArms)).toInt
@@ -296,9 +296,9 @@ class SuccessiveHalvingSearch extends Search {
 class SuccessiveRejectSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
 
@@ -343,9 +343,9 @@ class SuccessiveRejectSearch extends Search {
 class SuccessiveEliminationSearch extends Search {
   override def search(
       totalBudgets: Int,
-      arms: Array[Arm[_]],
+      arms: Array[Arm],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[_] = {
+      validationData: DataFrame): Arm = {
 
     val numArms = arms.length
     val delta = 0.1
@@ -359,7 +359,7 @@ class SuccessiveEliminationSearch extends Search {
     val ct = math.sqrt(0.5
       * math.log(4.0 * numArms * armsRef(0).getNumPulls * armsRef(0).getNumPulls / delta)
       / armsRef(0).getNumPulls)
-    val armValuesBuilder = new ArrayBuffer[Arm[_]]()
+    val armValuesBuilder = new ArrayBuffer[Arm]()
     var i = 0
     while (i < armsRef.length) {
       if (maxArmValidationResult - armsRef(i).getValidationResult(validationData) < ct) {
@@ -380,7 +380,7 @@ class SuccessiveEliminationSearch extends Search {
       val ct = math.sqrt(0.5
         * math.log(4.0 * numArms * armsRef(0).getNumPulls * armsRef(0).getNumPulls / delta)
         / armsRef(0).getNumPulls)
-      val armValuesBuilder = new ArrayBuffer[Arm[_]]()
+      val armValuesBuilder = new ArrayBuffer[Arm]()
       var i = 0
       while (i < armsRef.length) {
         if (maxArmValidationResult - armsRef(i).getValidationResult(validationData) < ct) {

@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, _}
-import org.apache.spark.ml.tuning.ValidatorParams
+import org.apache.spark.ml.tuning.{bandit, ValidatorParams}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.util.MLUtils
@@ -32,7 +32,36 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[BanditValidator]] and [[BanditValidatorModel]].
  */
-trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
+trait BanditValidatorParams extends HasMaxIter {
+
+  /**
+   * param for the estimator to be validated
+   * @group param
+   */
+  val estimator: Param[Estimator[M]] = new Param(this, "estimator", "estimator for selection")
+
+  /** @group getParam */
+  def getEstimator: Estimator[M] = $(estimator)
+
+  /**
+   * param for estimator param maps
+   * @group param
+   */
+  val estimatorParamMaps: Param[Array[ParamMap]] =
+    new Param(this, "estimatorParamMaps", "param maps for the estimator")
+
+  /** @group getParam */
+  def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
+
+  /**
+   * param for the evaluator used to select hyper-parameters that maximize the validated metric
+   * @group param
+   */
+  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
+    "evaluator used to select hyper-parameters that maximize the validated metric")
+
+  /** @group getParam */
+  def getEvaluator: Evaluator = $(evaluator)
 
   /**
    * Step control for one pulling of an arm.
@@ -95,7 +124,7 @@ class BanditValidator(override val uid: String)
   }
 
   /** @group setParam */
-  def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
+  def setEstimator(value: Estimator[M]): this.type = set(estimator, value)
 
   /** @group setParam */
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
@@ -129,12 +158,12 @@ class BanditValidator(override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       val arms = epm.map { parameter =>
-        val arm = new Arm[Model[_]]()
+        val arm = new Arm()
           .setMaxIter($(stepsPerPulling))
-          .setEstimator(est.asInstanceOf[Estimator[Model[_]]])
+          .setEstimator(est)
           .setEstimatorParamMap(parameter)
           .setEvaluator(eval)
-        arm.asInstanceOf[Arm[_]]
+        arm
       }
 
       val bestArm = $(searchStrategy).search($(maxIter), arms, trainingDataset, validationDataset)
