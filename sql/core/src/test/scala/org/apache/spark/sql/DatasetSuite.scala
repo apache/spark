@@ -177,16 +177,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("joinWith, expression condition, outer join") {
     val nullInteger = null.asInstanceOf[Integer]
     val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassData("a", new Integer(1)),
-      ClassData("c", new Integer(3))).toDS()
+    val ds1 = Seq(ClassNullableData("a", new Integer(1)),
+      ClassNullableData("c", new Integer(3))).toDS()
     val ds2 = Seq(("a", new Integer(1)),
       ("b", new Integer(2))).toDS()
 
     checkAnswer(
       ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassData("a", new Integer(1)), ("a", new Integer(1))),
-      (ClassData("c", new Integer(3)), (nullString, nullInteger)),
-      (ClassData(nullString, nullInteger), ("b", new Integer(2))))
+      (ClassNullableData("a", new Integer(1)), ("a", new Integer(1))),
+      (ClassNullableData("c", new Integer(3)), (nullString, nullInteger)),
+      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
   test("joinWith tuple with primitive, expression") {
@@ -418,7 +418,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 }
 
 
-case class ClassData(a: String, b: Integer)
+case class ClassData(a: String, b: Int)
+case class ClassNullableData(a: String, b: Integer)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
