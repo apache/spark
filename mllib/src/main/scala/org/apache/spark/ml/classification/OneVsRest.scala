@@ -22,39 +22,36 @@ import java.util.UUID
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
-import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
+import org.json4s.{DefaultFormats, JObject, _}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.param.{ParamPair, Param, ParamMap, Params}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
-  trait MyClassifierType {
-    // scalastyle:off structural.type
-    type ClassifierType = Classifier[F, E, M] forSome {
-      type F
-      type M <: ClassificationModel[F, M]
-      type E <: Classifier[F, E, M]
-    }
-    // scalastyle:on structural.type
+trait ClassifierTypeTrait {
+  // scalastyle:off structural.type
+  type ClassifierType = Classifier[F, E, M] forSome {
+    type F
+    type M <: ClassificationModel[F, M]
+    type E <: Classifier[F, E, M]
   }
+  // scalastyle:on structural.type
+}
 
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams with MyClassifierType {
+private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTrait {
 
 
   /**
@@ -152,17 +149,17 @@ final class OneVsRestModel private[ml] (
     copyValues(copied, extra).setParent(parent)
   }
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def write: MLWriter = new OneVsRestModel.OneVsRestModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object OneVsRestModel extends MLReadable[OneVsRestModel] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def read: MLReader[OneVsRestModel] = new OneVsRestModelReader
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): OneVsRestModel = super.load(path)
 
   /** [[MLWriter]] instance for [[OneVsRestModel]] */
@@ -173,7 +170,6 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
     private case class Data(labelMetadata: Map[String, Any])
 
     override protected def saveImpl(path: String): Unit = {
-      import org.json4s.JsonDSL._
       // Save model data: labelMetadata
       val dataPath = new Path(path, "data").toString
       sc.parallelize(Seq(instance.labelMetadata.json), 1).saveAsTextFile(dataPath)
@@ -294,24 +290,24 @@ final class OneVsRest(override val uid: String)
     copied
   }
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def write: MLWriter = new OneVsRest.OneVsRestWriter(this)
 }
 
-private[classification] object SharedReadWrite extends MyClassifierType {
+private[classification] object SharedReadWrite extends ClassifierTypeTrait {
 
   def validateParams(instance: OneVsRestParams): Unit = {
     def checkElement(elem: Params, name: String): Unit = elem match {
       case stage: MLWritable => // good
       case other =>
-        throw new UnsupportedOperationException("CrossValidator write will fail " +
+        throw new UnsupportedOperationException("OneVsRest write will fail " +
           s" because it contains $name which does not implement Writable." +
           s" Non-Writable $name: ${other.uid} of type ${other.getClass}")
     }
 
     instance match {
       case ovrModel: OneVsRestModel => ovrModel.models.foreach(checkElement(_, "model"))
-      case _ => // check nothing
+      case _ => // no need to check OneVsRest here
     }
 
     checkElement(instance.getClassifier, "classifier")
@@ -342,7 +338,7 @@ private[classification] object SharedReadWrite extends MyClassifierType {
             model.save(modelPath)
           case _ => // do nothing here since we have already checked the models
         }
-      case _ =>
+      case _ => // OneVsRest has already saved
     }
   }
 
@@ -360,13 +356,13 @@ private[classification] object SharedReadWrite extends MyClassifierType {
   }
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object OneVsRest extends MLReadable[OneVsRest] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def read: MLReader[OneVsRest] = new OneVsRestReader
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): OneVsRest = super.load(path)
 
   /** [[MLWriter]] instance for [[OneVsRest]] */
@@ -378,6 +374,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
       SharedReadWrite.saveImpl(path, instance, sc)
     }
   }
+
   private class OneVsRestReader extends MLReader[OneVsRest] {
 
     /** Checked against metadata when loading model */
@@ -385,9 +382,9 @@ object OneVsRest extends MLReadable[OneVsRest] {
 
     override def load(path: String): OneVsRest = {
       val (metadata, classifier) = SharedReadWrite.load(path, sc, className)
-      val ova = new OneVsRest(metadata.uid)
-      DefaultParamsReader.getAndSetParams(ova, metadata)
-      ova.setClassifier(classifier)
+      val ovr = new OneVsRest(metadata.uid)
+      DefaultParamsReader.getAndSetParams(ovr, metadata)
+      ovr.setClassifier(classifier)
     }
   }
 }
