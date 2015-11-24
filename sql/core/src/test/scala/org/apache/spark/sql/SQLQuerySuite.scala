@@ -1997,4 +1997,35 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sqlContext.setConf("spark.sql.subexpressionElimination.enabled", "true")
     verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
   }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (1)") {
+    // This test produced an incorrect result of 1 before the SPARK-10707 fix because of the
+    // NullPropagation rule: COUNT(v) got replaced with COUNT(1) because the output column of
+    // UNION was incorrectly considered non-nullable:
+    checkAnswer(
+      sql("""SELECT count(v) FROM (
+            |  SELECT v FROM (
+            |    SELECT 'foo' AS v UNION ALL
+            |    SELECT NULL AS v
+            |  ) my_union WHERE isnull(v)
+            |) my_subview""".stripMargin),
+      Seq(Row(0)))
+  }
+
+  test("SPARK-10707: nullability should be correctly propagated through set operations (2)") {
+    // This test uses RAND() to stop column pruning for Union and checks the resulting isnull
+    // value. This would produce an incorrect result before the fix in SPARK-10707 because the "v"
+    // column of the union was considered non-nullable.
+    checkAnswer(
+      sql(
+        """
+          |SELECT a FROM (
+          |  SELECT ISNULL(v) AS a, RAND() FROM (
+          |    SELECT 'foo' AS v UNION ALL SELECT null AS v
+          |  ) my_union
+          |) my_view
+        """.stripMargin),
+      Row(false) :: Row(true) :: Nil)
+  }
+
 }
