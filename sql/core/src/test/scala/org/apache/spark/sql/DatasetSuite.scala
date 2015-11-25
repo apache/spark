@@ -231,7 +231,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
-
   }
 
   test("groupBy function, keys") {
@@ -373,6 +372,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
+  test("sample with replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      Seq(5, 10, 52, 73): _*)
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      Seq(3, 17, 27, 58, 62): _*)
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -383,7 +398,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("self join") {
     val ds = Seq("1", "2").toDS().as("a")
-    val joined = ds.joinWith(ds)
+    val joined = ds.joinWith(ds, lit(true))
     checkAnswer(joined, ("1", "1"), ("1", "2"), ("2", "1"), ("2", "2"))
   }
 
@@ -403,7 +418,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Kryo encoder self join") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
-    assert(ds.joinWith(ds).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
       Set(
         (KryoData(1), KryoData(1)),
         (KryoData(1), KryoData(2)),
@@ -422,7 +437,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Java encoder self join") {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
-    assert(ds.joinWith(ds).collect().toSet ==
+    assert(ds.joinWith(ds, lit(true)).collect().toSet ==
       Set(
         (JavaData(1), JavaData(1)),
         (JavaData(1), JavaData(2)),
@@ -436,7 +451,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
 
     checkAnswer(
-      ds1.joinWith(ds2),
+      ds1.joinWith(ds2, lit(true)),
       ((nullInt, "1"), (nullInt, "1")),
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),

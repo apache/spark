@@ -17,21 +17,19 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions._
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function._
-
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -85,7 +83,6 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the schema of the encoded form of the objects in this [[Dataset]].
-   *
    * @since 1.6.0
    */
   def schema: StructType = resolvedTEncoder.schema
@@ -187,7 +184,6 @@ class Dataset[T] private[sql](
    *     .transform(featurize)
    *     .transform(...)
    * }}}
-   *
    * @since 1.6.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
@@ -455,6 +451,22 @@ class Dataset[T] private[sql](
       c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
+
+  /**
+   * Returns a new [[Dataset]] by sampling a fraction of rows.
+   * @since 1.6.0
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
+
+  /**
+   * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
+   * @since 1.6.0
+   */
+  def sample(withReplacement: Boolean, fraction: Double) : Dataset[T] = {
+    sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
   /* **************** *
    *  Set operations  *
    * **************** */
@@ -513,6 +525,9 @@ class Dataset[T] private[sql](
    * types as well as working with relational data where either side of the join has column
    * names in common.
    *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @since 1.6.0
    */
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
@@ -547,20 +562,13 @@ class Dataset[T] private[sql](
    * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
    * where `condition` evaluates to true
    *
+   * @param other Right side of the join.
+   * @param condition Join expression.
    * @since 1.6.0
    */
   def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
-
-  /**
-   * Joins this [[Dataset]] returning a [[Tuple2]] for each pair using cartesian join
-   *
-   * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
-   *
-   * @since 1.6.0
-   */
-  def joinWith[U](other: Dataset[U]): Dataset[(T, U)] = joinWith (other, lit(true), "inner")
 
   /* ************************** *
    *  Gather to Driver Actions  *
@@ -606,7 +614,6 @@ class Dataset[T] private[sql](
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
-   *
    * @since 1.6.0
    */
   def take(num: Int): Array[T] = withPlan(Limit(Literal(num), _)).collect()
@@ -616,7 +623,6 @@ class Dataset[T] private[sql](
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
-   *
    * @since 1.6.0
    */
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
