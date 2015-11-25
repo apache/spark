@@ -21,16 +21,27 @@ import java.net.{HttpURLConnection, URL}
 import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import com.codahale.metrics.Counter
 import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.json4s.JsonAST.JArray
+import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.when
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
+import org.openqa.selenium.WebDriver
+import org.scalatest.concurrent.Eventually
+import org.scalatest.selenium.WebBrowser
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark._
+import org.apache.spark.util.Utils
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -44,7 +55,7 @@ import org.apache.spark.util.ResetSystemProperties
  * are considered part of Spark's public api.
  */
 class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with ResetSystemProperties {
+  with JsonTestUtils with Eventually with WebBrowser with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -254,6 +265,98 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("incomplete apps get refreshed") {
+
+    implicit val webDriver: WebDriver = new HtmlUnitDriver
+    implicit val formats = org.json4s.DefaultFormats
+
+    val testDir = Utils.createTempDir()
+    testDir.deleteOnExit()
+
+    val myConf = new SparkConf()
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath)
+      .set("spark.eventLog.dir", testDir.getAbsolutePath)
+      .set("spark.history.fs.update.interval", "1")
+      .set("spark.eventLog.enabled", "true")
+      .set("spark.history.cache.window", "1")
+      .remove("spark.testing")
+    val provider = new FsHistoryProvider(myConf)
+    val securityManager = new SecurityManager(myConf)
+
+    val server = new HistoryServer(myConf, provider, securityManager, 18080)
+    val sc = new SparkContext("local", "test", myConf)
+    server.initialize()
+    server.bind()
+    val port = server.boundPort
+    val metrics = server.cacheMetrics
+    def assertMetric(name: String, counter: Counter, expected: Long) = {
+      val actual = counter.getCount
+      if (actual != expected) {
+        // this is here because Scalatest loses stack depth
+        throw new Exception(s"Wrong $name value - expected $expected but got $actual" +
+            s" in metrics\n$metrics")
+      }
+    }
+    try {
+      val d = sc.parallelize(1 to 10)
+      d.count()
+      val stdInterval = interval(100 milliseconds)
+      val appId = eventually(timeout(20 seconds), stdInterval) {
+        val json = getContentAndCode("applications", port)._2.get
+        val apps = parse(json).asInstanceOf[JArray].arr
+        apps should have size 1
+        (apps.head \ "id").extract[String]
+      }
+      def getAppUI: SparkUI = {
+        provider.getAppUI(appId, None).get
+      }
+
+      def getNumJobs(suffix: String): Int = {
+        go to (s"http://localhost:$port/history/$appId$suffix")
+        findAll(cssSelector("tbody tr")).toIndexedSeq.size
+      }
+      def completedJobs() = {
+        getAppUI.jobProgressListener.completedJobs
+      }
+      def activeJobs() = {
+        getAppUI.jobProgressListener.activeJobs.values.toSeq
+      }
+
+      activeJobs() should have size 0
+      completedJobs() should have size 1
+      getNumJobs("") should be(1)
+      assertMetric("lookupCount", metrics.lookupCount, 1)
+
+      // second job
+      val d2 = sc.parallelize(1 to 10)
+      d2.count()
+      val stdTimeout = timeout(10 seconds)
+      eventually(stdTimeout, stdInterval) {
+        // verifies that a reload picks up the change
+        completedJobs() should have size 2
+      }
+      eventually(stdTimeout, stdInterval) {
+        // this fails with patch https://github.com/apache/spark/pull/6935 as well, I'm not sure why
+        val numJobs = getNumJobs("")
+        assertMetric("lookupCount", metrics.lookupCount, 2)
+        numJobs should be (2)
+      }
+
+      getNumJobs("/jobs") should be (2)
+      // Here is where we still have an error.  /jobs is handled by another servlet,
+      // not controlled by the app cache.  We need some way for each of those servlets
+      // to know that they can get expired, so they can be detached and then the reloaded
+      // one can get re-attached
+      d.count()
+      getNumJobs("/jobs") should be (3)
+
+    } finally {
+      sc.stop()
+      server.stop()
+    }
+
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
