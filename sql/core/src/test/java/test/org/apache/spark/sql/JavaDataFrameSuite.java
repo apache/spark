@@ -298,4 +298,27 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(48000.0, actual[1].getDouble(1), 0.01);
     Assert.assertEquals(30000.0, actual[1].getDouble(2), 0.01);
   }
+
+  public void testGenericLoad() {
+    DataFrame df1 = context.read().format("text").load(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().format("text").load(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
+      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+    Assert.assertEquals(5L, df2.count());
+  }
+
+  @Test
+  public void testTextLoad() {
+    DataFrame df1 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Assert.assertEquals(4L, df1.count());
+
+    DataFrame df2 = context.read().text(
+      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
+      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+    Assert.assertEquals(5L, df2.count());
+  }
 }
