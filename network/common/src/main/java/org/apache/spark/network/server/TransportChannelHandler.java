@@ -138,6 +138,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         }
       }
     }
+    ctx.fireUserEventTriggered(evt);
   }
 
   public TransportResponseHandler getResponseHandler() {
