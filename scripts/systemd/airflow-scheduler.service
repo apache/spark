@@ -10,8 +10,8 @@ Group=airflow
 Type=simple
 ExecStart=/bin/airflow scheduler -n 5
 KillMode=process
-Restart=on-failure
-RestartSec=42s
+Restart=always
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
