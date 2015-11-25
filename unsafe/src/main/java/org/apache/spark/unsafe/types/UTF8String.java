@@ -467,12 +467,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String trim() {
+    return trim((byte) ' ');
+  }
+
+  public UTF8String trim(byte ch) {
     int s = 0;
     int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == ch) s++;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == ch) e--;
     if (s > e) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -482,9 +486,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String trimLeft() {
+    return trimLeft((byte) ' ');
+  }
+
+  public UTF8String trimLeft(byte ch) {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= 0x20 && getByte(s) >= 0x00) s++;
+    while (s < this.numBytes && getByte(s) == ch) s++;
     if (s == this.numBytes) {
       // empty string
       return UTF8String.fromBytes(new byte[0]);
@@ -494,9 +502,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String trimRight() {
+    return trimRight((byte) ' ');
+  }
+
+  public UTF8String trimRight(byte ch) {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) <= 0x20 && getByte(e) >= 0x00) e--;
+    while (e >= 0 && getByte(e) == ch) e--;
 
     if (e < 0) {
       // empty string

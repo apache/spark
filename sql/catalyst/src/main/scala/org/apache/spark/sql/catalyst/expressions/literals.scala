@@ -32,6 +32,7 @@ object Literal {
     case d: Double => Literal(d, DoubleType)
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)
+    case c: Char => Literal(c.toByte, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)

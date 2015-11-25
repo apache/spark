@@ -447,24 +447,37 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("TRIM/LTRIM/RTRIM") {
     val s = 'a.string.at(0)
-    checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
-    checkEvaluation(StringTrim(s), "abdef", create_row(" abdef "))
+    checkEvaluation(StringTrim(Literal(" aa  "), Literal(' ')), "aa", create_row(" abdef "))
+    checkEvaluation(StringTrim(s, Literal(' ')), "abdef", create_row(" abdef "))
+    checkEvaluation(StringTrim(Literal("\taa\t\t"), Literal('\t')), "aa", create_row("\tabdef\t"))
+    checkEvaluation(StringTrim(s, Literal('x')), "abdef", create_row("xabdefx"))
 
-    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Literal(" aa  "), Literal(' ')), "aa  ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(s, Literal(' ')), "abdef ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Literal("laall"), Literal('l')), "aall", create_row("labdefl"))
+    checkEvaluation(StringTrimLeft(s, Literal('\t')), "abdef\t", create_row("\tabdef\t"))
 
-    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal(" aa  "), Literal(' ')), " aa", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(s, Literal(' ')), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("haahh"), Literal('h')), "haa", create_row("habdefh"))
+    checkEvaluation(StringTrimRight(s, Literal('h')), "habdef", create_row("habdefh"))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
-    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
-    checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimRight(s, Literal(' ')), "  花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimLeft(s, Literal(' ')), "花花世界 ", create_row("  花花世界 "))
+    checkEvaluation(StringTrim(s, Literal(' ')), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimRight(s, Literal('k')), "kk花花世界", create_row("kk花花世界k"))
+    checkEvaluation(StringTrimLeft(s, Literal('c')), "花花世界c", create_row("cc花花世界c"))
+    checkEvaluation(StringTrim(s, Literal('m')), "花花世界", create_row("mm花花世界m"))
     // scalastyle:on
-    checkEvaluation(StringTrim(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimLeft(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimRight(Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrim(Literal.create(null, StringType), Literal(' ')), null)
+    checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal(' ')), null)
+    checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal(' ')), null)
+    checkEvaluation(
+      StringTrim(Literal.create(null, StringType), Literal.create(null, ByteType)), null)
+    checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal('x')), null)
+    checkEvaluation(StringTrimRight(Literal("abcde"), Literal.create(null, ByteType)), null)
   }
 
   test("FORMAT") {

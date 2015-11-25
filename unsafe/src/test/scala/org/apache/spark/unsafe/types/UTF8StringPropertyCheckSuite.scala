@@ -104,11 +104,22 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   val randomString: Gen[String] = Arbitrary.arbString.arbitrary
 
   test("trim, trimLeft, trimRight") {
-    // lTrim and rTrim are both modified from java.lang.String.trim
+    def trim(s: String): String = {
+      var st = 0
+      var len = s.length
+      val array: Array[Char] = s.toCharArray
+      while ((st < s.length) && (array(st) == ' ')) {
+        st += 1
+      }
+      while ((len > 0) && (array(len - 1) == ' ')) {
+        len -= 1
+      }
+      if ((st > 0) || (len < s.length)) s.substring(st, s.length) else s
+    }
     def lTrim(s: String): String = {
       var st = 0
       val array: Array[Char] = s.toCharArray
-      while ((st < s.length) && (array(st) <= ' ')) {
+      while ((st < s.length) && (array(st) == ' ')) {
         st += 1
       }
       if (st > 0) s.substring(st, s.length) else s
@@ -116,7 +127,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
     def rTrim(s: String): String = {
       var len = s.length
       val array: Array[Char] = s.toCharArray
-      while ((len > 0) && (array(len - 1) <= ' ')) {
+      while ((len > 0) && (array(len - 1) == ' ')) {
         len -= 1
       }
       if (len < s.length) s.substring(0, len) else s
@@ -128,7 +139,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
         whitespaceString
     ) { (start: String, middle: String, end: String) =>
       val s = start + middle + end
-      assert(toUTF8(s).trim() === toUTF8(s.trim()))
+      assert(toUTF8(s).trim() === toUTF8(trim(s)))
       assert(toUTF8(s).trimLeft() === toUTF8(lTrim(s)))
       assert(toUTF8(s).trimRight() === toUTF8(rTrim(s)))
     }
