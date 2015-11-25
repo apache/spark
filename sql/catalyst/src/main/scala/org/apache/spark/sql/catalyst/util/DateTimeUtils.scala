@@ -241,6 +241,10 @@ object DateTimeUtils {
           i += 3
         } else if (i < 2) {
           if (b == '-') {
+            if (i == 0 && j != 4) {
+              // year should have exact four digits
+              return None
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
@@ -308,15 +312,24 @@ object DateTimeUtils {
     }
 
     segments(i) = currentSegmentValue
+    if (!justTime && i == 0 && j != 4) {
+      // year should have exact four digits
+      return None
+    }
 
     while (digitsMilli < 6) {
       segments(6) *= 10
       digitsMilli += 1
     }
 
-    if (!justTime && (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 ||
+    if (!justTime && (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 ||
         segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
       return None
+    }
+
+    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
+    if (segments(6) > 999999) {
+      segments(6) = segments(6).toString.take(6).toInt
     }
 
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
@@ -368,6 +381,10 @@ object DateTimeUtils {
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
+        if (i == 0 && j != 4) {
+          // year should have exact four digits
+          return None
+        }
         segments(i) = currentSegmentValue
         currentSegmentValue = 0
         i += 1
@@ -381,8 +398,12 @@ object DateTimeUtils {
       }
       j += 1
     }
+    if (i == 0 && j != 4) {
+      // year should have exact four digits
+      return None
+    }
     segments(i) = currentSegmentValue
-    if (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
