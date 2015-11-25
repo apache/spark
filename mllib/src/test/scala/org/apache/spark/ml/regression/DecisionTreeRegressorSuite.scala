@@ -49,6 +49,7 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setImpurity("variance")
       .setMaxDepth(2)
       .setMaxBins(100)
+      .setSeed(1)
     val categoricalFeatures = Map(0 -> 3, 1-> 3)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
@@ -89,6 +90,7 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
       data: RDD[LabeledPoint],
       dt: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int]): Unit = {
+    val numFeatures = data.first().features.size
     val oldStrategy = dt.getOldStrategy(categoricalFeatures)
     val oldTree = OldDecisionTree.train(data, oldStrategy)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
@@ -97,5 +99,6 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     val oldTreeAsNew = DecisionTreeRegressionModel.fromOld(
       oldTree, newTree.parent.asInstanceOf[DecisionTreeRegressor], categoricalFeatures)
     TreeTests.checkEqual(oldTreeAsNew, newTree)
+    assert(newTree.numFeatures === numFeatures)
   }
 }

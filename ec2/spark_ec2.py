@@ -182,6 +182,10 @@ def parse_args():
         "-i", "--identity-file",
         help="SSH private key file to use for logging into instances")
     parser.add_option(
+        "-p", "--profile", default=None,
+        help="If you have multiple profiles (AWS or boto config), you can configure " +
+             "additional, named profiles by using this option (default: %default)")
+    parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
              "WARNING: must be 64-bit; small instances won't work")
@@ -591,7 +595,7 @@ def launch_cluster(conn, opts, cluster_name):
             dev = BlockDeviceType()
             dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
-            name = '/dev/sd' + string.letters[i + 1]
+            name = '/dev/sd' + string.ascii_letters[i + 1]
             block_map[name] = dev
 
     # Launch slaves
@@ -1315,7 +1319,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if opts.profile is None:
+            conn = ec2.connect_to_region(opts.region)
+        else:
+            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)

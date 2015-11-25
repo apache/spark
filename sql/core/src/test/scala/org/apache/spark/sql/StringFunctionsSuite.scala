@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.Decimal
 
 
 class StringFunctionsSuite extends QueryTest with SharedSQLContext {

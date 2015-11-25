@@ -119,13 +119,12 @@ object RandomForestClassifier {
  * features.
  * @param _trees  Decision trees in the ensemble.
  *               Warning: These have null parents.
- * @param numFeatures  Number of features used by this model
  */
 @Experimental
 final class RandomForestClassificationModel private[ml] (
     override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
-    val numFeatures: Int,
+    override val numFeatures: Int,
     override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, RandomForestClassificationModel]
   with TreeEnsembleModel with Serializable {
@@ -226,7 +225,8 @@ private[ml] object RandomForestClassificationModel {
       oldModel: OldRandomForestModel,
       parent: RandomForestClassifier,
       categoricalFeatures: Map[Int, Int],
-      numClasses: Int): RandomForestClassificationModel = {
+      numClasses: Int,
+      numFeatures: Int = -1): RandomForestClassificationModel = {
     require(oldModel.algo == OldAlgo.Classification, "Cannot convert RandomForestModel" +
       s" with algo=${oldModel.algo} (old API) to RandomForestClassificationModel (new API).")
     val newTrees = oldModel.trees.map { tree =>
@@ -234,6 +234,6 @@ private[ml] object RandomForestClassificationModel {
       DecisionTreeClassificationModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("rfc")
-    new RandomForestClassificationModel(uid, newTrees, -1, numClasses)
+    new RandomForestClassificationModel(uid, newTrees, numFeatures, numClasses)
   }
 }

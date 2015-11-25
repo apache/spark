@@ -27,6 +27,8 @@ abstract class BaseMutableProjection extends MutableProjection
 /**
  * Generates byte code that produces a [[MutableRow]] object that can update itself based on a new
  * input [[InternalRow]] for a fixed set of [[Expression Expressions]].
+ * It exposes a `target` method, which is used to set the row that will be updated.
+ * The internal [[MutableRow]] object created internally is used only when `target` is not used.
  */
 object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => MutableProjection] {
 
@@ -42,31 +44,45 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
       case (NoOp, _) => ""
       case (e, i) =>
         val evaluationCode = e.gen(ctx)
+        val isNull = s"isNull_$i"
+        val value = s"value_$i"
+        ctx.addMutableState("boolean", isNull, s"this.$isNull = true;")
+        ctx.addMutableState(ctx.javaType(e.dataType), value,
+          s"this.$value = ${ctx.defaultValue(e.dataType)};")
+        s"""
+          ${evaluationCode.code}
+          this.$isNull = ${evaluationCode.isNull};
+          this.$value = ${evaluationCode.value};
+         """
+    }
+    val updates = expressions.zipWithIndex.map {
+      case (NoOp, _) => ""
+      case (e, i) =>
         if (e.dataType.isInstanceOf[DecimalType]) {
           // Can't call setNullAt on DecimalType, because we need to keep the offset
           s"""
-            ${evaluationCode.code}
-            if (${evaluationCode.isNull}) {
+            if (this.isNull_$i) {
               ${ctx.setColumn("mutableRow", e.dataType, i, null)};
             } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
             }
           """
         } else {
           s"""
-            ${evaluationCode.code}
-            if (${evaluationCode.isNull}) {
+            if (this.isNull_$i) {
               mutableRow.setNullAt($i);
             } else {
-              ${ctx.setColumn("mutableRow", e.dataType, i, evaluationCode.primitive)};
+              ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
             }
           """
         }
     }
-    val allProjections = ctx.splitExpressions("i", projectionCodes)
+
+    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
+    val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
     val code = s"""
-      public Object generate($exprType[] expr) {
+      public java.lang.Object generate($exprType[] expr) {
         return new SpecificMutableProjection(expr);
       }
 
@@ -93,9 +109,11 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
           return (InternalRow) mutableRow;
         }
 
-        public Object apply(Object _i) {
-          InternalRow i = (InternalRow) _i;
+        public java.lang.Object apply(java.lang.Object _i) {
+          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allProjections
+          // copy all the results into MutableRow
+          $allUpdates
           return mutableRow;
         }
       }

@@ -36,10 +36,15 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
-  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
+  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
+
+    // Create operation log root directory, if operation logging is enabled
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
 
     val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
     setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
@@ -60,13 +65,19 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       sessionConf: java.util.Map[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
-    hiveContext.openSession()
     val sessionHandle =
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    val ctx = if (hiveContext.hiveThriftServerSingleSession) {
+      hiveContext
+    } else {
+      hiveContext.newSession()
+    }
+    ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
+    sparkSqlOperationManager.sessionToContexts += sessionHandle -> ctx
     sessionHandle
   }
 
@@ -74,7 +85,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
-
-    hiveContext.detachSession()
+    sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }
 }

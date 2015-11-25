@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -72,14 +73,20 @@ public class TransportClient implements Closeable {
   private final Channel channel;
   private final TransportResponseHandler handler;
   @Nullable private String clientId;
+  private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
+    this.timedOut = false;
+  }
+
+  public Channel getChannel() {
+    return channel;
   }
 
   public boolean isActive() {
-    return channel.isOpen() || channel.isActive();
+    return !timedOut && (channel.isOpen() || channel.isActive());
   }
 
   public SocketAddress getSocketAddress() {
@@ -156,6 +163,46 @@ public class TransportClient implements Closeable {
   }
 
   /**
+   * Request to stream the data with the given stream ID from the remote end.
+   *
+   * @param streamId The stream to fetch.
+   * @param callback Object to call with the stream data.
+   */
+  public void stream(final String streamId, final StreamCallback callback) {
+    final String serverAddr = NettyUtils.getRemoteAddress(channel);
+    final long startTime = System.currentTimeMillis();
+    logger.debug("Sending stream request for {} to {}", streamId, serverAddr);
+
+    // Need to synchronize here so that the callback is added to the queue and the RPC is
+    // written to the socket atomically, so that callbacks are called in the right order
+    // when responses arrive.
+    synchronized (this) {
+      handler.addStreamCallback(callback);
+      channel.writeAndFlush(new StreamRequest(streamId)).addListener(
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              long timeTaken = System.currentTimeMillis() - startTime;
+              logger.trace("Sending request for {} to {} took {} ms", streamId, serverAddr,
+                timeTaken);
+            } else {
+              String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
+                serverAddr, future.cause());
+              logger.error(errorMsg, future.cause());
+              channel.close();
+              try {
+                callback.onFailure(streamId, new IOException(errorMsg, future.cause()));
+              } catch (Exception e) {
+                logger.error("Uncaught exception in RPC response callback handler!", e);
+              }
+            }
+          }
+        });
+    }
+  }
+
+  /**
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
    */
@@ -216,6 +263,11 @@ public class TransportClient implements Closeable {
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }
+  }
+
+  /** Mark this channel as having timed out. */
+  public void timeOut() {
+    this.timedOut = true;
   }
 
   @Override

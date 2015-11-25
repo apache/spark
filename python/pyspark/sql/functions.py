@@ -29,6 +29,7 @@ from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
+from pyspark.sql.dataframe import DataFrame
 
 
 def _create_function(name, doc=""):
@@ -121,6 +122,24 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_functions_1_6 = {
+    # unary math functions
+    'stddev': 'Aggregate function: returns the unbiased sample standard deviation of' +
+              ' the expression in a group.',
+    'stddev_samp': 'Aggregate function: returns the unbiased sample standard deviation of' +
+                   ' the expression in a group.',
+    'stddev_pop': 'Aggregate function: returns population standard deviation of' +
+                  ' the expression in a group.',
+    'variance': 'Aggregate function: returns the population variance of the values in a group.',
+    'var_samp': 'Aggregate function: returns the unbiased variance of the values in a group.',
+    'var_pop':  'Aggregate function: returns the population variance of the values in a group.',
+    'skewness': 'Aggregate function: returns the skewness of the values in a group.',
+    'kurtosis': 'Aggregate function: returns the kurtosis of the values in a group.',
+    'collect_list': 'Aggregate function: returns a list of objects with duplicates.',
+    'collect_set': 'Aggregate function: returns a set of objects with duplicate elements' +
+                   ' eliminated.'
+}
+
 # math functions that take two arguments as input
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
@@ -131,18 +150,18 @@ _binary_mathfunctions = {
 
 _window_functions = {
     'rowNumber':
-        """returns a sequential number starting at 1 within a window partition.
-
-        This is equivalent to the ROW_NUMBER function in SQL.""",
+        """.. note:: Deprecated in 1.6, use row_number instead.""",
+    'row_number':
+        """returns a sequential number starting at 1 within a window partition.""",
     'denseRank':
+        """.. note:: Deprecated in 1.6, use dense_rank instead.""",
+    'dense_rank':
         """returns the rank of rows within a window partition, without any gaps.
 
         The difference between rank and denseRank is that denseRank leaves no gaps in ranking
         sequence when there are ties. That is, if you were ranking a competition using denseRank
         and had three people tie for second place, you would say that all three were in second
-        place and that the next person came in third.
-
-        This is equivalent to the DENSE_RANK function in SQL.""",
+        place and that the next person came in third.""",
     'rank':
         """returns the rank of rows within a window partition.
 
@@ -153,14 +172,14 @@ _window_functions = {
 
         This is equivalent to the RANK function in SQL.""",
     'cumeDist':
+        """.. note:: Deprecated in 1.6, use cume_dist instead.""",
+    'cume_dist':
         """returns the cumulative distribution of values within a window partition,
-        i.e. the fraction of rows that are below the current row.
-
-        This is equivalent to the CUME_DIST function in SQL.""",
+        i.e. the fraction of rows that are below the current row.""",
     'percentRank':
-        """returns the relative rank (i.e. percentile) of rows within a window partition.
-
-        This is equivalent to the PERCENT_RANK function in SQL.""",
+        """.. note:: Deprecated in 1.6, use percent_rank instead.""",
+    'percent_rank':
+        """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
 
 for _name, _doc in _functions.items():
@@ -170,7 +189,9 @@ for _name, _doc in _functions_1_4.items():
 for _name, _doc in _binary_mathfunctions.items():
     globals()[_name] = since(1.4)(_create_binary_mathfunction(_name, _doc))
 for _name, _doc in _window_functions.items():
-    globals()[_name] = since(1.4)(_create_window_function(_name, _doc))
+    globals()[_name] = since(1.6)(_create_window_function(_name, _doc))
+for _name, _doc in _functions_1_6.items():
+    globals()[_name] = since(1.6)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -187,6 +208,14 @@ def approxCountDistinct(col, rsd=None):
     else:
         jc = sc._jvm.functions.approxCountDistinct(_to_java_column(col), rsd)
     return Column(jc)
+
+
+@since(1.6)
+def broadcast(df):
+    """Marks a DataFrame as small enough for use in broadcast joins."""
+
+    sc = SparkContext._active_spark_context
+    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
 
 @since(1.4)
@@ -226,6 +255,22 @@ def coalesce(*cols):
     return Column(jc)
 
 
+@since(1.6)
+def corr(col1, col2):
+    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
+    and ``col2``.
+
+    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
+    >>> b = range(20)
+    >>> corrDf = sqlContext.createDataFrame(zip(a, b))
+    >>> corrDf = corrDf.agg(corr(corrDf._1, corrDf._2).alias('c'))
+    >>> corrDf.selectExpr('abs(c - 0.9572339139475857) < 1e-16 as t').collect()
+    [Row(t=True)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
+
+
 @since(1.3)
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
@@ -243,6 +288,38 @@ def countDistinct(col, *cols):
 
 @since(1.4)
 def monotonicallyIncreasingId():
+    """
+    .. note:: Deprecated in 1.6, use monotonically_increasing_id instead.
+    """
+    return monotonically_increasing_id()
+
+
+@since(1.6)
+def input_file_name():
+    """Creates a string column for the file name of the current Spark task.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.input_file_name())
+
+
+@since(1.6)
+def isnan(col):
+    """An expression that returns true iff the column is NaN.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.isnan(_to_java_column(col)))
+
+
+@since(1.6)
+def isnull(col):
+    """An expression that returns true iff the column is null.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.isnull(_to_java_column(col)))
+
+
+@since(1.6)
+def monotonically_increasing_id():
     """A column that generates monotonically increasing 64-bit integers.
 
     The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
@@ -255,11 +332,21 @@ def monotonicallyIncreasingId():
     0, 1, 2, 8589934592 (1L << 33), 8589934593, 8589934594.
 
     >>> df0 = sc.parallelize(range(2), 2).mapPartitions(lambda x: [(1,), (2,), (3,)]).toDF(['col1'])
-    >>> df0.select(monotonicallyIncreasingId().alias('id')).collect()
+    >>> df0.select(monotonically_increasing_id().alias('id')).collect()
     [Row(id=0), Row(id=1), Row(id=2), Row(id=8589934592), Row(id=8589934593), Row(id=8589934594)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.monotonicallyIncreasingId())
+    return Column(sc._jvm.functions.monotonically_increasing_id())
+
+
+@since(1.6)
+def nanvl(col1, col2):
+    """Returns col1 if it is not NaN, or col2 if col1 is NaN.
+
+    Both inputs should be floating point columns (DoubleType or FloatType).
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
 
 
 @since(1.4)
@@ -337,15 +424,23 @@ def shiftRightUnsigned(col, numBits):
 
 @since(1.4)
 def sparkPartitionId():
+    """
+    .. note:: Deprecated in 1.6, use spark_partition_id instead.
+    """
+    return spark_partition_id()
+
+
+@since(1.6)
+def spark_partition_id():
     """A column for partition ID of the Spark task.
 
     Note that this is indeterministic because it depends on data partitioning and task scheduling.
 
-    >>> df.repartition(1).select(sparkPartitionId().alias("pid")).collect()
+    >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
     [Row(pid=0), Row(pid=0)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.sparkPartitionId())
+    return Column(sc._jvm.functions.spark_partition_id())
 
 
 @since(1.5)
@@ -353,7 +448,7 @@ def expr(str):
     """Parses the expression string into the column that it represents
 
     >>> df.select(expr("length(name)")).collect()
-    [Row('length(name)=5), Row('length(name)=3)]
+    [Row(length(name)=5), Row(length(name)=3)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.expr(str))
@@ -1365,6 +1460,33 @@ def explode(col):
     return Column(jc)
 
 
+@since(1.6)
+def get_json_object(col, path):
+    """
+    Extracts json object from a json string based on json path specified, and returns json string
+    of the extracted json object. It will return null if the input json string is invalid.
+
+    :param col: string column in json format
+    :param path: path to the json object to extract
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
+    return Column(jc)
+
+
+@since(1.6)
+def json_tuple(col, fields):
+    """Creates a new row for a json column according to the given field names.
+
+    :param col: string column in json format
+    :param fields: list of fields to extract
+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.json_tuple(_to_java_column(col), fields)
+    return Column(jc)
+
+
 @since(1.5)
 def size(col):
     """
@@ -1412,14 +1534,15 @@ class UserDefinedFunction(object):
         self._judf = self._create_judf(name)
 
     def _create_judf(self, name):
+        from pyspark.sql import SQLContext
         f, returnType = self.func, self.returnType  # put them in closure `func`
         func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
         command = (func, None, ser, ser)
-        sc = SparkContext._active_spark_context
+        sc = SparkContext.getOrCreate()
         pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
-        ssql_ctx = sc._jvm.SQLContext(sc._jsc.sc())
-        jdt = ssql_ctx.parseDataType(self.returnType.json())
+        ctx = SQLContext.getOrCreate(sc)
+        jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,

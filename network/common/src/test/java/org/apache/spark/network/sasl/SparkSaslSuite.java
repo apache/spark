@@ -153,6 +153,8 @@ public class SparkSaslSuite {
       assertEquals("Pong", new String(response, StandardCharsets.UTF_8));
     } finally {
       ctx.close();
+      // There should be 2 terminated events; one for the client, one for the server.
+      verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
     }
   }
 
@@ -205,7 +207,7 @@ public class SparkSaslSuite {
   public void testEncryptedMessageChunking() throws Exception {
     File file = File.createTempFile("sasltest", ".txt");
     try {
-      TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
@@ -240,7 +242,7 @@ public class SparkSaslSuite {
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
-      final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
       StreamManager sm = mock(StreamManager.class);
       when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
           @Override
@@ -334,6 +336,23 @@ public class SparkSaslSuite {
     }
   }
 
+  @Test
+  public void testRpcHandlerDelegate() throws Exception {
+    // Tests all delegates exception for receive(), which is more complicated and already handled
+    // by all other tests.
+    RpcHandler handler = mock(RpcHandler.class);
+    RpcHandler saslHandler = new SaslRpcHandler(null, null, handler, null);
+
+    saslHandler.getStreamManager();
+    verify(handler).getStreamManager();
+
+    saslHandler.connectionTerminated(null);
+    verify(handler).connectionTerminated(any(TransportClient.class));
+
+    saslHandler.exceptionCaught(null, null);
+    verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
+  }
+
   private static class SaslTestCtx {
 
     final TransportClient client;
@@ -349,7 +368,7 @@ public class SparkSaslSuite {
         boolean disableClientEncryption)
       throws Exception {
 
-      TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
       SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");

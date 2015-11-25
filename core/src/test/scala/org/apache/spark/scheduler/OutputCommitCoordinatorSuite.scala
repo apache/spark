@@ -87,7 +87,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
-        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -170,7 +171,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage)
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
     assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))

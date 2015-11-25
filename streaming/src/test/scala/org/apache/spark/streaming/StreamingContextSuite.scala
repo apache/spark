@@ -180,6 +180,38 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.scheduler.isStarted === false)
   }
 
+  test("start should set job group and description of streaming jobs correctly") {
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
+    val sc = ssc.sc
+
+    @volatile var jobGroupFound: String = ""
+    @volatile var jobDescFound: String = ""
+    @volatile var jobInterruptFound: String = ""
+    @volatile var allFound: Boolean = false
+
+    addInputStream(ssc).foreachRDD { rdd =>
+      jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
+      allFound = true
+    }
+    ssc.start()
+
+    eventually(timeout(10 seconds), interval(10 milliseconds)) {
+      assert(allFound === true)
+    }
+
+    // Verify streaming jobs have expected thread-local properties
+    assert(jobGroupFound === null)
+    assert(jobDescFound.contains("Streaming job from"))
+    assert(jobInterruptFound === "false")
+
+    // Verify current thread's thread-local properties have not changed
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
+  }
 
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
@@ -746,6 +778,22 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // StreamingContext.validate changes the message, so use "contains" here
     assert(e.getCause.getMessage.contains("queueStream doesn't support checkpointing. " +
       "Please don't use queueStream when checkpointing is enabled."))
+  }
+
+  test("Creating an InputDStream but not using it should not crash") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val input1 = addInputStream(ssc)
+    val input2 = addInputStream(ssc)
+    val output = new TestOutputStream(input2)
+    output.register()
+    val batchCount = new BatchCounter(ssc)
+    ssc.start()
+    // Just wait for completing 2 batches to make sure it triggers
+    // `DStream.getMaxInputStreamRememberDuration`
+    batchCount.waitUntilBatchesCompleted(2, 10000)
+    // Throw the exception if crash
+    ssc.awaitTerminationOrTimeout(1)
+    ssc.stop()
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {

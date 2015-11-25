@@ -32,6 +32,7 @@ private class CodeFormatter {
   private var indentLevel = 0
   private val indentSize = 2
   private var indentString = ""
+  private var currentLine = 1
 
   private def addLine(line: String): Unit = {
     val indentChange =
@@ -44,11 +45,13 @@ private class CodeFormatter {
     } else {
       indentString
     }
+    code.append(f"/* ${currentLine}%03d */ ")
     code.append(thisLineIndent)
     code.append(line)
     code.append("\n")
     indentLevel = newIndentLevel
     indentString = " " * (indentSize * newIndentLevel)
+    currentLine += 1
   }
 
   private def addLines(code: String): CodeFormatter = {

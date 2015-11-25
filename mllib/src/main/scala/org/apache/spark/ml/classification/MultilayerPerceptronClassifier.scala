@@ -181,6 +181,8 @@ class MultilayerPerceptronClassificationModel private[ml] (
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
+  override val numFeatures: Int = layers.head
+
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
 
   /**
