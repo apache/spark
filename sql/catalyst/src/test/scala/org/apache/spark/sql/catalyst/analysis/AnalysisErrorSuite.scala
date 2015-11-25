@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{MapData, ArrayBasedMapData, GenericArrayData, ArrayData}
 import org.apache.spark.sql.types._
 
 import scala.beans.{BeanProperty, BeanInfo}
@@ -53,21 +53,29 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 }
 
 @BeanInfo
-private[sql] case class UngroupableData(@BeanProperty data: Array[Int])
+private[sql] case class UngroupableData(@BeanProperty data: Map[Int, Int])
 
 private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
-  override def sqlType: DataType = ArrayType(IntegerType)
+  override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
-  override def serialize(obj: Any): ArrayData = {
+  override def serialize(obj: Any): MapData = {
     obj match {
-      case groupableData: UngroupableData => new GenericArrayData(groupableData.data)
+      case groupableData: UngroupableData =>
+        val keyArray = new GenericArrayData(groupableData.data.keys.toSeq)
+        val valueArray = new GenericArrayData(groupableData.data.values.toSeq)
+        new ArrayBasedMapData(keyArray, valueArray)
     }
   }
 
   override def deserialize(datum: Any): UngroupableData = {
     datum match {
-      case data: Array[Int] => UngroupableData(data)
+      case data: MapData =>
+        val keyArray = data.keyArray().array
+        val valueArray = data.valueArray().array
+        assert(keyArray.length == valueArray.length)
+        val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
+        UngroupableData(mapData)
     }
   }
 
@@ -154,8 +162,8 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "sorting by unsupported column types",
-    listRelation.orderBy('list.asc),
-    "sort" :: "type" :: "array<int>" :: Nil)
+    mapRelation.orderBy('map.asc),
+    "sort" :: "type" :: "map<int,int>" :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -259,32 +267,33 @@ class AnalysisErrorSuite extends AnalysisTest {
         case true =>
           assertAnalysisSuccess(plan, true)
         case false =>
-          assertAnalysisError(plan, "expression a cannot be used in grouping expression" :: Nil)
+          assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
       }
-
     }
 
     val supportedDataTypes = Seq(
-      StringType,
+      StringType, BinaryType,
       NullType, BooleanType,
       ByteType, ShortType, IntegerType, LongType,
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
+      ArrayType(IntegerType),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", StringType, nullable = true),
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
       new GroupableUDT())
     supportedDataTypes.foreach { dataType =>
       checkDataType(dataType, shouldSuccess = true)
     }
 
     val unsupportedDataTypes = Seq(
-      BinaryType,
-      ArrayType(IntegerType),
       MapType(StringType, LongType),
       new StructType()
         .add("f1", FloatType, nullable = true)
-        .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
+        .add("f2", MapType(StringType, LongType), nullable = true),
       new UngroupableUDT())
     unsupportedDataTypes.foreach { dataType =>
       checkDataType(dataType, shouldSuccess = false)

@@ -723,7 +723,7 @@ Some of these advanced sources are as follows.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
 
-- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of tweets using
+- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j to get the public stream of tweets using
   [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
   can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
   Twitter4J library. You can either get the public stream, or get the filtered stream based on a
@@ -2001,8 +2001,7 @@ If the number of tasks launched per second is high (say, 50 or more per second),
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
 
-* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task
-  sizes, and therefore reduce the time taken to send them to the slaves.
+* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task sizes, and therefore reduce the time taken to send them to the slaves. This is controlled by the ```spark.closure.serializer``` property. However, at this time, Kryo serialization cannot be enabled for closure serialization. This may be resolved in a future release.
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the

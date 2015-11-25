@@ -373,22 +373,6 @@ setMethod("exp",
             column(jc)
           })
 
-#' explode
-#'
-#' Creates a new row for each element in the given array or map column.
-#'
-#' @rdname explode
-#' @name explode
-#' @family collection_funcs
-#' @export
-#' @examples \dontrun{explode(df$c)}
-setMethod("explode",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "explode", x@jc)
-            column(jc)
-          })
-
 #' expm1
 #'
 #' Computes the exponential of the given value minus one.
@@ -977,22 +961,6 @@ setMethod("sinh",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "sinh", x@jc)
-            column(jc)
-          })
-
-#' size
-#'
-#' Returns length of array or map.
-#'
-#' @rdname size
-#' @name size
-#' @family collection_funcs
-#' @export
-#' @examples \dontrun{size(df$c)}
-setMethod("size",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "size", x@jc)
             column(jc)
           })
 
@@ -2236,7 +2204,7 @@ setMethod("denseRank",
 #' @export
 #' @examples \dontrun{lag(df$c)}
 setMethod("lag",
-          signature(x = "characterOrColumn", offset = "numeric", defaultValue = "ANY"),
+          signature(x = "characterOrColumn"),
           function(x, offset, defaultValue = NULL) {
             col <- if (class(x) == "Column") {
               x@jc
@@ -2363,5 +2331,82 @@ setMethod("rowNumber",
           signature(x = "missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "rowNumber")
+            column(jc)
+          })
+
+###################### Collection functions######################
+
+#' array_contains
+#'
+#' Returns true if the array contain the value.
+#'
+#' @param x A Column
+#' @param value A value to be checked if contained in the column
+#' @rdname array_contains
+#' @name array_contains
+#' @family collection_funcs
+#' @export
+#' @examples \dontrun{array_contains(df$c, 1)}
+setMethod("array_contains",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "array_contains", x@jc, value)
+            column(jc)
+          })
+
+#' explode
+#'
+#' Creates a new row for each element in the given array or map column.
+#'
+#' @rdname explode
+#' @name explode
+#' @family collection_funcs
+#' @export
+#' @examples \dontrun{explode(df$c)}
+setMethod("explode",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "explode", x@jc)
+            column(jc)
+          })
+
+#' size
+#'
+#' Returns length of array or map.
+#'
+#' @rdname size
+#' @name size
+#' @family collection_funcs
+#' @export
+#' @examples \dontrun{size(df$c)}
+setMethod("size",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "size", x@jc)
+            column(jc)
+          })
+
+#' sort_array
+#'
+#' Sorts the input array for the given column in ascending order,
+#' according to the natural ordering of the array elements.
+#'
+#' @param x A Column to sort
+#' @param asc A logical flag indicating the sorting order.
+#'            TRUE, sorting is in ascending order.
+#'            FALSE, sorting is in descending order.
+#' @rdname sort_array
+#' @name sort_array
+#' @family collection_funcs
+#' @export
+#' @examples
+#' \dontrun{
+#' sort_array(df$c)
+#' sort_array(df$c, FALSE)
+#' }
+setMethod("sort_array",
+          signature(x = "Column"),
+          function(x, asc = TRUE) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sort_array", x@jc, asc)
             column(jc)
           })

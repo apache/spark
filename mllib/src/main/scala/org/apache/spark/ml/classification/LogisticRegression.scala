@@ -24,14 +24,14 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -157,7 +157,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with Logging {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -387,6 +387,11 @@ class LogisticRegression(override val uid: String)
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
 }
 
+object LogisticRegression extends DefaultParamsReadable[LogisticRegression] {
+
+  override def load(path: String): LogisticRegression = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model produced by [[LogisticRegression]].
@@ -397,7 +402,7 @@ class LogisticRegressionModel private[ml] (
     val coefficients: Vector,
     val intercept: Double)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-  with LogisticRegressionParams with Writable {
+  with LogisticRegressionParams with MLWritable {
 
   @deprecated("Use coefficients instead.", "1.6.0")
   def weights: Vector = coefficients
@@ -513,65 +518,71 @@ class LogisticRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[Writer]] instance for this ML instance.
+   * Returns a [[MLWriter]] instance for this ML instance.
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
+   *
+   * This also does not save the [[parent]] currently.
    */
-  override def write: Writer = new LogisticRegressionWriter(this)
+  @Since("1.6.0")
+  override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 }
 
 
-/** [[Writer]] instance for [[LogisticRegressionModel]] */
-private[classification] class LogisticRegressionWriter(instance: LogisticRegressionModel)
-  extends Writer with Logging {
+@Since("1.6.0")
+object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 
-  private case class Data(
-      numClasses: Int,
-      numFeatures: Int,
-      intercept: Double,
-      coefficients: Vector)
+  @Since("1.6.0")
+  override def read: MLReader[LogisticRegressionModel] = new LogisticRegressionModelReader
 
-  override protected def saveImpl(path: String): Unit = {
-    // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
-    // Save model data: numClasses, numFeatures, intercept, coefficients
-    val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
-      instance.coefficients)
-    val dataPath = new Path(path, "data").toString
-    sqlContext.createDataFrame(Seq(data)).write.format("parquet").save(dataPath)
+  @Since("1.6.0")
+  override def load(path: String): LogisticRegressionModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[LogisticRegressionModel]] */
+  private[LogisticRegressionModel]
+  class LogisticRegressionModelWriter(instance: LogisticRegressionModel)
+    extends MLWriter with Logging {
+
+    private case class Data(
+        numClasses: Int,
+        numFeatures: Int,
+        intercept: Double,
+        coefficients: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: numClasses, numFeatures, intercept, coefficients
+      val data = Data(instance.numClasses, instance.numFeatures, instance.intercept,
+        instance.coefficients)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
   }
-}
 
+  private class LogisticRegressionModelReader
+    extends MLReader[LogisticRegressionModel] {
 
-object LogisticRegressionModel extends Readable[LogisticRegressionModel] {
+    /** Checked against metadata when loading model */
+    private val className = classOf[LogisticRegressionModel].getName
 
-  override def read: Reader[LogisticRegressionModel] = new LogisticRegressionReader
+    override def load(path: String): LogisticRegressionModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-  override def load(path: String): LogisticRegressionModel = read.load(path)
-}
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.format("parquet").load(dataPath)
+        .select("numClasses", "numFeatures", "intercept", "coefficients").head()
+      // We will need numClasses, numFeatures in the future for multinomial logreg support.
+      // val numClasses = data.getInt(0)
+      // val numFeatures = data.getInt(1)
+      val intercept = data.getDouble(2)
+      val coefficients = data.getAs[Vector](3)
+      val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
 
-
-private[classification] class LogisticRegressionReader extends Reader[LogisticRegressionModel] {
-
-  /** Checked against metadata when loading model */
-  private val className = "org.apache.spark.ml.classification.LogisticRegressionModel"
-
-  override def load(path: String): LogisticRegressionModel = {
-    val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-    val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.format("parquet").load(dataPath)
-      .select("numClasses", "numFeatures", "intercept", "coefficients").head()
-    // We will need numClasses, numFeatures in the future for multinomial logreg support.
-    // val numClasses = data.getInt(0)
-    // val numFeatures = data.getInt(1)
-    val intercept = data.getDouble(2)
-    val coefficients = data.getAs[Vector](3)
-    val model = new LogisticRegressionModel(metadata.uid, coefficients, intercept)
-
-    DefaultParamsReader.getAndSetParams(model, metadata)
-    model
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
 
@@ -597,7 +608,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
    * @return This MultilabelSummarizer
    */
   def add(label: Double, weight: Double = 1.0): this.type = {
-    require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+    require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
     if (weight == 0.0) return this
 
@@ -744,23 +755,35 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns the receiver operating characteristic (ROC) curve,
    * which is an Dataframe having two fields (FPR, TPR)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
   @transient lazy val roc: DataFrame = binaryMetrics.roc().toDF("FPR", "TPR")
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   lazy val areaUnderROC: Double = binaryMetrics.areaUnderROC()
 
   /**
    * Returns the precision-recall curve, which is an Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val pr: DataFrame = binaryMetrics.pr().toDF("recall", "precision")
 
   /**
    * Returns a dataframe with two fields (threshold, F-Measure) curve with beta = 1.0.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val fMeasureByThreshold: DataFrame = {
     binaryMetrics.fMeasureByThreshold().toDF("threshold", "F-Measure")
@@ -770,6 +793,9 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns a dataframe with two fields (threshold, precision) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the precision.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val precisionByThreshold: DataFrame = {
     binaryMetrics.precisionByThreshold().toDF("threshold", "precision")
@@ -779,6 +805,9 @@ class BinaryLogisticRegressionSummary private[classification] (
    * Returns a dataframe with two fields (threshold, recall) curve.
    * Every possible probability obtained in transforming the dataset are used
    * as thresholds used in calculating the recall.
+   *
+   * Note: This ignores instance weights (setting all to 1.0) from [[LogisticRegression.weightCol]].
+   *       This will change in later Spark versions.
    */
   @transient lazy val recallByThreshold: DataFrame = {
     binaryMetrics.recallByThreshold().toDF("threshold", "recall")
@@ -833,7 +862,7 @@ private class LogisticAggregator(
     instance match { case Instance(label, weight, features) =>
       require(dim == features.size, s"Dimensions mismatch when adding new instance." +
         s" Expecting $dim but got ${features.size}.")
-      require(weight >= 0.0, s"instance weight, ${weight} has to be >= 0.0")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
 
