@@ -192,15 +192,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("joinWith, expression condition, outer join") {
     val nullInteger = null.asInstanceOf[Integer]
     val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", new Integer(1)),
-      ClassNullableData("c", new Integer(3))).toDS()
+    val ds1 = Seq(ClassNullableData("a", 1),
+      ClassNullableData("c", 3)).toDS()
     val ds2 = Seq(("a", new Integer(1)),
       ("b", new Integer(2))).toDS()
 
     checkAnswer(
       ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", new Integer(1)), ("a", new Integer(1))),
-      (ClassNullableData("c", new Integer(3)), (nullString, nullInteger)),
+      (ClassNullableData("a", 1), ("a", new Integer(1))),
+      (ClassNullableData("c", 3), (nullString, nullInteger)),
       (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
@@ -377,7 +377,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to n, 2).toDS()
     checkAnswer(
       data.sample(withReplacement = true, 0.05, seed = 13),
-      Seq(5, 10, 52, 73): _*)
+      5, 10, 52, 73)
   }
 
   test("sample without replacement") {
@@ -385,7 +385,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = sparkContext.parallelize(1 to n, 2).toDS()
     checkAnswer(
       data.sample(withReplacement = false, 0.05, seed = 13),
-      Seq(3, 17, 27, 58, 62): _*)
+      3, 17, 27, 58, 62)
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {

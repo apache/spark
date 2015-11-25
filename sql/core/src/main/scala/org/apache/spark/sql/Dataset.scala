@@ -451,16 +451,15 @@ class Dataset[T] private[sql](
       c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
-
   /**
-   * Returns a new [[Dataset]] by sampling a fraction of rows.
+   * Returns a new [[Dataset]] by sampling a fraction of records.
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
     withPlan(Sample(0.0, fraction, withReplacement, seed, _))
 
   /**
-   * Returns a new [[Dataset]] by sampling a fraction of rows, using a random seed.
+   * Returns a new [[Dataset]] by sampling a fraction of records, using a random seed.
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double) : Dataset[T] = {
@@ -560,7 +559,7 @@ class Dataset[T] private[sql](
 
   /**
    * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
-   * where `condition` evaluates to true
+   * where `condition` evaluates to true.
    *
    * @param other Right side of the join.
    * @param condition Join expression.
