@@ -185,17 +185,23 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds2 = Seq(1, 2).toDS().as("b")
 
     checkAnswer(
-      ds1.joinWith(ds2, $"a.value" === $"b.value"),
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
       (1, 1), (2, 2))
   }
 
-  test("joinWith, expression condition") {
-    val ds1 = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
-    val ds2 = Seq(("a", 1), ("b", 2)).toDS()
+  test("joinWith, expression condition, outer join") {
+    val nullInteger = null.asInstanceOf[Integer]
+    val nullString = null.asInstanceOf[String]
+    val ds1 = Seq(ClassNullableData("a", 1),
+      ClassNullableData("c", 3)).toDS()
+    val ds2 = Seq(("a", new Integer(1)),
+      ("b", new Integer(2))).toDS()
 
     checkAnswer(
-      ds1.joinWith(ds2, $"_1" === $"a"),
-      (ClassData("a", 1), ("a", 1)), (ClassData("b", 2), ("b", 2)))
+      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
+      (ClassNullableData("a", 1), ("a", new Integer(1))),
+      (ClassNullableData("c", 3), (nullString, nullInteger)),
+      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
   test("joinWith tuple with primitive, expression") {
@@ -225,7 +231,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
-
   }
 
   test("groupBy function, keys") {
@@ -367,6 +372,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
+  test("sample with replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = true, 0.05, seed = 13),
+      5, 10, 52, 73)
+  }
+
+  test("sample without replacement") {
+    val n = 100
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    checkAnswer(
+      data.sample(withReplacement = false, 0.05, seed = 13),
+      3, 17, 27, 58, 62)
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
@@ -440,6 +461,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
 
 case class ClassData(a: String, b: Int)
+case class ClassNullableData(a: String, b: Integer)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using
