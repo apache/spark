@@ -129,7 +129,7 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
-    val supportsTransactions = Try( 
+    val supportsTransactions = Try(
       conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
       conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
       ).getOrElse( true )
