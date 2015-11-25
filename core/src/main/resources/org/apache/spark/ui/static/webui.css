@@ -16,14 +16,9 @@
  */
 
 .navbar {
-  height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
-  min-width: 1200px
-}
-
-.navbar .navbar-inner {
-  height: 50px;
+  min-width: 600px;
 }
 
 .navbar .brand {
@@ -46,6 +41,7 @@
 .navbar-text {
   height: 50px;
   line-height: 3.3;
+  white-space: nowrap;
 }
 
 table.sortable thead {
