@@ -44,7 +44,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
       case _ => throw new IllegalArgumentException(s"Invalid file type: $ftype")
     }
 
-    require(file != null, s"File not found: $streamId")
+    require(file != null && file.isFile(), s"File not found: $streamId")
     new FileSegmentManagedBuffer(rpcEnv.transportConf, file, 0, file.length())
   }
 
