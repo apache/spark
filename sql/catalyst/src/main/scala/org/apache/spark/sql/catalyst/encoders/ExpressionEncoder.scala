@@ -112,7 +112,7 @@ object ExpressionEncoder {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
-          case BoundReference(ordinal, dt, _) => GetInternalRowField(input, ordinal, dt)
+          case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
         }
       }
     }

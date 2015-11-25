@@ -130,8 +130,13 @@ case class Sample(
  * Union two plans, without a distinct. This is UNION ALL in SQL.
  */
 case class Union(children: Seq[SparkPlan]) extends SparkPlan {
-  // TODO: attributes output by union should be distinct for nullability purposes
-  override def output: Seq[Attribute] = children.head.output
+  override def output: Seq[Attribute] = {
+    children.tail.foldLeft(children.head.output) { case (currentOutput, child) =>
+      currentOutput.zip(child.output).map { case (a1, a2) =>
+        a1.withNullability(a1.nullable || a2.nullable)
+      }
+    }
+  }
   override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
@@ -370,12 +375,12 @@ case class MapGroups[K, T, U](
  * iterators containing all elements in the group from left and right side.
  * The result of this function is encoded and flattened before being output.
  */
-case class CoGroup[K, Left, Right, R](
-    func: (K, Iterator[Left], Iterator[Right]) => TraversableOnce[R],
-    keyEnc: ExpressionEncoder[K],
+case class CoGroup[Key, Left, Right, Result](
+    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+    keyEnc: ExpressionEncoder[Key],
     leftEnc: ExpressionEncoder[Left],
     rightEnc: ExpressionEncoder[Right],
-    resultEnc: ExpressionEncoder[R],
+    resultEnc: ExpressionEncoder[Result],
     output: Seq[Attribute],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
