@@ -48,6 +48,10 @@ object JdbcUtils extends Logging {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overriden by the dialects.
+
+    System.out.println()
+    System.out.println("Query: " + dialect.getTableExistsQuery(table) )
+    System.out.println()
     Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
   }
 
@@ -125,13 +129,14 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
-    var supportsTransactions = true
+    val supportsTransactions = Try( 
+      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
+      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
+      ).getOrElse( true )
     try {
-      supportsTransactions = conn.getMetaData().supportsDataManipulationTransactionsOnly() ||  conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
-    }
-    try {
-      if (supportsTransactions)
+      if (supportsTransactions){
         conn.setAutoCommit(false) // Everything in the same db transaction.
+      }
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
@@ -180,16 +185,18 @@ object JdbcUtils extends Logging {
       } finally {
         stmt.close()
       }
-      if (supportsTransactions)
+      if (supportsTransactions) {
         conn.commit()
+      }
       committed = true
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
-        if (supportsTransactions)
+        if (supportsTransactions) {
           conn.rollback()
+        }
         conn.close()
       } else {
         // The stage must succeed.  We cannot propagate any exception close() might throw.
