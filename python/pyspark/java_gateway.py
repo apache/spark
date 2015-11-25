@@ -110,7 +110,8 @@ def launch_gateway():
             atexit.register(killChild)
 
     # Connect to the gateway
-    gateway = JavaGateway(GatewayClient(port=gateway_port), auto_convert=True,
+    gateway = JavaGateway(
+        GatewayClient(port=gateway_port), auto_convert=True,
         start_callback_server=True,
         callback_server_parameters=CallbackServerParameters(eager_load=False))
 
