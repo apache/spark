@@ -137,17 +137,17 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
   // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
   // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
   // However, this case should be unusual.
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def read: MLReader[TrainValidationSplit] = new TrainValidationSplitReader
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): TrainValidationSplit = super.load(path)
 
   private[TrainValidationSplit]
@@ -216,17 +216,17 @@ class TrainValidationSplitModel private[ml] (
     copyValues(copied, extra)
   }
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("1.7.0")
 object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def read: MLReader[TrainValidationSplitModel] = new TrainValidationSplitModelReader
 
-  @Since("1.6.0")
+  @Since("1.7.0")
   override def load(path: String): TrainValidationSplitModel = super.load(path)
 
   private[TrainValidationSplitModel]
