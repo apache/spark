@@ -129,7 +129,8 @@ object JdbcUtils extends Logging {
       conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
       conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
     } catch { 
-      case _: Exception => true
+      case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
+                           true
     }
 
     try {
