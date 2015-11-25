@@ -35,7 +35,9 @@ import org.apache.spark.util.ParentClassLoader
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used.
- * Allows the user to specify if user class path should be first
+ * Allows the user to specify if user class path should be first.
+ * This class loader delegates getting/finding resources to parent loader,
+ * which makes sense until REPL never provide resource dynamically.
  */
 class ExecutorClassLoader(
     conf: SparkConf,
@@ -57,6 +59,14 @@ class ExecutorClassLoader(
     case _ =>
       val fileSystem = FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
       getClassFileInputStreamFromFileSystem(fileSystem)
+  }
+
+  override def getResource(name: String): URL = {
+    parentLoader.getResource(name)
+  }
+
+  override def getResources(name: String): java.util.Enumeration[URL] = {
+    parentLoader.getResources(name)
   }
 
   override def findClass(name: String): Class[_] = {
