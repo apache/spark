@@ -609,6 +609,19 @@ object SimplifyFilters extends Rule[LogicalPlan] {
 }
 
 /**
+  * Helper functions for Predicate push down.
+  */
+object PredicateHelper {
+
+  // Substitute any known alias from a map.
+  def replaceAlias(condition: Expression, aliases: AttributeMap[Expression]): Expression = {
+    condition.transform {
+      case a: Attribute => aliases.getOrElse(a, a)
+    }
+  }
+}
+
+/**
  * Pushes [[Filter]] operators through [[Project]] operators, in-lining any [[Alias Aliases]]
  * that were defined in the projection.
  *
@@ -633,27 +646,21 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
 
       // If there is no nondeterministic conditions, push down the whole condition.
       if (nondeterministic.isEmpty) {
-        project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
+        project.copy(child = Filter(PredicateHelper.replaceAlias(condition, aliasMap), grandChild))
       } else {
         // If they are all nondeterministic conditions, leave it un-changed.
         if (deterministic.isEmpty) {
           filter
         } else {
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          val pushedCondition =
+            deterministic.map(PredicateHelper.replaceAlias(_, aliasMap)).reduce(And)
           Filter(nondeterministic.reduce(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
   }
 
-  // Substitute any attributes that are produced by the child projection, so that we safely
-  // eliminate it.
-  private[sql] def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
-    condition.transform {
-      case a: Attribute => sourceAliases.getOrElse(a, a)
-    }
-  }
 }
 
 /**
@@ -691,15 +698,18 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
     case filter @ Filter(condition,
         aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
 
-      // Create a map of Alias for grouping keys or literals
+      def hasAggregate(expression: Expression): Boolean = expression match {
+        case agg: AggregateExpression => true
+        case other => expression.children.exists(hasAggregate)
+      }
+      // Create a map of Alias for expressions that does not have AggregateExpression
       val aliasMap = AttributeMap(aggregateExpressions.collect {
-        case a: Alias if groupingExpressions.contains(a.child) || a.child.foldable =>
-          (a.toAttribute, a.child)
+        case a: Alias if !hasAggregate(a.child) => (a.toAttribute, a.child)
       })
-      val newCond = PushPredicateThroughProject.replaceAlias(condition, aliasMap)
+      val newCond = PredicateHelper.replaceAlias(condition, aliasMap)
 
       val (pushDown, stayUp) = splitConjunctivePredicates(newCond).partition {
-        conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
+        conjunct => conjunct.references.subsetOf(grandChild.outputSet) && conjunct.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)

@@ -2034,13 +2034,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val q1 = sql(
         """
           | SELECT k, v from (
-          |   SELECT key k, sum(value) v, 3 c FROM src GROUP BY key
-          | ) t WHERE k = 1 and v > 0 and c = 3
+          |   SELECT key + 1 AS k, sum(value) + 2 AS v, 3 c FROM src GROUP BY key
+          | ) t WHERE k = 0 and v > 0 and c = 3
         """.stripMargin)
       val q2 = sql(
         """
           | SELECT k, v from (
-          |   SELECT key k, sum(value) v, 3 c FROM src WHERE key = 1 GROUP BY key
+          |   SELECT key + 1 AS k, sum(value) + 2 AS v, 3 c FROM src WHERE key + 1 = 0 GROUP BY key
           | ) t WHERE v > 0
         """.stripMargin)
       comparePlans(q1.queryExecution.optimizedPlan, q2.queryExecution.optimizedPlan)
