@@ -19,8 +19,8 @@ package org.apache.spark.storage
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{ThreadSafeRpcEndpoint, RpcEnv, RpcCallContext, RpcEndpoint}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.util.{Utils, ThreadUtils}
 import org.apache.spark.{Logging, MapOutputTracker, SparkEnv}
 import org.apache.spark.storage.BlockManagerMessages._
 
@@ -70,6 +70,9 @@ class BlockManagerSlaveEndpoint(
 
     case GetMatchingBlockIds(filter, _) =>
       context.reply(blockManager.getMatchingBlockIds(filter))
+
+    case TriggerThreadDump =>
+      context.reply(Utils.getThreadDump())
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
