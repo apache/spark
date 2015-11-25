@@ -17,21 +17,20 @@
 
 package org.apache.spark.sql
 
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-
 import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -63,8 +62,8 @@ import org.apache.spark.storage.StorageLevel
  */
 @Experimental
 class Dataset[T] private[sql](
-    @transient val sqlContext: SQLContext,
-    @transient val queryExecution: QueryExecution,
+    @transient override val sqlContext: SQLContext,
+    @transient override val queryExecution: QueryExecution,
     tEncoder: Encoder[T]) extends Queryable with Serializable {
 
   /**
@@ -85,10 +84,27 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the schema of the encoded form of the objects in this [[Dataset]].
-   *
    * @since 1.6.0
    */
-  def schema: StructType = resolvedTEncoder.schema
+  override def schema: StructType = resolvedTEncoder.schema
+
+  /**
+   * Prints the schema of the underlying [[DataFrame]] to the console in a nice tree format.
+   * @since 1.6.0
+   */
+  override def printSchema(): Unit = toDF().printSchema()
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  override def explain(extended: Boolean): Unit = toDF().explain(extended)
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  override def explain(): Unit = toDF().explain()
 
   /* ************* *
    *  Conversions  *
@@ -156,6 +172,59 @@ class Dataset[T] private[sql](
   def count(): Long = toDF().count()
 
   /**
+   * Displays the content of this [[Dataset]] in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   * @param numRows Number of rows to show
+   *
+   * @since 1.6.0
+   */
+  def show(numRows: Int): Unit = show(numRows, truncate = true)
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right.
+   *
+   * @since 1.6.0
+   */
+  def show(): Unit = show(20)
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   *
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @since 1.6.0
+   */
+  def show(truncate: Boolean): Unit = show(20, truncate)
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   * @param numRows Number of rows to show
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @since 1.6.0
+   */
+  def show(numRows: Int, truncate: Boolean): Unit = toDF().show(numRows, truncate)
+
+  /**
     * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
     * @since 1.6.0
     */
@@ -187,7 +256,6 @@ class Dataset[T] private[sql](
    *     .transform(featurize)
    *     .transform(...)
    * }}}
-   *
    * @since 1.6.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
@@ -455,6 +523,21 @@ class Dataset[T] private[sql](
       c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
+  /**
+   * Returns a new [[Dataset]] by sampling a fraction of records.
+   * @since 1.6.0
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
+
+  /**
+   * Returns a new [[Dataset]] by sampling a fraction of records, using a random seed.
+   * @since 1.6.0
+   */
+  def sample(withReplacement: Boolean, fraction: Double) : Dataset[T] = {
+    sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
   /* **************** *
    *  Set operations  *
    * **************** */
@@ -513,13 +596,17 @@ class Dataset[T] private[sql](
    * types as well as working with relational data where either side of the join has column
    * names in common.
    *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val left = this.logicalPlan
     val right = other.logicalPlan
 
-    val joined = sqlContext.executePlan(Join(left, right, Inner, Some(condition.expr)))
+    val joined = sqlContext.executePlan(Join(left, right, joinType =
+      JoinType(joinType), Some(condition.expr)))
     val leftOutput = joined.analyzed.output.take(left.output.length)
     val rightOutput = joined.analyzed.output.takeRight(right.output.length)
 
@@ -539,6 +626,18 @@ class Dataset[T] private[sql](
         leftData :: rightData :: Nil,
         joined.analyzed)
     }
+  }
+
+  /**
+   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * where `condition` evaluates to true.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
   }
 
   /* ************************** *
@@ -585,7 +684,6 @@ class Dataset[T] private[sql](
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
-   *
    * @since 1.6.0
    */
   def take(num: Int): Array[T] = withPlan(Limit(Literal(num), _)).collect()
@@ -595,11 +693,9 @@ class Dataset[T] private[sql](
    *
    * Running take requires moving data into the application's driver process, and doing so with
    * a very large `n` can crash the driver process with OutOfMemoryError.
-   *
    * @since 1.6.0
    */
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
-
 
   /**
     * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
