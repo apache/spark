@@ -280,10 +280,9 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
       case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
         val ratings = srcFactors.transpose.multiply(dstFactors)
-        var k = 0
+        output.clear()
         ratings.foreachActive { (i, j, r) =>
           output.append((srcIds(i), (dstIds(j), r)))
-          k += 1
         }
         output.toSeq
     }
