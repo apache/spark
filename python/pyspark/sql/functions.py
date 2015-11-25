@@ -299,8 +299,8 @@ def isnan(col):
     """An expression that returns true iff the column is NaN.
 
     >>> df = sqlContext.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select(isnan("a").alias("r")).collect()
-    [Row(r=False), Row(r=True)]
+    >>> df.select(isnan("a").alias("r1"), isnan(df.a).alias("r2")).collect()
+    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnan(_to_java_column(col)))
@@ -311,8 +311,8 @@ def isnull(col):
     """An expression that returns true iff the column is null.
 
     >>> df = sqlContext.createDataFrame([(1, None), (None, 2)], ("a", "b"))
-    >>> df.select(isnull("a").alias("r")).collect()
-    [Row(r=False), Row(r=True)]
+    >>> df.select(isnull("a").alias("r1"), isnull(df.a).alias("r2")).collect()
+    [Row(r1=False, r2=False), Row(r1=True, r2=True)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
@@ -354,8 +354,8 @@ def nanvl(col1, col2):
     Both inputs should be floating point columns (DoubleType or FloatType).
 
     >>> df = sqlContext.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select(nanvl("a", "b").alias("r")).collect()
-    [Row(r=1.0), Row(r=2.0)]
+    >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
+    [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.nanvl(_to_java_column(col1), _to_java_column(col2)))
@@ -1472,6 +1472,7 @@ def explode(col):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.6)
 def get_json_object(col, path):
     """
@@ -1480,12 +1481,26 @@ def get_json_object(col, path):
 
     :param col: string column in json format
     :param path: path to the json object to extract
+
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), \
+          ("2", '''{"f1": "value12"}'''), \
+          ("3", '''{"f2": 2}'''), \
+          ("4", None), \
+          ("5", '''{"f1": null}'''), \
+          ("6", '''[invalid JSON string]''')]
+    >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
+    >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \
+                          get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None),
+     Row(key=u'3', c0=None, c1=u'2'), Row(key=u'4', c0=None, c1=None),
+     Row(key=u'5', c0=u'null', c1=None), Row(key=u'6', c0=None, c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(1.6)
 def json_tuple(col, *fields):
     """Creates a new row for a json column according to the given field names.
@@ -1493,20 +1508,17 @@ def json_tuple(col, *fields):
     :param col: string column in json format
     :param fields: list of fields to extract
 
-    >>> data = [("1", '''{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}'''), \
-          ("2", '''{"f1": "value12", "f3": "value3", "f2": 2, "f4": 4.01}'''), \
-          ("3", '''{"f1": "value13", "f4": "value44", "f3": "value33", "f2": 2, "f5": 5.01}'''), \
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), \
+          ("2", '''{"f1": "value12"}'''), \
+          ("3", '''{"f2": 2}'''), \
           ("4", None), \
-          ("5", '''{"f1": "", "f5": null}'''), \
+          ("5", '''{"f1": null}'''), \
           ("6", '''[invalid JSON string]''')]
     >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
-    >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2', 'f3', 'f4', 'f5')).collect()
-    [Row(key=u'1', c0=u'value1', c1=u'value2', c2=u'3', c3=None, c4=u'5.23'),
-     Row(key=u'2', c0=u'value12', c1=u'2', c2=u'value3', c3=u'4.01', c4=None),
-     Row(key=u'3', c0=u'value13', c1=u'2', c2=u'value33', c3=u'value44', c4=u'5.01'),
-     Row(key=u'4', c0=None, c1=None, c2=None, c3=None, c4=None),
-     Row(key=u'5', c0=u'', c1=None, c2=None, c3=None, c4=None),
-     Row(key=u'6', c0=None, c1=None, c2=None, c3=None, c4=None)]
+    >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None),
+     Row(key=u'3', c0=None, c1=u'2'), Row(key=u'4', c0=None, c1=None),
+     Row(key=u'5', c0=None, c1=None), Row(key=u'6', c0=None, c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
