@@ -135,7 +135,7 @@ object LinearDataGenerator {
     val rnd = new Random(seed)
     if (sparsity == 0.0) {
       (0 until nPoints).map { _ =>
-        val features = Vectors.dense((0 until weights.length).map { i =>
+        val features = Vectors.dense(weights.indices.map { i =>
           (rnd.nextDouble() - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i)
         }.toArray)
         val label = BLAS.dot(Vectors.dense(weights), features) +
@@ -146,7 +146,7 @@ object LinearDataGenerator {
     } else {
       val sparseRnd = new Random(seed)
       (0 until nPoints).map { _ =>
-        val (values, indices) = (0 until weights.length).filter { _ =>
+        val (values, indices) = weights.indices.filter { _ =>
           sparseRnd.nextDouble() <= sparsity }.map { i =>
           ((rnd.nextDouble() - 0.5) * math.sqrt(12.0 * xVariance(i)) + xMean(i), i)
         }.unzip
