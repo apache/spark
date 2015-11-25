@@ -27,9 +27,8 @@ import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.json4s.{DefaultFormats, JValue}
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
@@ -240,7 +239,7 @@ object ALSModel extends MLReadable[ALSModel] {
   private[ALSModel] class ALSModelWriter(instance: ALSModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata = render("rank" -> instance.rank)
+      val extraMetadata = "rank" -> instance.rank
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val userPath = new Path(path, "userFactors").toString
       instance.userFactors.write.format("parquet").save(userPath)
@@ -257,14 +256,7 @@ object ALSModel extends MLReadable[ALSModel] {
     override def load(path: String): ALSModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       implicit val format = DefaultFormats
-      val rank: Int = metadata.extraMetadata match {
-        case Some(m: JValue) =>
-          (m \ "rank").extract[Int]
-        case None =>
-          throw new RuntimeException(s"ALSModel loader could not read rank from JSON metadata:" +
-            s" ${metadata.metadataStr}")
-      }
-
+      val rank = (metadata.metadata \ "rank").extract[Int]
       val userPath = new Path(path, "userFactors").toString
       val userFactors = sqlContext.read.format("parquet").load(userPath)
       val itemPath = new Path(path, "itemFactors").toString
