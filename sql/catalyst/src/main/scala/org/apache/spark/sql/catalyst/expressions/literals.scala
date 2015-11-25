@@ -108,7 +108,8 @@ object IntegerLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal protected (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal protected (value: Any, dataType: DataType)
+  extends LeafExpression with CodegenFallback {
 
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
