@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
+ * :: Experimental ::
  * A [[Dataset]] is a strongly typed collection of objects that can be transformed in parallel
  * using functional or relational operations.
  *
@@ -151,6 +152,25 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def count(): Long = toDF().count()
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * @since 1.6.0
+    */
+  def repartition(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = true, _)
+  }
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+    * the 100 new partitions will claim 10 of the current partitions.
+    * @since 1.6.0
+    */
+  def coalesce(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = false, _)
+  }
 
   /* *********************** *
    *  Functional Operations  *

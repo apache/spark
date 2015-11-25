@@ -30,19 +30,38 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
+ *
+ * @since 1.6.0
  */
 abstract class SQLImplicits {
+
   protected def _sqlContext: SQLContext
 
+  /** @since 1.6.0 */
   implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
 
+  /** @since 1.6.0 */
   implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  /** @since 1.6.0 */
+
   implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
   implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
 
   /**
@@ -84,9 +103,9 @@ abstract class SQLImplicits {
     DataFrameHolder(_sqlContext.createDataFrame(data))
   }
 
-  // Do NOT add more implicit conversions. They are likely to break source compatibility by
-  // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
-  // because of [[DoubleRDDFunctions]].
+  // Do NOT add more implicit conversions for primitive types.
+  // They are likely to break source compatibility by making existing implicit conversions
+  // ambiguous. In particular, RDD[Double] is dangerous because of [[DoubleRDDFunctions]].
 
   /**
    * Creates a single column DataFrame from an RDD[Int].

@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise, future}
+import scala.io.Source
 import scala.util.{Random, Try}
 
 import com.google.common.base.Charsets.UTF_8
@@ -507,6 +508,12 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(rs2.getInt(2) === 500)
     }
   }
+
+  test("SPARK-11043 check operation log root directory") {
+    val expectedLine =
+      "Operation log root directory is created: " + operationLogPath.getAbsoluteFile
+    assert(Source.fromFile(logPath).getLines().exists(_.contains(expectedLine)))
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
@@ -642,7 +649,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
   private val pidDir: File = Utils.createTempDir("thriftserver-pid")
-  private var logPath: File = _
+  protected var logPath: File = _
+  protected var operationLogPath: File = _
   private var logTailingProcess: Process = _
   private var diagnosisBuffer: ArrayBuffer[String] = ArrayBuffer.empty[String]
 
@@ -679,6 +687,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
+       |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
        |  --hiveconf $portConf=$port
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
@@ -706,6 +715,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     warehousePath.delete()
     metastorePath = Utils.createTempDir()
     metastorePath.delete()
+    operationLogPath = Utils.createTempDir()
+    operationLogPath.delete()
     logPath = null
     logTailingProcess = null
 
@@ -781,6 +792,9 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
 
     metastorePath.delete()
     metastorePath = null
+
+    operationLogPath.delete()
+    operationLogPath = null
 
     Option(logPath).foreach(_.delete())
     logPath = null
