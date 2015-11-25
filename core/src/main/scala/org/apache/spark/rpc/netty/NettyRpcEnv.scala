@@ -27,7 +27,7 @@ import javax.annotation.Nullable
 
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
-import scala.util.{DynamicVariable, Failure, Success}
+import scala.util.{DynamicVariable, Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, HttpFileServer, SecurityManager, SparkConf}
@@ -375,13 +375,22 @@ private[netty] class NettyRpcEnv(
 
     @volatile private var error: Throwable = _
 
-    def setError(e: Throwable): Unit = error = e
+    def setError(e: Throwable): Unit = {
+      error = e
+      source.close()
+    }
 
     override def read(dst: ByteBuffer): Int = {
-      if (error != null) {
-        throw error
+      val result = if (error == null) {
+        Try(source.read(dst))
+      } else {
+        Failure(error)
       }
-      source.read(dst)
+
+      result match {
+        case Success(bytesRead) => bytesRead
+        case Failure(error) => throw error
+      }
     }
 
     override def close(): Unit = source.close()
