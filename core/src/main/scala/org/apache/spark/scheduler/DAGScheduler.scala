@@ -1574,7 +1574,6 @@ class DAGScheduler(
   }
 
   def stop() {
-    logInfo("Stopping DAGScheduler")
     messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
