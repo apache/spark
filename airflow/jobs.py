@@ -524,12 +524,12 @@ class SchedulerJob(BaseJob):
                 "Pool {pool} has {open_slots} slots, "
                 "{queue_size} task instances in queue".format(**locals()))
             if not open_slots:
-                return
+                continue
             tis = sorted(
                 tis, key=lambda ti: (-ti.priority_weight, ti.start_date))
             for ti in tis:
                 if not open_slots:
-                    return
+                    continue
                 task = None
                 try:
                     task = dagbag.dags[ti.dag_id].get_task(ti.task_id)
