@@ -746,7 +746,7 @@ object functions extends LegacyFunctions {
    * @deprecated As of 1.6.0, replaced by `input_file_name`. This will be removed in Spark 2.0.
    */
   @deprecated("Use input_file_name. This will be removed in Spark 2.0.", "1.6.0")
-  def inputFileName(): Column = inputFileName()
+  def inputFileName(): Column = input_file_name()
 
   /**
    * Creates a string column for the file name of the current Spark task.
