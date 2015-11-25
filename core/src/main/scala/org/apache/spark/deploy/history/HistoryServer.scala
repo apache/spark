@@ -59,8 +59,12 @@ class HistoryServer(
   private val incompleteApplicationRefreshInterval =
     conf.getTimeAsMs("spark.history.cache.window", "60s")
 
+  // application
   private val appCache = new ApplicationCache(this,
       incompleteApplicationRefreshInterval, retainedApplications, new SystemClock())
+
+  // and its metrics, for testing as well as monitoring
+  val cacheMetrics = appCache.metrics
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {

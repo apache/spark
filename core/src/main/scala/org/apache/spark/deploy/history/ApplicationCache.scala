@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
+import com.google.common.util.concurrent.ListenableFuture
 
 import org.apache.spark.Logging
 import org.apache.spark.metrics.source.Source
@@ -44,7 +45,7 @@ import org.apache.spark.util.Clock
 private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
-    clock: Clock) extends Logging with Source {
+    clock: Clock) extends Logging {
 
   /**
    * Services the load request from the cache.
@@ -55,6 +56,9 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     override def load(key: CacheKey): CacheEntry = {
       loadApplicationEntry(key.appId, key.attemptId)
     }
+
+    override def reload(key: CacheKey, oldValue: CacheEntry): ListenableFuture[CacheEntry] = super
+        .reload(key, oldValue)
   }
 
   /**
@@ -67,8 +71,10 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
      * @param rm removal notification
      */
     override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
-      removalCount.inc()
-      operations.detachSparkUI(rm.getKey.appId, rm.getKey.attemptId, rm.getValue().ui)
+      metrics.evictionCount.inc()
+      val key = rm.getKey
+      logDebug(s"Evicting entry ${key}")
+      operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().ui)
     }
   }
 
@@ -80,48 +86,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       .removalListener(removalListener)
       .build(appLoader)
 
-  /* metrics: counters and timers */
-  val lookupCount = new Counter()
-  val lookupFailureCount = new Counter()
-  val removalCount = new Counter()
-  val loadCount = new Counter()
-  val loadTimer = new Timer()
-  val updateProbeCount = new Counter()
-  val updateProbeTimer = new Timer()
-  val updateTriggeredCount = new Counter()
-
-  /** all the counters: for registration and string conversion. */
-  private val counters = Seq(
-    ("lookup.count", lookupCount),
-    ("lookup.failure.count", lookupFailureCount),
-    ("removal.count", removalCount),
-    ("load.count", loadCount),
-    ("update.probe.count", updateProbeCount),
-    ("update.triggered.count", updateTriggeredCount))
-
-  /** all metrics, including timers */
-  private val metrics = counters ++ Seq(
-    ("load.timer", loadTimer),
-    ("update.probe.timer", updateProbeTimer))
-
-  /**
-   * Name of metric source
-   */
-  override val sourceName = "ApplicationCache"
-
-  override def metricRegistry: MetricRegistry = new MetricRegistry
-
-  // init operations
-  init()
-
-  /**
-   * Startup actions.
-   * This includes registering metrics with [[metricRegistry]]
-   */
-  private def init(): Unit = {
-    metrics.foreach( e =>
-      metricRegistry.register(MetricRegistry.name("history.cache", e._1), e._2))
-  }
+  val metrics = new CacheMetrics("history.cache")
 
   /**
    * Get an entry. Cache fetch/refresh will have taken place by
@@ -153,7 +118,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
    * @return the underlying cache entry -which can have its timestamp changed.
    */
   private def lookupAndUpdate(appId: String, attemptId: Option[String]): CacheEntry = {
-    lookupCount.inc()
+    metrics.lookupCount.inc()
     val cacheKey = CacheKey(appId, attemptId)
     var entry = appCache.getIfPresent(cacheKey)
     if (entry == null) {
@@ -163,13 +128,13 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       val now = clock.getTimeMillis()
       if (now - entry.timestamp > refreshInterval) {
         log.debug(s"Probing for updated application $cacheKey")
-        updateProbeCount.inc()
-        val updated = time(updateProbeTimer) {
+        metrics.updateProbeCount.inc()
+        val updated = time(metrics.updateProbeTimer) {
           operations.isUpdated(appId, attemptId, entry.timestamp)
         }
         if (updated) {
           logDebug(s"refreshing $cacheKey")
-          updateTriggeredCount.inc()
+          metrics.updateTriggeredCount.inc()
           appCache.refresh(cacheKey)
           // and re-attempt the lookup
           entry = appCache.get(cacheKey)
@@ -194,6 +159,9 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     new CacheEntry(entry.ui, entry.completed, entry.timestamp)
   }
 
+  def size(): Long = { appCache.size() }
+  def cacheStats() = { appCache.stats()}
+
   /**
    * Time a closure, returning its output.
    * @param t timer
@@ -215,7 +183,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
    * then attach it to the web UI via [[ApplicationCacheOperations.attachSparkUI()]].
    *
    * The generated entry contains the UI and the current timestamp.
-   * The timer [[loadTimer]] tracks the time taken to load the UI.
+   * The timer [[metrics.loadTimer]] tracks the time taken to load the UI.
    *
    * @param appId application ID
    * @param attemptId optional attempt ID
@@ -225,8 +193,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
   @throws[NoSuchElementException]
   def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
     logDebug(s"Loading application Entry $appId/$attemptId")
-    loadCount.inc()
-    time(loadTimer) {
+    metrics.loadCount.inc()
+    time(metrics.loadTimer) {
       operations.getAppUI(appId, attemptId) match {
         case Some(ui) =>
           val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
@@ -235,7 +203,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
           // build the cache entry
           new CacheEntry(ui, completed, clock.getTimeMillis())
         case None =>
-          lookupFailureCount.inc()
+          metrics.lookupFailureCount.inc()
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -272,8 +240,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
    * @return a string value, primarily for testing and diagnostics
    */
   override def toString: String = {
-    val sb = new StringBuilder(
-      s"ApplicationCache($refreshInterval, $retainedApplications)")
+    val sb = new StringBuilder(s"ApplicationCache(refreshInterval=$refreshInterval," +
+          s"retainedApplications= $retainedApplications)")
     sb.append(s"; time = ${clock.getTimeMillis()}")
     sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
@@ -281,9 +249,10 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       case(key, entry) => sb.append(s"    $key -> $entry\n")
     }
     sb.append("----\n")
-    counters.foreach{ e =>
-        sb.append(e._1).append(" = ").append(e._2.getCount).append('\n')
-    }
+    sb.append(metrics)
+    sb.append("----\n")
+    sb.append(cacheStats)
+    sb.append("\n----\n")
     sb.toString()
   }
 }
@@ -324,6 +293,57 @@ private[history] final case class CacheKey(appId: String, attemptId: Option[Stri
 
   override def toString: String = {
     appId + attemptId.map { id => s"/$id" }.getOrElse("")
+  }
+}
+
+private[history] class CacheMetrics(prefix: String) extends Source {
+
+  /* metrics: counters and timers */
+  val lookupCount = new Counter()
+  val lookupFailureCount = new Counter()
+  val evictionCount = new Counter()
+  val loadCount = new Counter()
+  val loadTimer = new Timer()
+  val updateProbeCount = new Counter()
+  val updateProbeTimer = new Timer()
+  val updateTriggeredCount = new Counter()
+
+  /** all the counters: for registration and string conversion. */
+  private val counters = Seq(
+    ("lookup.count", lookupCount),
+    ("lookup.failure.count", lookupFailureCount),
+    ("eviction.count", evictionCount),
+    ("load.count", loadCount),
+    ("update.probe.count", updateProbeCount),
+    ("update.triggered.count", updateTriggeredCount))
+
+  /** all metrics, including timers */
+  private val allMetrics = counters ++ Seq(
+    ("load.timer", loadTimer),
+    ("update.probe.timer", updateProbeTimer))
+
+  /**
+   * Name of metric source
+   */
+  override val sourceName = "ApplicationCache"
+
+  override def metricRegistry: MetricRegistry = new MetricRegistry
+
+  /**
+   * Startup actions.
+   * This includes registering metrics with [[metricRegistry]]
+   */
+  private def init(): Unit = {
+    allMetrics.foreach(e =>
+      metricRegistry.register(MetricRegistry.name(prefix, e._1), e._2))
+  }
+
+  override def toString: String = {
+    val sb = new StringBuilder()
+    counters.foreach { e =>
+      sb.append(e._1).append(" = ").append(e._2.getCount).append('\n')
+    }
+    sb.toString()
   }
 }
 
