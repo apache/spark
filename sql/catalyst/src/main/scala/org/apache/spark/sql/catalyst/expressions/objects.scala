@@ -24,7 +24,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
-import org.apache.spark.sql.catalyst.encoders.ProductEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
@@ -237,11 +236,6 @@ case class NewInstance(
     }
 
     if (propagateNull) {
-      val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-        s"${ev.isNull} = ${ev.value} == null;"
-      } else {
-        ""
-      }
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -300,10 +294,9 @@ case class UnwrapOption(
 /**
  * Converts the result of evaluating `child` into an option, checking both the isNull bit and
  * (in the case of reference types) equality with null.
- * @param optionType The datatype to be held inside of the Option.
  * @param child The expression to evaluate and wrap.
  */
-case class WrapOption(optionType: DataType, child: Expression)
+case class WrapOption(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
@@ -316,14 +309,13 @@ case class WrapOption(optionType: DataType, child: Expression)
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val javaType = ctx.javaType(optionType)
     val inputObject = child.gen(ctx)
 
     s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = false;
-      scala.Option<$javaType> ${ev.value} =
+      scala.Option ${ev.value} =
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
@@ -372,6 +364,9 @@ case class MapObjects(
   private lazy val completeFunction = function(loopAttribute)
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case NullType =>
+      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
+      (i: String) => s".get($i, $nullTypeClassName)"
     case IntegerType => (i: String) => s".getInt($i)"
     case LongType => (i: String) => s".getLong($i)"
     case FloatType => (i: String) => s".getFloat($i)"
@@ -519,27 +514,6 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
          """
       }.mkString("\n") +
       s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
-  }
-}
-
-case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
-  extends UnaryExpression {
-
-  override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val row = child.gen(ctx)
-    s"""
-      ${row.code}
-      final boolean ${ev.isNull} = ${row.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
-      }
-    """
   }
 }
 

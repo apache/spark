@@ -21,14 +21,15 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.random.{ExponentialGenerator, WeibullGenerator}
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.{DataFrame, Row}
 
-class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class AFTSurvivalRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var datasetUnivariate: DataFrame = _
   @transient var datasetMultivariate: DataFrame = _
@@ -332,4 +333,32 @@ class AFTSurvivalRegressionSuite extends SparkFunSuite with MLlibTestSparkContex
           assert(prediction ~== model.predict(features) relTol 1E-5)
     }
   }
+
+  test("read/write") {
+    def checkModelData(
+        model: AFTSurvivalRegressionModel,
+        model2: AFTSurvivalRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients === model2.coefficients)
+      assert(model.scale === model2.scale)
+    }
+    val aft = new AFTSurvivalRegression()
+    testEstimatorAndModelReadWrite(aft, datasetMultivariate,
+      AFTSurvivalRegressionSuite.allParamSettings, checkModelData)
+  }
+}
+
+object AFTSurvivalRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "fitIntercept" -> true,
+    "maxIter" -> 2,
+    "tol" -> 0.01
+  )
 }

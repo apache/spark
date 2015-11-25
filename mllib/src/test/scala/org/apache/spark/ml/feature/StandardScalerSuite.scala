@@ -70,8 +70,8 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("params") {
     ParamsSuite.checkParams(new StandardScaler)
-    val oldModel = new feature.StandardScalerModel(Vectors.dense(1.0), Vectors.dense(2.0))
-    ParamsSuite.checkParams(new StandardScalerModel("empty", oldModel))
+    ParamsSuite.checkParams(new StandardScalerModel("empty",
+      Vectors.dense(1.0), Vectors.dense(2.0)))
   }
 
   test("Standardization with default parameter") {
@@ -126,13 +126,10 @@ class StandardScalerSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("StandardScalerModel read/write") {
-    val oldModel = new feature.StandardScalerModel(
-      Vectors.dense(1.0, 2.0), Vectors.dense(3.0, 4.0), false, true)
-    val instance = new StandardScalerModel("myStandardScalerModel", oldModel)
+    val instance = new StandardScalerModel("myStandardScalerModel",
+      Vectors.dense(1.0, 2.0), Vectors.dense(3.0, 4.0))
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.std === instance.std)
     assert(newInstance.mean === instance.mean)
-    assert(newInstance.getWithStd === instance.getWithStd)
-    assert(newInstance.getWithMean === instance.getWithMean)
   }
 }

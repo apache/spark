@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.InternalRow
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -152,6 +151,25 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def count(): Long = toDF().count()
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * @since 1.6.0
+    */
+  def repartition(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = true, _)
+  }
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+    * the 100 new partitions will claim 10 of the current partitions.
+    * @since 1.6.0
+    */
+  def coalesce(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = false, _)
+  }
 
   /* *********************** *
    *  Functional Operations  *

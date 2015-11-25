@@ -60,6 +60,68 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("rollup") {
+    checkAnswer(
+      courseSales.rollup("course", "year").sum("earnings"),
+      Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, null, 113000.0) :: Nil
+    )
+  }
+
+  test("cube") {
+    checkAnswer(
+      courseSales.cube("course", "year").sum("earnings"),
+      Row("Java", 2012, 20000.0) ::
+        Row("Java", 2013, 30000.0) ::
+        Row("Java", null, 50000.0) ::
+        Row("dotNET", 2012, 15000.0) ::
+        Row("dotNET", 2013, 48000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) ::
+        Row(null, null, 113000.0) :: Nil
+    )
+  }
+
+  test("rollup overlapping columns") {
+    checkAnswer(
+      testData2.rollup($"a" + $"b" as "foo", $"b" as "bar").agg(sum($"a" - $"b") as "foo"),
+      Row(2, 1, 0) :: Row(3, 2, -1) :: Row(3, 1, 1) :: Row(4, 2, 0) :: Row(4, 1, 2) :: Row(5, 2, 1)
+        :: Row(2, null, 0) :: Row(3, null, 0) :: Row(4, null, 2) :: Row(5, null, 1)
+        :: Row(null, null, 3) :: Nil
+    )
+
+    checkAnswer(
+      testData2.rollup("a", "b").agg(sum("b")),
+      Row(1, 1, 1) :: Row(1, 2, 2) :: Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 1) :: Row(3, 2, 2)
+        :: Row(1, null, 3) :: Row(2, null, 3) :: Row(3, null, 3)
+        :: Row(null, null, 9) :: Nil
+    )
+  }
+
+  test("cube overlapping columns") {
+    checkAnswer(
+      testData2.cube($"a" + $"b", $"b").agg(sum($"a" - $"b")),
+      Row(2, 1, 0) :: Row(3, 2, -1) :: Row(3, 1, 1) :: Row(4, 2, 0) :: Row(4, 1, 2) :: Row(5, 2, 1)
+        :: Row(2, null, 0) :: Row(3, null, 0) :: Row(4, null, 2) :: Row(5, null, 1)
+        :: Row(null, 1, 3) :: Row(null, 2, 0)
+        :: Row(null, null, 3) :: Nil
+    )
+
+    checkAnswer(
+      testData2.cube("a", "b").agg(sum("b")),
+      Row(1, 1, 1) :: Row(1, 2, 2) :: Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 1) :: Row(3, 2, 2)
+        :: Row(1, null, 3) :: Row(2, null, 3) :: Row(3, null, 3)
+        :: Row(null, 1, 3) :: Row(null, 2, 6)
+        :: Row(null, null, 9) :: Nil
+    )
+  }
+
   test("spark.sql.retainGroupColumns config") {
     checkAnswer(
       testData2.groupBy("a").agg(sum($"b")),
