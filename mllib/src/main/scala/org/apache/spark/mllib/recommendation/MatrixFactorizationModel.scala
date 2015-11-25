@@ -21,6 +21,7 @@ import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -275,15 +276,13 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       num: Int): RDD[(Int, Array[(Int, Double)])] = {
     val srcBlocks = blockify(rank, srcFeatures)
     val dstBlocks = blockify(rank, dstFeatures)
+    val output = new ArrayBuffer[(Int, (Int, Double))]()
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
       case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
-        val m = srcIds.length
-        val n = dstIds.length
         val ratings = srcFactors.transpose.multiply(dstFactors)
-        val output = new Array[(Int, (Int, Double))](m * n)
         var k = 0
         ratings.foreachActive { (i, j, r) =>
-          output(k) = (srcIds(i), (dstIds(j), r))
+          output.append((srcIds(i), (dstIds(j), r)))
           k += 1
         }
         output.toSeq
