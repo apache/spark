@@ -38,6 +38,7 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.util.ResetSystemProperties
 import org.apache.spark._
@@ -291,7 +292,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server.bind()
     val port = server.boundPort
     val metrics = server.cacheMetrics
-    def assertMetric(name: String, counter: Counter, expected: Long) = {
+    def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
       val actual = counter.getCount
       if (actual != expected) {
         // this is here because Scalatest loses stack depth
@@ -317,10 +318,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         go to (s"http://localhost:$port/history/$appId$suffix")
         findAll(cssSelector("tbody tr")).toIndexedSeq.size
       }
-      def completedJobs() = {
+      def completedJobs(): Seq[JobUIData] = {
         getAppUI.jobProgressListener.completedJobs
       }
-      def activeJobs() = {
+      def activeJobs(): Seq[JobUIData] = {
         getAppUI.jobProgressListener.activeJobs.values.toSeq
       }
 
