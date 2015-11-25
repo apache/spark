@@ -169,11 +169,11 @@ class GroupedData(object):
 
     @since(1.6)
     def pivot(self, pivot_col, values=None):
-        """Pivots a column of the current DataFrame and preform the specified aggregation.
+        """Pivots a column of the current DataFrame and perform the specified aggregation.
 
         :param pivot_col: Column to pivot
-        :param values: Optional list of values of pivotColumn that will be translated to columns in
-            the output data frame. If values are not provided the method with do an immediate call
+        :param values: Optional list of values of pivot column that will be translated to columns in
+            the output DataFrame. If values are not provided the method will do an immediate call
             to .distinct() on the pivot column.
 
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
