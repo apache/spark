@@ -706,14 +706,15 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
       val aliasMap = AttributeMap(aggregateExpressions.collect {
         case a: Alias if !hasAggregate(a.child) => (a.toAttribute, a.child)
       })
-      val newCond = PredicateHelper.replaceAlias(condition, aliasMap)
 
-      val (pushDown, stayUp) = splitConjunctivePredicates(newCond).partition {
-        conjunct => conjunct.references.subsetOf(grandChild.outputSet) && conjunct.deterministic
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { conjunct =>
+        val replaced = PredicateHelper.replaceAlias(conjunct, aliasMap)
+        replaced.references.subsetOf(grandChild.outputSet) && replaced.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
-        val withPushdown = aggregate.copy(child = Filter(pushDownPredicate, grandChild))
+        val replaced = PredicateHelper.replaceAlias(pushDownPredicate, aliasMap)
+        val withPushdown = aggregate.copy(child = Filter(replaced, grandChild))
         stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter

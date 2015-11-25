@@ -702,15 +702,15 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery = testRelation
       .select('a, 'b)
       .groupBy('a)(('a + 1) as 'aa, count('b) as 'c)
-      .where('c === 2L && 'aa === 3)
+      .where(('c === 2L || 'aa > 4) && 'aa < 3)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
       .select('a, 'b)
-      .where('a + 1 === 3)
+      .where('a + 1 < 3)
       .groupBy('a)(('a + 1) as 'aa, count('b) as 'c)
-      .where('c === 2L)
+      .where('c === 2L || 'aa > 4)
       .analyze
 
     comparePlans(optimized, correctAnswer)
