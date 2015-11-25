@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.InternalRow
 
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,6 +32,7 @@ import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
+ * :: Experimental ::
  * A [[Dataset]] is a strongly typed collection of objects that can be transformed in parallel
  * using functional or relational operations.
  *
@@ -74,7 +74,7 @@ class Dataset[T] private[sql](
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(queryExecution.analyzed.output)
+    unresolvedTEncoder.resolve(queryExecution.analyzed.output, OuterScopes.outerScopes)
 
   private implicit def classTag = resolvedTEncoder.clsTag
 
@@ -152,6 +152,25 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def count(): Long = toDF().count()
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * @since 1.6.0
+    */
+  def repartition(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = true, _)
+  }
+
+  /**
+    * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.
+    * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+    * the 100 new partitions will claim 10 of the current partitions.
+    * @since 1.6.0
+    */
+  def coalesce(numPartitions: Int): Dataset[T] = withPlan {
+    Repartition(numPartitions, shuffle = false, _)
+  }
 
   /* *********************** *
    *  Functional Operations  *
@@ -375,7 +394,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          resolvedTEncoder,
+          resolvedTEncoder.bind(queryExecution.analyzed.output),
           queryExecution.analyzed.output).named :: Nil,
         logicalPlan))
   }
@@ -498,13 +517,17 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
+    val joined = sqlContext.executePlan(Join(left, right, Inner, Some(condition.expr)))
+    val leftOutput = joined.analyzed.output.take(left.output.length)
+    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
+
     val leftData = this.unresolvedTEncoder match {
-      case e if e.flat => Alias(left.output.head, "_1")()
-      case _ => Alias(CreateStruct(left.output), "_1")()
+      case e if e.flat => Alias(leftOutput.head, "_1")()
+      case _ => Alias(CreateStruct(leftOutput), "_1")()
     }
     val rightData = other.unresolvedTEncoder match {
-      case e if e.flat => Alias(right.output.head, "_2")()
-      case _ => Alias(CreateStruct(right.output), "_2")()
+      case e if e.flat => Alias(rightOutput.head, "_2")()
+      case _ => Alias(CreateStruct(rightOutput), "_2")()
     }
 
 
@@ -513,7 +536,7 @@ class Dataset[T] private[sql](
     withPlan[(T, U)](other) { (left, right) =>
       Project(
         leftData :: rightData :: Nil,
-        Join(left, right, Inner, Some(condition.expr)))
+        joined.analyzed)
     }
   }
 

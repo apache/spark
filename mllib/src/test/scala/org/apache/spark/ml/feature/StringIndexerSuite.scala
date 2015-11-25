@@ -118,6 +118,23 @@ class StringIndexerSuite
     assert(indexerModel.transform(df).eq(df))
   }
 
+  test("StringIndexer read/write") {
+    val t = new StringIndexer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+    testDefaultReadWrite(t)
+  }
+
+  test("StringIndexerModel read/write") {
+    val instance = new StringIndexerModel("myStringIndexerModel", Array("a", "b", "c"))
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setHandleInvalid("skip")
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.labels === instance.labels)
+  }
+
   test("IndexToString params") {
     val idxToStr = new IndexToString()
     ParamsSuite.checkParams(idxToStr)
@@ -175,7 +192,7 @@ class StringIndexerSuite
     assert(outSchema("output").dataType === StringType)
   }
 
-  test("read/write") {
+  test("IndexToString read/write") {
     val t = new IndexToString()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")

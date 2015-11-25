@@ -38,7 +38,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * @tparam T ML instance type
    * @return  Instance loaded from file
    */
-  def testDefaultReadWrite[T <: Params with Writable](
+  def testDefaultReadWrite[T <: Params with MLWritable](
       instance: T,
       testParams: Boolean = true): T = {
     val uid = instance.uid
@@ -52,7 +52,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       instance.save(path)
     }
     instance.write.overwrite().save(path)
-    val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[Reader[T]]
+    val loader = instance.getClass.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
     val newInstance = loader.load(path)
 
     assert(newInstance.uid === instance.uid)
@@ -92,7 +92,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * @tparam E  Type of [[Estimator]]
    * @tparam M  Type of [[Model]] produced by estimator
    */
-  def testEstimatorAndModelReadWrite[E <: Estimator[M] with Writable, M <: Model[M] with Writable](
+  def testEstimatorAndModelReadWrite[
+    E <: Estimator[M] with MLWritable, M <: Model[M] with MLWritable](
       estimator: E,
       dataset: DataFrame,
       testParams: Map[String, Any],
@@ -119,7 +120,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   }
 }
 
-class MyParams(override val uid: String) extends Params with Writable {
+class MyParams(override val uid: String) extends Params with MLWritable {
 
   final val intParamWithDefault: IntParam = new IntParam(this, "intParamWithDefault", "doc")
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
@@ -145,14 +146,14 @@ class MyParams(override val uid: String) extends Params with Writable {
 
   override def copy(extra: ParamMap): Params = defaultCopy(extra)
 
-  override def write: Writer = new DefaultParamsWriter(this)
+  override def write: MLWriter = new DefaultParamsWriter(this)
 }
 
-object MyParams extends Readable[MyParams] {
+object MyParams extends MLReadable[MyParams] {
 
-  override def read: Reader[MyParams] = new DefaultParamsReader[MyParams]
+  override def read: MLReader[MyParams] = new DefaultParamsReader[MyParams]
 
-  override def load(path: String): MyParams = read.load(path)
+  override def load(path: String): MyParams = super.load(path)
 }
 
 class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext

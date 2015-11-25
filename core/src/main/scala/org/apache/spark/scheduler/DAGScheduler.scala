@@ -130,7 +130,7 @@ class DAGScheduler(
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
-  private[scheduler] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
+  private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
@@ -1574,14 +1574,11 @@ class DAGScheduler(
   }
 
   def stop() {
-    logInfo("Stopping DAGScheduler")
     messageScheduler.shutdownNow()
     eventProcessLoop.stop()
     taskScheduler.stop()
   }
 
-  // Start the event thread and register the metrics source at the end of the constructor
-  env.metricsSystem.registerSource(metricsSource)
   eventProcessLoop.start()
 }
 

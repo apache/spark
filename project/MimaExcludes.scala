@@ -108,7 +108,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSQLParser")
       ) ++ Seq(
         // SPARK-11485
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
@@ -142,6 +143,10 @@ object MimaExcludes {
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
+      ) ++ Seq(
+        // SPARK-4557 Changed foreachRDD to use VoidFunction
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
       )
     case v if v.startsWith("1.5") =>
       Seq(
