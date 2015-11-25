@@ -729,23 +729,36 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir, "file")
     Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val empty = new File(tempDir, "empty")
+    Files.write("", empty, UTF_8);
     val jar = new File(tempDir, "jar")
     Files.write(UUID.randomUUID().toString(), jar, UTF_8)
 
     val fileUri = env.fileServer.addFile(file)
+    val emptyUri = env.fileServer.addFile(empty)
     val jarUri = env.fileServer.addJar(jar)
 
     val destDir = Utils.createTempDir()
-    val destFile = new File(destDir, file.getName())
-    val destJar = new File(destDir, jar.getName())
-
     val sm = new SecurityManager(conf)
     val hc = SparkHadoopUtil.get.conf
-    Utils.fetchFile(fileUri, destDir, conf, sm, hc, 0L, false)
-    Utils.fetchFile(jarUri, destDir, conf, sm, hc, 0L, false)
 
-    assert(Files.equal(file, destFile))
-    assert(Files.equal(jar, destJar))
+    val files = Seq(
+      (file, fileUri),
+      (empty, emptyUri),
+      (jar, jarUri))
+    files.foreach { case (f, uri) =>
+      val destFile = new File(destDir, f.getName())
+      Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+      assert(Files.equal(f, destFile))
+    }
+
+    // Try to download files that do not exist.
+    Seq("files", "jars").foreach { root =>
+      intercept[Exception] {
+        val uri = env.address.toSparkURL + s"/$root/doesNotExist"
+        Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+      }
+    }
   }
 
 }

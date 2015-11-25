@@ -185,16 +185,24 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       StreamResponse resp = (StreamResponse) message;
       StreamCallback callback = streamCallbacks.poll();
       if (callback != null) {
-        StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
-          callback);
-        try {
-          TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
-            channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
-          frameDecoder.setInterceptor(interceptor);
-          streamActive = true;
-        } catch (Exception e) {
-          logger.error("Error installing stream handler.", e);
-          deactivateStream();
+        if (resp.byteCount > 0) {
+          StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
+            callback);
+          try {
+            TransportFrameDecoder frameDecoder = (TransportFrameDecoder)
+              channel.pipeline().get(TransportFrameDecoder.HANDLER_NAME);
+            frameDecoder.setInterceptor(interceptor);
+            streamActive = true;
+          } catch (Exception e) {
+            logger.error("Error installing stream handler.", e);
+            deactivateStream();
+          }
+        } else {
+          try {
+            callback.onComplete(resp.streamId);
+          } catch (Exception e) {
+            logger.warn("Error in stream handler onComplete().", e);
+          }
         }
       } else {
         logger.error("Could not find callback for StreamResponse.");
