@@ -27,8 +27,8 @@ import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.Matchers
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
@@ -379,7 +379,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     // build a list of applications
     val count = 100
     for (i <- 1 to count ) {
-      val appId =  f"app-$i%04d"
+      val appId = f"app-$i%04d"
       ids += appId
       clock.advance(10)
       val t = clock.getTimeMillis()
@@ -394,10 +394,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     assertMetric("loadCount", metrics.loadCount, count)
     assertMetric("evictionCount", metrics.evictionCount, count - size)
-
-
-  }
-
+}
 
   test("AttemptsAreEvicted") {
     val operations = new StubCacheOperations()

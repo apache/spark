@@ -165,7 +165,6 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
 
   def size(): Long = appCache.size()
 
-
   /**
    * Time a closure, returning its output.
    * @param t timer
@@ -373,7 +372,7 @@ private[history] trait ApplicationCacheOperations {
   def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI, completed: Boolean): Unit
 
   /**
-   *  Detach a Spark UI.
+   * Detach a Spark UI.
    *
    * @param ui Spark UI
    */
