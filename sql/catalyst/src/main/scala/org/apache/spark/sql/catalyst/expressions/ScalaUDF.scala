@@ -26,7 +26,13 @@ import org.apache.spark.sql.types._
 
 /**
  * User-defined function.
+ * @param function  The user defined scala function to run.
+ *                  Note that if you use primitive parameters, you are not able to check if it is
+ *                  null or not, and the UDF will return null for you if the primitive input is
+ *                  null. Use boxed type or [[Option]] if you wanna do the null-handling yourself.
  * @param dataType  Return type of function.
+ * @param children  The input expressions of this UDF.
+ * @param inputTypes  The expected input types of this UDF.
  */
 case class ScalaUDF(
     function: AnyRef,

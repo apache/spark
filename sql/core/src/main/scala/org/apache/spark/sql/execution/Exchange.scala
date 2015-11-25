@@ -51,7 +51,7 @@ case class Exchange(
     }
 
     val simpleNodeName = if (tungstenMode) "TungstenExchange" else "Exchange"
-    s"${simpleNodeName}${extraInfo}"
+    s"$simpleNodeName$extraInfo"
   }
 
   /**
@@ -475,10 +475,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       if (requiredOrdering.nonEmpty) {
         // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
         if (requiredOrdering != child.outputOrdering.take(requiredOrdering.length)) {
-          sqlContext.planner.BasicOperators.getSortOperator(
-            requiredOrdering,
-            global = false,
-            child)
+          Sort(requiredOrdering, global = false, child = child)
         } else {
           child
         }

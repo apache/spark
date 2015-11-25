@@ -17,7 +17,9 @@
 
 package org.apache.spark.rpc
 
-import java.io.NotSerializableException
+import java.io.{File, NotSerializableException}
+import java.util.UUID
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
 
 import scala.collection.mutable
@@ -25,10 +27,14 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.io.Files
+import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.Utils
 
 /**
  * Common tests for an RpcEnv implementation.
@@ -39,13 +45,18 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf()
-    env = createRpcEnv(conf, "local", 12345)
+    env = createRpcEnv(conf, "local", 0)
+
+    val sparkEnv = mock(classOf[SparkEnv])
+    when(sparkEnv.rpcEnv).thenReturn(env)
+    SparkEnv.set(sparkEnv)
   }
 
   override def afterAll(): Unit = {
     if (env != null) {
       env.shutdown()
     }
+    SparkEnv.set(null)
   }
 
   def createRpcEnv(conf: SparkConf, name: String, port: Int, clientMode: Boolean = false): RpcEnv
@@ -76,7 +87,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "send-remotely")
     try {
@@ -130,7 +141,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-remotely")
     try {
@@ -158,7 +169,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val shortProp = "spark.rpc.short.timeout"
     conf.set("spark.rpc.retry.wait", "0")
     conf.set("spark.rpc.numRetries", "1")
-    val anotherEnv = createRpcEnv(conf, "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "ask-timeout")
     try {
@@ -417,7 +428,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef("local", env.address, "sendWithReply-remotely")
     try {
@@ -457,7 +468,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-remotely-error")
@@ -497,7 +508,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "network-events")
@@ -543,7 +554,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 13345, clientMode = true)
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
     val rpcEndpointRef = anotherEnv.setupEndpointRef(
       "local", env.address, "sendWithReply-unserializable-error")
@@ -571,8 +582,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
-    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
-    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345, clientMode = true)
+    val localEnv = createRpcEnv(conf, "authentication-local", 0)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 0, clientMode = true)
 
     try {
       @volatile var message: String = null
@@ -602,8 +613,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", "good")
 
-    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
-    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345, clientMode = true)
+    val localEnv = createRpcEnv(conf, "authentication-local", 0)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 0, clientMode = true)
 
     try {
       localEnv.setupEndpoint("ask-authentication", new RpcEndpoint {
@@ -711,6 +722,30 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // Ensure description is not in message twice after addMessageIfTimeout and awaitResult
     assert(shortTimeout.timeoutProp.r.findAllIn(reply4).length === 1)
+  }
+
+  test("file server") {
+    val conf = new SparkConf()
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir, "file")
+    Files.write(UUID.randomUUID().toString(), file, UTF_8)
+    val jar = new File(tempDir, "jar")
+    Files.write(UUID.randomUUID().toString(), jar, UTF_8)
+
+    val fileUri = env.fileServer.addFile(file)
+    val jarUri = env.fileServer.addJar(jar)
+
+    val destDir = Utils.createTempDir()
+    val destFile = new File(destDir, file.getName())
+    val destJar = new File(destDir, jar.getName())
+
+    val sm = new SecurityManager(conf)
+    val hc = SparkHadoopUtil.get.conf
+    Utils.fetchFile(fileUri, destDir, conf, sm, hc, 0L, false)
+    Utils.fetchFile(jarUri, destDir, conf, sm, hc, 0L, false)
+
+    assert(Files.equal(file, destFile))
+    assert(Files.equal(jar, destJar))
   }
 
 }

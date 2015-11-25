@@ -337,27 +337,30 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
+  // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/part=1"
-        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-        val df = sqlContext.read.parquet(path).filter("a = 2")
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/part=1"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
+          val df = sqlContext.read.parquet(path).filter("a = 2")
 
-        // This is the source RDD without Spark-side filtering.
-        val childRDD =
-          df
-            .queryExecution
-            .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-            .child
-            .execute()
+          // This is the source RDD without Spark-side filtering.
+          val childRDD =
+            df
+              .queryExecution
+              .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+              .child
+              .execute()
 
-        // The result should be single row.
-        // When a filter is pushed to Parquet, Parquet can apply it to every row.
-        // So, we can check the number of rows returned from the Parquet
-        // to make sure our filter pushdown work.
-        assert(childRDD.count == 1)
+          // The result should be single row.
+          // When a filter is pushed to Parquet, Parquet can apply it to every row.
+          // So, we can check the number of rows returned from the Parquet
+          // to make sure our filter pushdown work.
+          assert(childRDD.count == 1)
+        }
       }
     }
   }
