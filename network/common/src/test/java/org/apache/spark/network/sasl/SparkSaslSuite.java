@@ -21,6 +21,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -351,6 +352,14 @@ public class SparkSaslSuite {
 
     saslHandler.exceptionCaught(null, null);
     verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
+  }
+
+  @Test
+  public void testDelegates() throws Exception {
+    Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
+    for (Method m : rpcHandlerMethods) {
+      SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+    }
   }
 
   private static class SaslTestCtx {

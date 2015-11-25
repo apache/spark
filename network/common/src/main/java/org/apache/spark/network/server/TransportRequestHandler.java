@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.server;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -27,13 +28,14 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.Encodable;
-import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
+import org.apache.spark.network.protocol.Encodable;
+import org.apache.spark.network.protocol.OneWayMessage;
+import org.apache.spark.network.protocol.RequestMessage;
 import org.apache.spark.network.protocol.RpcFailure;
+import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamRequest;
@@ -95,6 +97,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       processFetchRequest((ChunkFetchRequest) request);
     } else if (request instanceof RpcRequest) {
       processRpcRequest((RpcRequest) request);
+    } else if (request instanceof OneWayMessage) {
+      processOneWayMessage((OneWayMessage) request);
     } else if (request instanceof StreamRequest) {
       processStreamRequest((StreamRequest) request);
     } else {
@@ -153,6 +157,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+    }
+  }
+
+  private void processOneWayMessage(OneWayMessage req) {
+    try {
+      rpcHandler.receive(reverseClient, req.message);
+    } catch (Exception e) {
+      logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     }
   }
 

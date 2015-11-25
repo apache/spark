@@ -92,7 +92,11 @@ private[deploy] class ExecutorRunner(
       process.destroy()
       exitCode = Some(process.waitFor())
     }
-    worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    try {
+      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    } catch {
+      case e: IllegalStateException => logWarning(e.getMessage(), e)
+    }
   }
 
   /** Stop this executor runner, including killing the process it launched */
