@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeFunction, LogicalPlan, ShowFunctions}
-import org.apache.spark.sql.execution._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StringType
-
 
 /**
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
@@ -32,7 +31,7 @@ import org.apache.spark.sql.types.StringType
  *
  * @param fallback A function that parses an input string to a logical plan
  */
-private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
+class SparkSQLParser(fallback: String => LogicalPlan) extends AbstractSparkSQLParser {
 
   // A parser for the key-value part of the "SET [key = [value ]]" syntax
   private object SetCommandParser extends RegexParsers {
@@ -100,14 +99,14 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
         case _ ~ dbName => ShowTablesCommand(dbName)
       }
     | SHOW ~ FUNCTIONS ~> ((ident <~ ".").? ~ (ident | stringLit)).? ^^ {
-        case Some(f) => ShowFunctions(f._1, Some(f._2))
-        case None => ShowFunctions(None, None)
+        case Some(f) => logical.ShowFunctions(f._1, Some(f._2))
+        case None => logical.ShowFunctions(None, None)
       }
     )
 
   private lazy val desc: Parser[LogicalPlan] =
     DESCRIBE ~ FUNCTION ~> EXTENDED.? ~ (ident | stringLit) ^^ {
-      case isExtended ~ functionName => DescribeFunction(functionName, isExtended.isDefined)
+      case isExtended ~ functionName => logical.DescribeFunction(functionName, isExtended.isDefined)
     }
 
   private lazy val others: Parser[LogicalPlan] =

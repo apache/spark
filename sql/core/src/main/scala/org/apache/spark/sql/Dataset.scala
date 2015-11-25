@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 
 /**
+ * :: Experimental ::
  * A [[Dataset]] is a strongly typed collection of objects that can be transformed in parallel
  * using functional or relational operations.
  *
