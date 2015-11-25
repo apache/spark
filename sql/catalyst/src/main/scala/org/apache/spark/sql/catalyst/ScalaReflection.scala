@@ -130,7 +130,7 @@ object ScalaReflection extends ScalaReflection {
 
     /** Returns the current path with a field at ordinal extracted. */
     def addToPathOrdinal(ordinal: Int, dataType: DataType): Expression = path
-      .map(p => GetInternalRowField(p, ordinal, dataType))
+      .map(p => GetStructField(p, ordinal))
       .getOrElse(BoundReference(ordinal, dataType, false))
 
     /** Returns the current path or `BoundReference`. */
