@@ -348,7 +348,7 @@ class SchedulerJob(BaseJob):
         """
         This method checks whether a new DagRun needs to be created
         for a DAG based on scheduling interval
-        Returns DagRun if one is scheduled. Otherwise returns None. 
+        Returns DagRun if one is scheduled. Otherwise returns None.
         """
         if dag.schedule_interval:
             DagRun = models.DagRun
@@ -393,7 +393,7 @@ class SchedulerJob(BaseJob):
                 schedule_end = next_run_date
             elif next_run_date:
                 schedule_end = dag.following_schedule(next_run_date)
- 
+
             if next_run_date and schedule_end and schedule_end <= datetime.now():
                 next_run = DagRun(
                     dag_id=dag.dag_id,
@@ -499,10 +499,12 @@ class SchedulerJob(BaseJob):
         session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
-            if (
-                    ti.dag_id not in dagbag.dags or not
-                    dagbag.dags[ti.dag_id].has_task(ti.task_id)):
-                # Deleting queued jobs that don't exist anymore
+            if ti.dag_id not in dagbag.dags:
+                logging.info("DAG not longer in dagbag, deleting {}".format(ti))
+                session.delete(ti)
+                session.commit()
+            elif not dagbag.dags[ti.dag_id].has_task(ti.task_id):
+                logging.info("Task not longer exists, deleting {}".format(ti))
                 session.delete(ti)
                 session.commit()
             else:
