@@ -20,18 +20,20 @@ package org.apache.spark.deploy.history
 import java.util.{Date, NoSuchElementException}
 
 import scala.collection.mutable
+import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
+import org.scalatest.Matchers
 
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.ManualClock
 import org.apache.spark.{Logging, SparkFunSuite}
 
-class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar {
+class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
 
   /**
    * cache operations
@@ -147,14 +149,15 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
   test("Completed UI get") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
-    val cache = new ApplicationCache(operations, 5, 2, clock)
+    implicit val cache = new ApplicationCache(operations, 5, 2, clock)
+    val metrics = cache.metrics
     // cache misses
     val app1 = "app-1"
-    assertNotFound(cache, app1, None)
-    assert(1 === cache.lookupCount.getCount)
-    assert(1 === cache.lookupFailureCount.getCount)
+    assertNotFound(app1, None)
+    assertMetric("lookupCount", metrics.lookupCount, 1)
+    assertMetric("lookupFailureCount", metrics.lookupFailureCount, 1)
     assert(1 === operations.getAppUICount, "getAppUICount")
-    assertNotFound(cache, app1, None)
+    assertNotFound(app1, None)
     assert(2 === operations.getAppUICount, "getAppUICount")
     assert(0 === operations.attachCount, "attachCount")
 
@@ -200,7 +203,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val time3 = clock.getTimeMillis()
     operations.putAppUI(appId, attemptId, false, time3, 0, time3)
     // expect an error here
-    assertNotFound(cache, appId, None)
+    assertNotFound(appId, None)
   }
 
   /**
@@ -209,11 +212,12 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
   test("Naming") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
-    val cache = new ApplicationCache(operations, 5, 10, clock)
+    implicit val cache = new ApplicationCache(operations,
+      refreshInterval = 5, retainedApplications = 10, clock = clock)
     val appId = "app1"
     val attemptId = Some("_01")
     operations.putAppUI(appId, attemptId, false, clock.getTimeMillis(), 0, 0)
-    assertNotFound(cache, appId, None)
+    assertNotFound(appId, None)
   }
 
   test("Incomplete apps refreshed") {
@@ -221,7 +225,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val clock = new ManualClock(50)
     val window = 500
     val halfw = window / 2
-    val cache = new ApplicationCache(operations, window, 5, clock)
+    implicit val cache = new ApplicationCache(operations,
+      refreshInterval = window, retainedApplications = 5, clock = clock)
+    val metrics = cache.metrics
     // add the incomplete app
     // add the entry
     val started = clock.getTimeMillis()
@@ -231,15 +237,15 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val firstEntry = cache.lookupCacheEntry(appId, attemptId)
     assert(started === firstEntry.timestamp, s"timestamp in $firstEntry")
     assert(!firstEntry.completed, s"entry is complete: $firstEntry")
-    assertCounter(cache, "lookupCount", cache.lookupCount, 1)
+    assertMetric("lookupCount", metrics.lookupCount, 1)
 
     assert(0 === operations.updateProbeCount, "expected no update probe on that first get")
 
     // lookups within the refresh window returns the same value
     clock.setTime(halfw)
-    assertCacheEntryEquals(cache, appId, attemptId, firstEntry)
-    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 0)
-    assertCounter(cache, "lookupCount", cache.lookupCount, 2)
+    assertCacheEntryEquals(appId, attemptId, firstEntry)
+    assertMetric("updateProbeCount", metrics.updateProbeCount, 0)
+    assertMetric("lookupCount", metrics.lookupCount, 2)
     assert(0 === operations.updateProbeCount, "expected no updated probe within the time window")
 
     // but now move the ticker past that refresh
@@ -248,9 +254,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assert((clock.getTimeMillis() - firstEntry.timestamp) > cache.refreshInterval)
     val entry3 = cache.lookupCacheEntry(appId, attemptId)
     assert(firstEntry !== entry3, s"updated entry test from $cache")
-    assertCounter(cache, "lookupCount", cache.lookupCount, 3)
-    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 1)
-    assertCounter(cache, "updateTriggeredCount", cache.updateTriggeredCount, 0)
+    assertMetric("lookupCount", metrics.lookupCount, 3)
+    assertMetric("updateProbeCount", metrics.updateProbeCount, 1)
+    assertMetric("updateTriggeredCount", metrics.updateTriggeredCount, 0)
     assert(1 === operations.updateProbeCount, s"refresh count in $cache")
     assert(0 === operations.detachCount, s"detach count")
     assert(entry3.timestamp === checkTime)
@@ -261,35 +267,84 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
     // go a little bit forward again and the refresh window means no new probe
     clock.setTime(updateTime + 1)
-    assertCacheEntryEquals(cache, appId, attemptId, entry3)
-    assertCounter(cache, "lookupCount", cache.lookupCount, 4)
-    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 1)
+    assertCacheEntryEquals(appId, attemptId, entry3)
+    assertMetric("lookupCount", metrics.lookupCount, 4)
+    assertMetric("updateProbeCount", metrics.updateProbeCount, 1)
 
     // and but once past the window again, a probe is triggered and the change collected
     val endTime = window * 10
     clock.setTime(endTime)
     logDebug(s"Before operation = $cache")
     val entry5 = cache.lookupCacheEntry(appId, attemptId)
-    assertCounter(cache, "lookupCount", cache.lookupCount, 5)
-    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 2)
+    assertMetric("lookupCount", metrics.lookupCount, 5)
+    assertMetric("updateProbeCount", metrics.updateProbeCount, 2)
     // the update was triggered
-    assertCounter(cache, "updateTriggeredCount", cache.updateTriggeredCount, 1)
+    assertMetric("updateTriggeredCount", metrics.updateTriggeredCount, 1)
     assert(updatedApp === entry5.ui, s"UI {$updatedApp} did not match entry {$entry5} in $cache")
 
     // at which point, the refreshes stop
     clock.setTime(window * 20)
-    assertCacheEntryEquals(cache, appId, attemptId, entry5)
-    assertCounter(cache, "updateProbeCount", cache.updateProbeCount, 2)
+    assertCacheEntryEquals(appId, attemptId, entry5)
+    assertMetric("updateProbeCount", metrics.updateProbeCount, 2)
+  }
+
+  test("EntriesAreEvicted") {
+    val operations = new StubCacheOperations()
+    val clock = new ManualClock(1)
+    // only two entries are retained, so we expect evictions to occurr on lookups
+    implicit val cache = new ApplicationCache(operations,
+      retainedApplications =  5, refreshInterval = 2, clock = clock)
+    val metrics = cache.metrics
+    val appId = "app1"
+    val attempt1 = Some("01")
+    val attempt2 = Some("02")
+    val attempt3 = Some("03")
+    operations.putAppUI(appId, attempt1, true, 100, 110, 110)
+    operations.putAppUI(appId, attempt2, true, 200, 210, 210)
+    operations.putAppUI(appId, attempt3, true, 300, 310, 310)
+    val attempt4 = Some("04")
+    operations.putAppUI(appId, attempt4, true, 400, 410, 410)
+    val attempt5 = Some("05")
+    operations.putAppUI(appId, attempt5, true, 500, 510, 510)
+
+    def expectLoadAndEvictionCounts(expectedLoad: Int, expectedEvictionCount: Int): Unit = {
+      assertMetric("loadCount", metrics.loadCount, expectedLoad)
+      assertMetric("evictionCount", metrics.evictionCount, expectedEvictionCount)
+    }
+
+    // first entry
+    cache.get(appId, attempt1)
+    expectLoadAndEvictionCounts(1, 0)
+
+    // second
+    cache.get(appId, attempt2)
+    expectLoadAndEvictionCounts(2, 0)
+
+    // no change
+    cache.get(appId, attempt2)
+    expectLoadAndEvictionCounts(2, 0)
+
+
+    // eviction time
+    cache.get(appId, attempt3)
+    cache.size() should be (3)
+    cache.get(appId, attempt4)
+    expectLoadAndEvictionCounts(4, 0)
+    cache.get(appId, attempt5)
+    expectLoadAndEvictionCounts(5, 1)
+
+
   }
 
   /**
-   * Assert that a counter in the cache has a specific value
-   * @param cache cache
+   * Assert that a metric counter has a specific value; failure raises an exception
+   * including the cache's toString value
    * @param name counter name (for exceptions)
    * @param counter counter
    * @param expected expected value.
+   * @param cache cache
    */
-  def assertCounter(cache: ApplicationCache, name: String, counter: Counter, expected: Long)
+  def assertMetric(name: String, counter: Counter, expected: Long)(implicit cache: ApplicationCache)
       : Unit = {
     val actual = counter.getCount
     if (actual != expected) {
@@ -302,9 +357,13 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * Look up the cache entry and assert that it maches in the expected value.
    * This assertion works if the two CacheEntries are different -it looks at the fields.
    * UI are compared on object equality; the timestamp and completed flags directly.
+   * @param appId application ID
+   * @param attemptId attempt ID
+   * @param expected expected value
+   * @param cache app cache
    */
-  def assertCacheEntryEquals(cache: ApplicationCache, appId: String, attemptId: Option[String],
-      expected: CacheEntry): Unit = {
+  def assertCacheEntryEquals(appId: String, attemptId: Option[String],
+      expected: CacheEntry)(implicit cache: ApplicationCache): Unit = {
     val actual = cache.lookupCacheEntry(appId, attemptId)
     val errorText = s"Expected get($appId, $attemptId) -> $expected, but got $actual from $cache"
     assert(expected.ui === actual.ui, errorText + " SparkUI reference")
@@ -316,10 +375,12 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * Assert that a key wasn't found in cache or loaded.
    *
    * Looks for the specific nested exception raised by [[ApplicationCache]]
-   * @param cache
-   * @param appId
+   * @param appId application ID
+   * @param attemptId attempt ID
+   * @param cache app cache
    */
-  def assertNotFound(cache: ApplicationCache, appId: String, attemptId: Option[String]): Unit = {
+  def assertNotFound(appId: String, attemptId: Option[String])
+      (implicit cache: ApplicationCache): Unit = {
     val ex = intercept[UncheckedExecutionException] {
       cache.get(appId, attemptId)
     }
