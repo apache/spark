@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types.StructType
 
 import scala.util.control.NonFatal
@@ -28,7 +27,6 @@ private[sql] trait Queryable {
   def schema: StructType
   def queryExecution: QueryExecution
   def sqlContext: SQLContext
-  private[sql] def logicalPlan: LogicalPlan
 
   override def toString: String = {
     try {

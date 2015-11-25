@@ -1554,6 +1554,7 @@ class DataFrame private[sql](
   def distinct(): DataFrame = dropDuplicates()
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
@@ -1563,12 +1564,17 @@ class DataFrame private[sql](
   }
 
   /**
+   * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
    * @group basic
    * @since 1.3.0
    */
   def cache(): this.type = persist()
 
   /**
+   * Persist this [[DataFrame]] with the given storage level.
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
    * @group basic
    * @since 1.3.0
    */
@@ -1578,6 +1584,8 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
+   * @param blocking Whether to block until all blocks are deleted.
    * @group basic
    * @since 1.3.0
    */
@@ -1587,6 +1595,7 @@ class DataFrame private[sql](
   }
 
   /**
+   * Mark the [[DataFrame]] as non-persistent, and remove all blocks for it from memory and disk.
    * @group basic
    * @since 1.3.0
    */

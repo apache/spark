@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.storage.StorageLevel
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.function._
 
+import org.apache.spark.api.java.function._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
@@ -32,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
@@ -601,11 +601,8 @@ class Dataset[T] private[sql](
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
 
 
-  /* ******* *
-   *  Cache  *
-   * ******* */
-
   /**
+    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
     * @since 1.6.0
     */
   def persist(): this.type = {
@@ -614,11 +611,17 @@ class Dataset[T] private[sql](
   }
 
   /**
+    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
     * @since 1.6.0
     */
   def cache(): this.type = persist()
 
   /**
+    * Persist this [[Dataset]] with the given storage level.
+    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+    *                 `MEMORY_AND_DISK_2`, etc.
+    * @group basic
     * @since 1.6.0
     */
   def persist(newLevel: StorageLevel): this.type = {
@@ -627,6 +630,8 @@ class Dataset[T] private[sql](
   }
 
   /**
+    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+    * @param blocking Whether to block until all blocks are deleted.
     * @since 1.6.0
     */
   def unpersist(blocking: Boolean): this.type = {
@@ -635,6 +640,7 @@ class Dataset[T] private[sql](
   }
 
   /**
+    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
     * @since 1.6.0
     */
   def unpersist(): this.type = unpersist(blocking = false)
@@ -643,7 +649,7 @@ class Dataset[T] private[sql](
    *  Internal Functions  *
    * ******************** */
 
-  private[sql] def logicalPlan : LogicalPlan = queryExecution.analyzed
+  private[sql] def logicalPlan: LogicalPlan = queryExecution.analyzed
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
     new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), tEncoder)

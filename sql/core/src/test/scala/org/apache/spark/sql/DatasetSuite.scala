@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.io.{ObjectInput, ObjectOutput, Externalizable}
 
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
-
 import scala.language.postfixOps
 
 import org.apache.spark.sql.functions._
@@ -228,56 +226,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
 
-  }
-
-  test("persist and unpersist") {
-    val ds = Seq(("a", 1) , ("b", 2), ("c", 3)).toDS().select(expr("_2 + 1").as[Int])
-    val cached = ds.cache()
-    // count triggers the caching action. It should not throw.
-    cached.count()
-    // Make sure, the Dataset is indeed cached.
-    assert(sqlContext.cacheManager.lookupCachedData(cached).nonEmpty)
-    assertResult(1, "InMemoryRelation not found, testData should have been cached") {
-      cached.queryExecution.withCachedData.collect {
-        case r: InMemoryRelation => r
-      }.size
-    }
-    // Check result.
-    checkAnswer(
-      cached,
-      2, 3, 4)
-    // Drop the cache.
-    cached.unpersist()
-  }
-
-  test("persist and then rebind right encoder when join 2 datasets") {
-    val ds1 = Seq("1", "2").toDS().as("a")
-    val ds2 = Seq(2, 3).toDS().as("b")
-
-    ds1.persist()
-    ds2.persist()
-
-    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
-    checkAnswer(joined, ("2", 2))
-
-    ds1.unpersist()
-    ds2.unpersist()
-  }
-
-  test("persist and then groupBy columns asKey, map") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    ds.persist()
-
-    val grouped = ds.groupBy($"_1").keyAs[String]
-    val agged = grouped.mapGroup { case (g, iter) => (g, iter.map(_._2).sum) }
-    agged.persist()
-
-    checkAnswer(
-      agged.filter(_._1 == "b"),
-      ("b", 3))
-
-    ds.unpersist()
-    agged.unpersist()
   }
 
   test("groupBy function, keys") {
