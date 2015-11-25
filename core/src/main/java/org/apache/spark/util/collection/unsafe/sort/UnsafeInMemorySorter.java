@@ -228,6 +228,6 @@ public final class UnsafeInMemorySorter {
   }
 
   public SortedIterator getIterator() {
-    return new SortedIterator(memoryManager, pos, array);
+    return new SortedIterator(pos / 2);
   }
 }
