@@ -21,6 +21,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.Queue;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
@@ -518,5 +519,61 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     public long getKeyPrefix() {
       return upstream.getKeyPrefix();
     }
+  }
+
+  /**
+   * Returns a iterator. It is the caller's responsibility to call `cleanupResources()`
+   * after consuming this iterator.
+   */
+  public UnsafeSorterIterator getIterator() throws IOException {
+    if (spillWriters.isEmpty()) {
+      assert(inMemSorter != null);
+      return inMemSorter.getIterator();
+    } else {
+      Queue<UnsafeSorterIterator> queue = new LinkedList<>();
+      for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
+        queue.add(spillWriter.getReader(blockManager));
+      }
+      if (inMemSorter != null) {
+        queue.add(inMemSorter.getIterator());
+      }
+      return new ChainedIterator(queue);
+    }
+  }
+
+  class ChainedIterator extends UnsafeSorterIterator {
+    private final Queue<UnsafeSorterIterator> iterators;
+    private UnsafeSorterIterator current = null;
+    public ChainedIterator(Queue<UnsafeSorterIterator> iters) {
+      this.iterators = iters;
+      this.current = iters.remove();
+    }
+
+    @Override
+    public boolean hasNext() {
+      if (!current.hasNext()) {
+        if (!iterators.isEmpty()) {
+          current = iterators.remove();
+        }
+      }
+      return current.hasNext();
+    }
+
+    @Override
+    public void loadNext() throws IOException {
+      current.loadNext();
+    }
+
+    @Override
+    public Object getBaseObject() { return current.getBaseObject(); }
+
+    @Override
+    public long getBaseOffset() { return current.getBaseOffset(); }
+
+    @Override
+    public int getRecordLength() { return current.getRecordLength(); }
+
+    @Override
+    public long getKeyPrefix() { return current.getKeyPrefix(); }
   }
 }

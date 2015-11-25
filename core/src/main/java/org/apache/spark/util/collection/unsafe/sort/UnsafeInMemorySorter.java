@@ -231,4 +231,8 @@ public final class UnsafeInMemorySorter {
     sorter.sort(array, 0, pos / 2, sortComparator);
     return new SortedIterator(memoryManager, pos, array);
   }
+
+  public SortedIterator getIterator() {
+    return new SortedIterator(memoryManager, pos, array);
+  }
 }

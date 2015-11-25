@@ -17,15 +17,68 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark._
+import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, JoinedRow}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
+
+
+private[spark]
+class UnsafeCartesianRDD(rdd1 : RDD[UnsafeRow], rdd2 : RDD[UnsafeRow])
+  extends CartesianRDD[UnsafeRow, UnsafeRow](rdd1.sparkContext, rdd1, rdd2) {
+
+  override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
+    val sorter = UnsafeExternalSorter.create(
+      context.taskMemoryManager(),
+      SparkEnv.get.blockManager,
+      context,
+      null,
+      null,
+      1024,
+      SparkEnv.get.memoryManager.pageSizeBytes)
+
+    val currSplit = split.asInstanceOf[CartesianPartition]
+    var numFields = 0
+    for (y <- rdd2.iterator(currSplit.s2, context)) {
+      numFields = y.numFields()
+      sorter.insertRecord(y.getBaseObject, y.getBaseOffset, y.getSizeInBytes, 0)
+    }
+
+    def createIter(): Iterator[UnsafeRow] = {
+      val iter = sorter.getIterator
+      val unsafeRow = new UnsafeRow
+      new Iterator[UnsafeRow] {
+        override def hasNext: Boolean = {
+          iter.hasNext
+        }
+        override def next(): UnsafeRow = {
+          iter.loadNext()
+          unsafeRow.pointTo(iter.getBaseObject, iter.getBaseOffset, numFields, iter.getRecordLength)
+          unsafeRow
+        }
+      }
+    }
+
+    val resultIter =
+      for (x <- rdd1.iterator(currSplit.s1, context);
+           y <- createIter()) yield (x, y)
+    CompletionIterator[(UnsafeRow, UnsafeRow), Iterator[(UnsafeRow, UnsafeRow)]](
+      resultIter, sorter.cleanupResources)
+  }
+}
 
 
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = true
+  override def outputsUnsafeRows: Boolean = true
 
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
@@ -39,18 +92,19 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
 
     val leftResults = left.execute().map { row =>
       numLeftRows += 1
-      row.copy()
+      row.asInstanceOf[UnsafeRow]
     }
     val rightResults = right.execute().map { row =>
       numRightRows += 1
-      row.copy()
+      row.asInstanceOf[UnsafeRow]
     }
 
-    leftResults.cartesian(rightResults).mapPartitionsInternal { iter =>
-      val joinedRow = new JoinedRow
+    val pair = new UnsafeCartesianRDD(leftResults, rightResults)
+    pair.mapPartitionsInternal { iter =>
+      val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       iter.map { r =>
         numOutputRows += 1
-        joinedRow(r._1, r._2)
+        joiner.join(r._1, r._2)
       }
     }
   }
