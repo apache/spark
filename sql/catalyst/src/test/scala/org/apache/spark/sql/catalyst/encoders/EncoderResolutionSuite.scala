@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,28 +31,32 @@ case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
 
-class EncoderResolveSuite extends PlanTest {
+class EncoderResolutionSuite extends PlanTest {
   test("real type doesn't match encoder schema but they are compatible: product") {
     val encoder = ExpressionEncoder[StringLongClass]
     val cls = classOf[StringLongClass]
 
-    var attrs = Seq('a.string, 'b.int)
-    var fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
-    var expected: Expression = NewInstance(
-      cls,
-      toExternalString('a.string) :: 'b.int.cast(LongType) :: Nil,
-      false,
-      ObjectType(cls))
-    compareExpressions(fromRowExpr, expected)
+    {
+      val attrs = Seq('a.string, 'b.int)
+      val fromRowExpr: Expression = encoder.resolve(attrs, null).fromRowExpression
+      val expected: Expression = NewInstance(
+        cls,
+        toExternalString('a.string) :: 'b.int.cast(LongType) :: Nil,
+        false,
+        ObjectType(cls))
+      compareExpressions(fromRowExpr, expected)
+    }
 
-    attrs = Seq('a.int, 'b.long)
-    fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
-    expected = NewInstance(
-      cls,
-      toExternalString('a.int.cast(StringType)) :: 'b.long :: Nil,
-      false,
-      ObjectType(cls))
-    compareExpressions(fromRowExpr, expected)
+    {
+      val attrs = Seq('a.int, 'b.long)
+      val fromRowExpr = encoder.resolve(attrs, null).fromRowExpression
+      val expected = NewInstance(
+        cls,
+        toExternalString('a.int.cast(StringType)) :: 'b.long :: Nil,
+        false,
+        ObjectType(cls))
+      compareExpressions(fromRowExpr, expected)
+    }
   }
 
   test("real type doesn't match encoder schema but they are compatible: nested product") {
@@ -71,14 +77,9 @@ class EncoderResolveSuite extends PlanTest {
           NewInstance(
             innerCls,
             Seq(
-              toExternalString(GetStructField(
-                'b.struct(structType),
-                structType(0),
-                0).cast(StringType)),
-              GetStructField(
-                'b.struct(structType),
-                structType(1),
-                1)),
+              toExternalString(
+                GetStructField('b.struct(structType), 0, Some("a")).cast(StringType)),
+              GetStructField('b.struct(structType), 1, Some("b"))),
             false,
             ObjectType(innerCls))
         )),
@@ -102,14 +103,8 @@ class EncoderResolveSuite extends PlanTest {
         NewInstance(
           cls,
           Seq(
-            toExternalString(GetStructField(
-              'a.struct(structType),
-              structType(0),
-              0)),
-            GetStructField(
-              'a.struct(structType),
-              structType(1),
-              1).cast(LongType)),
+            toExternalString(GetStructField('a.struct(structType), 0, Some("a"))),
+            GetStructField('a.struct(structType), 1, Some("b")).cast(LongType)),
           false,
           ObjectType(cls)),
         'b.int.cast(LongType)),
@@ -123,13 +118,48 @@ class EncoderResolveSuite extends PlanTest {
   }
 
   test("throw exception if real type is not compatible with encoder schema") {
-    intercept[AnalysisException] {
+    val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolve(Seq('a.string, 'b.long), null)
-    }
+    }.message
+    assert(msg1.contains("Cannot up cast `b` from bigint to int as it may truncate"))
 
-    intercept[AnalysisException] {
+    val msg2 = intercept[AnalysisException] {
       val structType = new StructType().add("a", StringType).add("b", DecimalType.SYSTEM_DEFAULT)
       ExpressionEncoder[ComplexClass].resolve(Seq('a.long, 'b.struct(structType)), null)
+    }.message
+    assert(msg2.contains("Cannot up cast `b.b` from decimal(38,18) to bigint as it may truncate"))
+
+  }
+
+  // test for leaf types
+  castSuccess[Int, Long]
+  castSuccess[java.sql.Date, java.sql.Timestamp]
+  castSuccess[Long, String]
+  castSuccess[String, Long]
+  castSuccess[Int, java.math.BigDecimal]
+  castSuccess[Long, java.math.BigDecimal]
+
+  castFail[Long, Int]
+  castFail[java.sql.Timestamp, java.sql.Date]
+  castFail[java.math.BigDecimal, Double]
+  castFail[Double, java.math.BigDecimal]
+  castFail[java.math.BigDecimal, Int]
+
+  private def castSuccess[T: TypeTag, U: TypeTag]: Unit = {
+    val from = ExpressionEncoder[T]
+    val to = ExpressionEncoder[U]
+    val catalystType = from.schema.head.dataType.simpleString
+    test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should success") {
+      to.resolve(from.schema.toAttributes, null)
+    }
+  }
+
+  private def castFail[T: TypeTag, U: TypeTag]: Unit = {
+    val from = ExpressionEncoder[T]
+    val to = ExpressionEncoder[U]
+    val catalystType = from.schema.head.dataType.simpleString
+    test(s"cast from $catalystType to ${implicitly[TypeTag[U]].tpe} should fail") {
+      intercept[AnalysisException](to.resolve(from.schema.toAttributes, null))
     }
   }
 }

@@ -89,7 +89,7 @@ class Analyzer(
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
       CleanupAliases,
-      RemoveUpCast)
+      ResolveUpCast)
   )
 
   /**
@@ -1174,28 +1174,25 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 /**
  * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
  */
-object RemoveUpCast extends Rule[LogicalPlan] {
-  private def fail(from: DataType, to: DataType) = {
-    throw new AnalysisException(
-      s"Cannot up cast ${from.simpleString} to ${to.simpleString} as it may truncate")
+object ResolveUpCast extends Rule[LogicalPlan] {
+  private def fail(from: Expression, to: DataType) = {
+    throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
+      s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate")
   }
 
-  private def checkNumericPrecedence(from: DataType, to: DataType): Boolean = {
+  private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
-    if (toPrecedence > 0 && fromPrecedence > toPrecedence) {
-      false
-    } else {
-      true
-    }
+    toPrecedence > 0 && fromPrecedence > toPrecedence
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions {
       case UpCast(child, dataType) => (child.dataType, dataType) match {
-        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => fail(from, to)
-        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => fail(from, to)
-        case (from, to) if !checkNumericPrecedence(from, to) => fail(from, to)
+        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => fail(child, to)
+        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => fail(child, to)
+        case (from, to) if illegalNumericPrecedence(from, to) => fail(child, to)
+        case (TimestampType, DateType) => fail(child, DateType)
         case _ => Cast(child, dataType)
       }
     }

@@ -152,12 +152,9 @@ object ScalaReflection extends ScalaReflection {
      * is [a: int, b: long], then we will hit runtime error and say that we can't construct class
      * `Data` with int and long, because we lost the information that `b` should be a string.
      *
-     * This method help us "remember" the require data type by adding a `UpCast`.  Note that we
+     * This method help us "remember" the required data type by adding a `UpCast`.  Note that we
      * don't need to cast struct type because there must be `UnresolvedExtractValue` or
-     * `GetStructField` wrapping it, and we will need to handle leaf type.
-     *
-     * TODO: this only works if the real type is compatible with the encoder's schema, we should
-     * also handle error cases.
+     * `GetStructField` wrapping it, thus we only need to handle leaf type.
      */
     def upCastToExpectedType(expr: Expression, expected: DataType): Expression = expected match {
       case _: StructType => expr
