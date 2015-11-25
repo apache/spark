@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-
 import scala.language.implicitConversions
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.SqlParser._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
-
 
 private[sql] object Column {
 
@@ -111,7 +110,15 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case explode: Explode => MultiAlias(explode, Nil)
+
     case jt: JsonTuple => MultiAlias(jt, Nil)
+
+    case f: UnresolvedFunction =>
+      lexical.normalizeKeyword(f.name) match {
+        case "explode" => MultiAlias(f, Nil)
+        case "json_tuple" => MultiAlias(f, Nil)
+        case _ => UnresolvedAlias(f)
+      }
 
     case expr: Expression => Alias(expr, expr.prettyString)()
   }
