@@ -131,8 +131,9 @@ object JdbcUtils extends Logging {
     } catch { 
       case _: Exception => true
     }
+
     try {
-      if (supportsTransactions){
+      if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
       }
       val stmt = insertStatement(conn, table, rddSchema)
