@@ -61,8 +61,8 @@ import org.apache.spark.util.Utils
  */
 @Experimental
 class Dataset[T] private[sql](
-    @transient val sqlContext: SQLContext,
-    @transient val queryExecution: QueryExecution,
+    @transient override val sqlContext: SQLContext,
+    @transient override val queryExecution: QueryExecution,
     tEncoder: Encoder[T]) extends Queryable with Serializable {
 
   /**
@@ -85,7 +85,25 @@ class Dataset[T] private[sql](
    * Returns the schema of the encoded form of the objects in this [[Dataset]].
    * @since 1.6.0
    */
-  def schema: StructType = resolvedTEncoder.schema
+  override def schema: StructType = resolvedTEncoder.schema
+
+  /**
+   * Prints the schema of the underlying [[DataFrame]] to the console in a nice tree format.
+   * @since 1.6.0
+   */
+  override def printSchema(): Unit = toDF().printSchema()
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  override def explain(extended: Boolean): Unit = toDF().explain(extended)
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 1.6.0
+   */
+  override def explain(): Unit = toDF().explain()
 
   /* ************* *
    *  Conversions  *
@@ -151,6 +169,59 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def count(): Long = toDF().count()
+
+  /**
+   * Displays the content of this [[Dataset]] in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   * @param numRows Number of rows to show
+   *
+   * @since 1.6.0
+   */
+  def show(numRows: Int): Unit = show(numRows, truncate = true)
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right.
+   *
+   * @since 1.6.0
+   */
+  def show(): Unit = show(20)
+
+  /**
+   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   *
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @since 1.6.0
+   */
+  def show(truncate: Boolean): Unit = show(20, truncate)
+
+  /**
+   * Displays the [[DataFrame]] in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   * @param numRows Number of rows to show
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *              be truncated and all cells will be aligned right
+   *
+   * @since 1.6.0
+   */
+  def show(numRows: Int, truncate: Boolean): Unit = toDF().show(numRows, truncate)
 
   /**
     * Returns a new [[Dataset]] that has exactly `numPartitions` partitions.

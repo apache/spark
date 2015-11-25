@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -112,8 +112,8 @@ private[sql] object DataFrame {
  */
 @Experimental
 class DataFrame private[sql](
-    @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: QueryExecution)
+    @transient override val sqlContext: SQLContext,
+    @DeveloperApi @transient override val queryExecution: QueryExecution)
   extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
@@ -281,6 +281,35 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def schema: StructType = queryExecution.analyzed.schema
+
+  /**
+   * Prints the schema to the console in a nice tree format.
+   * @group basic
+   * @since 1.3.0
+   */
+  // scalastyle:off println
+  override def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @group basic
+   * @since 1.3.0
+   */
+  override def explain(extended: Boolean): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 1.3.0
+   */
+  override def explain(): Unit = explain(extended = false)
 
   /**
    * Returns all column names and their data types as an array.
