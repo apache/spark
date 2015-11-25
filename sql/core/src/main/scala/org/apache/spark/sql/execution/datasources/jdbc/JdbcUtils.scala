@@ -48,10 +48,6 @@ object JdbcUtils extends Logging {
     // Somewhat hacky, but there isn't a good way to identify whether a table exists for all
     // SQL database systems using JDBC meta data calls, considering "table" could also include
     // the database name. Query used to find table exists can be overriden by the dialects.
-
-    System.out.println()
-    System.out.println("Query: " + dialect.getTableExistsQuery(table) )
-    System.out.println()
     Try(conn.prepareStatement(dialect.getTableExistsQuery(table)).executeQuery()).isSuccess
   }
 
@@ -129,10 +125,12 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
-    val supportsTransactions = Try(
+    val supportsTransactions = try {
       conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
       conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
-      ).getOrElse( true )
+    } catch { 
+      case _: Exception => true
+    }
     try {
       if (supportsTransactions){
         conn.setAutoCommit(false) // Everything in the same db transaction.
