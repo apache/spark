@@ -57,6 +57,8 @@ private[spark] object ShutdownHookManager extends Logging {
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
+    //we need to materialize the paths to delete because deleteRecursively removes items from
+    //shutdownDeletePaths as we are traversing through it.
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
         logInfo("Deleting directory " + dirPath)
