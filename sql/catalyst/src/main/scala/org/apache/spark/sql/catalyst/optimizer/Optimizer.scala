@@ -649,7 +649,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
 
   // Substitute any attributes that are produced by the child projection, so that we safely
   // eliminate it.
-  private def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
+  private[sql] def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
     condition.transform {
       case a: Attribute => sourceAliases.getOrElse(a, a)
     }
@@ -690,7 +690,15 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition,
         aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
+
+      // Create a map of Alias for grouping keys or literals
+      val aliasMap = AttributeMap(aggregateExpressions.collect {
+        case a: Alias if groupingExpressions.contains(a.child) || a.child.foldable =>
+          (a.toAttribute, a.child)
+      })
+      val newCond = PushPredicateThroughProject.replaceAlias(condition, aliasMap)
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(newCond).partition {
         conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
       }
       if (pushDown.nonEmpty) {
