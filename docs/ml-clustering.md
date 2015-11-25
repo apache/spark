@@ -14,16 +14,13 @@ and generates a `LDAModel` as the base models. Expert users may cast a `LDAModel
 
 <div class="codetabs">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.LDA) for more details.
-
 <div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.LDA) for more details.
 {% include_example scala/org/apache/spark/examples/ml/LDAExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-
 Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/LDA.html) for more details.
-
 {% include_example java/org/apache/spark/examples/ml/JavaLDAExample.java %}
 </div>
 
