@@ -123,11 +123,11 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
       metricRegistry.register(MetricRegistry.name("history.cache", e._1), e._2))
   }
 
-
   /**
-   * Get the entry. Cache fetch/refresh will have taken place by
+   * Get an entry. Cache fetch/refresh will have taken place by
    * the time this method returns.
-   * @param appAndAttempt application to look up
+   * @param appAndAttempt application to look up in the format needed by the history server web UI,
+   *                      `appId/attemptId` or `appId`.
    * @return the entry
    */
   def get(appAndAttempt: String): SparkUI = {
