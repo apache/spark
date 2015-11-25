@@ -711,7 +711,7 @@ private[deploy] class Master(
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
     exec.application.driver.send(
-      ExecutorAdded(exec.id, exec.worker.id, exec.worker.hostPort, exec.cores, exec.memory))
+      ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
