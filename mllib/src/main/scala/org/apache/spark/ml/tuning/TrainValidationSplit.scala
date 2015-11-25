@@ -18,11 +18,12 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.tuning.CrossValidator.SharedReadWrite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
@@ -53,7 +54,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
  */
 @Experimental
 class TrainValidationSplit(override val uid: String) extends Estimator[TrainValidationSplitModel]
-  with TrainValidationSplitParams with Logging {
+  with TrainValidationSplitParams with MLWritable with Logging {
 
   def this() = this(Identifiable.randomUID("tvs"))
 
@@ -130,6 +131,47 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
     }
     copied
   }
+
+  // Currently, this only works if all [[Param]]s in [[estimatorParamMaps]] are simple types.
+  // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
+  // However, this case should be unusual.
+  @Since("1.6.0")
+  override def write: MLWriter = new CrossValidator.CrossValidatorWriter(this)
+}
+
+@Since("1.6.0")
+object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
+
+  @Since("1.6.0")
+  override def read: MLReader[TrainValidationSplit] = new TrainValidationSplitReader
+
+  @Since("1.6.0")
+  override def load(path: String): TrainValidationSplit = super.load(path)
+
+  private[TrainValidationSplit] class TrainValidationSplitWriter(instance: TrainValidationSplit) extends MLWriter {
+
+    SharedReadWrite.validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit =
+      SharedReadWrite.saveImpl(path, instance, sc)
+  }
+
+  private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[TrainValidationSplit].getName
+
+    override def load(path: String): TrainValidationSplit = {
+      val (metadata, estimator, evaluator, estimatorParamMaps, numFolds) =
+        SharedReadWrite.load(path, sc, className)
+      new CrossValidator(metadata.uid)
+        .setEstimator(estimator)
+        .setEvaluator(evaluator)
+        .setEstimatorParamMaps(estimatorParamMaps)
+        .setNumFolds(numFolds)
+    }
+  }
+
 }
 
 /**
