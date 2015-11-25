@@ -20,9 +20,11 @@ package org.apache.spark.deploy.history
 import java.util.{Date, NoSuchElementException}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
+import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
@@ -30,10 +32,25 @@ import org.scalatest.Matchers
 
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{Clock, ManualClock}
 import org.apache.spark.{Logging, SparkFunSuite}
 
 class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
+
+  /**
+   * subclass with access to the cache internals
+   * @param refreshInterval interval between refreshes in milliseconds.
+   * @param retainedApplications number of retained applications
+   */
+  class TestApplicationCache(
+      operations: ApplicationCacheOperations = new StubCacheOperations(),
+      refreshInterval: Long,
+      retainedApplications: Int,
+      clock: Clock = new ManualClock(0))
+      extends ApplicationCache(operations, refreshInterval, retainedApplications, clock) {
+
+    def cache(): LoadingCache[CacheKey, CacheEntry] = appCache
+  }
 
   /**
    * cache operations
@@ -99,7 +116,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       detachCount += 1
       var name = ui.getAppName
       val key = CacheKey(appId, attemptId)
-      attached.getOrElse(key , { throw new scala.NoSuchElementException() })
+      attached.getOrElse(key, {throw new scala.NoSuchElementException()})
       attached -= key
     }
 
@@ -120,7 +137,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
      * Lookup from the internal cache of attached UIs
      */
     def getAttached(appId: String, attemptId: Option[String]): Option[SparkUI] = {
-      attached.get(CacheKey(appId, attemptId ))
+      attached.get(CacheKey(appId, attemptId))
     }
 
   }
@@ -185,7 +202,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val cacheEntry2 = cache.get(app1)
     // no more refresh as this is a completed app
     assert(1 === operations.getAppUICount, "getAppUICount")
-    assert(0 === operations.updateProbeCount, "probeCount")
+    assert(0 === operations.updateProbeCount, "updateProbeCount")
     assert(0 === operations.detachCount, "attachCount")
 
     // evict the entry
@@ -220,6 +237,11 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(appId, None)
   }
 
+  /**
+   * Test that incomplete apps are not probed for updates during the time window,
+   * but that they are checked if that window has expired and they are not completed.
+   * Then, if they have changed, the old entry is replaced by a new one.
+   */
   test("Incomplete apps refreshed") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(50)
@@ -288,54 +310,6 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertMetric("updateProbeCount", metrics.updateProbeCount, 2)
   }
 
-  test("EntriesAreEvicted") {
-    val operations = new StubCacheOperations()
-    val clock = new ManualClock(1)
-    // only two entries are retained, so we expect evictions to occurr on lookups
-    implicit val cache = new ApplicationCache(operations,
-      retainedApplications =  5, refreshInterval = 2, clock = clock)
-    val metrics = cache.metrics
-    val appId = "app1"
-    val attempt1 = Some("01")
-    val attempt2 = Some("02")
-    val attempt3 = Some("03")
-    operations.putAppUI(appId, attempt1, true, 100, 110, 110)
-    operations.putAppUI(appId, attempt2, true, 200, 210, 210)
-    operations.putAppUI(appId, attempt3, true, 300, 310, 310)
-    val attempt4 = Some("04")
-    operations.putAppUI(appId, attempt4, true, 400, 410, 410)
-    val attempt5 = Some("05")
-    operations.putAppUI(appId, attempt5, true, 500, 510, 510)
-
-    def expectLoadAndEvictionCounts(expectedLoad: Int, expectedEvictionCount: Int): Unit = {
-      assertMetric("loadCount", metrics.loadCount, expectedLoad)
-      assertMetric("evictionCount", metrics.evictionCount, expectedEvictionCount)
-    }
-
-    // first entry
-    cache.get(appId, attempt1)
-    expectLoadAndEvictionCounts(1, 0)
-
-    // second
-    cache.get(appId, attempt2)
-    expectLoadAndEvictionCounts(2, 0)
-
-    // no change
-    cache.get(appId, attempt2)
-    expectLoadAndEvictionCounts(2, 0)
-
-
-    // eviction time
-    cache.get(appId, attempt3)
-    cache.size() should be (3)
-    cache.get(appId, attempt4)
-    expectLoadAndEvictionCounts(4, 0)
-    cache.get(appId, attempt5)
-    expectLoadAndEvictionCounts(5, 1)
-
-
-  }
-
   /**
    * Assert that a metric counter has a specific value; failure raises an exception
    * including the cache's toString value
@@ -345,7 +319,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
    * @param cache cache
    */
   def assertMetric(name: String, counter: Counter, expected: Long)(implicit cache: ApplicationCache)
-      : Unit = {
+  : Unit = {
     val actual = counter.getCount
     if (actual != expected) {
       // this is here because Scalatest loses stack depth
@@ -391,4 +365,84 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
   }
 
+  test("Large Scale Application Eviction") {
+    val operations = new StubCacheOperations()
+    val clock = new ManualClock(0)
+    val size = 5
+    // only two entries are retained, so we expect evictions to occurr on lookups
+    implicit val cache: ApplicationCache = new TestApplicationCache(operations,
+      retainedApplications = size, refreshInterval = 2, clock = clock)
+
+    val attempt1 = Some("01")
+
+    var ids = new ListBuffer[String]()
+    // build a list of applications
+    val count = 100
+    for (i <- 1 to count ) {
+      val appId =  f"app-$i%04d"
+      ids += appId
+      clock.advance(10)
+      val t = clock.getTimeMillis()
+      operations.putAppUI(appId, attempt1, true, t, t, t)
+    }
+    // now go through them in sequence reading them, expect evictions
+    ids.foreach { id =>
+      cache.get(id, attempt1)
+    }
+    logInfo(cache.toString)
+    val metrics = cache.metrics
+
+    assertMetric("loadCount", metrics.loadCount, count)
+    assertMetric("evictionCount", metrics.evictionCount, count - size)
+
+
+  }
+
+
+  test("AttemptsAreEvicted") {
+    val operations = new StubCacheOperations()
+    // only two entries are retained, so we expect evictions to occurr on lookups
+    implicit val cache: ApplicationCache = new TestApplicationCache(operations,
+      retainedApplications = 4, refreshInterval = 2)
+    val metrics = cache.metrics
+    val appId = "app1"
+    val attempt1 = Some("01")
+    val attempt2 = Some("02")
+    val attempt3 = Some("03")
+    operations.putAppUI(appId, attempt1, true, 100, 110, 110)
+    operations.putAppUI(appId, attempt2, true, 200, 210, 210)
+    operations.putAppUI(appId, attempt3, true, 300, 310, 310)
+    val attempt4 = Some("04")
+    operations.putAppUI(appId, attempt4, true, 400, 410, 410)
+    val attempt5 = Some("05")
+    operations.putAppUI(appId, attempt5, true, 500, 510, 510)
+
+    def expectLoadAndEvictionCounts(expectedLoad: Int, expectedEvictionCount: Int): Unit = {
+      assertMetric("loadCount", metrics.loadCount, expectedLoad)
+      assertMetric("evictionCount", metrics.evictionCount, expectedEvictionCount)
+    }
+
+    // first entry
+    cache.get(appId, attempt1)
+    expectLoadAndEvictionCounts(1, 0)
+
+    // second
+    cache.get(appId, attempt2)
+    expectLoadAndEvictionCounts(2, 0)
+
+    // no change
+    cache.get(appId, attempt2)
+    expectLoadAndEvictionCounts(2, 0)
+
+    // eviction time
+    cache.get(appId, attempt3)
+    cache.size() should be(3)
+    cache.get(appId, attempt4)
+    expectLoadAndEvictionCounts(4, 0)
+    cache.get(appId, attempt5)
+    expectLoadAndEvictionCounts(5, 1)
+    cache.get(appId, attempt5)
+    expectLoadAndEvictionCounts(5, 1)
+
+  }
 }

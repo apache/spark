@@ -42,10 +42,10 @@ import org.apache.spark.util.Clock
  * @param retainedApplications number of retained applications
  * @param clock time source
  */
-private[history] class ApplicationCache(operations: ApplicationCacheOperations,
+private[history] class ApplicationCache(val operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
-    clock: Clock) extends Logging {
+    val clock: Clock) extends Logging {
 
   /**
    * Services the load request from the cache.
@@ -80,12 +80,16 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
 
   /**
    * The cache of applications.
+   * Tagged as protected so as to allow subclasses in tests to accesss it directly
    */
-  private val appCache: LoadingCache[CacheKey, CacheEntry] = CacheBuilder.newBuilder()
+  protected val appCache: LoadingCache[CacheKey, CacheEntry] = CacheBuilder.newBuilder()
       .maximumSize(retainedApplications)
       .removalListener(removalListener)
       .build(appLoader)
 
+  /**
+   * The metrics which are updated as the cache is used
+   */
   val metrics = new CacheMetrics("history.cache")
 
   /**
@@ -159,8 +163,8 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     new CacheEntry(entry.ui, entry.completed, entry.timestamp)
   }
 
-  def size(): Long = { appCache.size() }
-  def cacheStats() = { appCache.stats()}
+  def size(): Long = appCache.size()
+
 
   /**
    * Time a closure, returning its output.
@@ -241,7 +245,7 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
    */
   override def toString: String = {
     val sb = new StringBuilder(s"ApplicationCache(refreshInterval=$refreshInterval," +
-          s"retainedApplications= $retainedApplications)")
+          s" retainedApplications= $retainedApplications)")
     sb.append(s"; time = ${clock.getTimeMillis()}")
     sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
@@ -251,8 +255,6 @@ private[history] class ApplicationCache(operations: ApplicationCacheOperations,
     sb.append("----\n")
     sb.append(metrics)
     sb.append("----\n")
-    sb.append(cacheStats)
-    sb.append("\n----\n")
     sb.toString()
   }
 }
