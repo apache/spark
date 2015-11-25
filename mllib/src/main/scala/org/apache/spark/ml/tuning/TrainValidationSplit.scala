@@ -17,10 +17,12 @@
 
 package org.apache.spark.ml.tuning
 
+import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.tuning.CrossValidator.SharedReadWrite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
@@ -136,7 +138,7 @@ class TrainValidationSplit(override val uid: String) extends Estimator[TrainVali
   // E.g., this may fail if a [[Param]] is an instance of an [[Estimator]].
   // However, this case should be unusual.
   @Since("1.6.0")
-  override def write: MLWriter = new CrossValidator.CrossValidatorWriter(this)
+  override def write: MLWriter = new TrainValidationSplit.TrainValidationSplitWriter(this)
 }
 
 @Since("1.6.0")
@@ -148,30 +150,34 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
   @Since("1.6.0")
   override def load(path: String): TrainValidationSplit = super.load(path)
 
-  private[TrainValidationSplit] class TrainValidationSplitWriter(instance: TrainValidationSplit) extends MLWriter {
+  private[TrainValidationSplit]
+  class TrainValidationSplitWriter(instance: TrainValidationSplit)
+    extends MLWriter with SharedReadWrite {
 
-    SharedReadWrite.validateParams(instance)
+    validateParams(instance)
 
     override protected def saveImpl(path: String): Unit =
-      SharedReadWrite.saveImpl(path, instance, sc)
+      saveImpl(path, instance, sc)
   }
 
-  private class TrainValidationSplitReader extends MLReader[TrainValidationSplit] {
+  private class TrainValidationSplitReader
+    extends MLReader[TrainValidationSplit] with SharedReadWrite {
 
     /** Checked against metadata when loading model */
     private val className = classOf[TrainValidationSplit].getName
 
     override def load(path: String): TrainValidationSplit = {
-      val (metadata, estimator, evaluator, estimatorParamMaps, numFolds) =
-        SharedReadWrite.load(path, sc, className)
-      new CrossValidator(metadata.uid)
+      implicit val format = DefaultFormats
+
+      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val trainRatio = (metadata.params \ "trainRatio").extract[Double]
+      new TrainValidationSplit(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-        .setNumFolds(numFolds)
+        .setTrainRatio(trainRatio)
     }
   }
-
 }
 
 /**
@@ -187,7 +193,7 @@ class TrainValidationSplitModel private[ml] (
     override val uid: String,
     val bestModel: Model[_],
     val validationMetrics: Array[Double])
-  extends Model[TrainValidationSplitModel] with TrainValidationSplitParams {
+  extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
 
   override def validateParams(): Unit = {
     bestModel.validateParams()
@@ -208,5 +214,55 @@ class TrainValidationSplitModel private[ml] (
       bestModel.copy(extra).asInstanceOf[Model[_]],
       validationMetrics.clone())
     copyValues(copied, extra)
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new TrainValidationSplitModel.TrainValidationSplitModelWriter(this)
+}
+
+@Since("1.6.0")
+object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[TrainValidationSplitModel] = new TrainValidationSplitModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): TrainValidationSplitModel = super.load(path)
+
+  private[TrainValidationSplitModel]
+  class TrainValidationSplitModelWriter(instance: TrainValidationSplitModel)
+    extends MLWriter with SharedReadWrite {
+
+    validateParams(instance)
+
+    override protected def saveImpl(path: String): Unit = {
+      import org.json4s.JsonDSL._
+      val extraMetadata = "validationMetrics" -> instance.validationMetrics.toSeq
+      saveImpl(path, instance, sc, Some(extraMetadata))
+      val bestModelPath = new Path(path, "bestModel").toString
+      instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
+    }
+  }
+
+  private class TrainValidationSplitModelReader
+    extends MLReader[TrainValidationSplitModel] with SharedReadWrite {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[TrainValidationSplitModel].getName
+
+    override def load(path: String): TrainValidationSplitModel = {
+      implicit val format = DefaultFormats
+
+      val (metadata, estimator, evaluator, estimatorParamMaps) = load(path, sc, className)
+      val trainRatio = (metadata.params \ "trainRatio").extract[Double]
+      val bestModelPath = new Path(path, "bestModel").toString
+      val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
+      val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
+      val tvs = new TrainValidationSplitModel(metadata.uid, bestModel, validationMetrics)
+      tvs.set(tvs.estimator, estimator)
+        .set(tvs.evaluator, evaluator)
+        .set(tvs.estimatorParamMaps, estimatorParamMaps)
+        .set(tvs.trainRatio, trainRatio)
+    }
   }
 }

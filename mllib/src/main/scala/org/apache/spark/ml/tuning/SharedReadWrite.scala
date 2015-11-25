@@ -30,7 +30,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util._
 
-private[tunning] trait SharedReadWrite {
+private trait SharedReadWrite {
   /**
    * Examine the given estimator (which may be a compound estimator) and extract a mapping
    * from UIDs to corresponding [[Params]] instances.
@@ -124,10 +124,10 @@ private[tunning] trait SharedReadWrite {
     instance.getEstimator.asInstanceOf[MLWritable].save(estimatorPath)
   }
 
-  def load(
+  def load[M <: Model[M]](
       path: String,
       sc: SparkContext,
-      expectedClassName: String): (Metadata, Estimator[_], Evaluator, Array[ParamMap]) = {
+      expectedClassName: String): (Metadata, Estimator[M], Evaluator, Array[ParamMap]) = {
 
     val metadata = DefaultParamsReader.loadMetadata(path, sc, expectedClassName)
 
@@ -135,7 +135,7 @@ private[tunning] trait SharedReadWrite {
     val evaluatorPath = new Path(path, "evaluator").toString
     val evaluator = DefaultParamsReader.loadParamsInstance[Evaluator](evaluatorPath, sc)
     val estimatorPath = new Path(path, "estimator").toString
-    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[_]](estimatorPath, sc)
+    val estimator = DefaultParamsReader.loadParamsInstance[Estimator[M]](estimatorPath, sc)
 
     val uidToParams = Map(evaluator.uid -> evaluator) ++ getUidMap(estimator)
 
