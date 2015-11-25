@@ -581,6 +581,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // Post init
     _taskScheduler.postStartHook()
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
@@ -1461,7 +1462,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   override def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds)
+        b.killExecutors(executorIds, replace = false, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1499,7 +1500,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true)
+        b.killExecutors(Seq(executorId), replace = true, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -2710,7 +2711,7 @@ object SparkContext extends Logging {
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
+        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
           new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)

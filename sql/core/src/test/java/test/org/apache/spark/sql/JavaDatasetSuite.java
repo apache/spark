@@ -24,6 +24,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
+
 import org.junit.*;
 
 import org.apache.spark.Accumulator;
@@ -34,6 +35,7 @@ import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.GroupedDataset;
+import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
 
 import static org.apache.spark.sql.functions.*;
@@ -168,7 +170,7 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, Encoders.INT());
 
-    Dataset<String> mapped = grouped.map(new MapGroupFunction<Integer, String, String>() {
+    Dataset<String> mapped = grouped.mapGroup(new MapGroupFunction<Integer, String, String>() {
       @Override
       public String call(Integer key, Iterator<String> values) throws Exception {
         StringBuilder sb = new StringBuilder(key.toString());
@@ -181,7 +183,7 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
 
-    Dataset<String> flatMapped = grouped.flatMap(
+    Dataset<String> flatMapped = grouped.flatMapGroup(
       new FlatMapGroupFunction<Integer, String, String>() {
         @Override
         public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
@@ -245,9 +247,9 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     GroupedDataset<Integer, String> grouped =
-      ds.groupBy(length(col("value"))).asKey(Encoders.INT());
+      ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
 
-    Dataset<String> mapped = grouped.map(
+    Dataset<String> mapped = grouped.mapGroup(
       new MapGroupFunction<Integer, String, String>() {
         @Override
         public String call(Integer key, Iterator<String> data) throws Exception {
@@ -380,5 +382,128 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Tuple2<Integer, Tuple2<Tuple2<String, Long>, String>>> ds3 =
       context.createDataset(data3, encoder3);
     Assert.assertEquals(data3, ds3.collectAsList());
+  }
+
+  @Test
+  public void testTypedAggregation() {
+    Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
+    List<Tuple2<String, Integer>> data =
+      Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
+    Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
+
+    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupBy(
+      new MapFunction<Tuple2<String, Integer>, String>() {
+        @Override
+        public String call(Tuple2<String, Integer> value) throws Exception {
+          return value._1();
+        }
+      },
+      Encoders.STRING());
+
+    Dataset<Tuple2<String, Integer>> agged =
+      grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
+    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+
+    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(
+      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()))
+      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
+    Assert.assertEquals(
+      Arrays.asList(
+        new Tuple2<>("a", 3),
+        new Tuple2<>("b", 3)),
+      agged2.collectAsList());
+  }
+
+  static class IntSumOf extends Aggregator<Tuple2<String, Integer>, Integer, Integer> {
+
+    @Override
+    public Integer zero() {
+      return 0;
+    }
+
+    @Override
+    public Integer reduce(Integer l, Tuple2<String, Integer> t) {
+      return l + t._2();
+    }
+
+    @Override
+    public Integer merge(Integer b1, Integer b2) {
+      return b1 + b2;
+    }
+
+    @Override
+    public Integer finish(Integer reduction) {
+      return reduction;
+    }
+  }
+
+  public static class KryoSerializable {
+    String value;
+
+    KryoSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((KryoSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  public static class JavaSerializable implements Serializable {
+    String value;
+
+    JavaSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((JavaSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  @Test
+  public void testKryoEncoder() {
+    Encoder<KryoSerializable> encoder = Encoders.kryo(KryoSerializable.class);
+    List<KryoSerializable> data = Arrays.asList(
+      new KryoSerializable("hello"), new KryoSerializable("world"));
+    Dataset<KryoSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testJavaEncoder() {
+    Encoder<JavaSerializable> encoder = Encoders.javaSerialization(JavaSerializable.class);
+    List<JavaSerializable> data = Arrays.asList(
+      new JavaSerializable("hello"), new JavaSerializable("world"));
+    Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  /**
+   * For testing error messages when creating an encoder on a private class. This is done
+   * here since we cannot create truly private classes in Scala.
+   */
+  private static class PrivateClassTest { }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testJavaEncoderErrorMessageForPrivateClass() {
+    Encoders.javaSerialization(PrivateClassTest.class);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testKryoEncoderErrorMessageForPrivateClass() {
+    Encoders.kryo(PrivateClassTest.class);
   }
 }

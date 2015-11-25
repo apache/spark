@@ -74,6 +74,10 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    sqlContext :: Nil
+  }
+
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
@@ -106,7 +110,9 @@ private[sql] object PhysicalRDD {
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
-      relation: BaseRelation): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString, relation.isInstanceOf[HadoopFsRelation])
+      relation: BaseRelation,
+      extraInformation: String = ""): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString + extraInformation,
+      relation.isInstanceOf[HadoopFsRelation])
   }
 }

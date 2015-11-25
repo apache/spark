@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.OpenHashSet
+import scala.collection.mutable.ArrayBuffer
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -244,12 +244,12 @@ private[sql] object Expand {
    */
   private def buildNonSelectExprSet(
       bitmask: Int,
-      exprs: Seq[Expression]): OpenHashSet[Expression] = {
-    val set = new OpenHashSet[Expression](2)
+      exprs: Seq[Expression]): ArrayBuffer[Expression] = {
+    val set = new ArrayBuffer[Expression](2)
 
     var bit = exprs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
       bit -= 1
     }
 
@@ -279,7 +279,7 @@ private[sql] object Expand {
 
       (child.output :+ gid).map(expr => expr transformDown {
         // TODO this causes a problem when a column is used both for grouping and aggregation.
-        case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+        case x: Expression if nonSelectedGroupExprSet.exists(_.semanticEquals(x)) =>
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
           Literal.create(null, expr.dataType)
@@ -322,6 +322,10 @@ trait GroupingAnalytics extends UnaryNode {
   def aggregations: Seq[NamedExpression]
 
   override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+
+  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
+  // will change in analysis.
+  override lazy val resolved: Boolean = false
 
   def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
 }

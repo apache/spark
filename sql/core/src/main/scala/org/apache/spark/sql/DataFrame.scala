@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -110,7 +110,6 @@ private[sql] object DataFrame {
  * @groupname action Actions
  * @since 1.3.0
  */
-// TODO: Improve documentation.
 @Experimental
 class DataFrame private[sql](
     @transient val sqlContext: SQLContext,
@@ -298,36 +297,6 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def columns: Array[String] = schema.fields.map(_.name)
-
-  /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
-
-  /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    withPlan(explain).queryExecution.executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
-  }
-
-  /**
-   * Only prints the physical plan to the console for debugging purposes.
-   * @group basic
-   * @since 1.3.0
-   */
-  def explain(): Unit = explain(extended = false)
 
   /**
    * Returns true if the `collect` and `take` methods can be run locally

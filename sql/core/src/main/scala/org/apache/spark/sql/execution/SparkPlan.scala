@@ -221,22 +221,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
 
-  protected def newProjection(
-      expressions: Seq[Expression], inputSchema: Seq[Attribute]): Projection = {
-    log.debug(s"Creating Projection: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateProjection.generate(expressions, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate projection, fallback to interpret", e)
-          new InterpretedProjection(expressions, inputSchema)
-        }
-    }
-  }
-
   protected def newMutableProjection(
       expressions: Seq[Expression], inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
@@ -282,6 +266,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         }
     }
   }
+
   /**
    * Creates a row ordering for the given schema, in natural ascending order.
    */
