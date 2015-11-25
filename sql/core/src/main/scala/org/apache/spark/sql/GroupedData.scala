@@ -282,7 +282,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -321,7 +321,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -353,7 +353,7 @@ class GroupedData protected[sql](
   }
 
   /**
-   * Pivots a column of the current [[DataFrame]] and preform the specified aggregation.
+   * Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
