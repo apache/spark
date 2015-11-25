@@ -630,7 +630,7 @@ class Analyzer(
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
-          val unresolvedSortOrders = sortOrder.filterNot(_.resolved)
+          val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
           val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
@@ -664,10 +664,11 @@ class Analyzer(
               }
           }
 
-          val sortOrdersMap = unresolvedSortOrders.map(
-            new TreeNodeRef(_)).zip(evaluatedOrderings).toMap
-          val finalSortOrders = sortOrder.map(
-            s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
+          val sortOrdersMap = unresolvedSortOrders
+            .map(new TreeNodeRef(_))
+            .zip(evaluatedOrderings)
+            .toMap
+          val finalSortOrders = sortOrder.map(s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
 
           // Since we don't rely on sort.resolved as the stop condition for this rule,
           // we need to check this and prevent applying this rule multiple times
