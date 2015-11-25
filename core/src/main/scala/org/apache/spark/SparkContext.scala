@@ -2728,7 +2728,7 @@ object SparkContext extends Logging {
 
       case zkUrl if zkUrl.startsWith("zk://") =>
         logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
-          "in the form mesos://zk://host:port.")
+          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
         createTaskScheduler(sc, "mesos://" + zkUrl)
 
       case _ =>
