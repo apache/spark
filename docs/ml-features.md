@@ -1705,6 +1705,71 @@ print(output.select("features", "clicked").first())
 </div>
 </div>
 
+## QuantileDiscretizer
+
+`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+categorical features.
+The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
+This attempts to find numBuckets partitions based on a sample of the given input data, but it may
+find fewer depending on the data sample values.
+
+Note that the result may different every time you run it, since the sample strategy behind it is
+non-deterministic.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `hour`:
+
+~~~
+ id | hour
+----|------
+ 0  | 18.0
+----|------
+ 1  | 19.0
+----|------
+ 2  | 8.0
+----|------
+ 3  | 5.0
+----|------
+ 4  | 22.0
+~~~
+
+`hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
+categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+
+~~~
+ id | hour | result
+----|------|------
+ 0  | 18.0 | 2.0
+----|------|------
+ 1  | 19.0 | 2.0
+----|------|------
+ 2  | 8.0  | 1.0
+----|------|------
+ 3  | 5.0  | 1.0
+----|------|------
+ 4  | 22.0 | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/feature/QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
+</div>
+</div>
+
 # Feature Selectors
 
 ## VectorSlicer
