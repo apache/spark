@@ -356,7 +356,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       executorDataMap.foreach { case (eid, _) =>
         driverEndpoint.askWithRetry[Boolean](RemoveExecutor(eid, SlaveLost()))
       }
-      executorDataMap.clear()
     }
   }
 
