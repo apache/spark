@@ -34,7 +34,6 @@ import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -232,20 +231,9 @@ object Pipeline extends MLReadable[Pipeline] {
         stages: Array[PipelineStage],
         sc: SparkContext,
         path: String): Unit = {
-      // Copied and edited from DefaultParamsWriter.saveMetadata
-      // TODO: modify DefaultParamsWriter.saveMetadata to avoid duplication
-      val uid = instance.uid
-      val cls = instance.getClass.getName
       val stageUids = stages.map(_.uid)
       val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
-      val metadata = ("class" -> cls) ~
-        ("timestamp" -> System.currentTimeMillis()) ~
-        ("sparkVersion" -> sc.version) ~
-        ("uid" -> uid) ~
-        ("paramMap" -> jsonParams)
-      val metadataPath = new Path(path, "metadata").toString
-      val metadataJson = compact(render(metadata))
-      sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
 
       // Save stages
       val stagesDir = new Path(path, "stages").toString
@@ -266,30 +254,10 @@ object Pipeline extends MLReadable[Pipeline] {
 
       implicit val format = DefaultFormats
       val stagesDir = new Path(path, "stages").toString
-      val stageUids: Array[String] = metadata.params match {
-        case JObject(pairs) =>
-          if (pairs.length != 1) {
-            // Should not happen unless file is corrupted or we have a bug.
-            throw new RuntimeException(
-              s"Pipeline read expected 1 Param (stageUids), but found ${pairs.length}.")
-          }
-          pairs.head match {
-            case ("stageUids", jsonValue) =>
-              jsonValue.extract[Seq[String]].toArray
-            case (paramName, jsonValue) =>
-              // Should not happen unless file is corrupted or we have a bug.
-              throw new RuntimeException(s"Pipeline read encountered unexpected Param $paramName" +
-                s" in metadata: ${metadata.metadataStr}")
-          }
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
-      }
+      val stageUids: Array[String] = (metadata.params \ "stageUids").extract[Seq[String]].toArray
       val stages: Array[PipelineStage] = stageUids.zipWithIndex.map { case (stageUid, idx) =>
         val stagePath = SharedReadWrite.getStagePath(stageUid, idx, stageUids.length, stagesDir)
-        val stageMetadata = DefaultParamsReader.loadMetadata(stagePath, sc)
-        val cls = Utils.classForName(stageMetadata.className)
-        cls.getMethod("read").invoke(null).asInstanceOf[MLReader[PipelineStage]].load(stagePath)
+        DefaultParamsReader.loadParamsInstance[PipelineStage](stagePath, sc)
       }
       (metadata.uid, stages)
     }

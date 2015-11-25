@@ -236,11 +236,6 @@ case class NewInstance(
     }
 
     if (propagateNull) {
-      val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-        s"${ev.isNull} = ${ev.value} == null;"
-      } else {
-        ""
-      }
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
       s"""
@@ -519,27 +514,6 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
          """
       }.mkString("\n") +
       s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
-  }
-}
-
-case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
-  extends UnaryExpression {
-
-  override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val row = child.gen(ctx)
-    s"""
-      ${row.code}
-      final boolean ${ev.isNull} = ${row.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
-      }
-    """
   }
 }
 

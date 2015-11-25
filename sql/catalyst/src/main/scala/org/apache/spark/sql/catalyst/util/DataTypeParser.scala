@@ -52,13 +52,17 @@ private[sql] trait DataTypeParser extends StandardTokenParsers {
     "(?i)decimal".r ^^^ DecimalType.USER_DEFAULT |
     "(?i)date".r ^^^ DateType |
     "(?i)timestamp".r ^^^ TimestampType |
-    varchar
+    varchar |
+    char
 
   protected lazy val fixedDecimalType: Parser[DataType] =
     ("(?i)decimal".r ~> "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
       case precision ~ scale =>
         DecimalType(precision.toInt, scale.toInt)
     }
+
+  protected lazy val char: Parser[DataType] =
+    "(?i)char".r ~> "(" ~> (numericLit <~ ")") ^^^ StringType
 
   protected lazy val varchar: Parser[DataType] =
     "(?i)varchar".r ~> "(" ~> (numericLit <~ ")") ^^^ StringType

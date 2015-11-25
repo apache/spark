@@ -32,7 +32,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   test("params") {
     ParamsSuite.checkParams(new PCA)
     val mat = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix]
-    val model = new PCAModel("pca", new OldPCAModel(2, mat))
+    val model = new PCAModel("pca", mat)
     ParamsSuite.checkParams(model)
   }
 
@@ -66,23 +66,18 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
   }
 
-  test("read/write") {
+  test("PCA read/write") {
+    val t = new PCA()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setK(3)
+    testDefaultReadWrite(t)
+  }
 
-    def checkModelData(model1: PCAModel, model2: PCAModel): Unit = {
-      assert(model1.pc === model2.pc)
-    }
-    val allParams: Map[String, Any] = Map(
-      "k" -> 3,
-      "inputCol" -> "features",
-      "outputCol" -> "pca_features"
-    )
-    val data = Seq(
-      (0.0, Vectors.sparse(5, Seq((1, 1.0), (3, 7.0)))),
-      (1.0, Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0)),
-      (2.0, Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
-    )
-    val df = sqlContext.createDataFrame(data).toDF("id", "features")
-    val pca = new PCA().setK(3)
-    testEstimatorAndModelReadWrite(pca, df, allParams, checkModelData)
+  test("PCAModel read/write") {
+    val instance = new PCAModel("myPCAModel",
+      Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix])
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.pc === instance.pc)
   }
 }
