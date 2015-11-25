@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.ui.SparkPlanGraph
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionStart,
+  SparkListenerSQLExecutionEnd}
 import org.apache.spark.util.Utils
 
 private[sql] object SQLExecution {
@@ -45,25 +46,14 @@ private[sql] object SQLExecution {
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
-        sqlContext.listener.onExecutionStart(
-          executionId,
-          callSite.shortForm,
-          callSite.longForm,
-          queryExecution.toString,
-          SparkPlanGraph(queryExecution.executedPlan),
-          System.currentTimeMillis())
+        sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
+          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
         try {
           body
         } finally {
-          // Ideally, we need to make sure onExecutionEnd happens after onJobStart and onJobEnd.
-          // However, onJobStart and onJobEnd run in the listener thread. Because we cannot add new
-          // SQL event types to SparkListener since it's a public API, we cannot guarantee that.
-          //
-          // SQLListener should handle the case that onExecutionEnd happens before onJobEnd.
-          //
-          // The worst case is onExecutionEnd may happen before onJobStart when the listener thread
-          // is very busy. If so, we cannot track the jobs for the execution. It seems acceptable.
-          sqlContext.listener.onExecutionEnd(executionId, System.currentTimeMillis())
+          sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+            executionId, System.currentTimeMillis()))
         }
       } finally {
         sc.setLocalProperty(EXECUTION_ID_KEY, null)

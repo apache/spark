@@ -42,6 +42,7 @@ trait SharedSQLContext extends SQLTestUtils {
    * Initialize the [[TestSQLContext]].
    */
   protected override def beforeAll(): Unit = {
+    SQLContext.clearSqlListener()
     if (_ctx == null) {
       _ctx = new TestSQLContext
     }

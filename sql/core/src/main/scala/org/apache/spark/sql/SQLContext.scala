@@ -1263,6 +1263,8 @@ object SQLContext {
    */
   @transient private val instantiatedContext = new AtomicReference[SQLContext]()
 
+  @transient private val sqlListener = new AtomicReference[SQLListener]()
+
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
@@ -1305,6 +1307,10 @@ object SQLContext {
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
     Option(instantiatedContext.get())
+  }
+
+  private[sql] def clearSqlListener(): Unit = {
+    sqlListener.set(null)
   }
 
   /**
@@ -1355,9 +1361,13 @@ object SQLContext {
    * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
    */
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    val listener = new SQLListener(sc.conf)
-    sc.addSparkListener(listener)
-    sc.ui.foreach(new SQLTab(listener, _))
-    listener
+    if (sqlListener.get() == null) {
+      val listener = new SQLListener(sc.conf)
+      if (sqlListener.compareAndSet(null, listener)) {
+        sc.addSparkListener(listener)
+        sc.ui.foreach(new SQLTab(listener, _))
+      }
+    }
+    sqlListener.get()
   }
 }
