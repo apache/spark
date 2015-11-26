@@ -175,14 +175,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Bind to the History Server: threads should be started here; exceptions may be raised
+   * Start the provider: threads should be started here; exceptions may be raised
    * if the history provider cannot be started.
-   * @param historyBinding binding information
    * @return the metric and binding information for registration
    */
-  override def start(historyBinding: ApplicationHistoryBinding):
-  (Option[Source], Option[HealthCheckSource]) = {
-    super.start(historyBinding)
+  override def start(): (Option[Source], Option[HealthCheckSource]) = {
+    super.start()
     (Some(metrics), Some(health))
   }
 

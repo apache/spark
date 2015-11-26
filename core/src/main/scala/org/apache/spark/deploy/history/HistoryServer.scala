@@ -160,7 +160,7 @@ class HistoryServer(
       // hook up metrics
 
       // start the provider against the metrics binding
-      val (source, health) = provider.start(new ApplicationHistoryBinding())
+      val (source, health) = provider.start()
       val codahaleContext = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
       codahaleContext.addServlet(new ServletHolder(new ThreadDumpServlet()),
         HistoryServer.THREADS_SUBPATH)

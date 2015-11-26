@@ -79,8 +79,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
    */
   private def createHistoryProvider(): FsHistoryProvider = {
     val provider = new FsHistoryProvider(createTestConf())
-    val binding = new ApplicationHistoryBinding()
-    provider.start(binding)
+    provider.start()
     provider
   }
 

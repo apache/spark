@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipOutputStream
 
 import scala.xml.Node
@@ -75,16 +76,9 @@ private[history] case class LoadedAppUI(
     ui: SparkUI,
     updateProbe: () => Boolean)
 
-/**
- * Binding information. Initially empty, may expand over time: it's here so that
- * subclassed providers do not break if binding information is added/expanded
- */
-private[history] case class ApplicationHistoryBinding() {
-}
-
 private[history] abstract class ApplicationHistoryProvider {
 
-  private var binding: Option[ApplicationHistoryBinding] = None
+  private val started = new AtomicBoolean(false)
 
   /**
    * Returns the count of application event logs that the provider is currently still processing.
@@ -112,14 +106,14 @@ private[history] abstract class ApplicationHistoryProvider {
 
   /**
    * Bind to the History Server: threads should be started here; exceptions may be raised
+   * Start the provider: threads should be started here; exceptions may be raised
    * if the history provider cannot be started.
-   * @param historyBinding binding information
+   * The base implementation contains a re-entrancy check and should
+   * be invoked first.
    * @return the metric and binding information for registration
    */
-  def start(historyBinding: ApplicationHistoryBinding):
-  (Option[Source], Option[HealthCheckSource]) = {
-    require(binding.isEmpty, "History provider already started")
-    binding = Some(historyBinding)
+  def start(): (Option[Source], Option[HealthCheckSource]) = {
+    require(started.getAndSet(true), "History provider already started")
     (None, None)
   }
 
