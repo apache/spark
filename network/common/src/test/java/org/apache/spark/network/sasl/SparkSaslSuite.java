@@ -21,6 +21,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
@@ -207,7 +208,7 @@ public class SparkSaslSuite {
   public void testEncryptedMessageChunking() throws Exception {
     File file = File.createTempFile("sasltest", ".txt");
     try {
-      TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
       byte[] data = new byte[8 * 1024];
       new Random().nextBytes(data);
@@ -242,7 +243,7 @@ public class SparkSaslSuite {
     final File file = File.createTempFile("sasltest", ".txt");
     SaslTestCtx ctx = null;
     try {
-      final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
       StreamManager sm = mock(StreamManager.class);
       when(sm.getChunk(anyLong(), anyInt())).thenAnswer(new Answer<ManagedBuffer>() {
           @Override
@@ -353,6 +354,14 @@ public class SparkSaslSuite {
     verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
   }
 
+  @Test
+  public void testDelegates() throws Exception {
+    Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
+    for (Method m : rpcHandlerMethods) {
+      SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+    }
+  }
+
   private static class SaslTestCtx {
 
     final TransportClient client;
@@ -368,7 +377,7 @@ public class SparkSaslSuite {
         boolean disableClientEncryption)
       throws Exception {
 
-      TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+      TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
 
       SecretKeyHolder keyHolder = mock(SecretKeyHolder.class);
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");

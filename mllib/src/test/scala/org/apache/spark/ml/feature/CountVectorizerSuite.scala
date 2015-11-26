@@ -18,14 +18,17 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
-class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
 
   test("params") {
+    ParamsSuite.checkParams(new CountVectorizer)
     ParamsSuite.checkParams(new CountVectorizerModel(Array("empty")))
   }
 
@@ -163,5 +166,24 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
+  }
+
+  test("CountVectorizer read/write") {
+    val t = new CountVectorizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMinDF(0.5)
+      .setMinTF(3.0)
+      .setVocabSize(10)
+    testDefaultReadWrite(t)
+  }
+
+  test("CountVectorizerModel read/write") {
+    val instance = new CountVectorizerModel("myCountVectorizerModel", Array("a", "b", "c"))
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMinTF(3.0)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.vocabulary === instance.vocabulary)
   }
 }

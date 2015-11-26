@@ -17,9 +17,11 @@
 
 package org.apache.spark.network;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -46,10 +48,11 @@ public class RpcIntegrationSuite {
   static TransportServer server;
   static TransportClientFactory clientFactory;
   static RpcHandler rpcHandler;
+  static List<String> oneWayMsgs;
 
   @BeforeClass
   public static void setUp() throws Exception {
-    TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     rpcHandler = new RpcHandler() {
       @Override
       public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
@@ -65,11 +68,18 @@ public class RpcIntegrationSuite {
       }
 
       @Override
+      public void receive(TransportClient client, byte[] message) {
+        String msg = new String(message, Charsets.UTF_8);
+        oneWayMsgs.add(msg);
+      }
+
+      @Override
       public StreamManager getStreamManager() { return new OneForOneStreamManager(); }
     };
     TransportContext context = new TransportContext(conf, rpcHandler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
+    oneWayMsgs = new ArrayList<>();
   }
 
   @AfterClass
@@ -156,6 +166,27 @@ public class RpcIntegrationSuite {
     RpcResult res = sendRPC("hello/Bob", "throw error/the", "hello/Builder", "return error/!");
     assertEquals(res.successMessages, Sets.newHashSet("Hello, Bob!", "Hello, Builder!"));
     assertErrorsContain(res.errorMessages, Sets.newHashSet("Thrown: the", "Returned: !"));
+  }
+
+  @Test
+  public void sendOneWayMessage() throws Exception {
+    final String message = "no reply";
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    try {
+      client.send(message.getBytes(Charsets.UTF_8));
+      assertEquals(0, client.getHandler().numOutstandingRequests());
+
+      // Make sure the message arrives.
+      long deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
+      while (System.nanoTime() < deadline && oneWayMsgs.size() == 0) {
+        TimeUnit.MILLISECONDS.sleep(10);
+      }
+
+      assertEquals(1, oneWayMsgs.size());
+      assertEquals(message, oneWayMsgs.get(0));
+    } finally {
+      client.close();
+    }
   }
 
   private void assertErrorsContain(Set<String> errors, Set<String> contains) {

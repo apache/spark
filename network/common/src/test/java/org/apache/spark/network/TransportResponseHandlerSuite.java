@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import io.netty.channel.Channel;
 import io.netty.channel.local.LocalChannel;
 import org.junit.Test;
 
@@ -28,12 +29,16 @@ import static org.mockito.Mockito.*;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.ChunkReceivedCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
+import org.apache.spark.network.client.StreamCallback;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamFailure;
+import org.apache.spark.network.protocol.StreamResponse;
+import org.apache.spark.network.util.TransportFrameDecoder;
 
 public class TransportResponseHandlerSuite {
   @Test
@@ -110,6 +115,28 @@ public class TransportResponseHandlerSuite {
 
     handler.handle(new RpcFailure(12345, "oh no"));
     verify(callback, times(1)).onFailure((Throwable) any());
+    assertEquals(0, handler.numOutstandingRequests());
+  }
+
+  @Test
+  public void testActiveStreams() {
+    Channel c = new LocalChannel();
+    c.pipeline().addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder());
+    TransportResponseHandler handler = new TransportResponseHandler(c);
+
+    StreamResponse response = new StreamResponse("stream", 1234L, null);
+    StreamCallback cb = mock(StreamCallback.class);
+    handler.addStreamCallback(cb);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.handle(response);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.deactivateStream();
+    assertEquals(0, handler.numOutstandingRequests());
+
+    StreamFailure failure = new StreamFailure("stream", "uh-oh");
+    handler.addStreamCallback(cb);
+    assertEquals(1, handler.numOutstandingRequests());
+    handler.handle(failure);
     assertEquals(0, handler.numOutstandingRequests());
   }
 }

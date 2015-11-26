@@ -23,11 +23,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.ByteStreams
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -37,10 +38,12 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class SparkSubmitSuite
   extends SparkFunSuite
   with Matchers
+  with BeforeAndAfterEach
   with ResetSystemProperties
   with Timeouts {
 
-  def beforeAll() {
+  override def beforeEach() {
+    super.beforeEach()
     System.setProperty("spark.testing", "true")
   }
 
@@ -366,10 +369,9 @@ class SparkSubmitSuite
     }
   }
 
-  test("correctly builds R packages included in a jar with --packages") {
-    // TODO(SPARK-9603): Building a package to $SPARK_HOME/R/lib is unavailable on Jenkins.
-    // It's hard to write the test in SparkR (because we can't create the repository dynamically)
-    /*
+  // TODO(SPARK-9603): Building a package is flaky on Jenkins Maven builds.
+  // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
+  ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -387,7 +389,6 @@ class SparkSubmitSuite
         rScriptDir)
       runSparkSubmit(args)
     }
-    */
   }
 
   test("resolves command line argument paths correctly") {
