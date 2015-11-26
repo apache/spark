@@ -627,6 +627,8 @@ class StreamingContext private[streaming] (
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
+      case PARTIALLY_STOPPED =>
+        throw new IllegalStateException("StreamingContext is partially stopped")
       case STOPPED =>
         throw new IllegalStateException("StreamingContext has already been stopped")
     }
@@ -698,28 +700,34 @@ class StreamingContext private[streaming] (
         " AsynchronousListenerBus")
     }
     synchronized {
-      try {
-        state match {
-          case INITIALIZED =>
-            logWarning("StreamingContext has not been started yet")
-          case STOPPED =>
-            logWarning("StreamingContext has already been stopped")
-          case ACTIVE =>
-            scheduler.stop(stopGracefully)
-            // Removing the streamingSource to de-register the metrics on stop()
-            env.metricsSystem.removeSource(streamingSource)
-            uiTab.foreach(_.detach())
-            StreamingContext.setActiveContext(null)
-            waiter.notifyStop()
-            if (shutdownHookRef != null) {
-              shutdownHookRefToRemove = shutdownHookRef
-              shutdownHookRef = null
-            }
-            logInfo("StreamingContext stopped successfully")
-        }
-      } finally {
-        // The state should always be Stopped after calling `stop()`, even if we haven't started yet
-        state = STOPPED
+      // The state should always be Stopped after calling `stop()`, even if we haven't started yet
+      state match {
+        case INITIALIZED =>
+          logWarning("StreamingContext has not been started yet")
+          state = STOPPED
+        case STOPPED =>
+          logWarning("StreamingContext has already been stopped")
+          state = STOPPED
+        case ACTIVE | PARTIALLY_STOPPED =>
+          // It's important that we don't set state = STOPPED until the very end of this case,
+          // since we need to ensure that we're still able to call `stop()` to recover from
+          // a partially-stopped StreamingContext which resulted from this `stop()` call being
+          // interrupted. See SPARK-12001 for more details. Instead, we record that we're in the
+          // process of stopping. Because the body of this case can be executed twice in the case
+          // of a partial stop, all methods called here need to be idempotent.
+          state = PARTIALLY_STOPPED
+          scheduler.stop(stopGracefully)
+          // Removing the streamingSource to de-register the metrics on stop()
+          env.metricsSystem.removeSource(streamingSource)
+          uiTab.foreach(_.detach())
+          StreamingContext.setActiveContext(null)
+          waiter.notifyStop()
+          if (shutdownHookRef != null) {
+            shutdownHookRefToRemove = shutdownHookRef
+            shutdownHookRef = null
+          }
+          logInfo("StreamingContext stopped successfully")
+          state = STOPPED
       }
     }
     if (shutdownHookRefToRemove != null) {

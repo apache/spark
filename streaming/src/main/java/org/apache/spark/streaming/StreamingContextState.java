@@ -39,6 +39,12 @@ public enum StreamingContextState {
   ACTIVE,
 
   /**
+   * The context was in the process of stopping but was interrupted.
+   * It is no longer usable and needs to be completely stopped by calling `stop()` again.
+   */
+  PARTIALLY_STOPPED,
+
+  /**
    * The context has been stopped and cannot be used any more.
    */
   STOPPED
