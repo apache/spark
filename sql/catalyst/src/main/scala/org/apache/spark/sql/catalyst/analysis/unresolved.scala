@@ -204,7 +204,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
         case s: StructType => s.zipWithIndex.map {
           case (f, i) =>
             val extract = GetStructField(attribute.get, i)
-            Alias(extract, target.get + "." + f.name)()
+            Alias(extract, f.name)()
         }
 
         case _ => {

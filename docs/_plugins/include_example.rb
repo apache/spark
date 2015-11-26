@@ -20,12 +20,12 @@ require 'pygments'
 
 module Jekyll
   class IncludeExampleTag < Liquid::Tag
-    
+
     def initialize(tag_name, markup, tokens)
       @markup = markup
       super
     end
- 
+
     def render(context)
       site = context.registers[:site]
       config_dir = '../examples/src/main'
@@ -37,7 +37,7 @@ module Jekyll
 
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
- 
+
       rendered_code = Pygments.highlight(code, :lexer => @lang)
 
       hint = "<div><small>Find full example code at " \
@@ -45,7 +45,7 @@ module Jekyll
 
       rendered_code + hint
     end
- 
+
     # Trim the code block so as to have the same indention, regardless of their positions in the
     # code file.
     def trim_codeblock(lines)
