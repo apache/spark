@@ -51,9 +51,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   override def getCheckpointFile: Option[String] = Some(checkpointPath)
 
   override val partitioner: Option[Partitioner] = {
-    println("Creating partitioner")
     _partitioner.orElse {
-      println("Reading partitioner from file")
       ReliableCheckpointRDD.readCheckpointedPartitionerFile(context, checkpointPath)
     }
   }
@@ -216,7 +214,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       } {
         serializeStream.close()
       }
-      println(s"Written partitioner to $partitionerFilePath")
+      logDebug(s"Written partitioner to $partitionerFilePath")
     } catch {
       case NonFatal(e) =>
         logWarning(s"Error writing partitioner $partitioner to $checkpointDirPath")
@@ -230,7 +228,6 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
-      println(s"Reading partitioner from $partitionerFilePath")
       if (fs.exists(partitionerFilePath)) {
         val fileInputStream = fs.open(partitionerFilePath, bufferSize)
         val serializer = SparkEnv.get.serializer.newInstance()
@@ -240,16 +237,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         } {
           deserializeStream.close()
         }
-        println(s"Read partitioner from $partitionerFilePath")
+        logDebug(s"Read partitioner from $partitionerFilePath")
         Some(partitioner)
       } else {
-        println("No partitioner file")
+        logDebug("No partitioner file")
         None
       }
     } catch {
       case NonFatal(e) =>
-        println(s"Error reading partitioner from $checkpointDirPath, " +
-            s"partitioner will not be recovered which can lead to performance loss", e)
+        logWarning(s"Error reading partitioner from $checkpointDirPath, " +
+            s"partitioner will not be recovered which may lead to performance loss", e)
         None
     }
   }
