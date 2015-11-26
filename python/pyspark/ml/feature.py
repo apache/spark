@@ -33,7 +33,8 @@ __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel',
            'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
            'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
            'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel', 'QuantileDiscretizer']
+           'Word2Vec', 'Word2VecModel', 'QuantileDiscretizer', 'ChiSqSelector',
+           'ChiSqSelectorModel']
 
 
 @inherit_doc
