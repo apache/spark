@@ -46,7 +46,7 @@ object ChiSqSelectorExample {
       .setNumTopFeatures(1)
       .setFeaturesCol("features")
       .setLabelCol("clicked")
-      .setOutputCol("result")
+      .setOutputCol("selectedFeatures")
 
     val result = selector.fit(df).transform(df)
     result.show()

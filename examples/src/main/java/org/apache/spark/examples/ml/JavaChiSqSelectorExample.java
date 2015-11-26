@@ -61,7 +61,7 @@ public class JavaChiSqSelectorExample {
       .setNumTopFeatures(1)
       .setFeaturesCol("features")
       .setLabelCol("clicked")
-      .setOutputCol("result");
+      .setOutputCol("selectedFeatures");
 
     DataFrame result = selector.fit(df).transform(df);
     result.show();

@@ -1960,7 +1960,8 @@ most. This is akin to yielding the features with the most predictive power.
 
 **Examples**
 
-Assume that we have a DataFrame with the columns `id`, `features`, and `clicked`:
+Assume that we have a DataFrame with the columns `id`, `features`, and `clicked`, which is used as
+our target to be predicted:
 
 ~~~
 id | features              | clicked
@@ -1971,11 +1972,11 @@ id | features              | clicked
 ~~~
 
 If we use `ChiSqSelector` with a `numTopFeatures = 1`, then according to our label `clicked` the
-last column of our `features` is the result:
+last column in our `features` chosen as the most useful feature:
 
 ~~~
-id | features              | clicked | result
----|-----------------------|---------|-------
+id | features              | clicked | selectedFeatures
+---|-----------------------|---------|------------------
  7 | [0.0, 0.0, 18.0, 1.0] | 1.0     | [1.0]
  8 | [0.0, 1.0, 12.0, 0.0] | 0.0     | [0.0]
  9 | [1.0, 0.0, 15.0, 0.1] | 0.0     | [0.1]
