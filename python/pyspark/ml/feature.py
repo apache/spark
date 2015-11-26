@@ -33,7 +33,7 @@ __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel',
            'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
            'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
            'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
-           'Word2Vec', 'Word2VecModel']
+           'Word2Vec', 'Word2VecModel', 'QuantileDiscretizer']
 
 
 @inherit_doc
@@ -2091,6 +2091,92 @@ class RFormulaModel(JavaModel):
 
     .. versionadded:: 1.5.0
     """
+
+
+@inherit_doc
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+    categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
+    into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+    covering all real values. This attempts to find numBuckets partitions based on a sample of data,
+    but it may find fewer depending on the data sample values.
+
+    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> discretizer = QuantileDiscretizer(inputCol="values", outputCol="buckets").setNumBuckets(3)
+    >>> bucketed = discretizer.fit(df).transform(df).collect()
+    >>> bucketed[0].buckets
+    0.0
+    >>> bucketed[1].buckets
+    1.0
+    >>> bucketed[2].buckets
+    1.0
+    >>> bucketed[3].buckets
+    2.0
+
+    .. versionadded:: 1.7.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numBuckets = \
+        Param(Params._dummy(), "numBuckets",
+              "Maximum number of buckets (quantiles, or categories) into which data points are " +
+              "grouped. Must be >= 2.")
+
+    @keyword_only
+    def __init__(self, numBuckets=None, inputCol=None, outputCol=None):
+        """
+        __init__(self, numBuckets=None, inputCol=None, outputCol=None)
+        """
+        super(QuantileDiscretizer, self).__init__()
+        self._java_obj = \
+            self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer", self.uid)
+        # Maximum number of buckets (quantiles, or categories) into which data points are grouped.
+        # Must be >= 2.
+        # default: 2
+        self.numBuckets = \
+            Param(self, "numBuckets",
+                  "Maximum number of buckets (quantiles, or categories) into which data points " +
+                  "are grouped. Must be >= 2.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    class QuantileDiscretizerModel(JavaModel):
+        def getSplits(self):
+            return self._call_java("getSplits")
+
+    @keyword_only
+    @since("1.7.0")
+    def setParams(self, numBuckets=None, inputCol=None, outputCol=None):
+        """
+        setParams(self, numBuckets=None, inputCol=None, outputCol=None)
+        Sets params for this QuantileDiscretizer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("1.7.0")
+    def setNumBuckets(self, value):
+        """
+        Sets the value of :py:attr:`numBuckets`.
+        """
+        self._paramMap[self.numBuckets] = value
+        return self
+
+    @since("1.7.0")
+    def getNumBuckets(self):
+        """
+        Gets the value of numBuckets or its default value.
+        """
+        return self.getOrDefault(self.numBuckets)
+
+    def _create_model(self, java_model):
+        model = self.QuantileDiscretizerModel(java_model)
+        return Bucketizer(splits=model.getSplits(),
+                          inputCol=self.getOrDefault("inputCol"),
+                          outputCol=self.getOrDefault("outputCol"))
 
 
 if __name__ == "__main__":
