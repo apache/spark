@@ -218,7 +218,7 @@ class AnalysisSuite extends AnalysisTest {
       nullResult,
       udf4)
     // checkUDF(udf4, expected4)
-    }
+  }
 
   test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
     val a = testRelation2.output(0)
