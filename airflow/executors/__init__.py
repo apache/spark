@@ -5,16 +5,6 @@ from airflow.executors.base_executor import BaseExecutor
 from airflow.executors.local_executor import LocalExecutor
 from airflow.executors.sequential_executor import SequentialExecutor
 
-# TODO Fix this emergency fix
-try:
-    from airflow.executors.celery_executor import CeleryExecutor
-except:
-    pass
-try:
-    from airflow.contrib.executors.mesos_executor import MesosExecutor
-except:
-    pass
-
 from airflow.utils import AirflowException
 
 _EXECUTOR = configuration.get('core', 'EXECUTOR')
@@ -22,10 +12,12 @@ _EXECUTOR = configuration.get('core', 'EXECUTOR')
 if _EXECUTOR == 'LocalExecutor':
     DEFAULT_EXECUTOR = LocalExecutor()
 elif _EXECUTOR == 'CeleryExecutor':
+    from airflow.executors.celery_executor import CeleryExecutor
     DEFAULT_EXECUTOR = CeleryExecutor()
 elif _EXECUTOR == 'SequentialExecutor':
     DEFAULT_EXECUTOR = SequentialExecutor()
 elif _EXECUTOR == 'MesosExecutor':
+    from airflow.contrib.executors.mesos_executor import MesosExecutor
     DEFAULT_EXECUTOR = MesosExecutor()
 else:
     # Loading plugins

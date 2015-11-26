@@ -398,7 +398,7 @@ def initdb(args):
 
 def resetdb(args):
     print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
-    if input(
+    if args.yes or input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
         logging.basicConfig(level=settings.LOGGING_LEVEL,
@@ -641,6 +641,11 @@ def get_parser():
 
     ht = "Burn down and rebuild the metadata database"
     parser_resetdb = subparsers.add_parser('resetdb', help=ht)
+    parser_resetdb.add_argument(
+            "-y", "--yes",
+            default=False,
+            help="Do not prompt to confirm reset. Use with care!",
+            action="store_true")
     parser_resetdb.set_defaults(func=resetdb)
 
     ht = "Upgrade metadata database to latest version"

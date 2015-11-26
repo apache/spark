@@ -16,7 +16,7 @@ import subprocess
 import sys
 from time import sleep
 
-from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_
+from sqlalchemy import Column, Integer, String, DateTime, func, Index, and_, or_
 from sqlalchemy.orm.session import make_transient
 
 from airflow import executors, models, settings, utils
@@ -348,6 +348,7 @@ class SchedulerJob(BaseJob):
         """
         This method checks whether a new DagRun needs to be created
         for a DAG based on scheduling interval
+        Returns DagRun if one is scheduled. Otherwise returns None.
         """
         if dag.schedule_interval:
             DagRun = models.DagRun
@@ -360,10 +361,11 @@ class SchedulerJob(BaseJob):
             active_runs = qry.scalar()
             if active_runs >= dag.max_active_runs:
                 return
-            qry = session.query(func.max(DagRun.execution_date)).filter(
-                DagRun.dag_id == dag.dag_id,
-                DagRun.external_trigger == False
-            )
+            qry = session.query(func.max(DagRun.execution_date)).filter_by(
+                    dag_id = dag.dag_id).filter(
+                        or_(DagRun.external_trigger == False,
+                            # add % as a wildcard for the like query
+                            DagRun.run_id.like(DagRun.ID_PREFIX+'%')))
             last_scheduled_run = qry.scalar()
             next_run_date = None
             if not last_scheduled_run:
@@ -385,9 +387,13 @@ class SchedulerJob(BaseJob):
             elif dag.schedule_interval == '@once' and not last_scheduled_run:
                 next_run_date = datetime.now()
 
-            schedule_end = dag.following_schedule(next_run_date)
+            # this structure is necessary to avoid a TypeError from concatenating
+            # NoneType
             if dag.schedule_interval == '@once':
                 schedule_end = next_run_date
+            elif next_run_date:
+                schedule_end = dag.following_schedule(next_run_date)
+
             if next_run_date and schedule_end and schedule_end <= datetime.now():
                 next_run = DagRun(
                     dag_id=dag.dag_id,
@@ -398,6 +404,7 @@ class SchedulerJob(BaseJob):
                 )
                 session.add(next_run)
                 session.commit()
+                return next_run
 
     def process_dag(self, dag, executor):
         """
@@ -492,10 +499,12 @@ class SchedulerJob(BaseJob):
         session.expunge_all()
         d = defaultdict(list)
         for ti in queued_tis:
-            if (
-                    ti.dag_id not in dagbag.dags or not
-                    dagbag.dags[ti.dag_id].has_task(ti.task_id)):
-                # Deleting queued jobs that don't exist anymore
+            if ti.dag_id not in dagbag.dags:
+                logging.info("DAG not longer in dagbag, deleting {}".format(ti))
+                session.delete(ti)
+                session.commit()
+            elif not dagbag.dags[ti.dag_id].has_task(ti.task_id):
+                logging.info("Task not longer exists, deleting {}".format(ti))
                 session.delete(ti)
                 session.commit()
             else:
@@ -515,12 +524,12 @@ class SchedulerJob(BaseJob):
                 "Pool {pool} has {open_slots} slots, "
                 "{queue_size} task instances in queue".format(**locals()))
             if not open_slots:
-                return
+                continue
             tis = sorted(
                 tis, key=lambda ti: (-ti.priority_weight, ti.start_date))
             for ti in tis:
                 if not open_slots:
-                    return
+                    continue
                 task = None
                 try:
                     task = dagbag.dags[ti.dag_id].get_task(ti.task_id)

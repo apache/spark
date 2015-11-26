@@ -544,6 +544,7 @@ class TaskInstance(Base):
         self.pool = task.pool
         self.priority_weight = task.priority_weight_total
         self.try_number = 1
+        self.test_mode = False  # can be changed when calling 'run'
         self.unixname = getpass.getuser()
         if state:
             self.state = state
@@ -887,6 +888,7 @@ class TaskInstance(Base):
         """
         task = self.task
         self.pool = pool or task.pool
+        self.test_mode = test_mode
         session = settings.Session()
         self.refresh_from_db(session)
         session.commit()
@@ -1111,6 +1113,7 @@ class TaskInstance(Base):
             'ti': self,
             'task_instance_key_str': ti_key_str,
             'conf': configuration,
+            'test_mode': self.test_mode,
         }
 
     def render_templates(self):
@@ -2671,6 +2674,9 @@ class DagRun(Base):
     """
     __tablename__ = "dag_run"
 
+    ID_PREFIX = 'scheduled__'
+    ID_FORMAT_PREFIX = ID_PREFIX + '{0}'
+
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
     execution_date = Column(DateTime, default=datetime.now())
@@ -2693,6 +2699,9 @@ class DagRun(Base):
             run_id=self.run_id,
             external_trigger=self.external_trigger)
 
+    @classmethod
+    def id_for_date(klass, date, prefix=ID_FORMAT_PREFIX):
+        return prefix.format(date.isoformat()[:19])
 
 class Pool(Base):
     __tablename__ = "slot_pool"
