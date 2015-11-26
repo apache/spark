@@ -2028,25 +2028,4 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
-  test("push filter through aggregation with alias and literals") {
-    withTempTable("src") {
-      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("src")
-      val q1 = sql(
-        """
-          | SELECT k, v from (
-          |   SELECT key + 1 AS k, sum(value) + 2 AS v, 3 c FROM src GROUP BY key
-          | ) t WHERE k = 0 and v > 0 and c = 3
-        """.stripMargin)
-      val q2 = sql(
-        """
-          | SELECT k, v from (
-          |   SELECT key + 1 AS k, sum(value) + 2 AS v, 3 c FROM src WHERE key + 1 = 0 GROUP BY key
-          | ) t WHERE v > 0
-        """.stripMargin)
-      comparePlans(q1.queryExecution.optimizedPlan, q2.queryExecution.optimizedPlan)
-      checkAnswer(q1, q2)
-    }
-
-  }
-
 }
