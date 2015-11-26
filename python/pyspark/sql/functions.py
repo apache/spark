@@ -1482,18 +1482,11 @@ def get_json_object(col, path):
     :param col: string column in json format
     :param path: path to the json object to extract
 
-    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), \
-          ("2", '''{"f1": "value12"}'''), \
-          ("3", '''{"f2": 2}'''), \
-          ("4", None), \
-          ("5", '''{"f1": null}'''), \
-          ("6", '''[invalid JSON string]''')]
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
     >>> df.select(df.key, get_json_object(df.jstring, '$.f1').alias("c0"), \
                           get_json_object(df.jstring, '$.f2').alias("c1") ).collect()
-    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None),
-     Row(key=u'3', c0=None, c1=u'2'), Row(key=u'4', c0=None, c1=None),
-     Row(key=u'5', c0=u'null', c1=None), Row(key=u'6', c0=None, c1=None)]
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.get_json_object(_to_java_column(col), path)
@@ -1508,17 +1501,10 @@ def json_tuple(col, *fields):
     :param col: string column in json format
     :param fields: list of fields to extract
 
-    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), \
-          ("2", '''{"f1": "value12"}'''), \
-          ("3", '''{"f2": 2}'''), \
-          ("4", None), \
-          ("5", '''{"f1": null}'''), \
-          ("6", '''[invalid JSON string]''')]
+    >>> data = [("1", '''{"f1": "value1", "f2": "value2"}'''), ("2", '''{"f1": "value12"}''')]
     >>> df = sqlContext.createDataFrame(data, ("key", "jstring"))
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
-    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None),
-     Row(key=u'3', c0=None, c1=u'2'), Row(key=u'4', c0=None, c1=None),
-     Row(key=u'5', c0=None, c1=None), Row(key=u'6', c0=None, c1=None)]
+    [Row(key=u'1', c0=u'value1', c1=u'value2'), Row(key=u'2', c0=u'value12', c1=None)]
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
