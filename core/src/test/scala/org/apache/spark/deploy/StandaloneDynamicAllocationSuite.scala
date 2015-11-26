@@ -386,14 +386,14 @@ class StandaloneDynamicAllocationSuite
     // the driver refuses to kill executors it does not know about
     syncExecutors(sc)
     val executors = getExecutorIds(sc)
-    val executorIdsBefore = executors.head
+    val executorIdsBefore = executors.toSet
     assert(executors.size === 2)
     // kill executor 1, and replace it
     assert(sc.killAndReplaceExecutor(executors.head))
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
       assert(apps.head.executors.size === 2)
-      val executorIdsAfter = getExecutorIds(sc).head
+      val executorIdsAfter = getExecutorIds(sc).toSet
       // make sure the old executors head has been killedAndReplaced.
       assert(executorIdsBefore != executorIdsAfter)
     }
