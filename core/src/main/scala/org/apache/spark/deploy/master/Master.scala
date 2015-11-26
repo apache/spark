@@ -662,6 +662,8 @@ private[deploy] class Master(
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       val coresPerTask = app.desc.coresPerTask
       // Filter out workers that don't have enough resources to launch an executor
+      // the user might set the requested number of cores per task via spark.task.cpus
+      // we need to respect this configuratio when allocating cores to the executor (SPARK-5337)
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= math.max(coresPerExecutor.getOrElse(1), coresPerTask))

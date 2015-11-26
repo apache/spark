@@ -269,6 +269,8 @@ private[spark] class CoarseMesosSchedulerBackend(
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         val id = offer.getId.getValue
+        // the user might set the requested number of cores per task via spark.task.cpus
+        // we need to respect this configuratio when allocating cores to the executor (SPARK-5337)
         if (meetsConstraints) {
           if (taskIdToSlaveId.size < executorLimit &&
             totalCoresAcquired < maxCores &&
