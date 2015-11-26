@@ -1,4 +1,4 @@
-import copy
+
 from datetime import datetime, time, timedelta
 import doctest
 import json
@@ -8,6 +8,8 @@ from time import sleep
 import unittest
 
 from airflow import configuration
+from airflow.models import Variable
+
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros, settings
 from airflow.hooks import BaseHook
@@ -31,9 +33,9 @@ except ImportError:
     import pickle
 
 
-def reset():
+def reset(dag_id=TEST_DAG_ID):
     session = Session()
-    tis = session.query(models.TaskInstance).filter_by(dag_id=TEST_DAG_ID)
+    tis = session.query(models.TaskInstance).filter_by(dag_id=dag_id)
     tis.delete()
     session.commit()
     session.close()
@@ -355,6 +357,68 @@ class CoreTest(unittest.TestCase):
             failed, tests = doctest.testmod(mod)
             if failed:
                 raise Exception("Failed a doctest")
+
+    def test_default_config_gen(self):
+
+        cfg = configuration.default_config()
+
+        # making sure some basic building blocks are present:
+        assert "[core]" in cfg
+        assert "dags_folder" in cfg
+        assert "sql_alchemy_conn" in cfg
+        assert "fernet_key" in cfg
+
+        # making sure replacement actually happened
+        assert "{AIRFLOW_HOME}" not in cfg
+        assert "{FERNET_KEY}" not in cfg
+
+    def test_variable_set_get_round_trip(self):
+        Variable.set("tested_var_set_id", "Monday morning breakfast")
+        assert "Monday morning breakfast" == Variable.get("tested_var_set_id")
+
+    def test_variable_set_get_round_trip_json(self):
+        value = {"a": 17, "b": 47}
+        Variable.set("tested_var_set_id", value, serialize_json=True)
+        assert value == Variable.get("tested_var_set_id", deserialize_json=True)
+
+    def test_get_non_existing_var_should_return_default(self):
+        default_value = "some default val"
+        assert default_value == Variable.get("thisIdDoesNotExist",
+                                             default_var=default_value)
+
+    def test_get_non_existing_var_should_not_deserialize_json_default(self):
+        default_value = "}{ this is a non JSON default }{"
+        assert default_value == Variable.get("thisIdDoesNotExist",
+                                             default_var=default_value,
+                                             deserialize_json=True)
+
+    def test_duplicate_dependencies(self):
+
+        regexp = "Dependency (.*)runme_0(.*)run_after_loop(.*) " \
+                 "already registered"
+
+        with self.assertRaisesRegexp(AirflowException, regexp):
+            self.runme_0.set_downstream(self.run_after_loop)
+
+        with self.assertRaisesRegexp(AirflowException, regexp):
+            self.run_after_loop.set_upstream(self.runme_0)
+
+    def test_cyclic_dependencies_1(self):
+
+        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
+        with self.assertRaisesRegexp(AirflowException, regexp):
+            self.runme_0.set_upstream(self.run_after_loop)
+
+    def test_cyclic_dependencies_2(self):
+        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
+        with self.assertRaisesRegexp(AirflowException, regexp):
+            self.run_after_loop.set_downstream(self.runme_0)
+
+    def test_cyclic_dependencies_3(self):
+        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
+        with self.assertRaisesRegexp(AirflowException, regexp):
+            self.run_this_last.set_downstream(self.runme_0)
+>>>>>>> 17aed4c... fixed Variable json deserialization
 
 
 class CliTests(unittest.TestCase):
