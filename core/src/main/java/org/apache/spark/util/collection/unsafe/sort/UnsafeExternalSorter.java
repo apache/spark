@@ -524,7 +524,9 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   }
 
   /**
-   * Returns a iterator. It is the caller's responsibility to call `cleanupResources()`
+   * Returns a iterator, which will return the rows in the order as inserted.
+   *
+   * It is the caller's responsibility to call `cleanupResources()`
    * after consuming this iterator.
    */
   public UnsafeSorterIterator getIterator() throws IOException {
@@ -532,7 +534,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       assert(inMemSorter != null);
       return inMemSorter.getIterator();
     } else {
-      Queue<UnsafeSorterIterator> queue = new LinkedList<>();
+      LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         queue.add(spillWriter.getReader(blockManager));
       }
@@ -543,20 +545,24 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  /**
+   * Chain multiple UnsafeSorterIterator together as single one.
+   */
   class ChainedIterator extends UnsafeSorterIterator {
+
     private final Queue<UnsafeSorterIterator> iterators;
-    private UnsafeSorterIterator current = null;
-    public ChainedIterator(Queue<UnsafeSorterIterator> iters) {
-      this.iterators = iters;
-      this.current = iters.remove();
+    private UnsafeSorterIterator current;
+
+    public ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
+      assert iterators.size() > 0;
+      this.iterators = iterators;
+      this.current = iterators.remove();
     }
 
     @Override
     public boolean hasNext() {
-      if (!current.hasNext()) {
-        if (!iterators.isEmpty()) {
-          current = iterators.remove();
-        }
+      if (!current.hasNext() && !iterators.isEmpty()) {
+        current = iterators.remove();
       }
       return current.hasNext();
     }

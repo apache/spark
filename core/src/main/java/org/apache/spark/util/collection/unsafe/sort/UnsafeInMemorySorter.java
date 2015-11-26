@@ -227,6 +227,9 @@ public final class UnsafeInMemorySorter {
     return new SortedIterator(pos / 2);
   }
 
+  /**
+   * Returns an iterator over record pointers in original order (inserted).
+   */
   public SortedIterator getIterator() {
     return new SortedIterator(pos / 2);
   }
