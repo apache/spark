@@ -48,8 +48,8 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes)
 
-    val currSplit = split.asInstanceOf[CartesianPartition]
-    for (y <- rdd2.iterator(currSplit.s2, context)) {
+    val partition = split.asInstanceOf[CartesianPartition]
+    for (y <- rdd2.iterator(partition.s2, context)) {
       sorter.insertRecord(y.getBaseObject, y.getBaseOffset, y.getSizeInBytes, 0)
     }
 
@@ -71,7 +71,7 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
     }
 
     val resultIter =
-      for (x <- rdd1.iterator(currSplit.s1, context);
+      for (x <- rdd1.iterator(partition.s1, context);
            y <- createIter()) yield (x, y)
     CompletionIterator[(UnsafeRow, UnsafeRow), Iterator[(UnsafeRow, UnsafeRow)]](
       resultIter, sorter.cleanupResources)
