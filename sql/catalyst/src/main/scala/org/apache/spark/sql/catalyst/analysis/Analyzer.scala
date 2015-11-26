@@ -630,7 +630,8 @@ class Analyzer(
 
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
-          val aliasedOrdering = sortOrder.map(o => Alias(o.child, "aggOrder")())
+          val unresolvedSortOrders = sortOrder.filterNot(_.resolved)
+          val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -663,13 +664,18 @@ class Analyzer(
               }
           }
 
+          val sortOrdersMap = unresolvedSortOrders.map(
+            new TreeNodeRef(_)).zip(evaluatedOrderings).toMap
+          val finalSortOrders = sortOrder.map(
+            s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
+
           // Since we don't rely on sort.resolved as the stop condition for this rule,
           // we need to check this and prevent applying this rule multiple times
-          if (sortOrder == evaluatedOrderings) {
+          if (sortOrder == finalSortOrders) {
             sort
           } else {
             Project(aggregate.output,
-              Sort(evaluatedOrderings, global,
+              Sort(finalSortOrders, global,
                 aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
           }
         } catch {
