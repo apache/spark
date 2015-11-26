@@ -113,11 +113,11 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case f: UnresolvedFunction =>
-      lexical.normalizeKeyword(f.name) match {
-        case "explode" => MultiAlias(f, Nil)
-        case "json_tuple" => MultiAlias(f, Nil)
-        case _ => UnresolvedAlias(f)
+    case func: UnresolvedFunction =>
+      lexical.normalizeKeyword(func.name) match {
+        case "explode" => MultiAlias(func, Nil)
+        case "json_tuple" => MultiAlias(func, Nil)
+        case _ => Alias(func, func.prettyString)()
       }
 
     case expr: Expression => Alias(expr, expr.prettyString)()
