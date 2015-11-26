@@ -2179,6 +2179,95 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
                           outputCol=self.getOrDefault("outputCol"))
 
 
+@inherit_doc
+class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
+    """
+    .. note:: Experimental
+
+    # Chi-Squared feature selection, which selects categorical features to use for predicting a
+    # categorical label.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame(
+    ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
+    ...    (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
+    ...    (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0)],
+    ...    ["features", "label"])
+    >>> selector = ChiSqSelector(numTopFeatures=1, outputCol="selectedFeatures")
+    >>> model = selector.fit(df)
+    >>> model.transform(df).collect()[0].selectedFeatures
+    DenseVector([1.0])
+    >>> model.transform(df).collect()[1].selectedFeatures
+    DenseVector([0.0])
+    >>> model.transform(df).collect()[2].selectedFeatures
+    DenseVector([0.1])
+
+    .. versionadded:: 1.7.0
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numTopFeatures = \
+        Param(Params._dummy(), "numTopFeatures",
+              "Number of features that selector will select, ordered by statistics value " +
+              "descending. If the number of features is < numTopFeatures, then this will select " +
+              "all features.")
+
+    @keyword_only
+    def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label"):
+        """
+        __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label")
+        """
+        super(ChiSqSelector, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
+        self.numTopFeatures = \
+            Param(self, "numTopFeatures",
+                  "Number of features that selector will select, ordered by statistics value " +
+                  "descending. If the number of features is < numTopFeatures, then this will " +
+                  "select all features.")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("1.7.0")
+    def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                  labelCol="labels"):
+        """
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+                  labelCol="labels")
+        Sets params for this ChiSqSelector.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("1.7.0")
+    def setNumTopFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numTopFeatures`.
+        """
+        self._paramMap[self.numTopFeatures] = value
+        return self
+
+    @since("1.7.0")
+    def getNumTopFeatures(self):
+        """
+        Gets the value of numTopFeatures or its default value.
+        """
+        return self.getOrDefault(self.numTopFeatures)
+
+    def _create_model(self, java_model):
+        return ChiSqSelectorModel(java_model)
+
+
+class ChiSqSelectorModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by ChiSqSelector.
+
+    .. versionadded:: 1.7.0
+    """
+
+
 if __name__ == "__main__":
     import doctest
     from pyspark.context import SparkContext
