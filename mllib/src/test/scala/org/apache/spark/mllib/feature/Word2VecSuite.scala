@@ -22,8 +22,9 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
+import org.scalatest.Matchers
 
-class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
+class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers{
 
   // TODO: add more tests
 
@@ -55,6 +56,34 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("Word2Vec with setMostFrequentK picks the most k frequent words"){
+    val sentence = "a b " * 100 + "a c " * 10
+    val localDoc = Seq(sentence, sentence)
+    val doc = sc.parallelize(localDoc)
+      .map(line => line.split(" ").toSeq)
+    val model = new Word2Vec().setVectorSize(10).setSeed(42L).setMostFrequentK(2).fit(doc)
+    assert(model.getVectors.keys.size == 2) 
+  }
+
+  test("Word2Vec with setMostFrequentK ignores minCount parameter"){
+    val sentence = "a b " * 100 + "a c " * 10
+    val localDoc = Seq(sentence, sentence)
+    val doc = sc.parallelize(localDoc)
+      .map(line => line.split(" ").toSeq)
+    val model = new Word2Vec().setVectorSize(10).setSeed(42L).setMinCount(11).setMostFrequentK(3).fit(doc)
+    assert(model.getVectors.keys.size == 3)
+  }
+
+  test("Word2Vec with setMostFrequentK does not throw an exception if there are less words"){
+    noException should be thrownBy {
+      val sentence = "a b " * 100 + "a c " * 10
+      val localDoc = Seq(sentence, sentence)
+      val doc = sc.parallelize(localDoc)
+        .map(line => line.split(" ").toSeq)
+      val model = new Word2Vec().setVectorSize(10).setSeed(42L).setMostFrequentK(10).fit(doc)
+    }
+  }
+  
   test("Word2VecModel") {
     val num = 2
     val word2VecMap = Map(

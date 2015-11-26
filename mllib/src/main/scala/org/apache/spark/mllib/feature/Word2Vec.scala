@@ -77,7 +77,7 @@ class Word2Vec extends Serializable with Logging {
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
   private var minCount = 5
-
+  private var mostFrequentK = -1
   /**
    * Sets vector size (default: 100).
    */
@@ -135,6 +135,11 @@ class Word2Vec extends Serializable with Logging {
     this
   }
 
+  def setMostFrequentK(mostFrequentK: Int): this.type = {
+    this.mostFrequentK = mostFrequentK
+    this
+  }
+
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
@@ -149,7 +154,7 @@ class Word2Vec extends Serializable with Logging {
   @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab(words: RDD[String]): Unit = {
-    vocab = words.map(w => (w, 1))
+    val fullVocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
       .map(x => VocabWord(
         x._1,
@@ -157,10 +162,21 @@ class Word2Vec extends Serializable with Logging {
         new Array[Int](MAX_CODE_LENGTH),
         new Array[Int](MAX_CODE_LENGTH),
         0))
-      .filter(_.cn >= minCount)
-      .collect()
-      .sortWith((a, b) => a.cn > b.cn)
+      
 
+    vocab = if (mostFrequentK>0) {
+      logInfo(s"mostFrequentK was set to $mostFrequentK minCount will be ignored")
+      fullVocab.takeOrdered(mostFrequentK)(new Ordering[VocabWord]{
+        override def compare(x: VocabWord, y: VocabWord): Int = -scala.math.Ordering.Long.compare(x.cn,y.cn)
+      })
+    }
+    else{
+      fullVocab.filter(_.cn >= minCount)
+        .sortBy(_.cn)
+        .collect()
+        .sortWith((a, b) => a.cn > b.cn)
+    }
+    
     vocabSize = vocab.length
     require(vocabSize > 0, "The vocabulary size should be > 0. You may need to check " +
       "the setting of minCount, which could be large enough to remove all your words in sentences.")

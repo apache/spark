@@ -71,6 +71,14 @@ private[feature] trait Word2VecBase extends Params
     "appear to be included in the word2vec model's vocabulary")
   setDefault(minCount -> 5)
 
+  /**
+   * the max number of tokens that will appear to be included in the word2vec model's vocabulary
+   * @group param
+   */
+  final val mostFrequentK = new IntParam(this, "mostFrequentK", "the max number of tokens that " +
+    "will appear to be included in the word2vec model's vocabulary")
+  setDefault(mostFrequentK -> -1)
+
   /** @group getParam */
   def getMinCount: Int = $(minCount)
 
@@ -121,6 +129,9 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setMinCount(value: Int): this.type = set(minCount, value)
 
+  /** @group setParam */
+  def setMostFrequentK(value: Int): this.type = set(mostFrequentK, value)
+
   override def fit(dataset: DataFrame): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
@@ -131,6 +142,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
       .setNumPartitions($(numPartitions))
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
+      .setMostFrequentK($(mostFrequentK))
       .fit(input)
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
