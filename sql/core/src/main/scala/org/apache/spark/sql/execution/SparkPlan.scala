@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
@@ -35,7 +36,7 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
 
 object SparkPlan {
-  protected[sql] val currentContext = new ThreadLocal[SQLContext]()
+  protected[sql] val currentContext = new ThreadLocal[WeakReference[SQLContext]]()
 }
 
 /**
@@ -49,7 +50,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SparkPlan.currentContext.get()
+  protected[spark] final val sqlContext = SparkPlan.currentContext.get().get()
 
   protected def sparkContext = sqlContext.sparkContext
 

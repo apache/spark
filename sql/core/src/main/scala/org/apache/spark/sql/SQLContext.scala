@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.{BeanInfo, Introspector}
+import java.lang.ref.WeakReference
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
@@ -26,7 +27,6 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -45,9 +45,10 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -401,7 +402,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SparkPlan.currentContext.set(new WeakReference[SQLContext](self))
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
@@ -417,7 +418,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SparkPlan.currentContext.set(new WeakReference[SQLContext](self))
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
