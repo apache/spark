@@ -304,8 +304,8 @@ private[spark] class BlockManager(
   }
 
   override def getShuffleBlockData(
-    blockId: ShuffleBlockId, blockManagerId: BlockManagerId)
-    : ManagedBuffer = {
+      blockId: ShuffleBlockId,
+      blockManagerId: BlockManagerId): ManagedBuffer = {
     shuffleManager.shuffleBlockResolver.getBlockData(blockId, blockManagerId)
   }
 

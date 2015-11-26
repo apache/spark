@@ -19,16 +19,16 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.{Logging, SparkConf}
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * BlockManagerMasterEndpoint is an [[ThreadSafeRpcEndpoint]] on the master node to track statuses
@@ -237,7 +237,7 @@ class BlockManagerMasterEndpoint(
 
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
+    blockManagerInfo.map { case (blockManagerId, info) =>
       (blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }
@@ -246,7 +246,7 @@ class BlockManagerMasterEndpoint(
   private def getLocalDirsPath(blockManagerId: BlockManagerId)
     : Map[BlockManagerId, Array[String]] = {
     blockManagerInfo
-      .filter { case(id, _) => id != blockManagerId && id.host == blockManagerId.host }
+      .filter { case (id, _) => id != blockManagerId && id.host == blockManagerId.host }
       .mapValues { info => info.localDirsPath }
       .toMap
   }
@@ -314,7 +314,7 @@ class BlockManagerMasterEndpoint(
       id: BlockManagerId,
       maxMemSize: Long,
       localDirsPath: Array[String],
-      slaveEndpoint: RpcEndpointRef) {
+      slaveEndpoint: RpcEndpointRef): Unit = {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {

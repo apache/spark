@@ -69,8 +69,7 @@ private[spark] class IndexShuffleBlockResolver(
   private def getIndexFile(
       shuffleId: Int,
       mapId: Int,
-      blockManagerId: BlockManagerId = blockManager.blockManagerId)
-    : File = {
+      blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
     if (blockManager.blockManagerId != blockManagerId) {
       blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(
         ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)

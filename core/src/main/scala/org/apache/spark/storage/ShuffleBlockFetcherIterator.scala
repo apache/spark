@@ -204,7 +204,7 @@ final class ShuffleBlockFetcherIterator(
     for ((address, blockInfos) <- blocksByAddress) {
       totalBlocks += blockInfos.size
       if (address.executorId == blockManager.blockManagerId.executorId ||
-          (enableBypassNetworkAccess && blockManager.blockManagerId.shareHost(address))) {
+          (enableBypassNetworkAccess && blockManager.blockManagerId.host == address.host)) {
         // Filter out zero-sized blocks
         val blocks = blockInfos.filter(_._2 != 0).map(_._1)
         localBlocks.getOrElseUpdate(address, ArrayBuffer()) ++= blocks
@@ -266,7 +266,7 @@ final class ShuffleBlockFetcherIterator(
           buf.retain()
           results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId, 0, buf))
         } catch {
-          case e: Exception =>
+          case NonFatal(e) =>
             // If we see an exception, stop immediately.
             logError(s"Error occurred while fetching local blocks", e)
             results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))

@@ -19,13 +19,14 @@ package org.apache.spark.storage
 
 import java.io.{File, FileWriter, IOException}
 
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import scala.language.reflectiveCalls
+
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
 
-import scala.language.reflectiveCalls
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class DiskBlockManagerSuite extends SparkFunSuite
     with BeforeAndAfterEach with BeforeAndAfterAll with PrivateMethodTester {

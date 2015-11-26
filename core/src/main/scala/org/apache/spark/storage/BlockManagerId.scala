@@ -65,10 +65,6 @@ class BlockManagerId private (
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
   }
 
-  def shareHost(other: BlockManagerId): Boolean = {
-    host == other.host
-  }
-
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeUTF(executorId_)
     out.writeUTF(host_)

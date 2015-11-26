@@ -36,8 +36,9 @@ import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.shuffle.FetchFailedException
 
 
-class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite
-    with BeforeAndAfterAll with PrivateMethodTester {
+class ShuffleBlockFetcherIteratorSuite
+  extends SparkFunSuite with BeforeAndAfterAll with PrivateMethodTester
+{
   private val testConf = new SparkConf(false)
 
   override def beforeAll() {
