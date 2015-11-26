@@ -30,7 +30,6 @@ import com.codahale.metrics.health.HealthCheckRegistry
 import com.codahale.metrics.jvm.{ThreadStatesGaugeSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
 //import com.codahale.metrics.jvm.{ThreadStatesGaugeSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
 import com.codahale.metrics.servlets.HealthCheckServlet
-//import com.codahale.metrics.servlets.MetricsServlet
 import com.codahale.metrics.servlets.ThreadDumpServlet
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
@@ -173,6 +172,7 @@ class HistoryServer(
       healthChecks = health
       attachHandler(codahaleContext)
       source.foreach(metricsSystem.registerSource)
+      metricsSystem.registerSource(new HistoryMetrics(this))
       metricsSystem.start()
       metricsSystem.getServletHandlers.foreach(attachHandler)
     }

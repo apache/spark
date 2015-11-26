@@ -116,7 +116,8 @@ private[history] abstract class ApplicationHistoryProvider {
    * @param historyBinding binding information
    * @return the metric and binding information for registration
    */
-  def start(historyBinding: ApplicationHistoryBinding): (Option[Source], Option[HealthCheckSource]) = {
+  def start(historyBinding: ApplicationHistoryBinding):
+  (Option[Source], Option[HealthCheckSource]) = {
     require(binding.isEmpty, "History provider already started")
     binding = Some(historyBinding)
     (None, None)

@@ -180,7 +180,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * @param historyBinding binding information
    * @return the metric and binding information for registration
    */
-  override def start(historyBinding: ApplicationHistoryBinding) = {
+  override def start(historyBinding: ApplicationHistoryBinding):
+  (Option[Source], Option[HealthCheckSource]) = {
     super.start(historyBinding)
     (Some(metrics), Some(health))
   }

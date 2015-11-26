@@ -22,26 +22,18 @@ import com.codahale.metrics.health.HealthCheckRegistry
 
 import org.apache.spark.metrics.source.Source
 
+/**
+ * History system metrics independent of providers go in here
+ * @param owner owning instance
+ */
 private[history] class HistoryMetrics(val owner: HistoryServer) extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "history"
-
-/*  // Gauge for worker numbers in cluster
-  metricRegistry.register(MetricRegistry.name("workers"), new Gauge[Int] {
-    override def getValue: Int = master.workers.size
-  })
-
-  // Gauge for application numbers in cluster
-  metricRegistry.register(MetricRegistry.name("apps"), new Gauge[Int] {
-    override def getValue: Int = master.apps.size
-  })
-
-  // Gauge for waiting application numbers in cluster
-  metricRegistry.register(MetricRegistry.name("waitingApps"), new Gauge[Int] {
-    override def getValue: Int = master.waitingApps.size
-  })*/
 }
 
+/**
+ * A trait for sources of health checks to implement
+ */
 private[spark] trait HealthCheckSource {
   def sourceName: String
 
