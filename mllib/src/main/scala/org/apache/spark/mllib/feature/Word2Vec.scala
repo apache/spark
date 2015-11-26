@@ -600,12 +600,15 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val vectorSize = model.values.head.size
       val numWords = model.size
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
-         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+        ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
+      val partitionSize = 33554432l //32MB
+      val approxSize = 4l * numWords * vectorSize //4 Byte is sizeOf(float)
+      val nPartitions = ((approxSize / partitionSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, nPartitions).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 
