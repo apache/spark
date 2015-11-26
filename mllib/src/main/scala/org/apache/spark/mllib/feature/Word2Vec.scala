@@ -41,15 +41,15 @@ import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.sql.SQLContext
 
 /**
- *  Entry in vocabulary
+ * Entry in vocabulary
  */
 private case class VocabWord(
-  var word: String,
-  var cn: Int,
-  var point: Array[Int],
-  var code: Array[Int],
-  var codeLen: Int
-)
+                              var word: String,
+                              var cn: Int,
+                              var point: Array[Int],
+                              var code: Array[Int],
+                              var codeLen: Int
+                              )
 
 /**
  * Word2Vec creates vector representation of words in a text corpus.
@@ -392,8 +392,8 @@ class Word2Vec extends Serializable with Logging {
         }.flatten
       }
       val synAgg = partial.reduceByKey { case (v1, v2) =>
-          blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
-          v1
+        blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
+        v1
       }.collect()
       var i = 0
       while (i < synAgg.length) {
@@ -432,9 +432,9 @@ class Word2Vec extends Serializable with Logging {
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Since("1.1.0")
-class Word2VecModel private[spark] (
-    private[spark] val wordIndex: Map[String, Int],
-    private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
+class Word2VecModel private[spark](
+                                    private[spark] val wordIndex: Map[String, Int],
+                                    private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
@@ -535,7 +535,7 @@ class Word2VecModel private[spark] (
     }
     wordList.zip(cosVec)
       .toSeq
-      .sortBy(- _._2)
+      .sortBy(-_._2)
       .take(num + 1)
       .tail
       .toArray
@@ -600,12 +600,15 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val vectorSize = model.values.head.size
       val numWords = model.size
       val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
-         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+        ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
+      val partitionSize = 33554432l //32MB
+      val approxSize = 4l * numWords * vectorSize //4 Byte is sizeOf(float)
+      val nPartitions = ((approxSize / partitionSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, nPartitions).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 
@@ -624,14 +627,14 @@ object Word2VecModel extends Loader[Word2VecModel] {
         val numWords = model.getVectors.size
         require(expectedVectorSize == vectorSize,
           s"Word2VecModel requires each word to be mapped to a vector of size " +
-          s"$expectedVectorSize, got vector of size $vectorSize")
+            s"$expectedVectorSize, got vector of size $vectorSize")
         require(expectedNumWords == numWords,
           s"Word2VecModel requires $expectedNumWords words, but got $numWords")
         model
       case _ => throw new Exception(
         s"Word2VecModel.load did not recognize model with (className, format version):" +
-        s"($loadedClassName, $loadedVersion).  Supported:\n" +
-        s"  ($classNameV1_0, 1.0)")
+          s"($loadedClassName, $loadedVersion).  Supported:\n" +
+          s"  ($classNameV1_0, 1.0)")
     }
   }
 }
