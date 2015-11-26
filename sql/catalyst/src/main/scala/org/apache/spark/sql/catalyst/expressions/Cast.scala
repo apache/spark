@@ -919,4 +919,5 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
  * Cast the child expression to the target data type, but will throw error if the cast might
  * truncate, e.g. long -> int, timestamp -> data.
  */
-case class UpCast(child: Expression, dataType: DataType) extends UnaryExpression with Unevaluable
+case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String])
+  extends UnaryExpression with Unevaluable

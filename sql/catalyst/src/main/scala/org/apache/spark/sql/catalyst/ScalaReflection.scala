@@ -116,32 +116,42 @@ object ScalaReflection extends ScalaReflection {
    * from ordinal 0 (since there are no names to map to).  The actual location can be moved by
    * calling resolve/bind with a new schema.
    */
-  def constructorFor[T : TypeTag]: Expression = constructorFor(localTypeOf[T], None)
+  def constructorFor[T : TypeTag]: Expression = {
+    val tpe = localTypeOf[T]
+    val clsName = getClassNameFromType(tpe)
+    val walkedTypePath = s"""- root class: "${clsName}"""" :: Nil
+    constructorFor(tpe, None, walkedTypePath)
+  }
 
   private def constructorFor(
       tpe: `Type`,
-      path: Option[Expression]): Expression = ScalaReflectionLock.synchronized {
+      path: Option[Expression],
+      walkedTypePath: Seq[String]): Expression = ScalaReflectionLock.synchronized {
 
     /** Returns the current path with a sub-field extracted. */
-    def addToPath(part: String, dataType: DataType): Expression = {
+    def addToPath(part: String, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
       val newPath = path
         .map(p => UnresolvedExtractValue(p, expressions.Literal(part)))
         .getOrElse(UnresolvedAttribute(part))
-      upCastToExpectedType(newPath, dataType)
+      upCastToExpectedType(newPath, dataType, walkedTypePath)
     }
 
     /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(ordinal: Int, dataType: DataType): Expression = {
+    def addToPathOrdinal(ordinal: Int, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
       val newPath = path
         .map(p => GetStructField(p, ordinal))
         .getOrElse(BoundReference(ordinal, dataType, false))
-      upCastToExpectedType(newPath, dataType)
+      upCastToExpectedType(newPath, dataType, walkedTypePath)
     }
 
     /** Returns the current path or `BoundReference`. */
     def getPath: Expression = {
       val dataType = schemaFor(tpe).dataType
-      path.getOrElse(upCastToExpectedType(BoundReference(0, dataType, true), dataType))
+      if (path.isDefined) {
+        path.get
+      } else {
+        upCastToExpectedType(BoundReference(0, dataType, true), dataType, walkedTypePath)
+      }
     }
 
     /**
@@ -156,9 +166,12 @@ object ScalaReflection extends ScalaReflection {
      * don't need to cast struct type because there must be `UnresolvedExtractValue` or
      * `GetStructField` wrapping it, thus we only need to handle leaf type.
      */
-    def upCastToExpectedType(expr: Expression, expected: DataType): Expression = expected match {
+    def upCastToExpectedType(
+        expr: Expression,
+        expected: DataType,
+        walkedTypePath: Seq[String]): Expression = expected match {
       case _: StructType => expr
-      case _ => UpCast(expr, expected)
+      case _ => UpCast(expr, expected, walkedTypePath)
     }
 
     tpe match {
@@ -166,7 +179,9 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
-        WrapOption(constructorFor(optType, path))
+        val className = getClassNameFromType(optType)
+        val newTypePath = s"""- option value class: "$className"""" +: walkedTypePath
+        WrapOption(constructorFor(optType, path, newTypePath))
 
       case t if t <:< localTypeOf[java.lang.Integer] =>
         val boxedType = classOf[java.lang.Integer]
@@ -244,9 +259,11 @@ object ScalaReflection extends ScalaReflection {
         primitiveMethod.map { method =>
           Invoke(getPath, method, arrayClassFor(elementType))
         }.getOrElse {
+          val className = getClassNameFromType(elementType)
+          val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p)),
+              p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
               schemaFor(elementType).dataType),
             "array",
@@ -255,10 +272,12 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+        val className = getClassNameFromType(elementType)
+        val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
         val arrayData =
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p)),
+              p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
               schemaFor(elementType).dataType),
             "array",
@@ -271,12 +290,13 @@ object ScalaReflection extends ScalaReflection {
           arrayData :: Nil)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
+        // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p)),
+              p => constructorFor(keyType, Some(p), walkedTypePath),
               Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
               schemaFor(keyType).dataType),
             "array",
@@ -285,7 +305,7 @@ object ScalaReflection extends ScalaReflection {
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p)),
+              p => constructorFor(valueType, Some(p), walkedTypePath),
               Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
               schemaFor(valueType).dataType),
             "array",
@@ -322,12 +342,19 @@ object ScalaReflection extends ScalaReflection {
           val fieldName = p.name.toString
           val fieldType = p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
           val dataType = schemaFor(fieldType).dataType
-
+          val clsName = getClassNameFromType(fieldType)
+          val newTypePath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
           // For tuples, we based grab the inner fields by ordinal instead of name.
           if (cls.getName startsWith "scala.Tuple") {
-            constructorFor(fieldType, Some(addToPathOrdinal(i, dataType)))
+            constructorFor(
+              fieldType,
+              Some(addToPathOrdinal(i, dataType, newTypePath)),
+              newTypePath)
           } else {
-            constructorFor(fieldType, Some(addToPath(fieldName, dataType)))
+            constructorFor(
+              fieldType,
+              Some(addToPath(fieldName, dataType, newTypePath)),
+              newTypePath)
           }
         }
 

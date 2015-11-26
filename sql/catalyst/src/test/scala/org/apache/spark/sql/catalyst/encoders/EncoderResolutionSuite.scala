@@ -121,14 +121,28 @@ class EncoderResolutionSuite extends PlanTest {
     val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolve(Seq('a.string, 'b.long), null)
     }.message
-    assert(msg1.contains("Cannot up cast `b` from bigint to int as it may truncate"))
+    assert(msg1 ==
+      s"""
+         |Cannot up cast `b` from bigint to int as it may truncate
+         |The type path of the target object is:
+         |- field (class: "scala.Int", name: "b")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
 
     val msg2 = intercept[AnalysisException] {
       val structType = new StructType().add("a", StringType).add("b", DecimalType.SYSTEM_DEFAULT)
       ExpressionEncoder[ComplexClass].resolve(Seq('a.long, 'b.struct(structType)), null)
     }.message
-    assert(msg2.contains("Cannot up cast `b.b` from decimal(38,18) to bigint as it may truncate"))
-
+    assert(msg2 ==
+      s"""
+         |Cannot up cast `b.b` from decimal(38,18) to bigint as it may truncate
+         |The type path of the target object is:
+         |- field (class: "scala.Long", name: "b")
+         |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.ComplexClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
   }
 
   // test for leaf types

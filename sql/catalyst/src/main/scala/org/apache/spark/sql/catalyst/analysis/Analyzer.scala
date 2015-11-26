@@ -1175,9 +1175,12 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
  * Replace the `UpCast` expression by `Cast`, and throw exceptions if the cast may truncate.
  */
 object ResolveUpCast extends Rule[LogicalPlan] {
-  private def fail(from: Expression, to: DataType) = {
+  private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
     throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
-      s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate")
+      s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
+      "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
+      "You can either add an explicit cast to the input data or choose a higher precision " +
+      "type of the field in the target object")
   }
 
   private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
@@ -1188,11 +1191,15 @@ object ResolveUpCast extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions {
-      case UpCast(child, dataType) => (child.dataType, dataType) match {
-        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) => fail(child, to)
-        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) => fail(child, to)
-        case (from, to) if illegalNumericPrecedence(from, to) => fail(child, to)
-        case (TimestampType, DateType) => fail(child, DateType)
+      case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
+        case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
+          fail(child, to, walkedTypePath)
+        case (from: DecimalType, to: NumericType) if !from.isTighterThan(to) =>
+          fail(child, to, walkedTypePath)
+        case (from, to) if illegalNumericPrecedence(from, to) =>
+          fail(child, to, walkedTypePath)
+        case (TimestampType, DateType) =>
+          fail(child, DateType, walkedTypePath)
         case _ => Cast(child, dataType)
       }
     }
