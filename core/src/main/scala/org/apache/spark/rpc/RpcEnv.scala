@@ -51,7 +51,8 @@ private[spark] object RpcEnv {
       advertisedHost: Option[String] = None,
       advertisedPort: Option[Int] = None): RpcEnv = {
     // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
-    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode, advertisedHost, advertisedPort)
+    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode, advertisedHost,
+                              advertisedPort)
     getRpcEnvFactory(conf).create(config)
   }
 }

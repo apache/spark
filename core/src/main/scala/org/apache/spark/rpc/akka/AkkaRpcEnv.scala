@@ -301,7 +301,8 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      config.name, config.host, config.port, config.conf, config.securityManager, config.advertisedHost, config.advertisedPort)
+      config.name, config.host, config.port, config.conf, config.securityManager,
+      config.advertisedHost, config.advertisedPort)
     actorSystem.actorOf(Props(classOf[ErrorMonitor]), "ErrorMonitor")
     new AkkaRpcEnv(actorSystem, config.securityManager, config.conf, boundPort)
   }
