@@ -408,6 +408,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
+      bcSyn0Global.unpersist(false)
+      bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
 
