@@ -173,6 +173,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
+        // a tricky way to stop YarnAllocator request containers
+        requestTotalExecutors(0, 0, Map.empty)
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(StopExecutor)
         }
