@@ -492,6 +492,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     val jdbcDf = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
     val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
-    assert(rows(0).getAs[java.sql.Timestamp](2) === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
+    assert(rows(0).getAs[java.sql.Timestamp](2)
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 }
