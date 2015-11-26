@@ -968,8 +968,8 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
 }
 
 /**
- * Eliminates a distribute by in case it is preceded by a group by with exactly the same grouping
- * columns and number of partitions is default.
+ * Eliminates a distribute by in case it is preceded by a group by with exactly the same grouping columns
+ * and number of partitions is default
  */
 object EliminateDistributeBy extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

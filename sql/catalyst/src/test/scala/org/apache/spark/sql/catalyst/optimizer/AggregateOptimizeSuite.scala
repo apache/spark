@@ -71,13 +71,10 @@ class AggregateOptimizeSuite extends PlanTest {
     val input = LocalRelation('a.int, 'b.int)
     val distributeOn = Seq('a.int)
 
-    val query =
-      RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
+    val query = RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
     val optimized = Optimize.execute(query.analyze)
 
-    val correctAnswer =
-      RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
-
+    val correctAnswer = RepartitionByExpression(distributeOn, Aggregate(distributeOn, input.output, input), Some(10))
     comparePlans(optimized, correctAnswer)
   }
 
