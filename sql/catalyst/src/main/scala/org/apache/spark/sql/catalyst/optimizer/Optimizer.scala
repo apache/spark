@@ -295,6 +295,11 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p @ Project(projectList1, Project(projectList2, child)) =>
+      // Create a list of Aliases for ScalaUDF to their values from the child projection.
+      val udfAliases = projectList2.collect {
+        case a: Alias if a.find(_.isInstanceOf[ScalaUDF]).isDefined => a.toAttribute
+      }
+
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
       val aliasMap = AttributeMap(projectList2.collect {
@@ -307,7 +312,16 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         case a: Attribute if aliasMap.contains(a) => aliasMap(a).child
       }.exists(!_.deterministic))
 
+      // We collect the indexes of UDFs referred in projectList1.
+      // If there are duplicate indexes, it means these UDFs are aliased in projectList1
+      // more than 1 time, we should not collapse them in order to avoid recomputing them.
+      val udfIndexes = projectList1
+        .flatMap(_.find(udfAliases.contains(_)))
+        .map(udfAliases.indexOf(_))
+
       if (hasNondeterministic) {
+        p
+      } else if (udfIndexes.size > udfIndexes.distinct.size) {
         p
       } else {
         // Substitute any attributes that are produced by the child projection, so that we safely

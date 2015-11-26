@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.{Alias, ScalaUDF}
+import org.apache.spark.sql.catalyst.plans.logical.Project
+
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -231,6 +234,25 @@ class UDFSuite extends QueryTest with SharedSQLContext {
            | SELECT tmp.t.* FROM
            | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
           """.stripMargin).toDF(), complexData.select("m", "a", "b"))
+  }
+
+  test("don't collapse UDF in order to avoid recomputing it") {
+    val myUDF = sqlContext.udf.register("myUDF", (s: Int) => {
+      Array[String](s.toString + "_part1", s.toString + "_part2")
+    })
+    val df = testData.select(('key + 1).as('key), 'value)
+    val df2 = df.withColumn("arr", myUDF(df("key")))
+    val df3 = df2.withColumn("e0", df2("arr")(0)).withColumn("e1", df2("arr")(1))
+
+    val optimized = df3.queryExecution.optimizedPlan
+    optimized.collect {
+      case p @ Project(projectList, child) =>
+        val udfAliases = projectList.collect {
+          case a: Alias if a.find(_.isInstanceOf[ScalaUDF]).isDefined => a.toAttribute
+        }
+        assert(udfAliases.size == 1 || udfAliases.size == 0)
+        p
+    }
   }
 
   test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {
