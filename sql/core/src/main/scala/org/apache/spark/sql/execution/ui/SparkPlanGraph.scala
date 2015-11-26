@@ -66,7 +66,9 @@ private[sql] object SparkPlanGraph {
         SQLMetrics.getMetricParam(metric.metricParam))
     }
     val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), planInfo.nodeName, planInfo.simpleString, metrics)
+      nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+      planInfo.simpleString, planInfo.metadata, metrics)
+
     nodes += node
     val childrenNodes = planInfo.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
@@ -85,26 +87,41 @@ private[sql] object SparkPlanGraph {
  * @param metrics metrics that this SparkPlan node will track
  */
 private[ui] case class SparkPlanGraphNode(
-    id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
+    id: Long,
+    name: String,
+    desc: String,
+    metadata: Map[String, String],
+    metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val values = {
-      for (metric <- metrics;
-           value <- metricsValue.get(metric.accumulatorId)) yield {
-        metric.name + ": " + value
-      }
+    val builder = mutable.StringBuilder.newBuilder
+
+    builder ++= name
+
+    if (metadata.nonEmpty) {
+      // If there are metadata, display each entry in a separate line. We should use an escaped
+      // "\n" here to follow the dot syntax.
+      //
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+      builder ++= "\\n \\n"
+      builder ++= metadataEntries.mkString("\\n")
     }
-    val label = if (values.isEmpty) {
-        name
-      } else {
-        // If there are metrics, display all metrics in a separate line. We should use an escaped
-        // "\n" here to follow the dot syntax.
-        //
-        // Note: whitespace between two "\n"s is to create an empty line between the name of
-        // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-        name + "\\n \\n" + values.mkString("\\n")
-      }
-    s"""  $id [label="$label"];"""
+
+    val values = for {
+      metric <- metrics
+      value <- metricsValue.get(metric.accumulatorId)
+    } yield {
+      metric.name + ": " + value
+    }
+
+    if (values.nonEmpty) {
+      builder ++= "\\n \\n"
+      builder ++= values.mkString("\\n")
+    }
+
+    s"""  $id [label="${builder.toString()}"];"""
   }
 }
 
