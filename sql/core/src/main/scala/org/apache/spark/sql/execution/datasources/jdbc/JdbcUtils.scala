@@ -21,6 +21,7 @@ import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
