@@ -640,20 +640,14 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
           filter
         } else {
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          val pushedCondition =
+            deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
           Filter(nondeterministic.reduce(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
   }
 
-  // Substitute any attributes that are produced by the child projection, so that we safely
-  // eliminate it.
-  private def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
-    condition.transform {
-      case a: Attribute => sourceAliases.getOrElse(a, a)
-    }
-  }
 }
 
 /**
@@ -690,12 +684,24 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition,
         aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
-        conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
+
+      def hasAggregate(expression: Expression): Boolean = expression match {
+        case agg: AggregateExpression => true
+        case other => expression.children.exists(hasAggregate)
+      }
+      // Create a map of Alias for expressions that does not have AggregateExpression
+      val aliasMap = AttributeMap(aggregateExpressions.collect {
+        case a: Alias if !hasAggregate(a.child) => (a.toAttribute, a.child)
+      })
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { conjunct =>
+        val replaced = replaceAlias(conjunct, aliasMap)
+        replaced.references.subsetOf(grandChild.outputSet) && replaced.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
-        val withPushdown = aggregate.copy(child = Filter(pushDownPredicate, grandChild))
+        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val withPushdown = aggregate.copy(child = Filter(replaced, grandChild))
         stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
       } else {
         filter
