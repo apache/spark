@@ -28,13 +28,15 @@ import scala.xml.Node
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.health.HealthCheckRegistry
 import com.codahale.metrics.jvm.{ThreadStatesGaugeSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
+//import com.codahale.metrics.jvm.{ThreadStatesGaugeSet, GarbageCollectorMetricSet, MemoryUsageGaugeSet}
 import com.codahale.metrics.servlets.HealthCheckServlet
-import com.codahale.metrics.servlets.MetricsServlet
+//import com.codahale.metrics.servlets.MetricsServlet
 import com.codahale.metrics.servlets.ThreadDumpServlet
 import com.google.common.cache._
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -71,8 +73,11 @@ class HistoryServer(
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
   private val initialized = new AtomicBoolean(false)
-  private[history] val metrics = new MetricRegistry()
-  private[history] val health = new HealthCheckRegistry()
+
+  private[history] val metricsSystem: MetricsSystem = MetricsSystem.createMetricsSystem("history",
+    conf, securityManager)
+  private[history] var metricsReg = metricsSystem.getMetricRegistry
+  private[history] var healthChecks: Option[HealthCheckSource] = _
 
   private val appLoader = new CacheLoader[String, SparkUI] {
     override def load(key: String): SparkUI = {
@@ -153,20 +158,23 @@ class HistoryServer(
       contextHandler.addServlet(new ServletHolder(loaderServlet), "/*")
       attachHandler(contextHandler)
 
-      // hook up Codahale metrics
-      val metricsHandler = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
-      metricsHandler.addServlet(new ServletHolder(new HealthCheckServlet(health)),
-        HistoryServer.METRICS_PATH_PREFIX)
-      metricsHandler.addServlet(new ServletHolder(new ThreadDumpServlet()),
-        HistoryServer.THREADS_SUBPATH)
-      metricsHandler.addServlet(new ServletHolder(new MetricsServlet(metrics)),
-        HistoryServer.HEALTH_SUBPATH)
-      attachHandler(metricsHandler)
-      metrics.registerAll(new ThreadStatesGaugeSet());
-      metrics.registerAll(new MemoryUsageGaugeSet());
-      metrics.registerAll(new GarbageCollectorMetricSet());
+      // hook up metrics
+
       // start the provider against the metrics binding
-      provider.start(new ApplicationHistoryBinding(metrics, health))
+      val (source, health) = provider.start(new ApplicationHistoryBinding())
+      val codahaleContext = new ServletContextHandler(null, HistoryServer.METRICS_PATH_PREFIX)
+      codahaleContext.addServlet(new ServletHolder(new ThreadDumpServlet()),
+        HistoryServer.THREADS_SUBPATH)
+      health.foreach { healthSource =>
+        codahaleContext.addServlet(
+          new ServletHolder(new HealthCheckServlet(healthSource.healthRegistry)),
+          HistoryServer.HEALTH_SUBPATH)
+      }
+      healthChecks = health
+      attachHandler(codahaleContext)
+      source.foreach(metricsSystem.registerSource)
+      metricsSystem.start()
+      metricsSystem.getServletHandlers.foreach(attachHandler)
     }
   }
 
@@ -185,6 +193,9 @@ class HistoryServer(
       appCache.stop()
       if (provider != null) {
         provider.stop()
+      }
+      if (metricsSystem != null) {
+        metricsSystem.stop()
       }
     }
   }

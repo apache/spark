@@ -24,6 +24,7 @@ import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.health.HealthCheckRegistry
 
 import org.apache.spark.SparkException
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -74,9 +75,11 @@ private[history] case class LoadedAppUI(
     ui: SparkUI,
     updateProbe: () => Boolean)
 
-
-private[history] case class ApplicationHistoryBinding(metrics: MetricRegistry,
-    health: HealthCheckRegistry) {
+/**
+ * Binding information. Initially empty, may expand over time: it's here so that
+ * subclassed providers do not break if binding information is added/expanded
+ */
+private[history] case class ApplicationHistoryBinding() {
 }
 
 private[history] abstract class ApplicationHistoryProvider {
@@ -111,10 +114,12 @@ private[history] abstract class ApplicationHistoryProvider {
    * Bind to the History Server: threads should be started here; exceptions may be raised
    * if the history provider cannot be started.
    * @param historyBinding binding information
+   * @return the metric and binding information for registration
    */
-  def start(historyBinding: ApplicationHistoryBinding): Unit = {
+  def start(historyBinding: ApplicationHistoryBinding): (Option[Source], Option[HealthCheckSource]) = {
     require(binding.isEmpty, "History provider already started")
     binding = Some(historyBinding)
+    (None, None)
   }
 
   /**

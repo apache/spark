@@ -22,7 +22,8 @@ import java.util.UUID
 import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import com.codahale.metrics.health.HealthCheckRegistry
+import com.codahale.metrics.health.HealthCheck.Result
+import com.codahale.metrics.health.{HealthCheck, HealthCheckRegistry}
 import com.codahale.metrics._
 import org.apache.spark.metrics.source.Source
 
@@ -132,7 +133,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
-  private val historyMetrics = new HistoryMetrics()
+  /** filesystem metrics: visible for test access */
+  private[history] val metrics = new FsHistoryProviderMetrics(this)
+
+  /** filesystem health: visible for test access */
+  private[history] val health = new FsHistoryProviderHealth(this)
 
   /**
    * Return a runnable that performs the given operation on the event logs.
@@ -167,6 +172,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       startSafeModeCheckThread(None)
     }
+  }
+
+  /**
+   * Bind to the History Server: threads should be started here; exceptions may be raised
+   * if the history provider cannot be started.
+   * @param historyBinding binding information
+   * @return the metric and binding information for registration
+   */
+  override def start(historyBinding: ApplicationHistoryBinding) = {
+    super.start(historyBinding)
+    (Some(metrics), Some(health))
   }
 
   private[history] def startSafeModeCheckThread(
@@ -255,50 +271,49 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
-    historyMetrics.appUILoadCount.inc()
-    val timer = historyMetrics.appUiLoadTimer.time()
-    try {
-      applications.get(appId).flatMap { appInfo =>
-        appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
-          val replayBus = new ReplayListenerBus()
-          val ui = {
-            val conf = this.conf.clone()
-            val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
-              HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
-            // Do not call ui.bind() to avoid creating a new server for each application
+  metrics.appUILoadCount.inc()
+    time(metrics.appUiLoadTimer) {
+      try {
+        applications.get(appId).flatMap { appInfo =>
+          appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
+            val replayBus = new ReplayListenerBus()
+            val ui = {
+              val conf = this.conf.clone()
+              val appSecManager = new SecurityManager(conf)
+              SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
+                HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
+              // Do not call ui.bind() to avoid creating a new server for each application
+            }
+
+            val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
+
+            val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+
+            if (appListener.appId.isDefined) {
+              ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
+              // make sure to set admin acls before view acls so they are properly picked up
+              val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
+              ui.getSecurityManager.setAdminAcls(adminAcls)
+              ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
+              val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
+                appListener.adminAclsGroups.getOrElse("")
+              ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
+              ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
+              Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
+            } else {
+              None
+            }
+
           }
-
-          val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
-
-          val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
-
-          if (appListener.appId.isDefined) {
-            ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
-            // make sure to set admin acls before view acls so they are properly picked up
-            val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
-            ui.getSecurityManager.setAdminAcls(adminAcls)
-            ui.getSecurityManager.setViewAcls(attempt.sparkUser, appListener.viewAcls.getOrElse(""))
-            val adminAclsGroups = HISTORY_UI_ADMIN_ACLS_GROUPS + "," +
-              appListener.adminAclsGroups.getOrElse("")
-            ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
-            ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
-            Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
-          } else {
-            None
-          }
-
         }
+      } catch {
+        case e: FileNotFoundException =>
+          metrics.appUILoadNotFoundCount.inc()
+          None
+        case other: Exception =>
+          metrics.appUILoadFailureCount.inc()
+          throw other
       }
-    } catch {
-      case e: FileNotFoundException =>
-        historyMetrics.appUILoadFailureCount.inc()
-        None
-      case other: Exception =>
-        historyMetrics.appUILoadFailureCount.inc()
-        throw other
-    } finally {
-      timer.stop()
     }
   }
 
@@ -327,7 +342,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       initThread.interrupt()
       initThread.join()
     }
-    historyMetrics.unregister()
   }
 
   /**
@@ -336,83 +350,87 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * applications that haven't been updated since last time the logs were checked.
    */
   private[history] def checkForLogs(): Unit = {
-    historyMetrics.updateCount.inc()
-    val updateContext = historyMetrics.updateTimer.time()
-    try {
-      val newLastScanTime = getNewLastScanTime()
-      logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
-      val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
-        .getOrElse(Seq[FileStatus]())
-      // scan for modified applications, replay and merge them
-      val logInfos: Seq[FileStatus] = statusList
-        .filter { entry =>
-          try {
-            val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
-            !entry.isDirectory() &&
-              // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
-              // reading a garbage file is safe, but we would log an error which can be scary to
-              // the end-user.
-              !entry.getPath().getName().startsWith(".") &&
-              prevFileSize < entry.getLen()
-          } catch {
-            case e: AccessControlException =>
-              // Do not use "logInfo" since these messages can get pretty noisy if printed on
-              // every poll.
-              logDebug(s"No permission to read $entry, ignoring.")
-              false
+    metrics.updateCount.inc()
+    time(metrics.updateTimer) {
+      try {
+        val newLastScanTime = getNewLastScanTime()
+        logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
+        val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
+          .getOrElse(Seq[FileStatus]())
+        // scan for modified applications, replay and merge them
+        val logInfos: Seq[FileStatus] = statusList
+          .filter { entry =>
+            try {
+              val prevFileSize = fileToAppInfo.get(entry.getPath()) .map {_.fileSize}.getOrElse(0L)
+              !entry.isDirectory() &&
+                // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
+                // reading a garbage file is safe, but we would log an error which can be scary to
+                // the end-user.
+                !entry.getPath().getName().startsWith(".") &&
+                prevFileSize < entry.getLen()
+            } catch {
+              case e: AccessControlException =>
+                // Do not use "logInfo" since these messages can get pretty noisy if printed on
+                // every poll.
+                logDebug(s"No permission to read $entry, ignoring.")
+                false
+            }
           }
-        }
-        .flatMap { entry => Some(entry) }
-        .sortWith { case (entry1, entry2) =>
-          entry1.getModificationTime() >= entry2.getModificationTime()
-      }
+          .flatMap { entry => Some(entry) }
+          .sortWith { case (entry1, entry2) =>
+            entry1.getModificationTime() >= entry2.getModificationTime()
+          }
 
       if (logInfos.nonEmpty) {
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
 
-      var tasks = mutable.ListBuffer[Future[_]]()
+        var tasks = mutable.ListBuffer[Future[_]]()
 
-      try {
-        for (file <- logInfos) {
-          tasks += replayExecutor.submit(new Runnable {
-            override def run(): Unit = mergeApplicationListing(file)
-          })
-        }
-      } catch {
-        // let the iteration over logInfos break, since an exception on
-        // replayExecutor.submit (..) indicates the ExecutorService is unable
-        // to take any more submissions at this time
-
-        case e: Exception =>
-          logError(s"Exception while submitting event log for replay", e)
-      }
-
-      pendingReplayTasksCount.addAndGet(tasks.size)
-
-      tasks.foreach { task =>
         try {
-          // Wait for all tasks to finish. This makes sure that checkForLogs
-          // is not scheduled again while some tasks are already running in
-          // the replayExecutor.
-          task.get()
+          for (file <- logInfos) {
+            tasks += replayExecutor.submit(new Runnable {
+              override def run(): Unit = time(metrics.mergeApplicationListingTimer) {
+                mergeApplicationListing(file)
+              }
+            })
+          }
         } catch {
-          case e: InterruptedException =>
-            throw e
+          // let the iteration over logInfos break, since an exception on
+          // replayExecutor.submit (..) indicates the ExecutorService is unable
+          // to take any more submissions at this time
+
           case e: Exception =>
-            logError("Exception while merging application listings", e)
-        } finally {
-          pendingReplayTasksCount.decrementAndGet()
+            logError(s"Exception while submitting event log for replay", e)
         }
+
+        pendingReplayTasksCount.addAndGet(tasks.size)
+
+        tasks.foreach { task =>
+          try {
+            // Wait for all tasks to finish. This makes sure that checkForLogs
+            // is not scheduled again while some tasks are already running in
+            // the replayExecutor.
+            task.get()
+          } catch {
+            case e: InterruptedException =>
+              throw e
+            case e: Exception =>
+              logError("Exception while merging application listings", e)
+          } finally {
+            pendingReplayTasksCount.decrementAndGet()
+          }
+        }
+
+        lastScanTime.set(newLastScanTime)
+      } catch {
+        case e: Exception => logError(
+          "Exception in checking for event log updates",
+          e)
+          metrics.updateFailureCount.inc()
+      } finally {
+        updateContext.stop()
       }
-
-      lastScanTime.set(newLastScanTime)
-    } catch {
-      case e: Exception => logError("Exception in checking for event log updates", e)
-        historyMetrics.updateFailureCount.inc()
-
-    } finally {
-      updateContext.stop()
     }
   }
 
@@ -712,7 +730,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-<<<<<<< 64515e5fbfd694d06fdbc28040fce7baf90a32aa
    * String description for diagnostics
    * @return a summary of the component state
    */
@@ -765,67 +782,106 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Metrics integration: the various counters of activity
+   * Time a closure, returning its output.
+   * @param t timer
+   * @param f function
+   * @tparam T type of return value of time
+   * @return the result of the function.
    */
-  private[history] class HistoryMetrics extends Source {
-
-    /** Name for metrics: `history.fs` */
-    override val sourceName = "history.fs"
-
-    private val name = MetricRegistry.name(sourceName)
-
-    /** Metrics registry */
-    override val metricRegistry = new MetricRegistry()
-
-    /** Number of updates */
-    val updateCount = new Counter()
-
-    /** Number of update failures */
-    val updateFailureCount = new Counter()
-
-    /** Number of App UI load operations */
-    val appUILoadCount = new Counter()
-
-    /** Number of App UI load operations that failed */
-    val appUILoadFailureCount = new Counter()
-
-    /** Statistics on update duration */
-    val updateTimer = new Timer()
-
-    /** Statistics on time to load app UIs */
-    val appUiLoadTimer = new Timer()
-
-    private var metrics: Option[MetricRegistry] = None
-    private var health: Option[HealthCheckRegistry] = None
-
-    /**
-     * Register metrics.
-     */
-    def registerMetrics(metrics: MetricRegistry, health: HealthCheckRegistry): Unit = {
-
-      this.metrics = Some(metrics)
-      this.health = Some(health)
-      def register(s: String, m: Metric) = {
-        metricRegistry.register(s, m)
-      }
-      register("update.count", updateCount)
-      register("update.failure.count", updateFailureCount)
-      register("update.time", updateTimer)
-      register("appui.load.time", appUiLoadTimer)
-      register("appui.load.count", appUILoadCount)
-      register("appui.load.failure.count", appUILoadFailureCount)
-      metrics.register(name, metricRegistry)
+  private def time[T](t: Timer)(f: => T): T = {
+    val timeCtx = t.time()
+    try {
+      f
+    } finally {
+      timeCtx.close()
     }
+  }
+}
 
-    /**
-     * Unregister
-     */
-    def unregister(): Unit = {
-      metrics.foreach(_.removeMatching(new MetricFilter {
-        def matches(name: String, metric: Metric): Boolean = name.startsWith(name)
-      }))
+/**
+ * Health checks
+ */
+private[history] class FsHistoryProviderHealth(owner: FsHistoryProvider) extends HealthCheckSource {
+
+  override val sourceName = "history.fs"
+
+  private val name = MetricRegistry.name(sourceName)
+  val healthRegistry = new HealthCheckRegistry
+
+  val fileSystemLive = new HealthCheck {
+    override def check() = {
+      if (owner.isFsInSafeMode()) {
+        Result.unhealthy("Filesystem is in safe mode")
+      } else {
+        Result.healthy()
+      }
     }
   }
 
+  private val healthChecks = Seq(
+    ("filesystem.healthy", fileSystemLive)
+  )
+
+  healthChecks.foreach(elt => healthRegistry.register(elt._1, elt._2))
+
+}
+  /**
+ * Metrics integration: the various counters of activity
+ */
+private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extends Source {
+
+  override val sourceName = "history.fs"
+
+  private val name = MetricRegistry.name(sourceName)
+
+  /** Metrics registry */
+  override val metricRegistry = new MetricRegistry()
+
+  /** Number of updates */
+  val updateCount = new Counter()
+
+  /** Number of update failures */
+  val updateFailureCount = new Counter()
+
+  /** Number of App UI load operations */
+  val appUILoadCount = new Counter()
+
+  /** Number of App UI load operations that failed */
+  val appUILoadFailureCount = new Counter()
+
+  /** Number of App UI load operations that failed due to an unknown file */
+  val appUILoadNotFoundCount = new Counter()
+
+  /** Statistics on update duration */
+  val updateTimer = new Timer()
+
+  /** Statistics on time to load app UIs */
+  val appUiLoadTimer = new Timer()
+
+  /** Statistics on time to replay and merge listings */
+  val mergeApplicationListingTimer = new Timer()
+
+    private val counters = Seq(
+    ("update.count", updateCount),
+    ("update.failure.count", updateFailureCount),
+    ("appui.load.count", appUILoadCount),
+    ("appui.load.failure.count", appUILoadFailureCount))
+    ("appui.load.not-found.count", appUILoadNotFoundCount)
+
+  private val timers = Seq (
+    ("update.timer", updateTimer),
+    ("merge.application.listings.timer", mergeApplicationListingTimer),
+    ("appui.load.timer", appUiLoadTimer))
+
+  val allMetrics = counters ++ timers
+
+  allMetrics.foreach(elt => metricRegistry.register(elt._1, elt._2))
+
+  override def toString: String = {
+    def sb = new StringBuilder(counters.size * 20)
+    allMetrics.foreach(elt => sb.append(s" ${elt._1} = ${elt._2}\n"))
+    sb.toString()
+  }
 }
 
 private[history] object FsHistoryProvider {
