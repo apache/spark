@@ -701,7 +701,7 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
         val replaced = replaceAlias(pushDownPredicate, aliasMap)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
-        // Otherwise, create Filter(pushDownPredicate) -> Aggregate -> Filter(stayUp).
+        // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
       } else {
         filter
