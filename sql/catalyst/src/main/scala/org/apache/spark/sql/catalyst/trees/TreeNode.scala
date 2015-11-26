@@ -368,7 +368,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString: String = generateTreeString(0, new StringBuilder).toString
+  def treeString: String = generateTreeString(0, Nil, new StringBuilder).toString
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
@@ -395,11 +395,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /** Appends the string represent of this node and its children to the given StringBuilder. */
-  protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
-    builder.append(" " * depth)
-    builder.append(simpleString)
-    builder.append("\n")
-    children.foreach(_.generateTreeString(depth + 1, builder))
+  protected def generateTreeString(
+      depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
+    val prefix = if (depth == 0) {
+      ""
+    } else {
+      (lastChildren.init.map { isLast =>
+        if (isLast) "   " else ":  "
+      } :+ (if (lastChildren.last) s"+- " else ":- ")).mkString
+    }
+
+    val head = prefix + simpleString
+    builder.append(head + "\n")
+
+    if (children.nonEmpty) {
+      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+    }
+
     builder
   }
 
