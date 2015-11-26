@@ -129,8 +129,9 @@ object JdbcUtils extends Logging {
       conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
       conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
     } catch { 
-      case e: Exception => logWarning("Exception while detecting transaction support", e)
-                           true
+      case NonFatal(e) => 
+        logWarning("Exception while detecting transaction support", e)
+        true
     }
 
     try {
