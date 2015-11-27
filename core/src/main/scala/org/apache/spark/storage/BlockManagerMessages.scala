@@ -42,6 +42,11 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
+  /**
+   * Driver -> Executor message to trigger a thread dump.
+   */
+  case object TriggerThreadDump extends ToBlockManagerSlave
+
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
@@ -90,7 +95,7 @@ private[spark] object BlockManagerMessages {
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case class GetRpcHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
+  case class GetExecutorEndpointRef(executorId: String) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 
