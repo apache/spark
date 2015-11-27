@@ -101,7 +101,8 @@ abstract class JdbcDialect extends Serializable {
    * Get the SQL statement for inserting a row int oa given table. Dialects can
    * override this method to return a statement that works best in a particular database.
    * @param table  The name of the table.
-   * @param rddSchema  The schema of the RDD. Some dialects require column names for the INSERT statement.
+   * @param rddSchema  The schema of the RDD. Some dialects require column names for
+   *                   the INSERT statement.
    * @return The SQL INSERT statement to use for inserting a row into the table.
    */
   def getInsertStatement(table: String, rddSchema: StructType): String = {
@@ -113,7 +114,7 @@ abstract class JdbcDialect extends Serializable {
       fieldsLeft = fieldsLeft - 1
     }
     return sql.toString()
-  }  
+  }
 
 }
 
@@ -158,7 +159,7 @@ object JdbcDialects {
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
-  registerDialect(ProgressCassandraDialect)
+  registerDialect(CassandraDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.
