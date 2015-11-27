@@ -95,15 +95,8 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function, `subExprState.fnName`. Just call that.
-      val isNull = ctx.freshName("isNull")
-      val primitive = ctx.freshName("primitive")
-      val code =
-        s"""
-           |/* $this */
-           | ${ctx.javaType(dataType)} $primitive = ${subExprState.value};
-           | boolean $isNull = ${subExprState.isNull};
-         """.stripMargin.trim
-      GeneratedExpressionCode(code, isNull, primitive)
+      val code = s"/* $this */"
+      GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val primitive = ctx.freshName("primitive")
