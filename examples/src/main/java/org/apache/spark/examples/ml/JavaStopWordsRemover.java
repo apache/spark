@@ -17,29 +17,24 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
 
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.StopWordsRemover;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
-/**
- * An example demonstrating a stop words remover.
- * Run with
- * <pre>
- * bin/run-example ml.JavaStopWordsRemover <file> <k>
- * </pre>
- */
 public class JavaStopWordsRemover {
 
   public static void main(String[] args) {
@@ -47,18 +42,23 @@ public class JavaStopWordsRemover {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
+    // $example on$
     StopWordsRemover remover = new StopWordsRemover()
-        .setInputCol("raw")
-        .setOutputCol("filtered");
+      .setInputCol("raw")
+      .setOutputCol("filtered");
 
     JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
-        RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
+      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
+      RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
     ));
+
     StructType schema = new StructType(new StructField[]{
-        new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+      new StructField(
+        "raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
+
     DataFrame dataset = jsql.createDataFrame(rdd, schema);
     remover.transform(dataset).show();
-    }
+    // $example off$
+  }
 }

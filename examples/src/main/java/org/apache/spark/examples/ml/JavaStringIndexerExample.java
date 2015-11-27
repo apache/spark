@@ -17,51 +17,49 @@
 
 package org.apache.spark.examples.ml;
 
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.NGram;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
-/**
- * An example demonstrating a n-gram.
- * Run with
- * <pre>
- * bin/run-example ml.JavaNGram <file> <k>
- * </pre>
- */
-public class JavaNGram {
+// $example on$
+import java.util.Arrays;
 
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.types.DataTypes.*;
+// $example off$
+
+public class JavaStringIndexerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaNGram");
+    SparkConf conf = new SparkConf().setAppName("JavaStringIndexerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
     JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create(0.0, Arrays.asList("Hi", "I", "heard", "about", "Spark")),
-        RowFactory.create(1.0, Arrays.asList("I", "wish", "Java", "could", "use", "case", "classes")),
-        RowFactory.create(2.0, Arrays.asList("Logistic", "regression", "models", "are", "neat"))
+      RowFactory.create(0, "a"),
+      RowFactory.create(1, "b"),
+      RowFactory.create(2, "c"),
+      RowFactory.create(3, "a"),
+      RowFactory.create(4, "a"),
+      RowFactory.create(5, "c")
     ));
     StructType schema = new StructType(new StructField[]{
-        new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-        new StructField("words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+      createStructField("id", DoubleType, false),
+      createStructField("category", StringType, false)
     });
-    DataFrame wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
-    NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
-    DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
-    for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
-      java.util.List<String> ngrams = r.getList(0);
-      for (String ngram : ngrams) System.out.print(ngram + " --- ");
-      System.out.println();
-    }
+    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    StringIndexer indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex");
+    DataFrame indexed = indexer.fit(df).transform(df);
+    indexed.show();
+    // $example off$
   }
 }

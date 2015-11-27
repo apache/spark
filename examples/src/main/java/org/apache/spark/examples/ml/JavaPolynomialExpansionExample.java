@@ -17,54 +17,54 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.Binarizer;
+import org.apache.spark.ml.feature.PolynomialExpansion;
+import org.apache.spark.mllib.linalg.VectorUDT;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
-/**
- * An example demonstrating a Binarizer.
- * Run with
- * <pre>
- * bin/run-example ml.JavaBinarizer <file> <k>
- * </pre>
- */
-public class JavaBinarizer {
-
+public class JavaPolynomialExpansionExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBinarizer");
+    SparkConf conf = new SparkConf().setAppName("JavaPolynomialExpansionExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create(0, 0.1),
-        RowFactory.create(1, 0.8),
-        RowFactory.create(2, 0.2)
+    // $example on$
+    PolynomialExpansion polyExpansion = new PolynomialExpansion()
+      .setInputCol("features")
+      .setOutputCol("polyFeatures")
+      .setDegree(3);
+
+    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+      RowFactory.create(Vectors.dense(-2.0, 2.3)),
+      RowFactory.create(Vectors.dense(0.0, 0.0)),
+      RowFactory.create(Vectors.dense(0.6, -1.1))
     ));
+
     StructType schema = new StructType(new StructField[]{
-        new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-        new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
+      new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
-    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
-    Binarizer binarizer = new Binarizer()
-      .setInputCol("feature")
-      .setOutputCol("binarized_feature")
-      .setThreshold(0.5);
-    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collect()) {
-    Double binarized_value = r.getDouble(0);
-      System.out.println(binarized_value);
+
+    DataFrame df = jsql.createDataFrame(data, schema);
+    DataFrame polyDF = polyExpansion.transform(df);
+
+    Row[] row = polyDF.select("polyFeatures").take(3);
+    for (Row r : row) {
+      System.out.println(r.get(0));
     }
+    // $example off$
   }
 }

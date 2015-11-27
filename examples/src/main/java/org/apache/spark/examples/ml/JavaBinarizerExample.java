@@ -17,57 +17,51 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.Bucketizer;
+import org.apache.spark.ml.feature.Binarizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
-/**
- * An example demonstrating a Bucketizer.
- * Run with
- * <pre>
- * bin/run-example ml.JavaBucketizer <file> <k>
- * </pre>
- */
-public class JavaBucketizer {
-
+public class JavaBinarizerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBucketizer");
+    SparkConf conf = new SparkConf().setAppName("JavaBinarizerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
-    double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
-
-    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-        RowFactory.create(-0.5),
-        RowFactory.create(-0.3),
-        RowFactory.create(0.0),
-        RowFactory.create(0.2)
+    // $example on$
+    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+      RowFactory.create(0, 0.1),
+      RowFactory.create(1, 0.8),
+      RowFactory.create(2, 0.2)
     ));
     StructType schema = new StructType(new StructField[]{
-        new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
+      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame dataFrame = jsql.createDataFrame(data, schema);
-
-    Bucketizer bucketizer = new Bucketizer()
-        .setInputCol("features")
-        .setOutputCol("bucketedFeatures")
-        .setSplits(splits);
-
-    // Transform original data into its bucket index.
-    DataFrame bucketedData = bucketizer.transform(dataFrame);
-
+    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+    Binarizer binarizer = new Binarizer()
+      .setInputCol("feature")
+      .setOutputCol("binarized_feature")
+      .setThreshold(0.5);
+    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
+    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
+    for (Row r : binarizedFeatures.collect()) {
+    Double binarized_value = r.getDouble(0);
+      System.out.println(binarized_value);
     }
+    // $example off$
+  }
 }
-
-

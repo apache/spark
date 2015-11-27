@@ -17,54 +17,57 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.ElementwiseProduct;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
-/**
- * An example demonstrating a Element wise Product.
- * Run with
- * <pre>
- * bin/run-example ml.JavaElementwiseProduct <file> <k>
- * </pre>
- */
-public class JavaElementwiseProduct {
-
+public class JavaElementwiseProductExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaElementwiseProduct");
+    SparkConf conf = new SparkConf().setAppName("JavaElementwiseProductExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
     // Create some vector data; also works for sparse vectors
     JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
-        RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
+      RowFactory.create("a", Vectors.dense(1.0, 2.0, 3.0)),
+      RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
     ));
+
     List<StructField> fields = new ArrayList<StructField>(2);
     fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("vector", DataTypes.StringType, false));
+
     StructType schema = DataTypes.createStructType(fields);
+
     DataFrame dataFrame = sqlContext.createDataFrame(jrdd, schema);
+
     Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
+
     ElementwiseProduct transformer = new ElementwiseProduct()
-        .setScalingVec(transformingVector)
-        .setInputCol("vector")
-        .setOutputCol("transformedVector");
+      .setScalingVec(transformingVector)
+      .setInputCol("vector")
+      .setOutputCol("transformedVector");
+
     // Batch transform the vectors to create new column:
     transformer.transform(dataFrame).show();
+    // $example off$
   }
 }

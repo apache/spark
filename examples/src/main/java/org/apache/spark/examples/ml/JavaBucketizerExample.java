@@ -17,51 +17,53 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.DCT;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.feature.Bucketizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+// $example off$
 
-/**
- * An example demonstrating a discrete cosine transform.
- * Run with
- * <pre>
- * bin/run-example ml.JavaDCT <file> <k>
- * </pre>
- */
-public class JavaDCT {
-
+public class JavaBucketizerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaDCT");
+    SparkConf conf = new SparkConf().setAppName("JavaBucketizerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
+    // $example on$
+    double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
+
     JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-        RowFactory.create(Vectors.dense(0.0, 1.0, -2.0, 3.0)),
-        RowFactory.create(Vectors.dense(-1.0, 2.0, 4.0, -7.0)),
-        RowFactory.create(Vectors.dense(14.0, -2.0, -5.0, 1.0))
+      RowFactory.create(-0.5),
+      RowFactory.create(-0.3),
+      RowFactory.create(0.0),
+      RowFactory.create(0.2)
     ));
     StructType schema = new StructType(new StructField[]{
-        new StructField("features", new VectorUDT(), false, Metadata.empty()),
+      new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame df = jsql.createDataFrame(data, schema);
-    DCT dct = new DCT()
-        .setInputCol("features")
-        .setOutputCol("featuresDCT")
-        .setInverse(false);
-    DataFrame dctDf = dct.transform(df);
-        dctDf.select("featuresDCT").show(3);
+    DataFrame dataFrame = jsql.createDataFrame(data, schema);
+
+    Bucketizer bucketizer = new Bucketizer()
+      .setInputCol("features")
+      .setOutputCol("bucketedFeatures")
+      .setSplits(splits);
+
+    // Transform original data into its bucket index.
+    DataFrame bucketedData = bucketizer.transform(dataFrame);
+    // $example off$
   }
 }
+
 
