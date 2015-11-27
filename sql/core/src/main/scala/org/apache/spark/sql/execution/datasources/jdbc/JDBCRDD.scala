@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 
+import scala.util.control.NonFatal
+
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
@@ -498,7 +500,7 @@ private[sql] class JDBCRDD(
             try {
               conn.commit()
             } catch {
-              case e: Throwable => logWarning("Exception committing transaction", e)
+              case NonFatal(e) => logWarning("Exception committing transaction", e)
             }
           }
           conn.close()
