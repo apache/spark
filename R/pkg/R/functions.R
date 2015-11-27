@@ -2146,47 +2146,47 @@ setMethod("ifelse",
 
 ###################### Window functions######################
 
-#' cumeDist
+#' cume_dist
 #'
 #' Window function: returns the cumulative distribution of values within a window partition,
 #' i.e. the fraction of rows that are below the current row.
 #'
 #'   N = total number of rows in the partition
-#'   cumeDist(x) = number of values before (and including) x / N
+#'   cume_dist(x) = number of values before (and including) x / N
 #'
 #' This is equivalent to the CUME_DIST function in SQL.
 #'
-#' @rdname cumeDist
-#' @name cumeDist
+#' @rdname cume_dist
+#' @name cume_dist
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{cumeDist()}
-setMethod("cumeDist",
+#' @examples \dontrun{cume_dist()}
+setMethod("cume_dist",
           signature(x = "missing"),
           function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "cumeDist")
+            jc <- callJStatic("org.apache.spark.sql.functions", "cume_dist")
             column(jc)
           })
 
-#' denseRank
+#' dense_rank
 #'
 #' Window function: returns the rank of rows within a window partition, without any gaps.
-#' The difference between rank and denseRank is that denseRank leaves no gaps in ranking
-#' sequence when there are ties. That is, if you were ranking a competition using denseRank
+#' The difference between rank and dense_rank is that dense_rank leaves no gaps in ranking
+#' sequence when there are ties. That is, if you were ranking a competition using dense_rank
 #' and had three people tie for second place, you would say that all three were in second
 #' place and that the next person came in third.
 #'
 #' This is equivalent to the DENSE_RANK function in SQL.
 #'
-#' @rdname denseRank
-#' @name denseRank
+#' @rdname dense_rank
+#' @name dense_rank
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{denseRank()}
-setMethod("denseRank",
+#' @examples \dontrun{dense_rank()}
+setMethod("dense_rank",
           signature(x = "missing"),
           function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "denseRank")
+            jc <- callJStatic("org.apache.spark.sql.functions", "dense_rank")
             column(jc)
           })
 
@@ -2264,7 +2264,7 @@ setMethod("ntile",
             column(jc)
           })
 
-#' percentRank
+#' percent_rank
 #'
 #' Window function: returns the relative rank (i.e. percentile) of rows within a window partition.
 #'
@@ -2274,15 +2274,15 @@ setMethod("ntile",
 #'
 #' This is equivalent to the PERCENT_RANK function in SQL.
 #'
-#' @rdname percentRank
-#' @name percentRank
+#' @rdname percent_rank
+#' @name percent_rank
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{percentRank()}
-setMethod("percentRank",
+#' @examples \dontrun{percent_rank()}
+setMethod("percent_rank",
           signature(x = "missing"),
           function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "percentRank")
+            jc <- callJStatic("org.apache.spark.sql.functions", "percent_rank")
             column(jc)
           })
 
@@ -2316,21 +2316,21 @@ setMethod("rank",
             base::rank(x, ...)
           })
 
-#' rowNumber
+#' row_number
 #'
 #' Window function: returns a sequential number starting at 1 within a window partition.
 #'
 #' This is equivalent to the ROW_NUMBER function in SQL.
 #'
-#' @rdname rowNumber
-#' @name rowNumber
+#' @rdname row_number
+#' @name row_number
 #' @family window_funcs
 #' @export
-#' @examples \dontrun{rowNumber()}
-setMethod("rowNumber",
+#' @examples \dontrun{row_number()}
+setMethod("row_number",
           signature(x = "missing"),
           function() {
-            jc <- callJStatic("org.apache.spark.sql.functions", "rowNumber")
+            jc <- callJStatic("org.apache.spark.sql.functions", "row_number")
             column(jc)
           })
 

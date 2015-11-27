@@ -700,9 +700,9 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname cumeDist
+#' @rdname cume_dist
 #' @export
-setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
+setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
 
 #' @rdname datediff
 #' @export
@@ -728,9 +728,9 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
-#' @rdname denseRank
+#' @rdname dense_rank
 #' @export
-setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
+setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
 
 #' @rdname explode
 #' @export
@@ -872,9 +872,9 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
-#' @rdname percentRank
+#' @rdname percent_rank
 #' @export
-setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
+setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
 
 #' @rdname pmod
 #' @export
@@ -913,9 +913,9 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
 
-#' @rdname rowNumber
+#' @rdname row_number
 #' @export
-setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
+setGeneric("row_number", function(x) { standardGeneric("row_number") })
 
 #' @rdname rpad
 #' @export
