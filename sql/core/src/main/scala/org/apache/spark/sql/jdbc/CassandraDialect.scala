@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 private case object CassandraDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean =
-    url.startsWith("jdbc:datadirect:cassandra") || 
+    url.startsWith("jdbc:datadirect:cassandra") ||
     url.startsWith("jdbc:weblogic:cassandra")
 
   override def getInsertStatement(table: String, rddSchema: StructType): String = {
