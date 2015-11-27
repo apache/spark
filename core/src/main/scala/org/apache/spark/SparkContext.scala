@@ -241,7 +241,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private val _stopHook = new ListBuffer[() => Unit]()
+  private val _stopHooks = new ListBuffer[() => Unit]()
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -1624,7 +1624,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * sparkContext is being stopped.
    */
   private[spark] def addStopHook(hook: () => Unit): Unit = {
-    _stopHook += hook
+    _stopHooks += hook
   }
 
   /**
@@ -1773,7 +1773,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
-    _stopHook.foreach(_())
+    _stopHooks.foreach(_())
     logInfo("Successfully stopped SparkContext")
   }
 
