@@ -137,7 +137,10 @@ object ScalaReflection extends ScalaReflection {
     }
 
     /** Returns the current path with a field at ordinal extracted. */
-    def addToPathOrdinal(ordinal: Int, dataType: DataType, walkedTypePath: Seq[String]): Expression = {
+    def addToPathOrdinal(
+        ordinal: Int,
+        dataType: DataType,
+        walkedTypePath: Seq[String]): Expression = {
       val newPath = path
         .map(p => GetStructField(p, ordinal))
         .getOrElse(BoundReference(ordinal, dataType, false))

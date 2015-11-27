@@ -152,11 +152,11 @@ class EncoderResolutionSuite extends PlanTest {
   castSuccess[String, Long]
   castSuccess[Int, java.math.BigDecimal]
   castSuccess[Long, java.math.BigDecimal]
+  castSuccess[Double, java.math.BigDecimal]
 
   castFail[Long, Int]
   castFail[java.sql.Timestamp, java.sql.Date]
   castFail[java.math.BigDecimal, Double]
-  castFail[Double, java.math.BigDecimal]
   castFail[java.math.BigDecimal, Int]
 
   private def castSuccess[T: TypeTag, U: TypeTag]: Unit = {
