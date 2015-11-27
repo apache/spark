@@ -409,15 +409,15 @@ private[execution] final case class RangeBoundOrdering(
  */
 private[execution] abstract class WindowFunctionFrame {
   /**
-    * Prepare the frame for calculating the results for a partition.
-    *
-    * @param rows to calculate the frame results for.
-    */
+   * Prepare the frame for calculating the results for a partition.
+   *
+   * @param rows to calculate the frame results for.
+   */
   def prepare(rows: ArrayBuffer[InternalRow]): Unit
 
   /**
-    * Write the current results to the target row.
-    */
+   * Write the current results to the target row.
+   */
   def write(): Unit
 }
 
@@ -620,7 +620,7 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
   private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the first input row with a value greater than the upper bound of the current
-    * output row. */
+   * output row. */
   private[this] var inputIndex = 0
 
   /** Index of the row we are currently writing. */
@@ -681,7 +681,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
   private[this] var input: ArrayBuffer[InternalRow] = null
 
   /** Index of the first input row with a value equal to or greater than the lower bound of the
-    * current output row. */
+   * current output row. */
   private[this] var inputIndex = 0
 
   /** Index of the row we are currently writing. */
