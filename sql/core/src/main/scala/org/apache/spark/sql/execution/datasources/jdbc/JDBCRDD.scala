@@ -224,6 +224,7 @@ private[sql] object JDBCRDD extends Logging {
       quotedColumns,
       filters,
       parts,
+      url,
       properties)
   }
 }
@@ -241,6 +242,7 @@ private[sql] class JDBCRDD(
     columns: Array[String],
     filters: Array[Filter],
     partitions: Array[Partition],
+    url: String,
     properties: Properties)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -361,6 +363,9 @@ private[sql] class JDBCRDD(
     context.addTaskCompletionListener{ context => close() }
     val part = thePart.asInstanceOf[JDBCPartition]
     val conn = getConnection()
+    val dialect = JdbcDialects.get(url)
+    import scala.collection.JavaConverters._
+    dialect.beforeFetch(conn, properties.asScala.toMap)
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -489,6 +494,13 @@ private[sql] class JDBCRDD(
       }
       try {
         if (null != conn) {
+          if (!conn.getAutoCommit && !conn.isClosed) {
+            try {
+              conn.commit()
+            } catch {
+              case e: Throwable => logWarning("Exception committing transaction", e)
+            }
+          }
           conn.close()
         }
         logInfo("closed connection")
