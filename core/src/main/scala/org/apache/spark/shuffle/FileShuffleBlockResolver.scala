@@ -100,11 +100,7 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
 
   override def getBlockData(blockId: ShuffleBlockId, blockManagerId: BlockManagerId)
     : ManagedBuffer = {
-    val file = if (blockManager.blockManagerId != blockManagerId) {
-      blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(blockId, blockManagerId)
-    } else {
-      blockManager.diskBlockManager.getFile(blockId)
-    }
+    val file = blockManager.diskBlockManager.getFile(blockId, blockManagerId)
     new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
   }
 

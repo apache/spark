@@ -257,7 +257,7 @@ final class ShuffleBlockFetcherIterator(
         assert(blockId.isShuffle)
         try {
           val buf = if (!enableExternalShuffleService) {
-            blockManager.getShuffleBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+            blockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
           } else {
             blockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
           }

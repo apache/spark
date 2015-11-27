@@ -113,7 +113,7 @@ class DiskBlockManagerSuite extends SparkFunSuite
       val dummyBlockFile = new File(blockDir, blockIdInLocalBmId2.name)
       assert(dummyBlockFile.createNewFile())
 
-      val file = testDiskBlockManager.getShuffleFileBypassNetworkAccess(
+      val file = testDiskBlockManager.getFile(
         blockIdInLocalBmId2, localBmId2)
       assert(dummyBlockFile.getName === file.getName)
       assert(dummyBlockFile.toString.contains(tempDir.toString))
@@ -126,7 +126,7 @@ class DiskBlockManagerSuite extends SparkFunSuite
       // Throw an IOException if given shuffle file not found
       val blockIdNotInLocalBmId2 = ShuffleBlockId(2, 0, 0)
       val errMsg = intercept[IOException] {
-        testDiskBlockManager.getShuffleFileBypassNetworkAccess(blockIdNotInLocalBmId2, localBmId2)
+        testDiskBlockManager.getFile(blockIdNotInLocalBmId2, localBmId2)
       }
       assert(errMsg.getMessage contains s"File '${getBlockDir(blockIdNotInLocalBmId2.name)}/" +
         s"${blockIdNotInLocalBmId2}' not found in local dir")

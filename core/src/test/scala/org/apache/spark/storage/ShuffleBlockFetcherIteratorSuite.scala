@@ -88,7 +88,7 @@ class ShuffleBlockFetcherIteratorSuite
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
     localBlocks.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getShuffleBlockData(meq(blockId), meq(localBmId))
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId), meq(localBmId))
     }
 
     // Make sure remote blocks would return
@@ -112,7 +112,7 @@ class ShuffleBlockFetcherIteratorSuite
       48 * 1024 * 1024)
 
     // 3 local blocks fetched in initialization
-    verify(blockManager, times(3)).getShuffleBlockData(any(), any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
 
     for (i <- 0 until 5) {
       assert(iterator.hasNext, s"iterator should have 5 elements but actually has $i elements")
@@ -137,7 +137,7 @@ class ShuffleBlockFetcherIteratorSuite
 
     // 3 local blocks, and 2 remote blocks
     // (but from the same block manager so one call to fetchBlocks)
-    verify(blockManager, times(3)).getShuffleBlockData(any(), any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
     verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any())
   }
 
@@ -157,13 +157,13 @@ class ShuffleBlockFetcherIteratorSuite
     val localBlocksInBmId1 = Map[ShuffleBlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer())
     localBlocksInBmId1.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getShuffleBlockData(meq(blockId), meq(localBmId1))
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId), meq(localBmId1))
     }
     val localBlocksInBmId2 = Map[ShuffleBlockId, ManagedBuffer](
       ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer())
     localBlocksInBmId2.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getShuffleBlockData(meq(blockId), meq(localBmId2))
+      doReturn(buf).when(blockManager).getBlockData(meq(blockId), meq(localBmId2))
     }
 
     // Create mock transfer
@@ -185,7 +185,7 @@ class ShuffleBlockFetcherIteratorSuite
       48 * 1024 * 1024)
 
     // Skip unnecessary remote reads
-    verify(blockManager, times(3)).getShuffleBlockData(any(), any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
 
     for (i <- 0 until 3) {
       assert(iterator.hasNext, s"iterator should have 3 elements but actually has $i elements")
@@ -193,7 +193,7 @@ class ShuffleBlockFetcherIteratorSuite
     }
 
     // As a result, only 3 local reads (2 remote access skipped)
-    verify(blockManager, times(3)).getShuffleBlockData(any(), any())
+    verify(blockManager, times(3)).getBlockData(any(), any())
     verify(transfer, times(0)).fetchBlocks(any(), any(), any(), any(), any())
   }
 

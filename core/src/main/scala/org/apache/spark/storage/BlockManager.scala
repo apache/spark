@@ -38,7 +38,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.serializer.{SerializerInstance, Serializer}
+import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
 
@@ -288,9 +288,10 @@ private[spark] class BlockManager(
    * Interface to get local block data. Throws an exception if the block cannot be found or
    * cannot be read successfully.
    */
-  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+  override def getBlockData(blockId: BlockId, blockManagerId: BlockManagerId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      getShuffleBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+      shuffleManager.shuffleBlockResolver.getBlockData(
+        blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
     } else {
       val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
         .asInstanceOf[Option[ByteBuffer]]
@@ -303,10 +304,8 @@ private[spark] class BlockManager(
     }
   }
 
-  override def getShuffleBlockData(
-      blockId: ShuffleBlockId,
-      blockManagerId: BlockManagerId): ManagedBuffer = {
-    shuffleManager.shuffleBlockResolver.getBlockData(blockId, blockManagerId)
+  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    getBlockData(blockId, this.blockManagerId)
   }
 
   /**

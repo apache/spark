@@ -49,35 +49,19 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  private def getDataFile(
-      shuffleId: Int,
-      mapId: Int,
-      blockManagerId: BlockManagerId = blockManager.blockManagerId)
-    : File = {
-    if (blockManager.blockManagerId != blockManagerId) {
-      blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(
-        ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
-    } else {
-      blockManager.diskBlockManager.getFile(
-        ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
-    }
-  }
-
   def getDataFile(shuffleId: Int, mapId: Int): File =
     getDataFile(shuffleId, mapId, blockManager.blockManagerId)
 
-  private def getIndexFile(
-      shuffleId: Int,
-      mapId: Int,
-      blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
-    if (blockManager.blockManagerId != blockManagerId) {
-      blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(
-        ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
-    } else {
-      blockManager.diskBlockManager.getFile(
-        ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
-    }
-  }
+  private def getDataFile(shuffleId: Int, mapId: Int, blockManagerId: BlockManagerId): File =
+    blockManager.diskBlockManager.getFile(
+      ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
+
+  private def getIndexFile(shuffleId: Int, mapId: Int): File =
+    getIndexFile(shuffleId, mapId, blockManager.blockManagerId)
+
+  private def getIndexFile(shuffleId: Int, mapId: Int, blockManagerId: BlockManagerId): File =
+    blockManager.diskBlockManager.getFile(
+      ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
 
   /**
    * Remove data file and index file that contain the output data from one map.

@@ -94,7 +94,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
-  def getShuffleFileBypassNetworkAccess(blockId: BlockId, blockManagerId: BlockManagerId): File = {
+  def getFile(blockId: BlockId, blockManagerId: BlockManagerId): File = {
     if (this.blockManagerId == blockManagerId) {
       getFile(blockId)
     } else {
