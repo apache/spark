@@ -66,5 +66,6 @@ public class JavaNGramExample {
       System.out.println();
     }
     // $example off$
+    jsc.stop();
   }
 }

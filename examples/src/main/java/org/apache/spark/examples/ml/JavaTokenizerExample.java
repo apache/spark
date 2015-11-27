@@ -70,5 +70,6 @@ public class JavaTokenizerExample {
       .setOutputCol("words")
       .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
     // example off
+    jsc.stop();
   }
 }

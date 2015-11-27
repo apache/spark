@@ -65,6 +65,7 @@ public class JavaPCAExample {
     DataFrame result = pca.transform(df).select("pcaFeatures");
     result.show();
     // $example off$
+    jsc.stop();
   }
 }
 

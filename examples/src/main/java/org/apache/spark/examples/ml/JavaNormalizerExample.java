@@ -47,5 +47,6 @@ public class JavaNormalizerExample {
     DataFrame lInfNormData =
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
     // $example off$
+    jsc.stop();
   }
 }

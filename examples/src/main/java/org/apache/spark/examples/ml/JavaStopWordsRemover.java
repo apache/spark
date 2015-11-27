@@ -60,5 +60,6 @@ public class JavaStopWordsRemover {
     DataFrame dataset = jsql.createDataFrame(rdd, schema);
     remover.transform(dataset).show();
     // $example off$
+    jsc.stop();
   }
 }

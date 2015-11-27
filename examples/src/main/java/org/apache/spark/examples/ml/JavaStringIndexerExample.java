@@ -61,5 +61,6 @@ public class JavaStringIndexerExample {
     DataFrame indexed = indexer.fit(df).transform(df);
     indexed.show();
     // $example off$
+    jsc.stop();
   }
 }

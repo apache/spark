@@ -67,6 +67,7 @@ public class JavaVectorSlicerExample {
 
     System.out.println(output.select("userFeatures", "features").first());
     // $example off$
+    jsc.stop();
   }
 }
 

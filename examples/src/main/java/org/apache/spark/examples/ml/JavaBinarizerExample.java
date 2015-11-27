@@ -63,5 +63,6 @@ public class JavaBinarizerExample {
       System.out.println(binarized_value);
     }
     // $example off$
+    jsc.stop();
   }
 }

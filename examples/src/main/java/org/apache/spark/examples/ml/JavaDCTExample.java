@@ -59,6 +59,7 @@ public class JavaDCTExample {
     DataFrame dctDf = dct.transform(df);
     dctDf.select("featuresDCT").show(3);
     // $example off$
+    jsc.stop();
   }
 }
 

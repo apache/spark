@@ -63,6 +63,7 @@ public class JavaBucketizerExample {
     // Transform original data into its bucket index.
     DataFrame bucketedData = bucketizer.transform(dataFrame);
     // $example off$
+    jsc.stop();
   }
 }
 

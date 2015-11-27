@@ -63,6 +63,7 @@ public class JavaRFormulaExample {
     DataFrame output = formula.fit(dataset).transform(dataset);
     output.select("features", "label").show();
     // $example off$
+    jsc.stop();
   }
 }
 

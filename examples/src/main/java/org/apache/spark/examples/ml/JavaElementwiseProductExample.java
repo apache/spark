@@ -69,5 +69,6 @@ public class JavaElementwiseProductExample {
     // Batch transform the vectors to create new column:
     transformer.transform(dataFrame).show();
     // $example off$
+    jsc.stop();
   }
 }

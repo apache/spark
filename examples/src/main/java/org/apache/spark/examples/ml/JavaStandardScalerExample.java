@@ -48,5 +48,6 @@ public class JavaStandardScalerExample {
     // Normalize each feature to have unit standard deviation.
     DataFrame scaledData = scalerModel.transform(dataFrame);
     // $example off$
+    jsc.stop();
   }
 }

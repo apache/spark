@@ -66,5 +66,6 @@ public class JavaPolynomialExpansionExample {
       System.out.println(r.get(0));
     }
     // $example off$
+    jsc.stop();
   }
 }

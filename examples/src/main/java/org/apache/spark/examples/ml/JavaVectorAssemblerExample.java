@@ -61,6 +61,7 @@ public class JavaVectorAssemblerExample {
     DataFrame output = assembler.transform(dataset);
     System.out.println(output.select("features", "clicked").first());
     // $example off$
+    jsc.stop();
   }
 }
 
