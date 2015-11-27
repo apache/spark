@@ -723,9 +723,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
  * This implementation only supports evaluation in [[Complete]] mode. This is enough for
  * Window processing.
  *
- * Processing of any number of distinct aggregates is supported using Set operations. More
- * advanced distinct operators (e.g. Sort Based Operators) should be added before the
- * [[AggregateProcessor]] is created.
+ * Processing of distinct aggregates is currently not supported.
  *
  * The implementation is split into an object which takes care of construction, and a the actual
  * processor class. Construction might be expensive and could be separated into a 'driver' and a
