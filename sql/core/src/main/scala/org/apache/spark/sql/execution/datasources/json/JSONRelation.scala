@@ -179,7 +179,7 @@ private[sql] class JSONRDDRelation (
     val maybeDataSchema: Option[StructType])(@transient val sqlContext: SQLContext)
   extends BaseRelation with PrunedFilteredScan with JSONSchemaCheck {
 
-  override def schema = {
+  override def schema: StructType = {
     val jsonSchema = maybeDataSchema.getOrElse {
       InferSchema(
         inputRDD,

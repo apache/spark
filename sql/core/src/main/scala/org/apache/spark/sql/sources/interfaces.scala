@@ -454,7 +454,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
 
     // at least one of the root inputs exist
-    private def isInputExists(paths: Array[String]): Boolean ={
+    private def isInputExists(paths: Array[String]): Boolean = {
       paths.exists(path => {
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
