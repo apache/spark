@@ -622,13 +622,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     if (!fileStatusCache.inputExists) {
       throw new IOException("Input paths do not exist, input paths="
         + inputPaths.mkString("[", ",", "]"))
+    } else if (inputStatuses.isEmpty) {
+      logWarning("Input paths are empty, input paths=" + inputPaths.mkString("[", ",", "]"))
+      sqlContext.sparkContext.emptyRDD[InternalRow]
     } else {
-      if (inputStatuses.isEmpty) {
-        logWarning("Input paths are empty, input paths=" + inputPaths.mkString("[", ",", "]"))
-        sqlContext.sparkContext.emptyRDD[InternalRow]
-      } else {
-        buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
-      }
+      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
     }
   }
 
