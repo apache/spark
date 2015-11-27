@@ -734,7 +734,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("aggregate: don't push down filters which is nondeterministic") {
+  test("aggregate: don't push down filters that are nondeterministic") {
     val originalQuery = testRelation
       .select('a, 'b)
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
