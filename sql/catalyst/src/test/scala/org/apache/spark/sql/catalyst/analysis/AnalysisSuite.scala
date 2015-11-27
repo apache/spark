@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class AnalysisSuite extends AnalysisTest {
@@ -217,5 +218,60 @@ class AnalysisSuite extends AnalysisTest {
       nullResult,
       udf4)
     // checkUDF(udf4, expected4)
+  }
+
+  test("SPARK-11863 mixture of aliases and real columns in order by clause - tpcds 19,55,71") {
+    val a = testRelation2.output(0)
+    val c = testRelation2.output(2)
+    val alias1 = a.as("a1")
+    val alias2 = c.as("a2")
+    val alias3 = count(a).as("a3")
+
+    val plan = testRelation2
+      .groupBy('a, 'c)('a.as("a1"), 'c.as("a2"), count('a).as("a3"))
+      .orderBy('a1.asc, 'c.asc)
+
+    val expected = testRelation2
+      .groupBy(a, c)(alias1, alias2, alias3)
+      .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
+      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
+    checkAnalysis(plan, expected)
+  }
+
+  test("analyzer should replace current_timestamp with literals") {
+    val in = Project(Seq(Alias(CurrentTimestamp(), "a")(), Alias(CurrentTimestamp(), "b")()),
+      LocalRelation())
+
+    val min = System.currentTimeMillis() * 1000
+    val plan = in.analyze.asInstanceOf[Project]
+    val max = (System.currentTimeMillis() + 1) * 1000
+
+    val lits = new scala.collection.mutable.ArrayBuffer[Long]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[Long]
+      e
+    }
+    assert(lits.size == 2)
+    assert(lits(0) >= min && lits(0) <= max)
+    assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
+  }
+
+  test("analyzer should replace current_date with literals") {
+    val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
+
+    val min = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val plan = in.analyze.asInstanceOf[Project]
+    val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
+
+    val lits = new scala.collection.mutable.ArrayBuffer[Int]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[Int]
+      e
+    }
+    assert(lits.size == 2)
+    assert(lits(0) >= min && lits(0) <= max)
+    assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
   }
 }

@@ -59,7 +59,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
-      RemoveDispensable,
+      RemoveDispensableExpressions,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions) ::
@@ -640,20 +640,14 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
           filter
         } else {
           // Push down the small conditions without nondeterministic expressions.
-          val pushedCondition = deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
+          val pushedCondition =
+            deterministic.map(replaceAlias(_, aliasMap)).reduce(And)
           Filter(nondeterministic.reduce(And),
             project.copy(child = Filter(pushedCondition, grandChild)))
         }
       }
   }
 
-  // Substitute any attributes that are produced by the child projection, so that we safely
-  // eliminate it.
-  private def replaceAlias(condition: Expression, sourceAliases: AttributeMap[Expression]) = {
-    condition.transform {
-      case a: Attribute => sourceAliases.getOrElse(a, a)
-    }
-  }
 }
 
 /**
@@ -666,14 +660,14 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
     case filter @ Filter(condition, g: Generate) =>
       // Predicates that reference attributes produced by the `Generate` operator cannot
       // be pushed below the operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
-        conjunct => conjunct.references subsetOf g.child.outputSet
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.references subsetOf g.child.outputSet
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
-        val withPushdown = Generate(g.generator, join = g.join, outer = g.outer,
+        val newGenerate = Generate(g.generator, join = g.join, outer = g.outer,
           g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
-        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+        if (stayUp.isEmpty) newGenerate else Filter(stayUp.reduce(And), newGenerate)
       } else {
         filter
       }
@@ -681,22 +675,34 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
 }
 
 /**
- * Push [[Filter]] operators through [[Aggregate]] operators. Parts of the predicate that reference
- * attributes which are subset of group by attribute set of [[Aggregate]] will be pushed beneath,
- * and the rest should remain above.
+ * Push [[Filter]] operators through [[Aggregate]] operators, iff the filters reference only
+ * non-aggregate attributes (typically literals or grouping expressions).
  */
 object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition,
-        aggregate @ Aggregate(groupingExpressions, aggregateExpressions, grandChild)) =>
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
-        conjunct => conjunct.references subsetOf AttributeSet(groupingExpressions)
+    case filter @ Filter(condition, aggregate: Aggregate) =>
+      // Find all the aliased expressions in the aggregate list that don't include any actual
+      // AggregateExpression, and create a map from the alias to the expression
+      val aliasMap = AttributeMap(aggregate.aggregateExpressions.collect {
+        case a: Alias if a.child.find(_.isInstanceOf[AggregateExpression]).isEmpty =>
+          (a.toAttribute, a.child)
+      })
+
+      // For each filter, expand the alias and check if the filter can be evaluated using
+      // attributes produced by the aggregate operator's child operator.
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        val replaced = replaceAlias(cond, aliasMap)
+        replaced.references.subsetOf(aggregate.child.outputSet) && replaced.deterministic
       }
+
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
-        val withPushdown = aggregate.copy(child = Filter(pushDownPredicate, grandChild))
-        stayUp.reduceOption(And).map(Filter(_, withPushdown)).getOrElse(withPushdown)
+        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        // If there is no more filter to stay up, just eliminate the filter.
+        // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
+        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
       } else {
         filter
       }
@@ -708,7 +714,7 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
  * evaluated using only the attributes of the left or right side of a join.  Other
  * [[Filter]] conditions are moved into the `condition` of the [[Join]].
  *
- * And also Pushes down the join filter, where the `condition` can be evaluated using only the
+ * And also pushes down the join filter, where the `condition` can be evaluated using only the
  * attributes of the left or right side of sub query when applicable.
  *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
@@ -815,7 +821,7 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 /**
  * Removes nodes that are not necessary.
  */
-object RemoveDispensable extends Rule[LogicalPlan] {
+object RemoveDispensableExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     case UnaryPositive(child) => child
     case PromotePrecision(child) => child

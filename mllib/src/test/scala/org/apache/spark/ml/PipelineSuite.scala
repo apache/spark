@@ -17,11 +17,9 @@
 
 package org.apache.spark.ml
 
-import java.io.File
-
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar.mock
@@ -179,8 +177,8 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 }
 
 
-/** Used to test [[Pipeline]] with [[Writable]] stages */
-class WritableStage(override val uid: String) extends Transformer with Writable {
+/** Used to test [[Pipeline]] with [[MLWritable]] stages */
+class WritableStage(override val uid: String) extends Transformer with MLWritable {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")
 
@@ -192,21 +190,21 @@ class WritableStage(override val uid: String) extends Transformer with Writable 
 
   override def copy(extra: ParamMap): WritableStage = defaultCopy(extra)
 
-  override def write: Writer = new DefaultParamsWriter(this)
+  override def write: MLWriter = new DefaultParamsWriter(this)
 
   override def transform(dataset: DataFrame): DataFrame = dataset
 
   override def transformSchema(schema: StructType): StructType = schema
 }
 
-object WritableStage extends Readable[WritableStage] {
+object WritableStage extends MLReadable[WritableStage] {
 
-  override def read: Reader[WritableStage] = new DefaultParamsReader[WritableStage]
+  override def read: MLReader[WritableStage] = new DefaultParamsReader[WritableStage]
 
-  override def load(path: String): WritableStage = read.load(path)
+  override def load(path: String): WritableStage = super.load(path)
 }
 
-/** Used to test [[Pipeline]] with non-[[Writable]] stages */
+/** Used to test [[Pipeline]] with non-[[MLWritable]] stages */
 class UnWritableStage(override val uid: String) extends Transformer {
 
   final val intParam: IntParam = new IntParam(this, "intParam", "doc")

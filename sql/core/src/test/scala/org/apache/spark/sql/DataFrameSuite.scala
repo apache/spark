@@ -459,7 +459,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val emptyDescribeResult = Seq(
       Row("count", "0", "0"),
       Row("mean", null, null),
-      Row("stddev", "NaN", "NaN"),
+      Row("stddev", null, null),
       Row("min", null, null),
       Row("max", null, null))
 
@@ -897,7 +897,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val dir2 = new File(dir, "dir2").getCanonicalPath
       df2.write.format("json").save(dir2)
 
-      checkAnswer(sqlContext.read.format("json").load(Array(dir1, dir2)),
+      checkAnswer(sqlContext.read.format("json").load(dir1, dir2),
         Row(1, 22) :: Row(2, 23) :: Nil)
 
       checkAnswer(sqlContext.read.format("json").load(dir1),
@@ -1107,6 +1107,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
         checkAnswer(sqlContext.read.parquet(p).select("YeaR"), Row(2012))
       }
+    }
+  }
+
+  // This test case is to verify a bug when making a new instance of LogicalRDD.
+  test("SPARK-11633: LogicalRDD throws TreeNode Exception: Failed to Copy Node") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
+      val df = sqlContext.createDataFrame(
+        rdd,
+        new StructType().add("f1", IntegerType).add("f2", IntegerType),
+        needsConversion = false).select($"F1", $"f2".as("f2"))
+      val df1 = df.as("a")
+      val df2 = df.as("b")
+      checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
     }
   }
 

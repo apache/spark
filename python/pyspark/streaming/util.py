@@ -38,12 +38,15 @@ class TransformFunction(object):
         self.func = func
         self.deserializers = deserializers
         self._rdd_wrapper = lambda jrdd, ctx, ser: RDD(jrdd, ctx, ser)
+        self.failure = None
 
     def rdd_wrapper(self, func):
         self._rdd_wrapper = func
         return self
 
     def call(self, milliseconds, jrdds):
+        # Clear the failure
+        self.failure = None
         try:
             if self.ctx is None:
                 self.ctx = SparkContext._active_spark_context
@@ -62,8 +65,11 @@ class TransformFunction(object):
             r = self.func(t, *rdds)
             if r:
                 return r._jrdd
-        except Exception:
-            traceback.print_exc()
+        except:
+            self.failure = traceback.format_exc()
+
+    def getLastFailure(self):
+        return self.failure
 
     def __repr__(self):
         return "TransformFunction(%s)" % self.func
@@ -88,20 +94,28 @@ class TransformFunctionSerializer(object):
         self.serializer = serializer
         self.gateway = gateway or self.ctx._gateway
         self.gateway.jvm.PythonDStream.registerSerializer(self)
+        self.failure = None
 
     def dumps(self, id):
+        # Clear the failure
+        self.failure = None
         try:
             func = self.gateway.gateway_property.pool[id]
             return bytearray(self.serializer.dumps((func.func, func.deserializers)))
-        except Exception:
-            traceback.print_exc()
+        except:
+            self.failure = traceback.format_exc()
 
     def loads(self, data):
+        # Clear the failure
+        self.failure = None
         try:
             f, deserializers = self.serializer.loads(bytes(data))
             return TransformFunction(self.ctx, f, *deserializers)
-        except Exception:
-            traceback.print_exc()
+        except:
+            self.failure = traceback.format_exc()
+
+    def getLastFailure(self):
+        return self.failure
 
     def __repr__(self):
         return "TransformFunctionSerializer(%s)" % self.serializer
