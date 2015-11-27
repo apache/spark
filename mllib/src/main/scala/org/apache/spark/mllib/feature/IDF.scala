@@ -214,8 +214,9 @@ private object IDFModel {
     v match {
       case SparseVector(size, indices, values) =>
         val newElements = new ArrayBuffer[(Int, Double)]
+        val nnz = indices.size
         var k = 0
-        while (k < indices.size) {
+        while (k < nnz) {
           val newValue = values(k) * idf(indices(k))
           if (newValue != 0.0) {
             newElements.append((indices(k), newValue))
