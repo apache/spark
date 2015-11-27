@@ -215,6 +215,16 @@ object functions extends LegacyFunctions {
   def collect_list(e: Column): Column = callUDF("collect_list", e)
 
   /**
+   * Aggregate function: returns a list of objects with duplicates.
+   *
+   * For now this is an alias for the collect_list Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_list(columnName: String): Column = collect_list(Column(columnName))
+
+  /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
    * For now this is an alias for the collect_set Hive UDAF.
@@ -223,6 +233,16 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def collect_set(e: Column): Column = callUDF("collect_set", e)
+
+  /**
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   *
+   * For now this is an alias for the collect_set Hive UDAF.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
   /**
    * Aggregate function: returns the Pearson Correlation Coefficient for two columns.
@@ -313,6 +333,14 @@ object functions extends LegacyFunctions {
   def kurtosis(e: Column): Column = withAggregateFunction { Kurtosis(e.expr) }
 
   /**
+   * Aggregate function: returns the kurtosis of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
+
+  /**
    * Aggregate function: returns the last value in a group.
    *
    * @group agg_funcs
@@ -387,12 +415,28 @@ object functions extends LegacyFunctions {
   def skewness(e: Column): Column = withAggregateFunction { Skewness(e.expr) }
 
   /**
+   * Aggregate function: returns the skewness of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def skewness(columnName: String): Column = skewness(Column(columnName))
+
+  /**
    * Aggregate function: alias for [[stddev_samp]].
    *
    * @group agg_funcs
    * @since 1.6.0
    */
   def stddev(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
+
+  /**
+   * Aggregate function: alias for [[stddev_samp]].
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev(columnName: String): Column = stddev(Column(columnName))
 
   /**
    * Aggregate function: returns the sample standard deviation of
@@ -404,6 +448,15 @@ object functions extends LegacyFunctions {
   def stddev_samp(e: Column): Column = withAggregateFunction { StddevSamp(e.expr) }
 
   /**
+   * Aggregate function: returns the sample standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
+
+  /**
    * Aggregate function: returns the population standard deviation of
    * the expression in a group.
    *
@@ -411,6 +464,15 @@ object functions extends LegacyFunctions {
    * @since 1.6.0
    */
   def stddev_pop(e: Column): Column = withAggregateFunction { StddevPop(e.expr) }
+
+  /**
+   * Aggregate function: returns the population standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
 
   /**
    * Aggregate function: returns the sum of all values in the expression.
@@ -453,6 +515,14 @@ object functions extends LegacyFunctions {
   def variance(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
+   * Aggregate function: alias for [[var_samp]].
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def variance(columnName: String): Column = variance(Column(columnName))
+
+  /**
    * Aggregate function: returns the unbiased variance of the values in a group.
    *
    * @group agg_funcs
@@ -461,12 +531,28 @@ object functions extends LegacyFunctions {
   def var_samp(e: Column): Column = withAggregateFunction { VarianceSamp(e.expr) }
 
   /**
+   * Aggregate function: returns the unbiased variance of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_samp(columnName: String): Column = var_samp(Column(columnName))
+
+  /**
    * Aggregate function: returns the population variance of the values in a group.
    *
    * @group agg_funcs
    * @since 1.6.0
    */
   def var_pop(e: Column): Column = withAggregateFunction { VariancePop(e.expr) }
+
+  /**
+   * Aggregate function: returns the population variance of the values in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions

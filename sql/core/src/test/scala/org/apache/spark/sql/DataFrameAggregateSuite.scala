@@ -261,6 +261,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.agg(stddev('a), stddev_pop('a), stddev_samp('a)),
       Row(testData2ADev, math.sqrt(4 / 6.0), testData2ADev))
+    checkAnswer(
+      testData2.agg(stddev("a"), stddev_pop("a"), stddev_samp("a")),
+      Row(testData2ADev, math.sqrt(4 / 6.0), testData2ADev))
   }
 
   test("zero stddev") {
