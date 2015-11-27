@@ -122,7 +122,7 @@ Under the hood, linear methods use convex optimization methods to optimize the o
 [Classification](http://en.wikipedia.org/wiki/Statistical_classification) aims to divide items into
 categories.
 The most common classification type is
-[binary classificaion](http://en.wikipedia.org/wiki/Binary_classification), where there are two
+[binary classification](http://en.wikipedia.org/wiki/Binary_classification), where there are two
 categories, usually named positive and negative.
 If there are more than two categories, it is called
 [multiclass classification](http://en.wikipedia.org/wiki/Multiclass_classification).
