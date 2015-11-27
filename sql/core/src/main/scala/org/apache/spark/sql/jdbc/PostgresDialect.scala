@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{Connection, Types}
 
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types._
@@ -69,5 +69,20 @@ private object PostgresDialect extends JdbcDialect {
 
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"
+  }
+
+  override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+    super.beforeFetch(connection, properties)
+
+    // According to the postgres jdbc documentation we need to be in autocommit=false if we actually
+    // want to have fetchsize be non 0 (all the rows).  This allows us to not have to cache all the
+    // rows inside the driver when fetching.
+    //
+    // See: https://jdbc.postgresql.org/documentation/head/query.html#query-with-cursor
+    //
+    if (properties.getOrElse("fetchsize", "0").toInt > 0) {
+      connection.setAutoCommit(false)
+    }
+
   }
 }

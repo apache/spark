@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.sql.types._
 import org.apache.spark.annotation.DeveloperApi
 
@@ -95,6 +97,15 @@ abstract class JdbcDialect extends Serializable {
    */
   def getTableExistsQuery(table: String): String = {
     s"SELECT * FROM $table WHERE 1=0"
+  }
+
+  /**
+    * Override connection specific properties to run before a select is made.  This is in place to
+    * allow dialects that need special treatment to optimize behavior.
+    * @param connection The connection object
+    * @param properties The connection properties.  This is passed through from the relation.
+    */
+  def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
 }
