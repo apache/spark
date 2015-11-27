@@ -34,14 +34,10 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
   override def beforeAll() {
     testData = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
     hiveContext.registerDataFrameAsTable(testData, "mytable")
-    hiveContext.sql("create schema usrdb")
-    hiveContext.sql("create table usrdb.test(c1 int)")
   }
 
   override def afterAll(): Unit = {
     hiveContext.dropTempTable("mytable")
-    hiveContext.sql("drop table usrdb.test")
-    hiveContext.sql("drop schema usrdb")
   }
 
   test("rollup") {
@@ -77,11 +73,5 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
       testData.cube("a", "b").agg(sum("b")),
       sql("select a, b, sum(b) from mytable group by a, b with cube").collect()
     )
-  }
-
-  // There was a bug in DataFrameFrameReader.table and it has problem for table with schema name,
-  // Before fix, it throw Exceptionorg.apache.spark.sql.catalyst.analysis.NoSuchTableException
-  test("table name with schema") {
-    hiveContext.read.table("usrdb.test")
   }
 }
