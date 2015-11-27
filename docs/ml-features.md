@@ -645,30 +645,7 @@ for more details on the API.
 Refer to the [VectorIndexer Java docs](api/java/org/apache/spark/ml/feature/VectorIndexer.html)
 for more details on the API.
 
-{% highlight java %}
-import java.util.Map;
-
-import org.apache.spark.ml.feature.VectorIndexer;
-import org.apache.spark.ml.feature.VectorIndexerModel;
-import org.apache.spark.sql.DataFrame;
-
-DataFrame data = sqlContext.read.format("libsvm")
-  .load("data/mllib/sample_libsvm_data.txt");
-VectorIndexer indexer = new VectorIndexer()
-  .setInputCol("features")
-  .setOutputCol("indexed")
-  .setMaxCategories(10);
-VectorIndexerModel indexerModel = indexer.fit(data);
-Map<Integer, Map<Double, Integer>> categoryMaps = indexerModel.javaCategoryMaps();
-System.out.print("Chose " + categoryMaps.size() + "categorical features:");
-for (Integer feature : categoryMaps.keySet()) {
-  System.out.print(" " + feature);
-}
-System.out.println();
-
-// Create new column "indexed" with categorical values transformed to indices
-DataFrame indexedData = indexerModel.transform(data);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaVectorIndexerExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -711,24 +688,7 @@ for more details on the API.
 Refer to the [Normalizer Java docs](api/java/org/apache/spark/ml/feature/Normalizer.html)
 for more details on the API.
 
-{% highlight java %}
-import org.apache.spark.ml.feature.Normalizer;
-import org.apache.spark.sql.DataFrame;
-
-DataFrame dataFrame = sqlContext.read.format("libsvm")
-  .load("data/mllib/sample_libsvm_data.txt");
-
-// Normalize each Vector using $L^1$ norm.
-Normalizer normalizer = new Normalizer()
-  .setInputCol("features")
-  .setOutputCol("normFeatures")
-  .setP(1.0);
-DataFrame l1NormData = normalizer.transform(dataFrame);
-
-// Normalize each Vector using $L^\infty$ norm.
-DataFrame lInfNormData =
-  normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaNormalizerExample.java %}
 </div>
 
 <div data-lang="python">
@@ -780,25 +740,7 @@ for more details on the API.
 Refer to the [StandardScaler Java docs](api/java/org/apache/spark/ml/feature/StandardScaler.html)
 for more details on the API.
 
-{% highlight java %}
-import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.ml.feature.StandardScalerModel;
-import org.apache.spark.sql.DataFrame;
-
-DataFrame dataFrame = sqlContext.read.format("libsvm")
-  .load("data/mllib/sample_libsvm_data.txt");
-StandardScaler scaler = new StandardScaler()
-  .setInputCol("features")
-  .setOutputCol("scaledFeatures")
-  .setWithStd(true)
-  .setWithMean(false);
-
-// Compute summary statistics by fitting the StandardScaler
-StandardScalerModel scalerModel = scaler.fit(dataFrame);
-
-// Normalize each feature to have unit standard deviation.
-DataFrame scaledData = scalerModel.transform(dataFrame);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaStandardScalerExample.java %}
 </div>
 
 <div data-lang="python">
