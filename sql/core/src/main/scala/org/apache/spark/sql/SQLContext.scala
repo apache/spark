@@ -1328,7 +1328,7 @@ object SQLContext {
     activeContext.remove()
   }
 
-  private[sql] def getActiveContextOption(): Option[SQLContext] = {
+  private[sql] def getActive(): Option[SQLContext] = {
     Option(activeContext.get())
   }
 

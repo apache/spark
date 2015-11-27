@@ -43,7 +43,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SQLContext.getActiveContextOption().get
+  protected[spark] final val sqlContext = SQLContext.getActive().get
 
   protected def sparkContext = sqlContext.sparkContext
 
