@@ -740,29 +740,10 @@ The implementation in MLlib has the following parameters:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-The following code snippets can be executed in `spark-shell`.
-
 Refer to the [`BisectingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeansModel) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.clustering.{BisectingKMeans, BisectingKMeansModel}
-import org.apache.spark.mllib.linalg.Vectors
-
-// Load and parse the data
-val data = sc.textFile("data/mllib/sample_bisecting_kmeans_data.txt")
-val parsedData = data.map(s => Vectors.dense(s.trim.split(',').map(_.toDouble)))
-
-// Cluster the data into the tree clusters using BisectingKMeans
-val model = new BisectingKMeans().setK(3).run(parsedData)
-
-// Output the compute cost and the cluster centers
-println(s"Compute Cost: ${model.computeCost(parsedData)}")
-model.clusterCenters.zipWithIndex.foreach { case (center, idx) =>
-  println(s"Cluster Center ${idx}: ${center}")
-}
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/BisectingKMeansExample.scala %}
 </div>
-
 </div>
 
 ## Streaming k-means
