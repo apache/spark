@@ -94,7 +94,7 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("allowNonNumericNumbers off") {
-    val testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
+    var testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
       """{"age": -Infinity}""")
 
     testCases.foreach { str =>
@@ -102,6 +102,16 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
       val df = sqlContext.read.option("allowNonNumericNumbers", "false").json(rdd)
 
       assert(df.schema.head.name == "_corrupt_record")
+    }
+
+    testCases = Seq("""{"age": "NaN"}""", """{"age": "Infinity"}""",
+      """{"age": "-Infinity"}""")
+
+    testCases.foreach { str =>
+      val rdd = sqlContext.sparkContext.parallelize(Seq(str))
+      val df = sqlContext.read.option("allowNonNumericNumbers", "false").json(rdd)
+
+      assert(df.schema.head.name == "age")
     }
   }
 

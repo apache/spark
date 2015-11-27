@@ -101,7 +101,22 @@ object JacksonParser {
         parser.getFloatValue
 
       case (VALUE_STRING, FloatType) =>
-        parser.getFloatValue
+        // Special case handling for quoted non-numeric numbers.
+        if (configOptions.allowNonNumericNumbers) {
+          val value = parser.getText
+          val lowerCaseValue = value.toLowerCase()
+          if (lowerCaseValue.equals("nan") ||
+            lowerCaseValue.equals("infinity") ||
+            lowerCaseValue.equals("-infinity") ||
+            lowerCaseValue.equals("inf") ||
+            lowerCaseValue.equals("-inf")) {
+            value.toFloat
+          } else {
+            sys.error(s"Cannot parse $value as FloatType.")
+          }
+        } else {
+          parser.getFloatValue
+        }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
         parser.getDoubleValue
