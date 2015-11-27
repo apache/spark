@@ -878,7 +878,7 @@ setMethod("rtrim",
 #'}
 setMethod("sd",
           signature(x = "Column"),
-          function(x, na.rm = FALSE) {
+          function(x) {
             # In R, sample standard deviation is calculated with the sd() function.
             stddev_samp(x)
           })
@@ -1250,7 +1250,7 @@ setMethod("upper",
 #'}
 setMethod("var",
           signature(x = "Column"),
-          function(x, y = NULL, na.rm = FALSE, use) {
+          function(x) {
             # In R, sample variance is calculated with the var() function.
             var_samp(x)
           })
@@ -1487,6 +1487,7 @@ setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
             jcol <- lapply(list(...), function (x) {
+              stopifnot(class(x) == "Column")
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
@@ -1507,7 +1508,10 @@ setMethod("countDistinct",
 setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jcol <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
             jc <- callJStatic("org.apache.spark.sql.functions", "concat", jcols)
             column(jc)
           })
@@ -1526,7 +1530,10 @@ setMethod("greatest",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jcol <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
             jc <- callJStatic("org.apache.spark.sql.functions", "greatest", jcols)
             column(jc)
           })
@@ -1545,7 +1552,10 @@ setMethod("least",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function(x) { x@jc })
+            jcol <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
             jc <- callJStatic("org.apache.spark.sql.functions", "least", jcols)
             column(jc)
           })
@@ -1618,6 +1628,7 @@ setMethod("n", signature(x = "Column"),
 #' @rdname date_format
 #' @name date_format
 #' @export
+#' @examples \dontrun{date_format(df$t, 'MM/dd/yyy')}
 setMethod("date_format", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "date_format", y@jc, x)
@@ -1632,6 +1643,7 @@ setMethod("date_format", signature(y = "Column", x = "character"),
 #' @rdname from_utc_timestamp
 #' @name from_utc_timestamp
 #' @export
+#' @examples \dontrun{from_utc_timestamp(df$t, 'PST')}
 setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "from_utc_timestamp", y@jc, x)
@@ -1650,6 +1662,7 @@ setMethod("from_utc_timestamp", signature(y = "Column", x = "character"),
 #' @rdname instr
 #' @name instr
 #' @export
+#' @examples \dontrun{instr(df$c, 'b')}
 setMethod("instr", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "instr", y@jc, x)
@@ -1664,13 +1677,18 @@ setMethod("instr", signature(y = "Column", x = "character"),
 #' For example, \code{next_day('2015-07-27', "Sunday")} returns 2015-08-02 because that is the first
 #' Sunday after 2015-07-27.
 #'
-#' Day of the week parameter is case insensitive, and accepts:
+#' Day of the week parameter is case insensitive, and accepts first three or two characters:
 #' "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
 #'
 #' @family datetime_funcs
 #' @rdname next_day
 #' @name next_day
 #' @export
+#' @examples
+#'\dontrun{
+#'next_day(df$d, 'Sun')
+#'next_day(df$d, 'Sunday')
+#'}
 setMethod("next_day", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "next_day", y@jc, x)
@@ -1685,6 +1703,7 @@ setMethod("next_day", signature(y = "Column", x = "character"),
 #' @rdname to_utc_timestamp
 #' @name to_utc_timestamp
 #' @export
+#' @examples \dontrun{to_utc_timestamp(df$t, 'PST')}
 setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "to_utc_timestamp", y@jc, x)
@@ -1699,6 +1718,7 @@ setMethod("to_utc_timestamp", signature(y = "Column", x = "character"),
 #' @family datetime_funcs
 #' @rdname add_months
 #' @export
+#' @examples \dontrun{add_months(df$d, 1)}
 setMethod("add_months", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "add_months", y@jc, as.integer(x))
@@ -1713,6 +1733,7 @@ setMethod("add_months", signature(y = "Column", x = "numeric"),
 #' @rdname date_add
 #' @name date_add
 #' @export
+#' @examples \dontrun{date_add(df$d, 1)}
 setMethod("date_add", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "date_add", y@jc, as.integer(x))
@@ -1727,6 +1748,7 @@ setMethod("date_add", signature(y = "Column", x = "numeric"),
 #' @rdname date_sub
 #' @name date_sub
 #' @export
+#' @examples \dontrun{date_sub(df$d, 1)}
 setMethod("date_sub", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "date_sub", y@jc, as.integer(x))
@@ -1735,16 +1757,19 @@ setMethod("date_sub", signature(y = "Column", x = "numeric"),
 
 #' format_number
 #'
-#' Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places,
+#' Formats numeric column y to a format like '#,###,###.##', rounded to x decimal places,
 #' and returns the result as a string column.
 #'
-#' If d is 0, the result has no decimal point or fractional part.
-#' If d < 0, the result will be null.'
+#' If x is 0, the result has no decimal point or fractional part.
+#' If x < 0, the result will be null.
 #'
+#' @param y column to format
+#' @param x number of decimal place to format to
 #' @family string_funcs
 #' @rdname format_number
 #' @name format_number
 #' @export
+#' @examples \dontrun{format_number(df$n, 4)}
 setMethod("format_number", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1764,6 +1789,7 @@ setMethod("format_number", signature(y = "Column", x = "numeric"),
 #' @rdname sha2
 #' @name sha2
 #' @export
+#' @examples \dontrun{sha2(df$c, 256)}
 setMethod("sha2", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "sha2", y@jc, as.integer(x))
@@ -1779,6 +1805,7 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #' @rdname shiftLeft
 #' @name shiftLeft
 #' @export
+#' @examples \dontrun{shiftLeft(df$c, 1)}
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1796,6 +1823,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #' @rdname shiftRight
 #' @name shiftRight
 #' @export
+#' @examples \dontrun{shiftRight(df$c, 1)}
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1813,6 +1841,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #' @rdname shiftRightUnsigned
 #' @name shiftRightUnsigned
 #' @export
+#' @examples \dontrun{shiftRightUnsigned(df$c, 1)}
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1830,6 +1859,7 @@ setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
 #' @rdname concat_ws
 #' @name concat_ws
 #' @export
+#' @examples \dontrun{concat_ws('-', df$s, df$d)}
 setMethod("concat_ws", signature(sep = "character", x = "Column"),
           function(sep, x, ...) {
             jcols <- lapply(list(x, ...), function(x) { x@jc })
@@ -1845,6 +1875,7 @@ setMethod("concat_ws", signature(sep = "character", x = "Column"),
 #' @rdname conv
 #' @name conv
 #' @export
+#' @examples \dontrun{conv(df$n, 2, 16)}
 setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeric"),
           function(x, fromBase, toBase) {
             fromBase <- as.integer(fromBase)
@@ -1864,6 +1895,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' @rdname expr
 #' @name expr
 #' @export
+#' @examples \dontrun{expr('length(name)')}
 setMethod("expr", signature(x = "character"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "expr", x)
@@ -1878,6 +1910,7 @@ setMethod("expr", signature(x = "character"),
 #' @rdname format_string
 #' @name format_string
 #' @export
+#' @examples \dontrun{format_string('%d %s', df$a, df$b)}
 setMethod("format_string", signature(format = "character", x = "Column"),
           function(format, x, ...) {
             jcols <- lapply(list(x, ...), function(arg) { arg@jc })
@@ -1897,6 +1930,11 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' @rdname from_unixtime
 #' @name from_unixtime
 #' @export
+#' @examples
+#'\dontrun{
+#'from_unixtime(df$t)
+#'from_unixtime(df$t, 'yyyy/MM/dd HH')
+#'}
 setMethod("from_unixtime", signature(x = "Column"),
           function(x, format = "yyyy-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1915,6 +1953,7 @@ setMethod("from_unixtime", signature(x = "Column"),
 #' @rdname locate
 #' @name locate
 #' @export
+#' @examples \dontrun{locate('b', df$c, 1)}
 setMethod("locate", signature(substr = "character", str = "Column"),
           function(substr, str, pos = 0) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1931,6 +1970,7 @@ setMethod("locate", signature(substr = "character", str = "Column"),
 #' @rdname lpad
 #' @name lpad
 #' @export
+#' @examples \dontrun{lpad(df$c, 6, '#')}
 setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -1947,6 +1987,7 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' @rdname rand
 #' @name rand
 #' @export
+#' @examples \dontrun{rand()}
 setMethod("rand", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rand")
@@ -1970,6 +2011,7 @@ setMethod("rand", signature(seed = "numeric"),
 #' @rdname randn
 #' @name randn
 #' @export
+#' @examples \dontrun{randn()}
 setMethod("randn", signature(seed = "missing"),
           function(seed) {
             jc <- callJStatic("org.apache.spark.sql.functions", "randn")
@@ -1993,6 +2035,7 @@ setMethod("randn", signature(seed = "numeric"),
 #' @rdname regexp_extract
 #' @name regexp_extract
 #' @export
+#' @examples \dontrun{regexp_extract(df$c, '(\d+)-(\d+)', 1)}
 setMethod("regexp_extract",
           signature(x = "Column", pattern = "character", idx = "numeric"),
           function(x, pattern, idx) {
@@ -2010,6 +2053,7 @@ setMethod("regexp_extract",
 #' @rdname regexp_replace
 #' @name regexp_replace
 #' @export
+#' @examples \dontrun{regexp_replace(df$c, '(\\d+)', '--')}
 setMethod("regexp_replace",
           signature(x = "Column", pattern = "character", replacement = "character"),
           function(x, pattern, replacement) {
@@ -2027,6 +2071,7 @@ setMethod("regexp_replace",
 #' @rdname rpad
 #' @name rpad
 #' @export
+#' @examples \dontrun{rpad(df$c, 6, '#')}
 setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           function(x, len, pad) {
             jc <- callJStatic("org.apache.spark.sql.functions",
@@ -2040,12 +2085,17 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
 #' Returns the substring from string str before count occurrences of the delimiter delim.
 #' If count is positive, everything the left of the final delimiter (counting from left) is
 #' returned. If count is negative, every to the right of the final delimiter (counting from the
-#' right) is returned. substring <- index performs a case-sensitive match when searching for delim.
+#' right) is returned. substring_index performs a case-sensitive match when searching for delim.
 #'
 #' @family string_funcs
 #' @rdname substring_index
 #' @name substring_index
 #' @export
+#' @examples
+#'\dontrun{
+#'substring_index(df$c, '.', 2)
+#'substring_index(df$c, '.', -1)
+#'}
 setMethod("substring_index",
           signature(x = "Column", delim = "character", count = "numeric"),
           function(x, delim, count) {
@@ -2066,6 +2116,7 @@ setMethod("substring_index",
 #' @rdname translate
 #' @name translate
 #' @export
+#' @examples \dontrun{translate(df$c, 'rnlt', '123')}
 setMethod("translate",
           signature(x = "Column", matchingString = "character", replaceString = "character"),
           function(x, matchingString, replaceString) {
@@ -2082,6 +2133,12 @@ setMethod("translate",
 #' @rdname unix_timestamp
 #' @name unix_timestamp
 #' @export
+#' @examples
+#'\dontrun{
+#'unix_timestamp()
+#'unix_timestamp(df$t)
+#'unix_timestamp(df$t, 'yyyy-MM-dd HH')
+#'}
 setMethod("unix_timestamp", signature(x = "missing", format = "missing"),
           function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp")
@@ -2113,7 +2170,9 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
 #' @family normal_funcs
 #' @rdname when
 #' @name when
+#' @seealso \link{ifelse}
 #' @export
+#' @examples \dontrun{when(df$age == 2, df$age + 1)}
 setMethod("when", signature(condition = "Column", value = "ANY"),
           function(condition, value) {
               condition <- condition@jc
@@ -2130,7 +2189,9 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
 #' @family normal_funcs
 #' @rdname ifelse
 #' @name ifelse
+#' @seealso \link{when}
 #' @export
+#' @examples \dontrun{ifelse(df$a > 1 & df$b > 2, 0, 1)}
 setMethod("ifelse",
           signature(test = "Column", yes = "ANY", no = "ANY"),
           function(test, yes, no) {
