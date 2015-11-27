@@ -861,8 +861,8 @@ test_that("column functions", {
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c)
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
-  c14 <- cumeDist() + ntile(1)
-  c15 <- denseRank() + percentRank() + rank() + rowNumber()
+  c14 <- cume_dist() + ntile(1)
+  c15 <- dense_rank() + percent_rank() + rank() + row_number()
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
