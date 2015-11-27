@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -44,5 +45,7 @@ object StandardScalerExample {
     // Normalize each feature to have unit standard deviation.
     val scaledData = scalerModel.transform(dataFrame)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

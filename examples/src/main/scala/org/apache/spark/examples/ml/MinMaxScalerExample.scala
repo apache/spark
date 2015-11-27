@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -42,5 +43,7 @@ object MinMaxScalerExample {
     // rescale each feature to range [min, max].
     val scaledData = scalerModel.transform(dataFrame)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -46,6 +47,8 @@ object PCAExample {
     val result = pcaDF.select("pcaFeatures")
     result.show()
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 

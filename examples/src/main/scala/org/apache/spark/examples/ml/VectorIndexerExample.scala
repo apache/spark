@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -46,5 +47,7 @@ object VectorIndexerExample {
     // Create new column "indexed" with categorical values transformed to indices
     val indexedData = indexerModel.transform(data)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

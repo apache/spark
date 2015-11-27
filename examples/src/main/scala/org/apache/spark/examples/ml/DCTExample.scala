@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -46,6 +47,8 @@ object DCTExample {
     val dctDf = dct.transform(df)
     dctDf.select("featuresDCT").show(3)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 

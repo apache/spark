@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -41,5 +42,7 @@ object StopWordsRemoverExample {
 
     remover.transform(dataSet).show()
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

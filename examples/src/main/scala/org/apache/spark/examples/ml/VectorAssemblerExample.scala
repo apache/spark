@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -42,5 +43,7 @@ object VectorAssemblerExample {
     val output = assembler.transform(dataset)
     println(output.select("features", "clicked").first())
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

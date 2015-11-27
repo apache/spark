@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -50,6 +51,8 @@ object OneHotEncoderExample {
     val encoded = encoder.transform(indexed)
     encoded.select("id", "categoryVec").foreach(println)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 

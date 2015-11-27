@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -43,6 +44,8 @@ object BucketizerExample {
     // Transform original data into its bucket index.
     val bucketedData = bucketizer.transform(dataFrame)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 

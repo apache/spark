@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -47,5 +48,7 @@ object TokenizerExample {
     val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
     regexTokenized.select("words", "label").take(3).foreach(println)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

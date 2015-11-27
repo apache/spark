@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -43,5 +44,7 @@ object NormalizerExample {
     // Normalize each Vector using $L^\infty$ norm.
     val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -41,6 +42,8 @@ object StringIndexerExample {
     val indexed = indexer.fit(df).transform(df)
     indexed.show()
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 

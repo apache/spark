@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -41,5 +42,7 @@ object BinarizerExample {
     val binarizedFeatures = binarizedDataFrame.select("binarized_feature")
     binarizedFeatures.collect().foreach(println)
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

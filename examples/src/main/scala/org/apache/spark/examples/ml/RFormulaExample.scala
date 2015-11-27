@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -42,5 +43,7 @@ object RFormulaExample {
     val output = formula.fit(dataset).transform(dataset)
     output.select("features", "label").show()
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println

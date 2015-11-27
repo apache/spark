@@ -41,6 +41,7 @@ object NGramExample {
     val ngramDataFrame = ngram.transform(wordDataFrame)
     ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
     // $example off$
+    sc.stop()
   }
 }
 // scalastyle:on println

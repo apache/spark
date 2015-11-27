@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -45,6 +46,8 @@ object ElementwiseProductExample {
     // Batch transform the vectors to create new column:
     transformer.transform(dataFrame).show()
     // $example off$
+    sc.stop()
   }
 }
+// scalastyle:on println
 
