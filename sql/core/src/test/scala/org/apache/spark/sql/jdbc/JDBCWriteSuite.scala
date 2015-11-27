@@ -153,4 +153,12 @@ class JDBCWriteSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLCon
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === ctx.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
+
+  test("INSERT to JDBC Datasource with Unserializable Driver Properties") {
+    UnserializableDriverHelper.replaceDriverDuring {
+      sql("INSERT INTO TABLE PEOPLE1 SELECT * FROM PEOPLE")
+      assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
+      assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
+    }
+  }
 }
