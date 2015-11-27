@@ -109,8 +109,8 @@ class CodeGenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of variables that need to be initialized on each row.
-  val subExprInitVariables = mutable.ArrayBuffer.empty[String]
+  // The collection of variables that need to be reset on each row.
+  val subExprResetVariables = mutable.ArrayBuffer.empty[String]
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -413,10 +413,10 @@ class CodeGenContext {
       val code = expr.gen(this)
       val fn =
         s"""
-           |private ${javaType(expr.dataType)} $fnName(InternalRow ${INPUT_ROW}) {
+           |private void $fnName(InternalRow $INPUT_ROW) {
            |  ${code.code.trim}
            |  $isNull = ${code.isNull};
-           |  return ${code.value};
+           |  $value = ${code.value};
            |}
            """.stripMargin
 
@@ -442,7 +442,7 @@ class CodeGenContext {
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subExprInitVariables += s"$value = ${fnName}(${INPUT_ROW});"
+      subExprResetVariables += s"${fnName}($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     })

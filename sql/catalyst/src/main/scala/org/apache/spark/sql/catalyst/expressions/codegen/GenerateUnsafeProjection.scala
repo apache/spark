@@ -288,7 +288,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx.addMutableState(holderClass, bufferHolder, s"this.$bufferHolder = new $holderClass();")
 
     // Reset the subexpression values for each row.
-    val subexprReset = ctx.subExprInitVariables.mkString("\n")
+    val subexprReset = ctx.subExprResetVariables.mkString("\n")
 
     val code =
       s"""
