@@ -43,9 +43,12 @@ class BlockManagerMaster(
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(
-      blockManagerId: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef): Unit = {
+      blockManagerId: BlockManagerId,
+      maxMemSize: Long,
+      localDirsPath: Array[String],
+      slaveEndpoint: RpcEndpointRef): Unit = {
     logInfo("Trying to register BlockManager")
-    tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint))
+    tell(RegisterBlockManager(blockManagerId, maxMemSize, localDirsPath, slaveEndpoint))
     logInfo("Registered BlockManager")
   }
 
@@ -72,6 +75,12 @@ class BlockManagerMaster(
   def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     driverEndpoint.askWithRetry[IndexedSeq[Seq[BlockManagerId]]](
       GetLocationsMultipleBlockIds(blockIds))
+  }
+
+  /** Return other blockmanager's local dirs with the given blockManagerId */
+  def getLocalDirsPath(blockManagerId: BlockManagerId): Map[BlockManagerId, Array[String]] = {
+    driverEndpoint.askWithRetry[Map[BlockManagerId, Array[String]]](
+      GetLocalDirsPath(blockManagerId))
   }
 
   /**

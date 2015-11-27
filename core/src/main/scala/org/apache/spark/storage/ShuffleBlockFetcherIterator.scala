@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
+import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet, Queue}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkException, TaskContext}
@@ -58,6 +58,17 @@ final class ShuffleBlockFetcherIterator(
 
   import ShuffleBlockFetcherIterator._
 
+  private[this] val enableExternalShuffleService =
+    blockManager.conf.getBoolean("spark.shuffle.service.enabled", false)
+
+  /**
+   * If this option enabled, bypass unnecessary network interaction
+   * if multiple block managers work in a single host.
+   */
+  private[this] val enableBypassNetworkAccess =
+    blockManager.conf.getBoolean("spark.shuffle.bypassNetworkAccess", false) &&
+      !enableExternalShuffleService
+
   /**
    * Total number of blocks to fetch. This can be smaller than the total number of blocks
    * in [[blocksByAddress]] because we filter out zero-sized blocks in [[initialize]].
@@ -74,8 +85,12 @@ final class ShuffleBlockFetcherIterator(
 
   private[this] val startTime = System.currentTimeMillis
 
-  /** Local blocks to fetch, excluding zero-sized blocks. */
-  private[this] val localBlocks = new ArrayBuffer[BlockId]()
+  /**
+   * Local blocks to fetch, excluding zero-sized blocks.
+   * This iterator bypasses remote access to fetch the blocks that
+   * other block managers holds in an identical host.
+   */
+  private[this] val localBlocks = new HashMap[BlockManagerId, ArrayBuffer[BlockId]]
 
   /** Remote blocks to fetch, excluding zero-sized blocks. */
   private[this] val remoteBlocks = new HashSet[BlockId]()
@@ -188,10 +203,12 @@ final class ShuffleBlockFetcherIterator(
     var totalBlocks = 0
     for ((address, blockInfos) <- blocksByAddress) {
       totalBlocks += blockInfos.size
-      if (address.executorId == blockManager.blockManagerId.executorId) {
+      if (address.executorId == blockManager.blockManagerId.executorId ||
+          (enableBypassNetworkAccess && blockManager.blockManagerId.host == address.host)) {
         // Filter out zero-sized blocks
-        localBlocks ++= blockInfos.filter(_._2 != 0).map(_._1)
-        numBlocksToFetch += localBlocks.size
+        val blocks = blockInfos.filter(_._2 != 0).map(_._1)
+        localBlocks.getOrElseUpdate(address, ArrayBuffer()) ++= blocks
+        numBlocksToFetch += blocks.size
       } else {
         val iterator = blockInfos.iterator
         var curRequestSize = 0L
@@ -233,19 +250,28 @@ final class ShuffleBlockFetcherIterator(
   private[this] def fetchLocalBlocks() {
     val iter = localBlocks.iterator
     while (iter.hasNext) {
-      val blockId = iter.next()
-      try {
-        val buf = blockManager.getBlockData(blockId)
-        shuffleMetrics.incLocalBlocksFetched(1)
-        shuffleMetrics.incLocalBytesRead(buf.size)
-        buf.retain()
-        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId, 0, buf))
-      } catch {
-        case e: Exception =>
-          // If we see an exception, stop immediately.
-          logError(s"Error occurred while fetching local blocks", e)
-          results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
-          return
+      val (blockManagerId, blockIds) = iter.next()
+      val blockIter = blockIds.iterator
+      while (blockIter.hasNext) {
+        val blockId = blockIter.next()
+        assert(blockId.isShuffle)
+        try {
+          val buf = if (!enableExternalShuffleService) {
+            blockManager.getShuffleBlockData(blockId.asInstanceOf[ShuffleBlockId], blockManagerId)
+          } else {
+            blockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
+          }
+          shuffleMetrics.incLocalBlocksFetched(1)
+          shuffleMetrics.incLocalBytesRead(buf.size)
+          buf.retain()
+          results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId, 0, buf))
+        } catch {
+          case NonFatal(e) =>
+            // If we see an exception, stop immediately.
+            logError(s"Error occurred while fetching local blocks", e)
+            results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
+            return
+        }
       }
     }
   }

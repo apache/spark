@@ -49,12 +49,34 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  def getDataFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  private def getDataFile(
+      shuffleId: Int,
+      mapId: Int,
+      blockManagerId: BlockManagerId = blockManager.blockManagerId)
+    : File = {
+    if (blockManager.blockManagerId != blockManagerId) {
+      blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(
+        ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
+    } else {
+      blockManager.diskBlockManager.getFile(
+        ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    }
   }
 
-  private def getIndexFile(shuffleId: Int, mapId: Int): File = {
-    blockManager.diskBlockManager.getFile(ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+  def getDataFile(shuffleId: Int, mapId: Int): File =
+    getDataFile(shuffleId, mapId, blockManager.blockManagerId)
+
+  private def getIndexFile(
+      shuffleId: Int,
+      mapId: Int,
+      blockManagerId: BlockManagerId = blockManager.blockManagerId): File = {
+    if (blockManager.blockManagerId != blockManagerId) {
+      blockManager.diskBlockManager.getShuffleFileBypassNetworkAccess(
+        ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID), blockManagerId)
+    } else {
+      blockManager.diskBlockManager.getFile(
+        ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID))
+    }
   }
 
   /**
@@ -183,10 +205,12 @@ private[spark] class IndexShuffleBlockResolver(
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  override def getBlockData(
+      blockId: ShuffleBlockId,
+      blockManagerId: BlockManagerId): ManagedBuffer = {
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
-    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId, blockManagerId)
 
     val in = new DataInputStream(new FileInputStream(indexFile))
     try {
@@ -195,7 +219,7 @@ private[spark] class IndexShuffleBlockResolver(
       val nextOffset = in.readLong()
       new FileSegmentManagedBuffer(
         transportConf,
-        getDataFile(blockId.shuffleId, blockId.mapId),
+        getDataFile(blockId.shuffleId, blockId.mapId, blockManagerId),
         offset,
         nextOffset - offset)
     } finally {

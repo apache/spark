@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.util.UUID
 import java.io.{IOException, File}
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -51,16 +53,26 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
 
+  // Cache local directories for other block managers
+  private val localDirsByOtherBlkMgr = new mutable.HashMap[BlockManagerId, Array[String]]
+
   private val shutdownHook = addShutdownHook()
+
+  def blockManagerId: BlockManagerId = blockManager.blockManagerId
+
+  def getLocalDirsPath(): Array[String] = {
+    localDirs.map(_.getAbsolutePath)
+  }
+
+  def getLocalDirsPath(blockManagerId: BlockManagerId): Map[BlockManagerId, Array[String]] = {
+    blockManager.master.getLocalDirsPath(blockManagerId)
+  }
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
   def getFile(filename: String): File = {
-    // Figure out which local directory it hashes to, and which subdirectory in that
-    val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+    val (dirId, subDirId) = getDirInfo(filename, localDirs.length)
 
     // Create the subdirectory if it doesn't already exist
     val subDir = subDirs(dirId).synchronized {
@@ -81,6 +93,39 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
+
+  def getShuffleFileBypassNetworkAccess(blockId: BlockId, blockManagerId: BlockManagerId): File = {
+    if (this.blockManagerId == blockManagerId) {
+      getFile(blockId)
+    } else {
+      // Get a file from another block manager with given blockManagerId
+      val dirs = localDirsByOtherBlkMgr.synchronized {
+        localDirsByOtherBlkMgr.getOrElse(blockManagerId, {
+          localDirsByOtherBlkMgr ++= getLocalDirsPath(this.blockManagerId)
+          localDirsByOtherBlkMgr.getOrElse(blockManagerId, {
+            throw new IOException(s"Block manager (${blockManagerId}) not found " +
+              s"in host '${this.blockManagerId.host}'")
+          })
+        })
+      }
+      val (dirId, subDirId) = getDirInfo(blockId.name, dirs.length)
+      val file = new File(new File(dirs(dirId), "%02x".format(subDirId)), blockId.name)
+      if (!file.exists()) {
+        throw new IOException(s"File '${file}' not found in local dir")
+      }
+      logInfo(s"${this.blockManagerId} bypasses network access and " +
+        s"directly reads file '${file}' in local dir")
+      file
+    }
+  }
+
+  def getDirInfo(filename: String, numDirs: Int): (Int, Int) = {
+     // Figure out which local directory it hashes to, and which subdirectory in that
+    val hash = Utils.nonNegativeHash(filename)
+    val dirId = hash % numDirs
+    val subDirName = (hash / numDirs) % subDirsPerLocalDir
+    (dirId, subDirName)
+  }
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
@@ -166,7 +211,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     // Only perform cleanup if an external service is not serving our shuffle files.
     // Also blockManagerId could be null if block manager is not initialized properly.
     if (!blockManager.externalShuffleServiceEnabled ||
-      (blockManager.blockManagerId != null && blockManager.blockManagerId.isDriver)) {
+      (this.blockManagerId != null && blockManager.blockManagerId.isDriver)) {
       localDirs.foreach { localDir =>
         if (localDir.isDirectory() && localDir.exists()) {
           try {

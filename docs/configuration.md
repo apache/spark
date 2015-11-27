@@ -477,6 +477,14 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.io.compression.codec</code>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.bypassNetworkAccess</code></td>
+  <td>false</td>
+  <td>
+    Whether to bypass network interaction if block managers share an identical host
+    (e.g., multiple block managers work in a single host).
+  </td>
+</tr>
 </table>
 
 #### Spark UI
