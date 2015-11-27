@@ -26,6 +26,7 @@ from pyspark import RDD, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
+from pyspark.sql import utils
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -108,7 +109,7 @@ class DataFrameReader(object):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class`DataFrame`.
 
-        :param path: optional string for file-system backed data sources.
+        :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
@@ -117,6 +118,7 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+
         >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
         ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
@@ -129,12 +131,8 @@ class DataFrameReader(object):
         self.options(**options)
         if path is not None:
             if type(path) == list:
-                paths = path
-                gateway = self._sqlContext._sc._gateway
-                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
-                for i in range(0, len(paths)):
-                    jpaths[i] = paths[i]
-                return self._df(self._jreader.load(jpaths))
+                return self._df(
+                    self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
             else:
                 return self._df(self._jreader.load(path))
         else:
@@ -176,6 +174,8 @@ class DataFrameReader(object):
             self.schema(schema)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        elif type(path) == list:
+            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             return self._df(self._jreader.json(path._jrdd))
         else:
@@ -206,16 +206,20 @@ class DataFrameReader(object):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, path):
+    def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "text".
 
         Each line in the text file is a new row in the resulting DataFrame.
+
+        :param paths: string, or list of strings, for input path(s).
 
         >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        return self._df(self._jreader.text(path))
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
     def orc(self, path):
@@ -269,8 +273,9 @@ class DataFrameReader(object):
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
-            arr = self._sqlContext._sc._jvm.PythonUtils.toArray(predicates)
-            return self._df(self._jreader.jdbc(url, table, arr, jprop))
+            gateway = self._sqlContext._sc._gateway
+            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
+            return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
 

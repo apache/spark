@@ -556,7 +556,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     if (!dynamicAllocationEnabled && _conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-      logInfo("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
     }
 
     _executorAllocationManager =
@@ -581,6 +581,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // Post init
     _taskScheduler.postStartHook()
+    _env.metricsSystem.registerSource(_dagScheduler.metricsSource)
     _env.metricsSystem.registerSource(new BlockManagerSource(_env.blockManager))
     _executorAllocationManager.foreach { e =>
       _env.metricsSystem.registerSource(e.executorAllocationManagerSource)
@@ -1378,7 +1379,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     val key = if (!isLocal && scheme == "file") {
-      env.httpFileServer.addFile(new File(uri.getPath))
+      env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else {
       schemeCorrectedPath
     }
@@ -1461,7 +1462,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   override def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(executorIds)
+        b.killExecutors(executorIds, replace = false, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1499,7 +1500,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
-        b.killExecutors(Seq(executorId), replace = true)
+        b.killExecutors(Seq(executorId), replace = true, force = true)
       case _ =>
         logWarning("Killing executors is only supported in coarse-grained mode")
         false
@@ -1629,7 +1630,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       var key = ""
       if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
-        key = env.httpFileServer.addJar(new File(path))
+        key = env.rpcEnv.fileServer.addJar(new File(path))
       } else {
         val uri = new URI(path)
         key = uri.getScheme match {
@@ -1643,7 +1644,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
-                env.httpFileServer.addJar(new File(fileName))
+                env.rpcEnv.fileServer.addJar(new File(fileName))
               } catch {
                 case e: Exception =>
                   // For now just log an error but allow to go through so spark examples work.
@@ -1654,7 +1655,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
               }
             } else {
               try {
-                env.httpFileServer.addJar(new File(uri.getPath))
+                env.rpcEnv.fileServer.addJar(new File(uri.getPath))
               } catch {
                 case exc: FileNotFoundException =>
                   logError(s"Jar not found at $path")
@@ -1693,6 +1694,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Shut down the SparkContext.
   def stop() {
+    if (AsynchronousListenerBus.withinListenerThread.value) {
+      throw new SparkException("Cannot stop SparkContext within listener thread of" +
+        " AsynchronousListenerBus")
+    }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
     if (!stopped.compareAndSet(false, true)) {
@@ -2710,7 +2715,7 @@ object SparkContext extends Logging {
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
+        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
           new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)

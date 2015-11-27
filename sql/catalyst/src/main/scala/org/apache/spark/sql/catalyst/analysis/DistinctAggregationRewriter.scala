@@ -126,8 +126,8 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
       // When the flag is set to specialize single distinct agg planning,
       // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column and this aggregate operator does have grouping expressions.
-      distinctAggGroups.size > 1 || (distinctAggGroups.size == 1 && a.groupingExpressions.isEmpty)
+      // distinct column.
+      distinctAggGroups.size > 1
     } else {
       distinctAggGroups.size >= 1
     }

@@ -868,29 +868,27 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     (0 to 2).foreach { fallbackStartsAt =>
-      sqlContext.setConf(
-        "spark.sql.TungstenAggregate.testFallbackStartsAt",
-        fallbackStartsAt.toString)
+      withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> fallbackStartsAt.toString) {
+        // Create a new df to make sure its physical operator picks up
+        // spark.sql.TungstenAggregate.testFallbackStartsAt.
+        // todo: remove it?
+        val newActual = DataFrame(sqlContext, actual.logicalPlan)
 
-      // Create a new df to make sure its physical operator picks up
-      // spark.sql.TungstenAggregate.testFallbackStartsAt.
-      // todo: remove it?
-      val newActual = DataFrame(sqlContext, actual.logicalPlan)
+        QueryTest.checkAnswer(newActual, expectedAnswer) match {
+          case Some(errorMessage) =>
+            val newErrorMessage =
+              s"""
+                |The following aggregation query failed when using TungstenAggregate with
+                |controlled fallback (it falls back to sort-based aggregation once it has processed
+                |$fallbackStartsAt input rows). The query is
+                |${actual.queryExecution}
+                |
+                |$errorMessage
+              """.stripMargin
 
-      QueryTest.checkAnswer(newActual, expectedAnswer) match {
-        case Some(errorMessage) =>
-          val newErrorMessage =
-            s"""
-              |The following aggregation query failed when using TungstenAggregate with
-              |controlled fallback (it falls back to sort-based aggregation once it has processed
-              |$fallbackStartsAt input rows). The query is
-              |${actual.queryExecution}
-              |
-              |$errorMessage
-            """.stripMargin
-
-          fail(newErrorMessage)
-        case None =>
+            fail(newErrorMessage)
+          case None =>
+        }
       }
     }
   }

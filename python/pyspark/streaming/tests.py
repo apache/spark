@@ -403,6 +403,74 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
+    def test_failed_func(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], time: Time)
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream = self.ssc.queueStream(input)
+
+        def failed_func(i):
+            raise ValueError("This is a special error")
+
+        input_stream.map(failed_func).pprint()
+        self.ssc.start()
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func2(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time)
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream1 = self.ssc.queueStream(input)
+        input_stream2 = self.ssc.queueStream(input)
+
+        def failed_func(rdd1, rdd2):
+            raise ValueError("This is a special error")
+
+        input_stream1.transformWith(failed_func, input_stream2, True).pprint()
+        self.ssc.start()
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func_with_reseting_failure(self):
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream = self.ssc.queueStream(input)
+
+        def failed_func(i):
+            if i == 1:
+                # Make it fail in the second batch
+                raise ValueError("This is a special error")
+            else:
+                return i
+
+        # We should be able to see the results of the 3rd and 4th batches even if the second batch
+        # fails
+        expected = [[0], [2], [3]]
+        self.assertEqual(expected, self._collect(input_stream.map(failed_func), 3))
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
 
 class StreamingListenerTests(PySparkStreamingTestCase):
 
@@ -582,6 +650,17 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 0.1, 0.1))
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 1, 0.1))
 
+    def test_reduce_by_key_and_window_with_none_invFunc(self):
+        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+
+        def func(dstream):
+            return dstream.map(lambda x: (x, 1))\
+                .reduceByKeyAndWindow(operator.add, None, 5, 1)\
+                .filter(lambda kv: kv[1] > 0).count()
+
+        expected = [[2], [4], [6], [6], [6], [6]]
+        self._test_func(input, func, expected)
+
 
 class StreamingContextTests(PySparkStreamingTestCase):
 
@@ -753,7 +832,34 @@ class CheckpointTests(unittest.TestCase):
         if self.cpd is not None:
             shutil.rmtree(self.cpd)
 
-    @unittest.skip("Enable it when we fix the checkpoint bug")
+    def test_transform_function_serializer_failure(self):
+        inputd = tempfile.mkdtemp()
+        self.cpd = tempfile.mkdtemp("test_transform_function_serializer_failure")
+
+        def setup():
+            conf = SparkConf().set("spark.default.parallelism", 1)
+            sc = SparkContext(conf=conf)
+            ssc = StreamingContext(sc, 0.5)
+
+            # A function that cannot be serialized
+            def process(time, rdd):
+                sc.parallelize(range(1, 10))
+
+            ssc.textFileStream(inputd).foreachRDD(process)
+            return ssc
+
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
+        try:
+            self.ssc.start()
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue(
+                "It appears that you are attempting to reference SparkContext" in failure)
+            return
+
+        self.fail("using SparkContext in process should fail because it's not Serializable")
+
     def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()
         outputd = tempfile.mkdtemp() + "/"
@@ -822,11 +928,11 @@ class CheckpointTests(unittest.TestCase):
         # Verify that getOrCreate() uses existing SparkContext
         self.ssc.stop(True, True)
         time.sleep(1)
-        sc = SparkContext(SparkConf())
+        self.sc = SparkContext(conf=SparkConf())
         self.setupCalled = False
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == sc)
+        self.assertTrue(self.ssc.sparkContext == self.sc)
 
         # Verify the getActiveOrCreate() recovers from checkpoint files
         self.ssc.stop(True, True)
@@ -845,11 +951,11 @@ class CheckpointTests(unittest.TestCase):
         # Verify that getActiveOrCreate() uses existing SparkContext
         self.ssc.stop(True, True)
         time.sleep(1)
-        self.sc = SparkContext(SparkConf())
+        self.sc = SparkContext(conf=SparkConf())
         self.setupCalled = False
         self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == sc)
+        self.assertTrue(self.ssc.sparkContext == self.sc)
 
         # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
         self.ssc.stop(True, True)
@@ -1042,6 +1148,41 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.assertEqual(topic_and_partition_a, topic_and_partition_b)
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_message_handler(self):
+        """Test Python direct Kafka RDD MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 1, "c": 2}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges,
+                                   messageHandler=getKeyAndDoubleMessage)
+        self._validateRddResult({"aa": 1, "bb": 1, "cc": 2}, rdd)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_message_handler(self):
+        """Test the Python direct Kafka stream MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams,
+                                               messageHandler=getKeyAndDoubleMessage)
+        self._validateStreamResult({"aa": 1, "bb": 2, "cc": 3}, stream)
 
 
 class FlumeStreamTests(PySparkStreamingTestCase):

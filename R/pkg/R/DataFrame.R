@@ -254,7 +254,6 @@ setMethod("dtypes",
 #' @family DataFrame functions
 #' @rdname columns
 #' @name columns
-#' @aliases names
 #' @export
 #' @examples
 #'\dontrun{
@@ -272,7 +271,6 @@ setMethod("columns",
             })
           })
 
-#' @family DataFrame functions
 #' @rdname columns
 #' @name names
 setMethod("names",
@@ -281,7 +279,6 @@ setMethod("names",
             columns(x)
           })
 
-#' @family DataFrame functions
 #' @rdname columns
 #' @name names<-
 setMethod("names<-",
@@ -533,14 +530,8 @@ setMethod("distinct",
             dataFrame(sdf)
           })
 
-#' @title Distinct rows in a DataFrame
-#
-#' @description Returns a new DataFrame containing distinct rows in this DataFrame
-#'
-#' @family DataFrame functions
-#' @rdname unique
+#' @rdname distinct
 #' @name unique
-#' @aliases distinct
 setMethod("unique",
           signature(x = "DataFrame"),
           function(x) {
@@ -557,7 +548,7 @@ setMethod("unique",
 #'
 #' @family DataFrame functions
 #' @rdname sample
-#' @aliases sample_frac
+#' @name sample
 #' @export
 #' @examples
 #'\dontrun{
@@ -579,7 +570,6 @@ setMethod("sample",
             dataFrame(sdf)
           })
 
-#' @family DataFrame functions
 #' @rdname sample
 #' @name sample_frac
 setMethod("sample_frac",
@@ -589,16 +579,15 @@ setMethod("sample_frac",
             sample(x, withReplacement, fraction)
           })
 
-#' Count
+#' nrow
 #'
 #' Returns the number of rows in a DataFrame
 #'
 #' @param x A SparkSQL DataFrame
 #'
 #' @family DataFrame functions
-#' @rdname count
+#' @rdname nrow
 #' @name count
-#' @aliases nrow
 #' @export
 #' @examples
 #'\dontrun{
@@ -614,14 +603,8 @@ setMethod("count",
             callJMethod(x@sdf, "count")
           })
 
-#' @title Number of rows for a DataFrame
-#' @description Returns number of rows in a DataFrames
-#'
 #' @name nrow
-#'
-#' @family DataFrame functions
 #' @rdname nrow
-#' @aliases count
 setMethod("nrow",
           signature(x = "DataFrame"),
           function(x) {
@@ -870,7 +853,6 @@ setMethod("toRDD",
 #' @param x a DataFrame
 #' @return a GroupedData
 #' @seealso GroupedData
-#' @aliases group_by
 #' @family DataFrame functions
 #' @rdname groupBy
 #' @name groupBy
@@ -896,7 +878,6 @@ setMethod("groupBy",
              groupedData(sgd)
            })
 
-#' @family DataFrame functions
 #' @rdname groupBy
 #' @name group_by
 setMethod("group_by",
@@ -913,7 +894,6 @@ setMethod("group_by",
 #' @family DataFrame functions
 #' @rdname agg
 #' @name agg
-#' @aliases summarize
 #' @export
 setMethod("agg",
           signature(x = "DataFrame"),
@@ -921,7 +901,6 @@ setMethod("agg",
             agg(groupBy(x), ...)
           })
 
-#' @family DataFrame functions
 #' @rdname agg
 #' @name summarize
 setMethod("summarize",
@@ -1092,7 +1071,6 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' @family DataFrame functions
 #' @rdname subset
 #' @name subset
-#' @aliases [
 #' @family subsetting functions
 #' @examples
 #' \dontrun{
@@ -1216,7 +1194,7 @@ setMethod("selectExpr",
 #' @family DataFrame functions
 #' @rdname withColumn
 #' @name withColumn
-#' @aliases mutate transform
+#' @seealso \link{rename} \link{mutate}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1231,7 +1209,6 @@ setMethod("withColumn",
           function(x, colName, col) {
             select(x, x$"*", alias(col, colName))
           })
-
 #' Mutate
 #'
 #' Return a new DataFrame with the specified columns added.
@@ -1240,9 +1217,9 @@ setMethod("withColumn",
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @family DataFrame functions
-#' @rdname withColumn
+#' @rdname mutate
 #' @name mutate
-#' @aliases withColumn transform
+#' @seealso \link{rename} \link{withColumn}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1273,17 +1250,15 @@ setMethod("mutate",
           })
 
 #' @export
-#' @family DataFrame functions
-#' @rdname withColumn
+#' @rdname mutate
 #' @name transform
-#' @aliases withColumn mutate
 setMethod("transform",
           signature(`_data` = "DataFrame"),
           function(`_data`, ...) {
             mutate(`_data`, ...)
           })
 
-#' WithColumnRenamed
+#' rename
 #'
 #' Rename an existing column in a DataFrame.
 #'
@@ -1292,8 +1267,9 @@ setMethod("transform",
 #' @param newCol The new column name.
 #' @return A DataFrame with the column name changed.
 #' @family DataFrame functions
-#' @rdname withColumnRenamed
+#' @rdname rename
 #' @name withColumnRenamed
+#' @seealso \link{mutate}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1316,17 +1292,9 @@ setMethod("withColumnRenamed",
             select(x, cols)
           })
 
-#' Rename
-#'
-#' Rename an existing column in a DataFrame.
-#'
-#' @param x A DataFrame
-#' @param newCol A named pair of the form new_column_name = existing_column
-#' @return A DataFrame with the column name changed.
-#' @family DataFrame functions
-#' @rdname withColumnRenamed
+#' @param newColPair A named pair of the form new_column_name = existing_column
+#' @rdname rename
 #' @name rename
-#' @aliases withColumnRenamed
 #' @export
 #' @examples
 #'\dontrun{
@@ -1371,7 +1339,6 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @family DataFrame functions
 #' @rdname arrange
 #' @name arrange
-#' @aliases orderby
 #' @export
 #' @examples
 #'\dontrun{
@@ -1395,8 +1362,8 @@ setMethod("arrange",
             dataFrame(sdf)
           })
 
-#' @family DataFrame functions
 #' @rdname arrange
+#' @name arrange
 #' @export
 setMethod("arrange",
           signature(x = "DataFrame", col = "character"),
@@ -1427,9 +1394,9 @@ setMethod("arrange",
             do.call("arrange", c(x, jcols))
           })
 
-#' @family DataFrame functions
 #' @rdname arrange
-#' @name orderby
+#' @name orderBy
+#' @export
 setMethod("orderBy",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col) {
@@ -1492,6 +1459,7 @@ setMethod("where",
 #' @family DataFrame functions
 #' @rdname join
 #' @name join
+#' @seealso \link{merge}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1528,9 +1496,7 @@ setMethod("join",
             dataFrame(sdf)
           })
 
-#'
 #' @name merge
-#' @aliases join
 #' @title Merges two data frames
 #' @param x the first data frame to be joined
 #' @param y the second data frame to be joined
@@ -1550,6 +1516,7 @@ setMethod("join",
 #'   outer join will be returned.
 #' @family DataFrame functions
 #' @rdname merge
+#' @seealso \link{join}
 #' @export
 #' @examples
 #'\dontrun{
@@ -1671,7 +1638,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
   cols
 }
 
-#' UnionAll
+#' rbind
 #'
 #' Return a new DataFrame containing the union of rows in this DataFrame
 #' and another DataFrame. This is equivalent to `UNION ALL` in SQL.
@@ -1681,7 +1648,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the union.
 #' @family DataFrame functions
-#' @rdname unionAll
+#' @rdname rbind
 #' @name unionAll
 #' @export
 #' @examples
@@ -1700,13 +1667,11 @@ setMethod("unionAll",
           })
 
 #' @title Union two or more DataFrames
-#'
 #' @description Returns a new DataFrame containing rows of all parameters.
 #'
-#' @family DataFrame functions
 #' @rdname rbind
 #' @name rbind
-#' @aliases unionAll
+#' @export
 setMethod("rbind",
           signature(... = "DataFrame"),
           function(x, ..., deparse.level = 1) {
@@ -1795,7 +1760,6 @@ setMethod("except",
 #' @family DataFrame functions
 #' @rdname write.df
 #' @name write.df
-#' @aliases saveDF
 #' @export
 #' @examples
 #'\dontrun{
@@ -1828,7 +1792,6 @@ setMethod("write.df",
             callJMethod(df@sdf, "save", source, jmode, options)
           })
 
-#' @family DataFrame functions
 #' @rdname write.df
 #' @name saveDF
 #' @export
@@ -1891,7 +1854,7 @@ setMethod("saveAsTable",
             callJMethod(df@sdf, "saveAsTable", tableName, source, jmode, options)
           })
 
-#' describe
+#' summary
 #'
 #' Computes statistics for numeric columns.
 #' If no columns are given, this function computes statistics for all numerical columns.
@@ -1901,9 +1864,8 @@ setMethod("saveAsTable",
 #' @param ... Additional expressions
 #' @return A DataFrame
 #' @family DataFrame functions
-#' @rdname describe
+#' @rdname summary
 #' @name describe
-#' @aliases summary
 #' @export
 #' @examples
 #'\dontrun{
@@ -1923,8 +1885,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @family DataFrame functions
-#' @rdname describe
+#' @rdname summary
 #' @name describe
 setMethod("describe",
           signature(x = "DataFrame"),
@@ -1934,11 +1895,6 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @title Summary
-#'
-#' @description Computes statistics for numeric columns of the DataFrame
-#'
-#' @family DataFrame functions
 #' @rdname summary
 #' @name summary
 setMethod("summary",
@@ -1966,7 +1922,6 @@ setMethod("summary",
 #' @family DataFrame functions
 #' @rdname nafunctions
 #' @name dropna
-#' @aliases na.omit
 #' @export
 #' @examples
 #'\dontrun{
@@ -1993,7 +1948,6 @@ setMethod("dropna",
             dataFrame(sdf)
           })
 
-#' @family DataFrame functions
 #' @rdname nafunctions
 #' @name na.omit
 #' @export
@@ -2019,9 +1973,7 @@ setMethod("na.omit",
 #'             type are ignored. For example, if value is a character, and
 #'             subset contains a non-character column, then the non-character
 #'             column is simply ignored.
-#' @return A DataFrame
 #'
-#' @family DataFrame functions
 #' @rdname nafunctions
 #' @name fillna
 #' @export
@@ -2152,7 +2104,7 @@ setMethod("with",
           })
 
 #' Returns the column types of a DataFrame.
-#' 
+#'
 #' @name coltypes
 #' @title Get column types of a DataFrame
 #' @family dataframe_funcs
