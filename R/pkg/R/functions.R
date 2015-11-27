@@ -1486,12 +1486,12 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcol <- lapply(list(...), function (x) {
+            jcols <- lapply(list(...), function (x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              jcol)
+                              jcols)
             column(jc)
           })
 
@@ -1508,7 +1508,7 @@ setMethod("countDistinct",
 setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
-            jcol <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function (x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -1530,7 +1530,7 @@ setMethod("greatest",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcol <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function (x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -1552,7 +1552,7 @@ setMethod("least",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcol <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function (x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
