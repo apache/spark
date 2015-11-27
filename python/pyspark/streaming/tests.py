@@ -1161,6 +1161,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.sendMessages(topic, sendData)
 
         offsetRanges = []
+
         def transformWithOffsetRanges(rdd):
             for o in rdd.offsetRanges():
                 offsetRanges.append(o)
@@ -1169,6 +1170,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.ssc.stop(False)
         self.ssc = None
         tmpdir = "checkpoint-test-%d" % random.randint(0, 10000)
+
         def setup():
             ssc = StreamingContext(self.sc, 0.5)
             ssc.checkpoint(tmpdir)
