@@ -15,39 +15,37 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.ml.feature.{Tokenizer, RegexTokenizer}
-import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
+import org.apache.spark.ml.feature.{RegexTokenizer, Tokenizer}
+// $example off$
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for tokenizer. Run with
- * {{{
- * ./bin/run-example ml.TokenizerExample [options]
- * }}}
- */
 object TokenizerExample {
-  val conf = new SparkConf().setAppName("JavaTokenizerExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("TokenizerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val sentenceDataFrame = sqlContext.createDataFrame(Seq(
-    (0, "Hi I heard about Spark"),
-    (1, "I wish Java could use case classes"),
-    (2, "Logistic,regression,models,are,neat")
-  )).toDF("label", "sentence")
+    // $example on$
+    val sentenceDataFrame = sqlContext.createDataFrame(Seq(
+      (0, "Hi I heard about Spark"),
+      (1, "I wish Java could use case classes"),
+      (2, "Logistic,regression,models,are,neat")
+    )).toDF("label", "sentence")
 
-  val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-  val regexTokenizer = new RegexTokenizer()
-    .setInputCol("sentence")
-    .setOutputCol("words")
-    .setPattern("\\W") // alternatively .setPattern("\\w+").setGaps(false)
+    val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
+    val regexTokenizer = new RegexTokenizer()
+      .setInputCol("sentence")
+      .setOutputCol("words")
+      .setPattern("\\W") // alternatively .setPattern("\\w+").setGaps(false)
 
-  val tokenized = tokenizer.transform(sentenceDataFrame)
-  tokenized.select("words", "label").take(3).foreach(println)
-  val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-  regexTokenized.select("words", "label").take(3).foreach(println)
+    val tokenized = tokenizer.transform(sentenceDataFrame)
+    tokenized.select("words", "label").take(3).foreach(println)
+    val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
+    regexTokenized.select("words", "label").take(3).foreach(println)
+    // $example off$
+  }
 }
-// scalastyle:on println

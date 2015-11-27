@@ -17,32 +17,31 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.Normalizer
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for normalizer. Run with
- * {{{
- * ./bin/run-example ml.NormalizerExample [options]
- * }}}
- */
 object NormalizerExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("NormalizerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("NormalizerExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
-  val dataFrame = sqlContext.read.format("libsvm")
-    .load("data/mllib/sample_libsvm_data.txt")
+    // Normalize each Vector using $L^1$ norm.
+    val normalizer = new Normalizer()
+      .setInputCol("features")
+      .setOutputCol("normFeatures")
+      .setP(1.0)
 
-  // Normalize each Vector using $L^1$ norm.
-  val normalizer = new Normalizer()
-    .setInputCol("features")
-    .setOutputCol("normFeatures")
-    .setP(1.0)
-  val l1NormData = normalizer.transform(dataFrame)
+    val l1NormData = normalizer.transform(dataFrame)
 
-  // Normalize each Vector using $L^\infty$ norm.
-  val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
+    // Normalize each Vector using $L^\infty$ norm.
+    val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
+    // $example off$
+  }
 }

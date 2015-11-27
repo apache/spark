@@ -17,33 +17,32 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.StandardScaler
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for standard scaler. Run with
- * {{{
- * ./bin/run-example ml.StandardScalerExample [options]
- * }}}
- */
 object StandardScalerExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("StandardScalerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("StandardScalerExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
-  val dataFrame = sqlContext.read.format("libsvm")
-    .load("data/mllib/sample_libsvm_data.txt")
-  val scaler = new StandardScaler()
-    .setInputCol("features")
-    .setOutputCol("scaledFeatures")
-    .setWithStd(true)
-    .setWithMean(false)
+    val scaler = new StandardScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures")
+      .setWithStd(true)
+      .setWithMean(false)
 
-  // Compute summary statistics by fitting the StandardScaler
-  val scalerModel = scaler.fit(dataFrame)
+    // Compute summary statistics by fitting the StandardScaler.
+    val scalerModel = scaler.fit(dataFrame)
 
-  // Normalize each feature to have unit standard deviation.
-  val scaledData = scalerModel.transform(dataFrame)
+    // Normalize each feature to have unit standard deviation.
+    val scaledData = scalerModel.transform(dataFrame)
+    // $example off$
+  }
 }

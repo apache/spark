@@ -16,32 +16,31 @@
  */
 
 // scalastyle:off println
-
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.NGram
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for n-gram. Run with
- * {{{
- * ./bin/run-example ml.NGramExample [options]
- * }}}
- */
 object NGramExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("NGramExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("NGramExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val wordDataFrame = sqlContext.createDataFrame(Seq(
+      (0, Array("Hi", "I", "heard", "about", "Spark")),
+      (1, Array("I", "wish", "Java", "could", "use", "case", "classes")),
+      (2, Array("Logistic", "regression", "models", "are", "neat"))
+    )).toDF("label", "words")
 
-  val wordDataFrame = sqlContext.createDataFrame(Seq(
-    (0, Array("Hi", "I", "heard", "about", "Spark")),
-    (1, Array("I", "wish", "Java", "could", "use", "case", "classes")),
-    (2, Array("Logistic", "regression", "models", "are", "neat"))
-  )).toDF("label", "words")
-
-  val ngram = new NGram().setInputCol("words").setOutputCol("ngrams")
-  val ngramDataFrame = ngram.transform(wordDataFrame)
-  ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
+    val ngram = new NGram().setInputCol("words").setOutputCol("ngrams")
+    val ngramDataFrame = ngram.transform(wordDataFrame)
+    ngramDataFrame.take(3).map(_.getAs[Stream[String]]("ngrams").toList).foreach(println)
+    // $example off$
+  }
 }
+// scalastyle:on println

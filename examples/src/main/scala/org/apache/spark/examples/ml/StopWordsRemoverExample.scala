@@ -15,35 +15,31 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
-
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.StopWordsRemover
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for stop words remover. Run with
- * {{{
- * ./bin/run-example ml.StopWordsRemoverExample [options]
- * }}}
- */
 object StopWordsRemoverExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("StopWordsRemoverExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("StopWordsRemoverExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
 
-  val remover = new StopWordsRemover()
-    .setInputCol("raw")
-    .setOutputCol("filtered")
-  val dataSet = sqlContext.createDataFrame(Seq(
-    (0, Seq("I", "saw", "the", "red", "baloon")),
-    (1, Seq("Mary", "had", "a", "little", "lamb"))
-  )).toDF("id", "raw")
+    val dataSet = sqlContext.createDataFrame(Seq(
+      (0, Seq("I", "saw", "the", "red", "baloon")),
+      (1, Seq("Mary", "had", "a", "little", "lamb"))
+    )).toDF("id", "raw")
 
-  remover.transform(dataSet).show()
+    remover.transform(dataSet).show()
+    // $example off$
+  }
 }
-
-// scalastyle:on println
