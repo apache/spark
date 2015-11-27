@@ -97,6 +97,7 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
+    override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
     override val outputsUnsafeRows: Boolean = false)
   extends LeafNode {
@@ -111,7 +112,7 @@ private[sql] case class PhysicalRDD(
 
 private[sql] object PhysicalRDD {
   // Metadata keys
-  val SOURCE = "Source"
+  val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
 
   def createFromDataSource(
@@ -121,6 +122,6 @@ private[sql] object PhysicalRDD {
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
     // All HadoopFsRelations output UnsafeRows
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
-    PhysicalRDD(output, rdd, metadata + (SOURCE -> relation.toString), outputUnsafeRows)
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
   }
 }

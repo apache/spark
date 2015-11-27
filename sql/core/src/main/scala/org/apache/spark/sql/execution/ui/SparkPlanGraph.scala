@@ -98,13 +98,23 @@ private[ui] case class SparkPlanGraphNode(
 
     builder ++= name
 
+    def truncateLongText(text: String) = {
+      if (text.length > 100) {
+        text.take(100) + "..."
+      } else {
+        text
+      }
+    }
+
     if (metadata.nonEmpty) {
       // If there are metadata, display each entry in a separate line. We should use an escaped
       // "\n" here to follow the dot syntax.
       //
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+      val metadataEntries = for {
+        (key, value) <- metadata.toSeq.sorted
+      } yield s"$key: ${truncateLongText(value)}"
       builder ++= "\\n \\n"
       builder ++= metadataEntries.mkString("\\n")
     }
