@@ -29,7 +29,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
+import org.apache.spark.sql.execution.datasources.json.{JSONRDDRelation, JSONRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types.StructType
@@ -258,13 +258,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     val primitivesAsString = extraOptions.getOrElse("primitivesAsString", "false").toBoolean
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(
-        Some(jsonRDD),
+      new JSONRDDRelation(
+        jsonRDD,
         samplingRatio,
         primitivesAsString,
-        userSpecifiedSchema,
-        None,
-        None)(sqlContext)
+        userSpecifiedSchema)(sqlContext)
     )
   }
 

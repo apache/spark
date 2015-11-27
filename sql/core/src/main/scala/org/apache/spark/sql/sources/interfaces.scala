@@ -422,7 +422,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   private class FileStatusCache {
 
-    var inputExists: Boolean = !paths.isEmpty
+    var inputExists: Boolean = _
 
     var leafFiles = mutable.Map.empty[Path, FileStatus]
 
@@ -436,7 +436,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          inputExists = inputExists && fs.exists(qualified)
           logInfo(s"Listing $qualified on driver")
           Try(fs.listStatus(qualified)).getOrElse(Array.empty)
         }.filterNot { status =>
@@ -454,7 +453,17 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
+    // at least one of the root inputs exist
+    private def isInputExists(paths: Array[String]): Boolean ={
+      paths.exists(path => {
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(hadoopConf)
+        fs.exists(hdfsPath)
+      })
+    }
+
     def refresh(): Unit = {
+      inputExists = isInputExists(paths)
       val files = listLeafFiles(paths)
 
       leafFiles.clear()
@@ -462,6 +471,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
       leafFiles ++= files.map(f => f.getPath -> f).toMap
       leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
+
     }
   }
 
@@ -609,11 +619,11 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
       }
     }
 
-    if (!inputExists) {
+    if (!fileStatusCache.inputExists) {
       throw new IOException("Input paths do not exist, input paths="
         + inputPaths.mkString("[", ",", "]"))
     } else {
-      if (inputStatuses.isEmpty && readFromHDFS) {
+      if (inputStatuses.isEmpty) {
         logWarning("Input paths are empty, input paths=" + inputPaths.mkString("[", ",", "]"))
         sqlContext.sparkContext.emptyRDD[InternalRow]
       } else {
@@ -622,18 +632,6 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     }
   }
 
-  /**
-   * Most of time, HadoopFsRelation should check the inputPaths, but for some cases it is not,
-   * e.g. JsonRelation may read from RDD[String]
-   */
-  def inputExists: Boolean = fileStatusCache.inputExists
-
-  /**
-   * Most of time, HadoopFsRelation should read from hdfs, but some cases it is not,
-   * e.g. JsonRelation may read from RDD[String]
-   * @return
-   */
-  def readFromHDFS: Boolean = true
 
   /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned

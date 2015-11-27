@@ -1164,32 +1164,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("JSONRelation equality test") {
     val relation0 = new JSONRelation(
-      Some(empty),
       1.0,
       false,
       Some(StructType(StructField("a", IntegerType, true) :: Nil)),
       None, None)(sqlContext)
     val logicalRelation0 = LogicalRelation(relation0)
-    val relation1 = new JSONRelation(
-      Some(singleRow),
+    val relation1 = new JSONRDDRelation(
+      singleRow,
       1.0,
       false,
-      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)))(sqlContext)
     val logicalRelation1 = LogicalRelation(relation1)
-    val relation2 = new JSONRelation(
-      Some(singleRow),
+    val relation2 = new JSONRDDRelation(
+      singleRow,
       0.5,
       false,
-      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      Some(StructType(StructField("a", IntegerType, true) :: Nil)))(sqlContext)
     val logicalRelation2 = LogicalRelation(relation2)
-    val relation3 = new JSONRelation(
-      Some(singleRow),
+    val relation3 = new JSONRDDRelation(
+      singleRow,
       1.0,
       false,
-      Some(StructType(StructField("b", IntegerType, true) :: Nil)),
-      None, None)(sqlContext)
+      Some(StructType(StructField("b", IntegerType, true) :: Nil)))(sqlContext)
     val logicalRelation3 = LogicalRelation(relation3)
 
     assert(relation0 !== relation1)

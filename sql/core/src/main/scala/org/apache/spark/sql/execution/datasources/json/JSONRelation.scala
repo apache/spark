@@ -33,7 +33,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
@@ -56,7 +56,6 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
     val primitivesAsString = parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
 
     new JSONRelation(
-      None,
       samplingRatio,
       primitivesAsString,
       dataSchema,
@@ -66,18 +65,10 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
   }
 }
 
-private[sql] class JSONRelation(
-    val inputRDD: Option[RDD[String]],
-    val samplingRatio: Double,
-    val primitivesAsString: Boolean,
-    val maybeDataSchema: Option[StructType],
-    val maybePartitionSpec: Option[PartitionSpec],
-    override val userDefinedPartitionColumns: Option[StructType],
-    override val paths: Array[String] = Array.empty[String])(@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec) {
+private[json] trait JSONSchemaCheck {
 
   /** Constraints to be imposed on schema to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
+  def checkConstraints(schema: StructType): Unit = {
     if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
       val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
@@ -86,6 +77,16 @@ private[sql] class JSONRelation(
         s"cannot save to JSON format")
     }
   }
+}
+
+private[sql] class JSONRelation(
+    val samplingRatio: Double,
+    val primitivesAsString: Boolean,
+    val maybeDataSchema: Option[StructType],
+    val maybePartitionSpec: Option[PartitionSpec],
+    override val userDefinedPartitionColumns: Option[StructType],
+    override val paths: Array[String] = Array.empty[String])(@transient val sqlContext: SQLContext)
+  extends HadoopFsRelation(maybePartitionSpec) with JSONSchemaCheck {
 
   override val needConversion: Boolean = false
 
@@ -116,7 +117,7 @@ private[sql] class JSONRelation(
         name.startsWith("_") || name.startsWith(".")
       }.toArray
       InferSchema(
-        inputRDD.getOrElse(createBaseRdd(files)),
+        createBaseRdd(files),
         samplingRatio,
         sqlContext.conf.columnNameOfCorruptRecord,
         primitivesAsString)
@@ -133,7 +134,7 @@ private[sql] class JSONRelation(
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
     val rows = JacksonParser(
-      inputRDD.getOrElse(createBaseRdd(inputPaths)),
+      createBaseRdd(inputPaths),
       requiredDataSchema,
       sqlContext.conf.columnNameOfCorruptRecord)
 
@@ -143,17 +144,9 @@ private[sql] class JSONRelation(
     }
   }
 
-  override def inputExists: Boolean = inputRDD.isDefined || super.inputExists
-
-  override def readFromHDFS: Boolean = !inputRDD.isDefined
-
   override def equals(other: Any): Boolean = other match {
     case that: JSONRelation =>
-      ((inputRDD, that.inputRDD) match {
-        case (Some(thizRdd), Some(thatRdd)) => thizRdd eq thatRdd
-        case (None, None) => true
-        case _ => false
-      }) && paths.toSet == that.paths.toSet &&
+        paths.toSet == that.paths.toSet &&
         dataSchema == that.dataSchema &&
         schema == that.schema
     case _ => false
@@ -161,7 +154,6 @@ private[sql] class JSONRelation(
 
   override def hashCode(): Int = {
     Objects.hashCode(
-      inputRDD,
       paths.toSet,
       dataSchema,
       schema,
@@ -177,6 +169,52 @@ private[sql] class JSONRelation(
         new JsonOutputWriter(path, dataSchema, context)
       }
     }
+  }
+}
+
+private[sql] class JSONRDDRelation (
+    val inputRDD: RDD[String],
+    val samplingRatio: Double,
+    val primitivesAsString: Boolean,
+    val maybeDataSchema: Option[StructType])(@transient val sqlContext: SQLContext)
+  extends BaseRelation with PrunedFilteredScan with JSONSchemaCheck {
+
+  override def schema = {
+    val jsonSchema = maybeDataSchema.getOrElse {
+      InferSchema(
+        inputRDD,
+        samplingRatio,
+        sqlContext.conf.columnNameOfCorruptRecord,
+        primitivesAsString)
+    }
+    checkConstraints(jsonSchema)
+    jsonSchema
+  }
+
+
+  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+    val requiredDataSchema = StructType(requiredColumns.map(schema(_)))
+    val rows = JacksonParser(
+      inputRDD,
+      requiredDataSchema,
+      sqlContext.conf.columnNameOfCorruptRecord)
+
+    rows.mapPartitions { iterator =>
+      val converter = CatalystTypeConverters.createToScalaConverter(requiredDataSchema)
+      iterator.map(converter(_).asInstanceOf[Row])
+    }
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JSONRDDRelation =>
+      (inputRDD eq that.inputRDD) && schema == that.schema
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hashCode(
+      inputRDD,
+      schema)
   }
 }
 
