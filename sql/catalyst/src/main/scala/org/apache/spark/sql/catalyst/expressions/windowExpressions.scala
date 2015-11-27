@@ -283,8 +283,8 @@ object FrameBoundaryExtractor {
 }
 
 /**
-  * A window function is a function that can only be evaluated in the context of a window operator.
-  */
+ * A window function is a function that can only be evaluated in the context of a window operator.
+ */
 trait WindowFunction extends Expression {
   /** Frame in which the window operator must be executed. */
   def frame: WindowFrame = UnspecifiedFrame
@@ -296,7 +296,6 @@ abstract class OffsetWindowFunction
   val default: Expression
   val offset: Expression
   val offsetSign: Int
-
 
   override def children: Seq[Expression] = Seq(input, offset, default)
 
@@ -371,8 +370,8 @@ abstract class RowNumberLike extends AggregateWindowFunction {
 }
 
 /**
-  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
-  */
+ * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
+ */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
   /** The partition size attribute, this is here to prevent us from creating an attribute on the
     * executor side. */

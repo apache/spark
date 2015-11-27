@@ -158,16 +158,16 @@ case class Window(
   }
 
   /**
-    * Create a frame processor.
-    *
-    * This method uses Code Generation. It can only be used on the executor side.
-    *
-    * @param frame boundaries.
-    * @param functions to process in the frame.
-    * @param ordinal at which the processor starts writing to the output.
-    * @param target to which the processor will write.
-    * @return a frame processor.
-    */
+   * Create a frame processor.
+   *
+   * This method uses Code Generation. It can only be used on the executor side.
+   *
+   * @param frame boundaries.
+   * @param functions to process in the frame.
+   * @param ordinal at which the processor starts writing to the output.
+   * @param target to which the processor will write.
+   * @return a frame processor.
+   */
   private[this] def createFrameProcessor(
     frame: (Char, WindowFrame),
     functions: Array[Expression],
@@ -403,10 +403,10 @@ private[execution] final case class RangeBoundOrdering(
 }
 
 /**
-  * A window function calculates the results of a number of window functions for a window frame.
-  * Before use a frame must be prepared by passing it all the rows in the current partition. After
-  * preparation the update method can be called to fill the output rows.
-  */
+ * A window function calculates the results of a number of window functions for a window frame.
+ * Before use a frame must be prepared by passing it all the rows in the current partition. After
+ * preparation the update method can be called to fill the output rows.
+ */
 private[execution] abstract class WindowFunctionFrame {
   /**
     * Prepare the frame for calculating the results for a partition.
@@ -422,14 +422,14 @@ private[execution] abstract class WindowFunctionFrame {
 }
 
 /**
-  * The offset window frame calculates frames containing LEAD/LAG statements.
-  *
-  * @param target to write results to.
-  * @param expressions to shift a number of rows.
-  * @param inputSchema required for creating a projection.
-  * @param newMutableProjection function used to create the projection.
-  * @param offset by which rows get moved within a partition.
-  */
+ * The offset window frame calculates frames containing LEAD/LAG statements.
+ *
+ * @param target to write results to.
+ * @param expressions to shift a number of rows.
+ * @param inputSchema required for creating a projection.
+ * @param newMutableProjection function used to create the projection.
+ * @param offset by which rows get moved within a partition.
+ */
 private[execution] final class OffsetWindowFunctionFrame(
     target: MutableRow,
     ordinal: Int,
@@ -500,14 +500,14 @@ private[execution] final class OffsetWindowFunctionFrame(
 }
 
 /**
-  * The sliding window frame calculates frames with the following SQL form:
-  * ... BETWEEN 1 PRECEDING AND 1 FOLLOWING
-  *
-  * @param target to write results to.
-  * @param processor to calculate the row values with.
-  * @param lbound comparator used to identify the lower bound of an output row.
-  * @param ubound comparator used to identify the upper bound of an output row.
-  */
+ * The sliding window frame calculates frames with the following SQL form:
+ * ... BETWEEN 1 PRECEDING AND 1 FOLLOWING
+ *
+ * @param target to write results to.
+ * @param processor to calculate the row values with.
+ * @param lbound comparator used to identify the lower bound of an output row.
+ * @param ubound comparator used to identify the upper bound of an output row.
+ */
 private[execution] final class SlidingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
@@ -569,16 +569,16 @@ private[execution] final class SlidingWindowFunctionFrame(
 }
 
 /**
-  * The unbounded window frame calculates frames with the following SQL forms:
-  * ... (No Frame Definition)
-  * ... BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-  *
-  * Its results are  the same for each and every row in the partition. This class can be seen as a
-  * special case of a sliding window, but is optimized for the unbound case.
-  *
-  * @param target to write results to.
-  * @param processor to calculate the row values with.
-  */
+ * The unbounded window frame calculates frames with the following SQL forms:
+ * ... (No Frame Definition)
+ * ... BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+ *
+ * Its results are  the same for each and every row in the partition. This class can be seen as a
+ * special case of a sliding window, but is optimized for the unbound case.
+ *
+ * @param target to write results to.
+ * @param processor to calculate the row values with.
+ */
 private[execution] final class UnboundedWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor) extends WindowFunctionFrame {
@@ -598,19 +598,19 @@ private[execution] final class UnboundedWindowFunctionFrame(
 }
 
 /**
-  * The UnboundPreceding window frame calculates frames with the following SQL form:
-  * ... BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-  *
-  * There is only an upper bound. Very common use cases are for instance running sums or counts
-  * (row_number). Technically this is a special case of a sliding window. However a sliding window
-  * has to maintain a buffer, and it must do a full evaluation everytime the buffer changes. This
-  * is not the case when there is no lower bound, given the additive nature of most aggregates
-  * streaming updates and partial evaluation suffice and no buffering is needed.
-  *
-  * @param target to write results to.
-  * @param processor to calculate the row values with.
-  * @param ubound comparator used to identify the upper bound of an output row.
-  */
+ * The UnboundPreceding window frame calculates frames with the following SQL form:
+ * ... BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+ *
+ * There is only an upper bound. Very common use cases are for instance running sums or counts
+ * (row_number). Technically this is a special case of a sliding window. However a sliding window
+ * has to maintain a buffer, and it must do a full evaluation everytime the buffer changes. This
+ * is not the case when there is no lower bound, given the additive nature of most aggregates
+ * streaming updates and partial evaluation suffice and no buffering is needed.
+ *
+ * @param target to write results to.
+ * @param processor to calculate the row values with.
+ * @param ubound comparator used to identify the upper bound of an output row.
+ */
 private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
@@ -657,21 +657,21 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
 }
 
 /**
-  * The UnboundFollowing window frame calculates frames with the following SQL form:
-  * ... BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
-  *
-  * There is only an upper bound. This is a slightly modified version of the sliding window. The
-  * sliding window operator has to check if both upper and the lower bound change when a new row
-  * gets processed, where as the unbounded following only has to check the lower bound.
-  *
-  * This is a very expensive operator to use, O(n * (n - 1) /2), because we need to maintain a
-  * buffer and must do full recalculation after each row. Reverse iteration would be possible, if
-  * the communitativity of the used window functions can be guaranteed.
-  *
-  * @param target to write results to.
-  * @param processor to calculate the row values with.
-  * @param lbound comparator used to identify the lower bound of an output row.
-  */
+ * The UnboundFollowing window frame calculates frames with the following SQL form:
+ * ... BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+ *
+ * There is only an upper bound. This is a slightly modified version of the sliding window. The
+ * sliding window operator has to check if both upper and the lower bound change when a new row
+ * gets processed, where as the unbounded following only has to check the lower bound.
+ *
+ * This is a very expensive operator to use, O(n * (n - 1) /2), because we need to maintain a
+ * buffer and must do full recalculation after each row. Reverse iteration would be possible, if
+ * the communitativity of the used window functions can be guaranteed.
+ *
+ * @param target to write results to.
+ * @param processor to calculate the row values with.
+ * @param lbound comparator used to identify the lower bound of an output row.
+ */
 private[execution] final class UnboundedFollowingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
@@ -718,19 +718,19 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
 }
 
 /**
-  * This class prepares and manages the processing of a number of aggregate functions.
-  *
-  * This implementation only supports evaluation in [[Complete]] mode. This is enough for
-  * Window processing.
-  *
-  * Processing of any number of distinct aggregates is supported using Set operations. More
-  * advanced distinct operators (e.g. Sort Based Operators) should be added before the
-  * [[AggregateProcessor]] is created.
-  *
-  * The implementation is split into an object which takes care of construction, and a the actual
-  * processor class. Construction might be expensive and could be separated into a 'driver' and a
-  * 'executor' part.
-  */
+ * This class prepares and manages the processing of a number of aggregate functions.
+ *
+ * This implementation only supports evaluation in [[Complete]] mode. This is enough for
+ * Window processing.
+ *
+ * Processing of any number of distinct aggregates is supported using Set operations. More
+ * advanced distinct operators (e.g. Sort Based Operators) should be added before the
+ * [[AggregateProcessor]] is created.
+ *
+ * The implementation is split into an object which takes care of construction, and a the actual
+ * processor class. Construction might be expensive and could be separated into a 'driver' and a
+ * 'executor' part.
+ */
 private[execution] object AggregateProcessor {
   def apply(functions: Array[AggregateFunction],
     ordinal: Int,
@@ -804,9 +804,9 @@ private[execution] object AggregateProcessor {
 }
 
 /**
-  * This class manages the processing of a number of aggregate functions. See the documentation of
-  * the object for more information.
-  */
+ * This class manages the processing of a number of aggregate functions. See the documentation of
+ * the object for more information.
+ */
 private[execution] final class AggregateProcessor(
     private[this] val bufferSchema: Array[AttributeReference],
     private[this] val initialProjection: MutableProjection,
