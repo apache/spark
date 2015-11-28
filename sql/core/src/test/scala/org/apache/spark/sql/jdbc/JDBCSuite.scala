@@ -484,4 +484,11 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
   }
+
+  test("Basic API with Unserializable Driver Properties") {
+    UnserializableDriverHelper.replaceDriverDuring {
+      assert(sqlContext.read.jdbc(
+        urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+    }
+  }
 }
