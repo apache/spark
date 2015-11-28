@@ -30,12 +30,7 @@ private[mllib] trait PMMLModelExport {
    * Holder of the exported model in PMML format
    */
   @BeanProperty
-  val pmml: PMML = new PMML
-
-  pmml.setVersion("4.2")
-  setHeader(pmml)
-
-  private def setHeader(pmml: PMML): Unit = {
+  val pmml: PMML = {
     val version = getClass.getPackage.getImplementationVersion
     val app = new Application("Apache Spark MLlib").setVersion(version)
     val timestamp = new Timestamp()
@@ -43,6 +38,6 @@ private[mllib] trait PMMLModelExport {
     val header = new Header()
       .setApplication(app)
       .setTimestamp(timestamp)
-    pmml.setHeader(header)
+    new PMML("4.2", header, null)
   }
 }
