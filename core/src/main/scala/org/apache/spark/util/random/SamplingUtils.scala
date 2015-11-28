@@ -34,7 +34,7 @@ private[spark] object SamplingUtils {
       input: Iterator[T],
       k: Int,
       seed: Long = Random.nextLong())
-    : (Array[T], Int) = {
+    : (Array[T], Long) = {
     val reservoir = new Array[T](k)
     // Put the first k elements in the reservoir.
     var i = 0
@@ -52,16 +52,22 @@ private[spark] object SamplingUtils {
       (trimReservoir, i)
     } else {
       // If input size > k, continue the sampling process.
+      var l = i.toLong
       val rand = new XORShiftRandom(seed)
       while (input.hasNext) {
         val item = input.next()
-        val replacementIndex = rand.nextInt(i)
+        val replacementIndex = l < Int.MaxValue match {
+          case true =>
+            rand.nextInt(l.toInt)
+          case false =>
+            rand.nextInt()
+        }
         if (replacementIndex < k) {
           reservoir(replacementIndex) = item
         }
-        i += 1
+        l += 1
       }
-      (reservoir, i)
+      (reservoir, l)
     }
   }
 
