@@ -21,13 +21,12 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
-import org.h2.jdbc.JdbcSQLException
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.h2.jdbc.JdbcSQLException
+import org.scalatest.BeforeAndAfter
 
 class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
   import testImplicits._
@@ -467,6 +466,13 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
     assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("Basic API with Unserializable Driver Properties") {
+    UnserializableDriverHelper.replaceDriverDuring {
+      assert(sqlContext.read.jdbc(
+        urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+    }
   }
 
   test("table exists query by jdbc dialect") {
