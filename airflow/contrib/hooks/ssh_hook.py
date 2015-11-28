@@ -80,7 +80,7 @@ class SSHHook(BaseHook):
         if self.tty:
             connection_cmd.append("-t")
 
-        logging.debug("SSH cmd: {} ".format(connection_cmd))
+        logging.debug("SSH cmd: {} ".format(connection_cmd + cmd))
 
         return connection_cmd + cmd
 
@@ -95,13 +95,13 @@ class SSHHook(BaseHook):
         return subprocess.Popen(prefixed_cmd, **kwargs)
 
     def check_output(self, cmd):
-        p = self._Popen(cmd, stdout=subprocess.PIPE)
-        output, _ = p.communicate()
+        p = self._Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output, stderr = p.communicate()
 
         if p.returncode != 0:
             # I like this better: RemoteCalledProcessError(p.returncode, cmd, self.host, output=output)
-            raise AirflowException("Cannot execute {} on {}. Error code is: {}. Output: {}".format(
-                                   cmd, self.conn.host, p.returncode, output))
+            raise AirflowException("Cannot execute {} on {}. Error code is: {}. Output: {}, Stderr: {}".format(
+                                   cmd, self.conn.host, p.returncode, output, stderr))
 
         return output
 

@@ -841,6 +841,7 @@ class SSHHookTest(unittest.TestCase):
         configuration.test_mode()
         from airflow.contrib.hooks.ssh_hook import SSHHook
         self.hook = SSHHook()
+        self.hook.no_host_key_check = True
 
     def test_remote_cmd(self):
         output = self.hook.check_output(["echo", "-n", "airflow"])
