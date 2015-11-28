@@ -604,12 +604,12 @@ object Word2VecModel extends Loader[Word2VecModel] {
         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      //we want to partition the model in partitions of size 32MB
+      // We want to partition the model in partitions of size 32MB
       val partitionSize = (1L << 25)
-      //we calculate the approximate size of the model
-      //we only calculate the array size, not considering
-      //the string size, the formula is:
-      //floatSize * numWords * vectorSize
+      // We calculate the approximate size of the model
+      // We only calculate the array size, not considering
+      // the string size, the formula is:
+      // floatSize * numWords * vectorSize
       val approxSize = 4L * numWords * vectorSize
       val nPartitions = ((approxSize / partitionSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
