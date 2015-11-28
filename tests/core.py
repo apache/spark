@@ -836,6 +836,17 @@ class S3HookTest(unittest.TestCase):
                          "Incorrect parsing of the s3 url")
 
 
+class SSHHookTest(unittest.TestCase):
+    def setUp(self):
+        configuration.test_mode()
+        from airflow.contrib.hooks.ssh_hook import SSHHook
+        self.hook = SSHHook()
+
+    def test_remote_cmd(self):
+        output = self.hook.check_output(["echo", "-n", "airflow"])
+        self.assertEqual(output, b"airflow")
+
+
 if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
 
