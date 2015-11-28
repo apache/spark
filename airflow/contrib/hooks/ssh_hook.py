@@ -39,6 +39,7 @@ from airflow import AirflowException
 
 import logging
 
+
 class SSHHook(BaseHook):
     def __init__(self, conn_id='ssh_default'):
         conn = self.get_connection(conn_id)
@@ -85,7 +86,7 @@ class SSHHook(BaseHook):
 
         return connection_cmd + cmd
 
-    def _Popen(self, cmd, **kwargs):
+    def Popen(self, cmd, **kwargs):
         """
         Remote Popen
         :param cmd:
@@ -96,7 +97,7 @@ class SSHHook(BaseHook):
         return subprocess.Popen(prefixed_cmd, **kwargs)
 
     def check_output(self, cmd):
-        p = self._Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = self.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, stderr = p.communicate()
 
         if p.returncode != 0:
@@ -109,7 +110,7 @@ class SSHHook(BaseHook):
     @contextmanager
     def tunnel(self, local_port, remote_port=None, remote_host="localhost"):
         tunnel_host = "{0}:{1}:{2}".format(local_port, remote_host, remote_port)
-        proc = self._Popen(["-L", tunnel_host, "echo -n ready && cat"],
+        proc = self.Popen(["-L", tunnel_host, "echo -n ready && cat"],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            )
 

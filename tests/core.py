@@ -865,7 +865,7 @@ class SSHHookTest(unittest.TestCase):
         import subprocess
         import socket
 
-        self.handle = self.hook._Popen([
+        self.handle = self.hook.Popen([
             "python", "-c", '"{0}"'.format(HELLO_SERVER_CMD)
         ], stdout=subprocess.PIPE)
 
