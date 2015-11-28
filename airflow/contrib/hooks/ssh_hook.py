@@ -82,7 +82,7 @@ class SSHHook(BaseHook):
 
         logging.debug("SSH cmd: {} ".format(connection_cmd))
 
-        return connection_cmd
+        return connection_cmd + cmd
 
     def _Popen(self, cmd, **kwargs):
         """
