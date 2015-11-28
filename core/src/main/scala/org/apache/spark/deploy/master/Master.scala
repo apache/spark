@@ -253,9 +253,17 @@ private[deploy] class Master(
       execOption match {
         case Some(exec) => {
           val appInfo = idToApp(appId)
+          val oldState = exec.state
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
+
+          if (state == ExecutorState.RUNNING) {
+            assert(oldState == ExecutorState.LAUNCHING,
+              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            appInfo.resetRetryCount()
+          }
+
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
@@ -702,8 +710,8 @@ private[deploy] class Master(
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
-    exec.application.driver.send(ExecutorAdded(
-      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
+    exec.application.driver.send(
+      ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
@@ -768,7 +776,8 @@ private[deploy] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
+    val appId = newApplicationId(date)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
   private def registerApplication(app: ApplicationInfo): Unit = {
@@ -920,7 +929,7 @@ private[deploy] class Master(
       val eventLogDir = app.desc.eventLogDir
         .getOrElse {
           // Event logging is not enabled for this application
-          app.desc.appUiUrl = notFoundBasePath
+          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
           return None
         }
 
@@ -954,7 +963,7 @@ private[deploy] class Master(
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
-      app.desc.appUiUrl = ui.basePath
+      app.appUIUrlAtHistoryServer = Some(ui.basePath)
       Some(ui)
     } catch {
       case fnf: FileNotFoundException =>
@@ -964,7 +973,7 @@ private[deploy] class Master(
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
         None
       case e: Exception =>
         // Relay exception message to application UI page
@@ -973,7 +982,8 @@ private[deploy] class Master(
         var msg = s"Exception in replaying log for application $appName!"
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
+        app.appUIUrlAtHistoryServer =
+            Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
         None
     }
   }

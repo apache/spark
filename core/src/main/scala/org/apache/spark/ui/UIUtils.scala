@@ -143,14 +143,10 @@ private[spark] object UIUtils extends Logging {
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   def uiRoot: String = {
-    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
-      System.getenv("APPLICATION_WEB_PROXY_BASE")
-    } else if (System.getProperty("spark.ui.proxyBase") != null) {
-      System.getProperty("spark.ui.proxyBase")
-    }
-    else {
-      ""
-    }
+    // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
+    sys.props.get("spark.ui.proxyBase")
+      .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
+      .getOrElse("")
   }
 
   def prependBaseUri(basePath: String = "", resource: String = ""): String = {
@@ -214,10 +210,10 @@ private[spark] object UIUtils extends Logging {
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
-            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            <ul class="nav">{header}</ul>
           </div>
         </div>
         <div class="container-fluid">
@@ -323,7 +319,9 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+    // started + completed can be > total when there are speculative tasks
+    val boundedStarted = math.min(started, total - completed)
+    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">

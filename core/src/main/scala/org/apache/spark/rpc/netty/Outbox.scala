@@ -22,11 +22,59 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.rpc.RpcAddress
 
-private[netty] case class OutboxMessage(content: Array[Byte], callback: RpcResponseCallback)
+private[netty] sealed trait OutboxMessage {
+
+  def sendWith(client: TransportClient): Unit
+
+  def onFailure(e: Throwable): Unit
+
+}
+
+private[netty] case class OneWayOutboxMessage(content: Array[Byte]) extends OutboxMessage
+  with Logging {
+
+  override def sendWith(client: TransportClient): Unit = {
+    client.send(content)
+  }
+
+  override def onFailure(e: Throwable): Unit = {
+    logWarning(s"Failed to send one-way RPC.", e)
+  }
+
+}
+
+private[netty] case class RpcOutboxMessage(
+    content: Array[Byte],
+    _onFailure: (Throwable) => Unit,
+    _onSuccess: (TransportClient, Array[Byte]) => Unit)
+  extends OutboxMessage with RpcResponseCallback {
+
+  private var client: TransportClient = _
+  private var requestId: Long = _
+
+  override def sendWith(client: TransportClient): Unit = {
+    this.client = client
+    this.requestId = client.sendRpc(content, this)
+  }
+
+  def onTimeout(): Unit = {
+    require(client != null, "TransportClient has not yet been set.")
+    client.removeRpcRequest(requestId)
+  }
+
+  override def onFailure(e: Throwable): Unit = {
+    _onFailure(e)
+  }
+
+  override def onSuccess(response: Array[Byte]): Unit = {
+    _onSuccess(client, response)
+  }
+
+}
 
 private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
 
@@ -68,7 +116,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       }
     }
     if (dropped) {
-      message.callback.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
+      message.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
     } else {
       drainOutbox()
     }
@@ -108,7 +156,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       try {
         val _client = synchronized { client }
         if (_client != null) {
-          _client.sendRpc(message.content, message.callback)
+          message.sendWith(_client)
         } else {
           assert(stopped == true)
         }
@@ -181,7 +229,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
     // update messages and it's safe to just drain the queue.
     var message = messages.poll()
     while (message != null) {
-      message.callback.onFailure(e)
+      message.onFailure(e)
       message = messages.poll()
     }
     assert(messages.isEmpty)
@@ -215,7 +263,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
     // update messages and it's safe to just drain the queue.
     var message = messages.poll()
     while (message != null) {
-      message.callback.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
+      message.onFailure(new SparkException("Message is dropped because Outbox is stopped"))
       message = messages.poll()
     }
   }

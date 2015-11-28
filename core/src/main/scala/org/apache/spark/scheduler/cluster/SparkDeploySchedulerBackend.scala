@@ -191,17 +191,19 @@ private[spark] class SparkDeploySchedulerBackend(
   }
 
   private def stop(finalState: SparkAppHandle.State): Unit = synchronized {
-    stopping = true
+    try {
+      stopping = true
 
-    launcherBackend.setState(finalState)
-    launcherBackend.close()
+      super.stop()
+      client.stop()
 
-    super.stop()
-    client.stop()
-
-    val callback = shutdownCallback
-    if (callback != null) {
-      callback(this)
+      val callback = shutdownCallback
+      if (callback != null) {
+        callback(this)
+      }
+    } finally {
+      launcherBackend.setState(finalState)
+      launcherBackend.close()
     }
   }
 

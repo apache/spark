@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.param.ParamsSuite
@@ -25,7 +26,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
 
-class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class VectorAssemblerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new VectorAssembler)
@@ -67,6 +69,17 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("transform should throw an exception in case of unsupported type") {
+    val df = sqlContext.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("a", "b", "c"))
+      .setOutputCol("features")
+    val thrown = intercept[SparkException] {
+      assembler.transform(df)
+    }
+    assert(thrown.getMessage contains "VectorAssembler does not support the StringType type")
+  }
+
   test("ML attributes") {
     val browser = NominalAttribute.defaultAttr.withValues("chrome", "firefox", "safari")
     val hour = NumericAttribute.defaultAttr.withMin(0.0).withMax(24.0)
@@ -100,5 +113,12 @@ class VectorAssemblerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(userSalaryOut === user.getAttr("salary").withName("user_salary").withIndex(4))
     assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5))
     assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6))
+  }
+
+  test("read/write") {
+    val t = new VectorAssembler()
+      .setInputCols(Array("myInputCol", "myInputCol2"))
+      .setOutputCol("myOutputCol")
+    testDefaultReadWrite(t)
   }
 }

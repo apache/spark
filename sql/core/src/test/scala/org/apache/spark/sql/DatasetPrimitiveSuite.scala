@@ -59,7 +59,7 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
   test("foreach") {
     val ds = Seq(1, 2, 3).toDS()
     val acc = sparkContext.accumulator(0)
-    ds.foreach(acc +=)
+    ds.foreach(acc += _)
     assert(acc.value == 6)
   }
 
@@ -75,11 +75,6 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     assert(ds.reduce(_ + _) == 6)
   }
 
-  test("fold") {
-    val ds = Seq(1, 2, 3).toDS()
-    assert(ds.fold(0)(_ + _) == 6)
-  }
-
   test("groupBy function, keys") {
     val ds = Seq(1, 2, 3, 4, 5).toDS()
     val grouped = ds.groupBy(_ % 2)
@@ -88,16 +83,26 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       0, 1)
   }
 
-  test("groupBy function, mapGroups") {
+  test("groupBy function, map") {
     val ds = Seq(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11).toDS()
     val grouped = ds.groupBy(_ % 2)
     val agged = grouped.mapGroups { case (g, iter) =>
       val name = if (g == 0) "even" else "odd"
-      Iterator((name, iter.size))
+      (name, iter.size)
     }
 
     checkAnswer(
       agged,
       ("even", 5), ("odd", 6))
+  }
+
+  test("groupBy function, flatMap") {
+    val ds = Seq("a", "b", "c", "xyz", "hello").toDS()
+    val grouped = ds.groupBy(_.length)
+    val agged = grouped.flatMapGroups { case (g, iter) => Iterator(g.toString, iter.mkString) }
+
+    checkAnswer(
+      agged,
+      "1", "abc", "3", "xyz", "5", "hello")
   }
 }

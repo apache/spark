@@ -39,7 +39,6 @@ public final class LongArray {
   private final long length;
 
   public LongArray(MemoryBlock memory) {
-    assert memory.size() % WIDTH == 0 : "Memory not aligned (" + memory.size() + ")";
     assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 4 billion elements";
     this.memory = memory;
     this.baseObj = memory.getBaseObject();
@@ -51,11 +50,28 @@ public final class LongArray {
     return memory;
   }
 
+  public Object getBaseObject() {
+    return baseObj;
+  }
+
+  public long getBaseOffset() {
+    return baseOffset;
+  }
+
   /**
    * Returns the number of elements this array can hold.
    */
   public long size() {
     return length;
+  }
+
+  /**
+   * Fill this all with 0L.
+   */
+  public void zeroOut() {
+    for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
+      Platform.putLong(baseObj, off, 0);
+    }
   }
 
   /**

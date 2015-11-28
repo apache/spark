@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -36,8 +37,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.protocol.ChunkFetchRequest;
+import org.apache.spark.network.protocol.OneWayMessage;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.util.NettyUtils;
 
 /**
@@ -72,10 +75,12 @@ public class TransportClient implements Closeable {
   private final Channel channel;
   private final TransportResponseHandler handler;
   @Nullable private String clientId;
+  private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
+    this.timedOut = false;
   }
 
   public Channel getChannel() {
@@ -83,7 +88,7 @@ public class TransportClient implements Closeable {
   }
 
   public boolean isActive() {
-    return channel.isOpen() || channel.isActive();
+    return !timedOut && (channel.isOpen() || channel.isActive());
   }
 
   public SocketAddress getSocketAddress() {
@@ -160,10 +165,54 @@ public class TransportClient implements Closeable {
   }
 
   /**
+   * Request to stream the data with the given stream ID from the remote end.
+   *
+   * @param streamId The stream to fetch.
+   * @param callback Object to call with the stream data.
+   */
+  public void stream(final String streamId, final StreamCallback callback) {
+    final String serverAddr = NettyUtils.getRemoteAddress(channel);
+    final long startTime = System.currentTimeMillis();
+    logger.debug("Sending stream request for {} to {}", streamId, serverAddr);
+
+    // Need to synchronize here so that the callback is added to the queue and the RPC is
+    // written to the socket atomically, so that callbacks are called in the right order
+    // when responses arrive.
+    synchronized (this) {
+      handler.addStreamCallback(callback);
+      channel.writeAndFlush(new StreamRequest(streamId)).addListener(
+        new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (future.isSuccess()) {
+              long timeTaken = System.currentTimeMillis() - startTime;
+              logger.trace("Sending request for {} to {} took {} ms", streamId, serverAddr,
+                timeTaken);
+            } else {
+              String errorMsg = String.format("Failed to send request for %s to %s: %s", streamId,
+                serverAddr, future.cause());
+              logger.error(errorMsg, future.cause());
+              channel.close();
+              try {
+                callback.onFailure(streamId, new IOException(errorMsg, future.cause()));
+              } catch (Exception e) {
+                logger.error("Uncaught exception in RPC response callback handler!", e);
+              }
+            }
+          }
+        });
+    }
+  }
+
+  /**
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
+   *
+   * @param message The message to send.
+   * @param callback Callback to handle the RPC's reply.
+   * @return The RPC's id.
    */
-  public void sendRpc(byte[] message, final RpcResponseCallback callback) {
+  public long sendRpc(byte[] message, final RpcResponseCallback callback) {
     final String serverAddr = NettyUtils.getRemoteAddress(channel);
     final long startTime = System.currentTimeMillis();
     logger.trace("Sending RPC to {}", serverAddr);
@@ -192,6 +241,8 @@ public class TransportClient implements Closeable {
           }
         }
       });
+
+    return requestId;
   }
 
   /**
@@ -220,6 +271,35 @@ public class TransportClient implements Closeable {
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }
+  }
+
+  /**
+   * Sends an opaque message to the RpcHandler on the server-side. No reply is expected for the
+   * message, and no delivery guarantees are made.
+   *
+   * @param message The message to send.
+   */
+  public void send(byte[] message) {
+    channel.writeAndFlush(new OneWayMessage(message));
+  }
+
+  /**
+   * Removes any state associated with the given RPC.
+   *
+   * @param requestId The RPC id returned by {@link #sendRpc(byte[], RpcResponseCallback)}.
+   */
+  public void removeRpcRequest(long requestId) {
+    handler.removeRpcRequest(requestId);
+  }
+
+  /** Mark this channel as having timed out. */
+  public void timeOut() {
+    this.timedOut = true;
+  }
+
+  @VisibleForTesting
+  public TransportResponseHandler getHandler() {
+    return handler;
   }
 
   @Override

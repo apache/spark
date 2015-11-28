@@ -629,6 +629,7 @@ private[spark] object SparkConf extends Logging {
     name.startsWith("spark.akka") ||
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
+    name.startsWith("spark.rpc") ||
     isSparkPortConf(name)
   }
 

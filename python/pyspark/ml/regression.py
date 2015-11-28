@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
@@ -33,7 +35,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver):
+                       HasStandardization, HasSolver, HasWeightCol):
     """
     Linear regression.
 
@@ -48,20 +50,20 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
-    ...     (1.0, Vectors.dense(1.0)),
-    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal")
+    ...     (1.0, 2.0, Vectors.dense(1.0)),
+    ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
-    -1.0
-    >>> model.weights
-    DenseVector([1.0])
-    >>> model.intercept
-    0.0
+    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    True
+    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    True
+    >>> abs(model.intercept - 0.0) < 0.001
+    True
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> model.transform(test1).head().prediction
-    1.0
+    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
         ...
@@ -73,11 +75,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 standardization=True, solver="auto"):
+                 standardization=True, solver="auto", weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 standardization=True, solver="auto")
+                 standardization=True, solver="auto", weightCol=None)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -90,11 +92,11 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  standardization=True, solver="auto"):
+                  standardization=True, solver="auto", weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  standardization=True, solver="auto")
+                  standardization=True, solver="auto", weightCol=None)
         Sets params for linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -117,7 +119,17 @@ class LinearRegressionModel(JavaModel):
         """
         Model weights.
         """
+
+        warnings.warn("weights is deprecated. Use coefficients instead.")
         return self._call_java("weights")
+
+    @property
+    @since("1.6.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
 
     @property
     @since("1.4.0")
@@ -811,6 +823,30 @@ class AFTSurvivalRegressionModel(JavaModel):
 
     .. versionadded:: 1.6.0
     """
+
+    @property
+    @since("1.6.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("1.6.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("1.6.0")
+    def scale(self):
+        """
+        Model scale paramter.
+        """
+        return self._call_java("scale")
 
     def predictQuantiles(self, features):
         """

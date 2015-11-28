@@ -20,12 +20,14 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager, ResultSet, ResultSetMetaData, SQLException}
 import java.util.Properties
 
+import scala.util.control.NonFatal
+
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, DateTimeUtils}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -224,6 +226,7 @@ private[sql] object JDBCRDD extends Logging {
       quotedColumns,
       filters,
       parts,
+      url,
       properties)
   }
 }
@@ -241,6 +244,7 @@ private[sql] class JDBCRDD(
     columns: Array[String],
     filters: Array[Filter],
     partitions: Array[Partition],
+    url: String,
     properties: Properties)
   extends RDD[InternalRow](sc, Nil) {
 
@@ -324,29 +328,32 @@ private[sql] class JDBCRDD(
   case object StringConversion extends JDBCConversion
   case object TimestampConversion extends JDBCConversion
   case object BinaryConversion extends JDBCConversion
+  case class ArrayConversion(elementConversion: JDBCConversion) extends JDBCConversion
 
   /**
    * Maps a StructType to a type tag list.
    */
-  def getConversions(schema: StructType): Array[JDBCConversion] = {
-    schema.fields.map(sf => sf.dataType match {
-      case BooleanType => BooleanConversion
-      case DateType => DateConversion
-      case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
-      case DoubleType => DoubleConversion
-      case FloatType => FloatConversion
-      case IntegerType => IntegerConversion
-      case LongType =>
-        if (sf.metadata.contains("binarylong")) BinaryLongConversion else LongConversion
-      case StringType => StringConversion
-      case TimestampType => TimestampConversion
-      case BinaryType => BinaryConversion
-      case _ => throw new IllegalArgumentException(s"Unsupported field $sf")
-    }).toArray
+  def getConversions(schema: StructType): Array[JDBCConversion] =
+    schema.fields.map(sf => getConversions(sf.dataType, sf.metadata))
+
+  private def getConversions(dt: DataType, metadata: Metadata): JDBCConversion = dt match {
+    case BooleanType => BooleanConversion
+    case DateType => DateConversion
+    case DecimalType.Fixed(p, s) => DecimalConversion(p, s)
+    case DoubleType => DoubleConversion
+    case FloatType => FloatConversion
+    case IntegerType => IntegerConversion
+    case LongType => if (metadata.contains("binarylong")) BinaryLongConversion else LongConversion
+    case StringType => StringConversion
+    case TimestampType => TimestampConversion
+    case BinaryType => BinaryConversion
+    case ArrayType(et, _) => ArrayConversion(getConversions(et, metadata))
+    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.simpleString}")
   }
 
   /**
    * Runs the SQL query against the JDBC driver.
+   *
    */
   override def compute(thePart: Partition, context: TaskContext): Iterator[InternalRow] =
     new Iterator[InternalRow] {
@@ -358,6 +365,9 @@ private[sql] class JDBCRDD(
     context.addTaskCompletionListener{ context => close() }
     val part = thePart.asInstanceOf[JDBCPartition]
     val conn = getConnection()
+    val dialect = JdbcDialects.get(url)
+    import scala.collection.JavaConverters._
+    dialect.beforeFetch(conn, properties.asScala.toMap)
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -368,7 +378,7 @@ private[sql] class JDBCRDD(
     val sqlText = s"SELECT $columnList FROM $fqTable $myWhereClause"
     val stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    val fetchSize = properties.getProperty("fetchSize", "0").toInt
+    val fetchSize = properties.getProperty("fetchsize", "0").toInt
     stmt.setFetchSize(fetchSize)
     val rs = stmt.executeQuery()
 
@@ -419,16 +429,44 @@ private[sql] class JDBCRDD(
                 mutableRow.update(i, null)
               }
             case BinaryConversion => mutableRow.update(i, rs.getBytes(pos))
-            case BinaryLongConversion => {
+            case BinaryLongConversion =>
               val bytes = rs.getBytes(pos)
               var ans = 0L
               var j = 0
               while (j < bytes.size) {
                 ans = 256 * ans + (255 & bytes(j))
-                j = j + 1;
+                j = j + 1
               }
               mutableRow.setLong(i, ans)
-            }
+            case ArrayConversion(elementConversion) =>
+              val array = rs.getArray(pos).getArray
+              if (array != null) {
+                val data = elementConversion match {
+                  case TimestampConversion =>
+                    array.asInstanceOf[Array[java.sql.Timestamp]].map { timestamp =>
+                      nullSafeConvert(timestamp, DateTimeUtils.fromJavaTimestamp)
+                    }
+                  case StringConversion =>
+                    array.asInstanceOf[Array[java.lang.String]]
+                      .map(UTF8String.fromString)
+                  case DateConversion =>
+                    array.asInstanceOf[Array[java.sql.Date]].map { date =>
+                      nullSafeConvert(date, DateTimeUtils.fromJavaDate)
+                    }
+                  case DecimalConversion(p, s) =>
+                    array.asInstanceOf[Array[java.math.BigDecimal]].map { decimal =>
+                      nullSafeConvert[java.math.BigDecimal](decimal, d => Decimal(d, p, s))
+                    }
+                  case BinaryLongConversion =>
+                    throw new IllegalArgumentException(s"Unsupported array element conversion $i")
+                  case _: ArrayConversion =>
+                    throw new IllegalArgumentException("Nested arrays unsupported")
+                  case _ => array.asInstanceOf[Array[Any]]
+                }
+                mutableRow.update(i, new GenericArrayData(data))
+              } else {
+                mutableRow.update(i, null)
+              }
           }
           if (rs.wasNull) mutableRow.setNullAt(i)
           i = i + 1
@@ -458,6 +496,13 @@ private[sql] class JDBCRDD(
       }
       try {
         if (null != conn) {
+          if (!conn.getAutoCommit && !conn.isClosed) {
+            try {
+              conn.commit()
+            } catch {
+              case NonFatal(e) => logWarning("Exception committing transaction", e)
+            }
+          }
           conn.close()
         }
         logInfo("closed connection")
@@ -485,6 +530,14 @@ private[sql] class JDBCRDD(
       }
       gotNext = false
       nextValue
+    }
+  }
+
+  private def nullSafeConvert[T](input: T, f: T => Any): Any = {
+    if (input == null) {
+      null
+    } else {
+      f(input)
     }
   }
 }
