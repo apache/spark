@@ -15,31 +15,35 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.linalg.Vectors
+// $example on$
 import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.mllib.linalg.Vectors
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for vector assembler. Run with
- * {{{
- * ./bin/run-example ml.VectorAssemblerExample [options]
- * }}}
- */
 object VectorAssemblerExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("VectorAssemblerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("OneHotEncoderExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val dataset = sqlContext.createDataFrame(
+      Seq((0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0))
+    ).toDF("id", "hour", "mobile", "userFeatures", "clicked")
 
-  val dataset = sqlContext.createDataFrame(
-    Seq((0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0))
-  ).toDF("id", "hour", "mobile", "userFeatures", "clicked")
-  val assembler = new VectorAssembler()
-    .setInputCols(Array("hour", "mobile", "userFeatures"))
-    .setOutputCol("features")
-  val output = assembler.transform(dataset)
-  println(output.select("features", "clicked").first())
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("hour", "mobile", "userFeatures"))
+      .setOutputCol("features")
+
+    val output = assembler.transform(dataset)
+    println(output.select("features", "clicked").first())
+    // $example off$
+    sc.stop()
+  }
 }
+// scalastyle:on println

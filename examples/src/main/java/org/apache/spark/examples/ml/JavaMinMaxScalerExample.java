@@ -22,43 +22,28 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.StopWordsRemover;
+import org.apache.spark.ml.feature.MinMaxScaler;
+import org.apache.spark.ml.feature.MinMaxScalerModel;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 // $example off$
 
-public class JavaStopWordsRemover {
-
+public class JavaMinMaxScalerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStopWordsRemover");
+    SparkConf conf = new SparkConf().setAppName("JaveMinMaxScalerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
-    StopWordsRemover remover = new StopWordsRemover()
-      .setInputCol("raw")
-      .setOutputCol("filtered");
+    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    MinMaxScaler scaler = new MinMaxScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures");
 
-    JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
-      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
-      RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
-    ));
+    // Compute summary statistics and generate MinMaxScalerModel
+    MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
 
-    StructType schema = new StructType(new StructField[]{
-      new StructField(
-        "raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
-    });
-
-    DataFrame dataset = jsql.createDataFrame(rdd, schema);
-    remover.transform(dataset).show();
+    // rescale each feature to range [min, max].
+    DataFrame scaledData = scalerModel.transform(dataFrame);
     // $example off$
     jsc.stop();
   }

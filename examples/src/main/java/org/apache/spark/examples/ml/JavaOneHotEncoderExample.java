@@ -25,7 +25,9 @@ import org.apache.spark.sql.SQLContext;
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.StopWordsRemover;
+import org.apache.spark.ml.feature.OneHotEncoder;
+import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.ml.feature.StringIndexerModel;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -33,33 +35,43 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-// $example off$
+// $example off
 
-public class JavaStopWordsRemover {
-
+public class JavaOneHotEncoderExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStopWordsRemover");
+    SparkConf conf = new SparkConf().setAppName("JavaOneHotEncoderExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SQLContext sqlContext = new SQLContext(jsc);
 
     // $example on$
-    StopWordsRemover remover = new StopWordsRemover()
-      .setInputCol("raw")
-      .setOutputCol("filtered");
-
-    JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
-      RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
-      RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
+    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+      RowFactory.create(0, "a"),
+      RowFactory.create(1, "b"),
+      RowFactory.create(2, "c"),
+      RowFactory.create(3, "a"),
+      RowFactory.create(4, "a"),
+      RowFactory.create(5, "c")
     ));
 
     StructType schema = new StructType(new StructField[]{
-      new StructField(
-        "raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
+      new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(rdd, schema);
-    remover.transform(dataset).show();
+    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+
+    StringIndexerModel indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex")
+      .fit(df);
+    DataFrame indexed = indexer.transform(df);
+
+    OneHotEncoder encoder = new OneHotEncoder()
+      .setInputCol("categoryIndex")
+      .setOutputCol("categoryVec");
+    DataFrame encoded = encoder.transform(indexed);
     // $example off$
     jsc.stop();
   }
 }
+

@@ -19,34 +19,37 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.{RegexTokenizer, Tokenizer}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
+import org.apache.spark.ml.feature.VectorSlicer
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StructType
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
-object TokenizerExample {
+object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("TokenizerExample")
+    val conf = new SparkConf().setAppName("VectorSlicerExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val sentenceDataFrame = sqlContext.createDataFrame(Seq(
-      (0, "Hi I heard about Spark"),
-      (1, "I wish Java could use case classes"),
-      (2, "Logistic,regression,models,are,neat")
-    )).toDF("label", "sentence")
+    val data = Array(Row(-2.0, 2.3, 0.0))
 
-    val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
-    val regexTokenizer = new RegexTokenizer()
-      .setInputCol("sentence")
-      .setOutputCol("words")
-      .setPattern("\\W") // alternatively .setPattern("\\w+").setGaps(false)
+    val defaultAttr = NumericAttribute.defaultAttr
+    val attrs = Array("f1", "f2", "f3").map(defaultAttr.withName)
+    val attrGroup = new AttributeGroup("userFeatures", attrs.asInstanceOf[Array[Attribute]])
 
-    val tokenized = tokenizer.transform(sentenceDataFrame)
-    tokenized.select("words", "label").take(3).foreach(println)
-    val regexTokenized = regexTokenizer.transform(sentenceDataFrame)
-    regexTokenized.select("words", "label").take(3).foreach(println)
+    val dataRDD = sc.parallelize(data)
+    val dataset = sqlContext.createDataFrame(dataRDD, StructType(Array(attrGroup.toStructField())))
+
+    val slicer = new VectorSlicer().setInputCol("userFeatures").setOutputCol("features")
+
+    slicer.setIndices(Array(1)).setNames(Array("f3"))
+    // or slicer.setIndices(Array(1, 2)), or slicer.setNames(Array("f2", "f3"))
+
+    val output = slicer.transform(dataset)
+    println(output.select("userFeatures", "features").first())
     // $example off$
     sc.stop()
   }

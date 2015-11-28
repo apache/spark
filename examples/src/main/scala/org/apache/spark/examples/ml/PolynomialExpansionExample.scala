@@ -15,37 +15,39 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.PolynomialExpansion
 import org.apache.spark.mllib.linalg.Vectors
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for polynomial expansion. Run with
- * {{{
- * ./bin/run-example ml.PolynomialExpansionExample [options]
- * }}}
- */
 object PolynomialExpansionExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("PolynomialExpansionExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("PolynomialExpansionExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
-
-  val data = Array(
-    Vectors.dense(-2.0, 2.3),
-    Vectors.dense(0.0, 0.0),
-    Vectors.dense(0.6, -1.1)
-  )
-  val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
-  val polynomialExpansion = new PolynomialExpansion()
-    .setInputCol("features")
-    .setOutputCol("polyFeatures")
-    .setDegree(3)
-  val polyDF = polynomialExpansion.transform(df)
-  polyDF.select("polyFeatures").take(3).foreach(println)
+    // $example on$
+    val data = Array(
+      Vectors.dense(-2.0, 2.3),
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(0.6, -1.1)
+    )
+    val df = sqlContext.createDataFrame(data.map(Tuple1.apply)).toDF("features")
+    val polynomialExpansion = new PolynomialExpansion()
+      .setInputCol("features")
+      .setOutputCol("polyFeatures")
+      .setDegree(3)
+    val polyDF = polynomialExpansion.transform(df)
+    polyDF.select("polyFeatures").take(3).foreach(println)
+    // $example off$
+    sc.stop()
+  }
 }
+// scalastyle:on println
 
 

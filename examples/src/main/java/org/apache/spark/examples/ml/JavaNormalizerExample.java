@@ -15,36 +15,38 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.ml;
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
 
 // $example on$
-import org.apache.spark.ml.feature.Normalizer
+import org.apache.spark.ml.feature.Normalizer;
+import org.apache.spark.sql.DataFrame;
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
-object NormalizerExample {
-  def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("NormalizerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+public class JavaNormalizerExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("JavaNormalizerExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
-    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Normalize each Vector using $L^1$ norm.
-    val normalizer = new Normalizer()
+    Normalizer normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normFeatures")
-      .setP(1.0)
+      .setP(1.0);
 
-    val l1NormData = normalizer.transform(dataFrame)
+    DataFrame l1NormData = normalizer.transform(dataFrame);
 
     // Normalize each Vector using $L^\infty$ norm.
-    val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
+    DataFrame lInfNormData =
+      normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
     // $example off$
-    sc.stop()
+    jsc.stop();
   }
 }
-// scalastyle:on println

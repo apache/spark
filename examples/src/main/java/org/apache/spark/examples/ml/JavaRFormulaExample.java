@@ -17,52 +17,53 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.StringIndexer;
+import org.apache.spark.ml.feature.RFormula;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.types.DataTypes.*;
+// $example off$
 
-/**
- * An example demonstrating a string indexer.
- * Run with
- * <pre>
- * bin/run-example ml.JavaStringIndexer <file> <k>
- * </pre>
- */
-public class JavaStringIndexer {
-
+public class JavaRFormulaExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStringIndexer");
+    SparkConf conf = new SparkConf().setAppName("JavaRFormulaExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create(0, "a"),
-        RowFactory.create(1, "b"),
-        RowFactory.create(2, "c"),
-        RowFactory.create(3, "a"),
-        RowFactory.create(4, "a"),
-        RowFactory.create(5, "c")
-    ));
-    StructType schema = new StructType(new StructField[]{
-        createStructField("id", DoubleType, false),
-        createStructField("category", StringType, false)
+    // $example on$
+    StructType schema = createStructType(new StructField[]{
+      createStructField("id", IntegerType, false),
+      createStructField("country", StringType, false),
+      createStructField("hour", IntegerType, false),
+      createStructField("clicked", DoubleType, false)
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-    StringIndexer indexer = new StringIndexer()
-        .setInputCol("category")
-        .setOutputCol("categoryIndex");
-    DataFrame indexed = indexer.fit(df).transform(df);
-    indexed.show();
+
+    JavaRDD<Row> rdd = jsc.parallelize(Arrays.asList(
+      RowFactory.create(7, "US", 18, 1.0),
+      RowFactory.create(8, "CA", 12, 0.0),
+      RowFactory.create(9, "NZ", 15, 0.0)
+    ));
+
+    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+    RFormula formula = new RFormula()
+      .setFormula("clicked ~ country + hour")
+      .setFeaturesCol("features")
+      .setLabelCol("label");
+    DataFrame output = formula.fit(dataset).transform(dataset);
+    output.select("features", "label").show();
+    // $example off$
+    jsc.stop();
   }
 }
+

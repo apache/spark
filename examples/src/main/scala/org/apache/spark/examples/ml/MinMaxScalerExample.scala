@@ -15,34 +15,35 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.MinMaxScaler
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for min-max scaler. Run with
- * {{{
- * ./bin/run-example ml.MinMaxScalerExample [options]
- * }}}
- */
 object MinMaxScalerExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("MinMaxScalerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("OneHotEncoderExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
+    val scaler = new MinMaxScaler()
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures")
 
-  val dataFrame = sqlContext.read.format("libsvm")
-    .load("data/mllib/sample_libsvm_data.txt")
-  val scaler = new MinMaxScaler()
-    .setInputCol("features")
-    .setOutputCol("scaledFeatures")
+    // Compute summary statistics and generate MinMaxScalerModel
+    val scalerModel = scaler.fit(dataFrame)
 
-  // Compute summary statistics and generate MinMaxScalerModel
-  val scalerModel = scaler.fit(dataFrame)
-
-  // rescale each feature to range [min, max].
-  val scaledData = scalerModel.transform(dataFrame)
+    // rescale each feature to range [min, max].
+    val scaledData = scalerModel.transform(dataFrame)
+    // $example off$
+    sc.stop()
+  }
 }
+// scalastyle:on println

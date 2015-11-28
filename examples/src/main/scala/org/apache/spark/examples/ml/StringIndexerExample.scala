@@ -15,31 +15,35 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.StringIndexer
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for string indexer. Run with
- * {{{
- * ./bin/run-example ml.StringIndexerExample [options]
- * }}}
- */
 object StringIndexerExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("StringIndexerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("StringIndexerExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val df = sqlContext.createDataFrame(
+      Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
+    ).toDF("id", "category")
 
-  val df = sqlContext.createDataFrame(
-    Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c"))
-  ).toDF("id", "category")
-  val indexer = new StringIndexer()
-    .setInputCol("category")
-    .setOutputCol("categoryIndex")
-  val indexed = indexer.fit(df).transform(df)
-  indexed.show()
+    val indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex")
+
+    val indexed = indexer.fit(df).transform(df)
+    indexed.show()
+    // $example off$
+    sc.stop()
+  }
 }
+// scalastyle:on println
 

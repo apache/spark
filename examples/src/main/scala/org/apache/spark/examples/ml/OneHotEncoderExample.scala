@@ -15,42 +15,44 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.ml.feature.{OneHotEncoder, StringIndexer}
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * An example runner for one hot encoder. Run with
- * {{{
- * ./bin/run-example ml.OneHotEncoderExample [options]
- * }}}
- */
 object OneHotEncoderExample {
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("OneHotEncoderExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  val conf = new SparkConf().setAppName("OneHotEncoderExample")
-  val sc = new SparkContext(conf)
-  val sqlContext = new SQLContext(sc)
+    // $example on$
+    val df = sqlContext.createDataFrame(Seq(
+      (0, "a"),
+      (1, "b"),
+      (2, "c"),
+      (3, "a"),
+      (4, "a"),
+      (5, "c")
+    )).toDF("id", "category")
 
-  val df = sqlContext.createDataFrame(Seq(
-    (0, "a"),
-    (1, "b"),
-    (2, "c"),
-    (3, "a"),
-    (4, "a"),
-    (5, "c")
-  )).toDF("id", "category")
+    val indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex")
+      .fit(df)
+    val indexed = indexer.transform(df)
 
-  val indexer = new StringIndexer()
-    .setInputCol("category")
-    .setOutputCol("categoryIndex")
-    .fit(df)
-  val indexed = indexer.transform(df)
-
-  val encoder = new OneHotEncoder().setInputCol("categoryIndex").
-    setOutputCol("categoryVec")
-  val encoded = encoder.transform(indexed)
-  encoded.select("id", "categoryVec").foreach(println)
+    val encoder = new OneHotEncoder().setInputCol("categoryIndex").
+      setOutputCol("categoryVec")
+    val encoded = encoder.transform(indexed)
+    encoded.select("id", "categoryVec").foreach(println)
+    // $example off$
+    sc.stop()
+  }
 }
+// scalastyle:on println
 

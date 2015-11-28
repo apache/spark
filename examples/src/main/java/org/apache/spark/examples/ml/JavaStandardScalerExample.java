@@ -15,37 +15,39 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.ml;
+
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
 
 // $example on$
-import org.apache.spark.ml.feature.StandardScaler
+import org.apache.spark.ml.feature.StandardScaler;
+import org.apache.spark.ml.feature.StandardScalerModel;
+import org.apache.spark.sql.DataFrame;
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
-object StandardScalerExample {
-  def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("StandardScalerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+public class JavaStandardScalerExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("JavaStandardScalerExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
-    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
-    val scaler = new StandardScaler()
+    StandardScaler scaler = new StandardScaler()
       .setInputCol("features")
       .setOutputCol("scaledFeatures")
       .setWithStd(true)
-      .setWithMean(false)
+      .setWithMean(false);
 
-    // Compute summary statistics by fitting the StandardScaler.
-    val scalerModel = scaler.fit(dataFrame)
+    // Compute summary statistics by fitting the StandardScaler
+    StandardScalerModel scalerModel = scaler.fit(dataFrame);
 
     // Normalize each feature to have unit standard deviation.
-    val scaledData = scalerModel.transform(dataFrame)
+    DataFrame scaledData = scalerModel.transform(dataFrame);
     // $example off$
-    sc.stop()
+    jsc.stop();
   }
 }
-// scalastyle:on println

@@ -17,54 +17,50 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.Binarizer;
+import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-/**
- * An example demonstrating a Binarizer.
- * Run with
- * <pre>
- * bin/run-example ml.JavaBinarizer <file> <k>
- * </pre>
- */
-public class JavaBinarizer {
+import static org.apache.spark.sql.types.DataTypes.*;
+// $example off$
 
+public class JavaStringIndexerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBinarizer");
+    SparkConf conf = new SparkConf().setAppName("JavaStringIndexerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
     JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-        RowFactory.create(0, 0.1),
-        RowFactory.create(1, 0.8),
-        RowFactory.create(2, 0.2)
+      RowFactory.create(0, "a"),
+      RowFactory.create(1, "b"),
+      RowFactory.create(2, "c"),
+      RowFactory.create(3, "a"),
+      RowFactory.create(4, "a"),
+      RowFactory.create(5, "c")
     ));
     StructType schema = new StructType(new StructField[]{
-        new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
-        new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
+      createStructField("id", DoubleType, false),
+      createStructField("category", StringType, false)
     });
-    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
-    Binarizer binarizer = new Binarizer()
-      .setInputCol("feature")
-      .setOutputCol("binarized_feature")
-      .setThreshold(0.5);
-    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collect()) {
-    Double binarized_value = r.getDouble(0);
-      System.out.println(binarized_value);
-    }
+    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    StringIndexer indexer = new StringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex");
+    DataFrame indexed = indexer.fit(df).transform(df);
+    indexed.show();
+    // $example off$
+    jsc.stop();
   }
 }
