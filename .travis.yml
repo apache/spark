@@ -9,6 +9,7 @@ addons:
     packages:
       - slapd
       - ldap-utils
+      - openssh-server
 python:
   - "2.7"
   - "3.4"
