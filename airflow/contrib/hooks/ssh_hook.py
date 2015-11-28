@@ -36,6 +36,7 @@ import subprocess
 from airflow.hooks.base_hook import BaseHook
 from airflow import AirflowException
 
+import logging
 
 class SSHHook(BaseHook):
     def __init__(self, conn_id='ssh_default'):
@@ -79,6 +80,8 @@ class SSHHook(BaseHook):
         if self.tty:
             connection_cmd.append("-t")
 
+        logging.debug("SSH cmd: {} ".format(connection_cmd))
+
         return connection_cmd
 
     def _Popen(self, cmd, **kwargs):
@@ -97,8 +100,8 @@ class SSHHook(BaseHook):
 
         if p.returncode != 0:
             # I like this better: RemoteCalledProcessError(p.returncode, cmd, self.host, output=output)
-            raise AirflowException("Cannot execute {} on {}. Error code is: {}. Output: {}",
-                                   p.returncode, cmd, self.conn.host, output)
+            raise AirflowException("Cannot execute {} on {}. Error code is: {}. Output: {}".format(
+                                   cmd, self.conn.host, p.returncode, output))
 
         return output
 
