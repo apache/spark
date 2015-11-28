@@ -40,7 +40,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{EventLoggingWriterListener, EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
@@ -933,11 +933,11 @@ private[deploy] class Master(
           return None
         }
 
-      val eventLogFilePrefix = EventLoggingListener.getLogPath(
+      val eventLogFilePrefix = EventLoggingWriterListener.getLogPath(
           eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
+          EventLoggingWriterListener.IN_PROGRESS))
 
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
@@ -945,16 +945,16 @@ private[deploy] class Master(
       }
 
       val (eventLogFile, status) = if (inProgressExists) {
-        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+        (eventLogFilePrefix + EventLoggingWriterListener.IN_PROGRESS, " (in progress)")
       } else {
         (eventLogFilePrefix, " (completed)")
       }
 
-      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val logInput = EventLoggingWriterListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
-      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
+      val maybeTruncated = eventLogFile.endsWith(EventLoggingWriterListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
       } finally {

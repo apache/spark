@@ -244,7 +244,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = getNewLastScanTime()
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
-      val logInfos: Seq[FileStatus] = statusList
+
+      // App list should not contain meta file.
+      val logFiles = statusList.filter { entry => !entry.getPath.getName.contains("meta") }
+      val logInfos: Seq[FileStatus] = logFiles
         .filter { entry =>
           try {
             getModificationTime(entry).map { time =>
@@ -369,7 +372,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = logs.flatMap { fileStatus =>
       try {
         val bus = new ReplayListenerBus()
-        val res = replay(fileStatus, bus)
+        val res = replayMetaEvent(fileStatus, bus)
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
           case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
@@ -448,6 +451,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         now - attempt.lastUpdated > maxAge && attempt.completed
       }
 
+      def shouldCleanMeta(fs: FileSystem, appId: String): (Boolean, Path) = {
+        val metaFile = appId.replaceAll("part\\d+", "meta")
+        val metaPath = new Path(logDir, metaFile)
+        val appPrefix = appId.split("-part")(0)
+        if (fs.exists(metaPath) && applications.keySet.filter(_.contains(appPrefix)).size == 0) {
+          (true, metaPath)
+        } else {
+          (false, null)
+        }
+      }
+
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { app =>
@@ -471,6 +485,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           if (fs.exists(path)) {
             if (!fs.delete(path, true)) {
               logWarning(s"Error deleting ${path}")
+            }
+          }
+
+          // Determine if need to delete meta file
+          if (path.getName.contains("part")) {
+            val (needClean, metaPath) = shouldCleanMeta(fs, attempt.appId)
+            if (needClean) {
+              fs.delete(metaPath, true)
+              logInfo(s"Success to delete meta file: $metaPath")
             }
           }
         } catch {
@@ -518,45 +541,88 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * Replays the events in the specified log file and returns information about the associated
-   * application. Return `None` if the application ID cannot be located.
+   * Replays the meta events in the specified log file and returns information about the associated
+   * application.
    */
-  private def replay(
+  private def replayMetaEvent(
       eventLog: FileStatus,
       bus: ReplayListenerBus): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
+    logInfo(s"Replaying meta file of log: $logPath")
+
+    val isGroupApp = logPath.getName.contains("part")
+    val input =
+      if (isGroupApp) {
+        EventLoggingWriterListener.getMetaStream(logPath, fs)
+      } else if (isLegacyLogDirectory(eventLog)) {
+        openLegacyEventLog(logPath)
+      } else {
+        EventLoggingWriterListener.openEventLog(logPath, fs)
+      }
+
+    try {
+      val appListener = new ApplicationEventListener
+      val appCompleted = isApplicationCompleted(eventLog)
+      bus.addListener(appListener)
+      bus.replay(input, logPath.toString, !appCompleted)
+
+      val appId = if (isGroupApp) {
+        logPath.getName.split("\\.")(0)
+      } else if (appListener.appId.isDefined || !sparkVersionHasAppId(eventLog)) {
+        appListener.appId.getOrElse(logPath.getName())
+      } else {
+        return None
+      }
+
+      Some(new FsApplicationAttemptInfo(
+        logPath.getName(),
+        appListener.appName.getOrElse(NOT_STARTED),
+        appId,
+        appListener.appAttemptId,
+        appListener.startTime.getOrElse(-1L),
+        appListener.endTime.getOrElse(-1L),
+        getModificationTime(eventLog).get,
+        appListener.sparkUser.getOrElse(NOT_STARTED),
+        appCompleted))
+    } finally {
+      input.close()
+    }
+  }
+
+  /**
+   * Replays the events in the specified log file and returns information about the associated
+   * application. Return `None` if the application ID cannot be located.
+   */
+  private def replay(eventLog: FileStatus, bus: ReplayListenerBus): Option[String] = {
+    val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
+
+    val metaInput: Option[InputStream] =
+      if (logPath.getName.contains("part")) {
+        Some(EventLoggingWriterListener.getMetaStream(logPath, fs))
+      } else {
+        None
+      }
     val logInput =
       if (isLegacyLogDirectory(eventLog)) {
         openLegacyEventLog(logPath)
       } else {
-        EventLoggingListener.openEventLog(logPath, fs)
+        EventLoggingWriterListener.openEventLog(logPath, fs)
       }
     try {
       val appListener = new ApplicationEventListener
       val appCompleted = isApplicationCompleted(eventLog)
       bus.addListener(appListener)
-      bus.replay(logInput, logPath.toString, !appCompleted)
-
-      // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
-      // try to show their UI. Some old versions of Spark generate logs without an app ID, so let
-      // logs generated by those versions go through.
-      if (appListener.appId.isDefined || !sparkVersionHasAppId(eventLog)) {
-        Some(new FsApplicationAttemptInfo(
-          logPath.getName(),
-          appListener.appName.getOrElse(NOT_STARTED),
-          appListener.appId.getOrElse(logPath.getName()),
-          appListener.appAttemptId,
-          appListener.startTime.getOrElse(-1L),
-          appListener.endTime.getOrElse(-1L),
-          getModificationTime(eventLog).get,
-          appListener.sparkUser.getOrElse(NOT_STARTED),
-          appCompleted))
-      } else {
-        None
+      if (null != logInput) {
+        bus.replay(logInput, logPath.toString, !appCompleted)
       }
+      metaInput.map(bus.replay(_, logPath.toString, !appCompleted))
+      Some("")
     } finally {
-      logInput.close()
+      metaInput.foreach(_.close)
+      if (null != logInput) {
+        logInput.close()
+      }
     }
   }
 
@@ -625,7 +691,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (isLegacyLogDirectory(entry)) {
       fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
     } else {
-      !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
+      !entry.getPath().getName().endsWith(EventLoggingWriterListener.IN_PROGRESS)
     }
   }
 
@@ -685,8 +751,8 @@ private[history] object FsHistoryProvider {
 
   // Constants used to parse Spark 1.0.0 log directories.
   val LOG_PREFIX = "EVENT_LOG_"
-  val SPARK_VERSION_PREFIX = EventLoggingListener.SPARK_VERSION_KEY + "_"
-  val COMPRESSION_CODEC_PREFIX = EventLoggingListener.COMPRESSION_CODEC_KEY + "_"
+  val SPARK_VERSION_PREFIX = EventLoggingWriterListener.SPARK_VERSION_KEY + "_"
+  val COMPRESSION_CODEC_PREFIX = EventLoggingWriterListener.COMPRESSION_CODEC_KEY + "_"
   val APPLICATION_COMPLETE = "APPLICATION_COMPLETE"
 }
 

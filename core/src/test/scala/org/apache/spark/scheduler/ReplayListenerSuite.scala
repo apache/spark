@@ -118,7 +118,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!eventLog.isDir)
 
     // Replay events
-    val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
+    val logData = EventLoggingWriterListener.openEventLog(eventLog.getPath(), fileSystem)
     val eventMonster = new EventMonster(conf)
     try {
       val replayer = new ReplayListenerBus()
@@ -130,7 +130,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
-    val originalEvents = sc.eventLogger.get.loggedEvents
+    val originalEvents = sc.eventLogger.get.getLoggedEvent
     val replayedEvents = eventMonster.loggedEvents
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) => assert(e1 === e2) }
   }

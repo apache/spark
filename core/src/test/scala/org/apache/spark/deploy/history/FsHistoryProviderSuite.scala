@@ -63,8 +63,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       appAttemptId: Option[String],
       inProgress: Boolean,
       codec: Option[String] = None): File = {
-    val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, appAttemptId)
+    val ip = if (inProgress) EventLoggingWriterListener.IN_PROGRESS else ""
+    val logUri = EventLoggingWriterListener.getLogPath(testDir.toURI, appId, appAttemptId)
     val logPath = new URI(logUri).getPath + ip
     new File(logPath)
   }
@@ -210,14 +210,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should
-        endWith(EventLoggingListener.IN_PROGRESS)
+        endWith(EventLoggingWriterListener.IN_PROGRESS)
     }
 
     logFile1.renameTo(newLogFile("app1", None, inProgress = false))
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list.head.attempts.head.asInstanceOf[FsApplicationAttemptInfo].logPath should not
-        endWith(EventLoggingListener.IN_PROGRESS)
+        endWith(EventLoggingWriterListener.IN_PROGRESS)
     }
   }
 
@@ -481,7 +481,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
     if (isNewFormat) {
-      EventLoggingListener.initEventLog(new FileOutputStream(file))
+      EventLoggingWriterListener.initEventLog(new FileOutputStream(file))
     }
     val writer = new OutputStreamWriter(bstream, "UTF-8")
     Utils.tryWithSafeFinally {

@@ -234,7 +234,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @volatile private var _dagScheduler: DAGScheduler = _
   private var _applicationId: String = _
   private var _applicationAttemptId: Option[String] = None
-  private var _eventLogger: Option[EventLoggingListener] = None
+  private var _eventLogger: Option[EventLoggingWriterListener] = None
   private var _executorAllocationManager: Option[ExecutorAllocationManager] = None
   private var _cleaner: Option[ContextCleaner] = None
   private var _listenerBusStarted: Boolean = false
@@ -261,6 +261,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
+  private[spark] def eventLogGroupSize: Int = _conf.getInt("spark.eventLog.group.size", 0)
   private[spark] def eventLogDir: Option[URI] = _eventLogDir
   private[spark] def eventLogCodec: Option[String] = _eventLogCodec
 
@@ -349,7 +350,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
-  private[spark] def eventLogger: Option[EventLoggingListener] = _eventLogger
+  private[spark] def eventLogger: Option[EventLoggingWriterListener] = _eventLogger
 
   private[spark] def executorAllocationManager: Option[ExecutorAllocationManager] =
     _executorAllocationManager
@@ -428,8 +429,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _eventLogDir =
       if (isEventLogEnabled) {
-        val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
-          .stripSuffix("/")
+        val unresolvedDir = conf.get("spark.eventLog.dir",
+          EventLoggingWriterListener.DEFAULT_LOG_DIR).stripSuffix("/")
         Some(Utils.resolveURI(unresolvedDir))
       } else {
         None
@@ -543,9 +544,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     _eventLogger =
       if (isEventLogEnabled) {
-        val logger =
+        val logger = if (eventLogGroupSize > 0) {
+          new EventLoggingGroupListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
+            _conf, _hadoopConfiguration)
+        } else {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
+        }
         logger.start()
         listenerBus.addListener(logger)
         Some(logger)

@@ -64,7 +64,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
     eventLogger.start()
 
-    val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
+    val logPath = new Path(eventLogger.logPath + EventLoggingWriterListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
     val logStatus = fileSystem.getFileStatus(logPath)
     assert(!logStatus.isDir)
@@ -95,7 +95,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Log overwriting") {
-    val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
+    val logUri = EventLoggingWriterListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new URI(logUri).getPath
     // Create file before writing the event log
     new FileOutputStream(new File(logPath)).close()
@@ -107,18 +107,19 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   test("Event log name") {
     // without compression
-    assert(s"file:/base-dir/app1" === EventLoggingListener.getLogPath(
+    assert(s"file:/base-dir/app1" === EventLoggingWriterListener.getLogPath(
       Utils.resolveURI("/base-dir"), "app1", None))
     // with compression
     assert(s"file:/base-dir/app1.lzf" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None, Some("lzf")))
+      EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"), "app1", None,
+        Some("lzf")))
     // illegal characters in app ID
     assert(s"file:/base-dir/a-fine-mind_dollar_bills__1" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+      EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"),
         "a fine:mind$dollar{bills}.1", None))
     // illegal characters in app ID with compression
     assert(s"file:/base-dir/a-fine-mind_dollar_bills__1.lz4" ===
-      EventLoggingListener.getLogPath(Utils.resolveURI("/base-dir"),
+      EventLoggingWriterListener.getLogPath(Utils.resolveURI("/base-dir"),
         "a fine:mind$dollar{bills}.1", None, Some("lz4")))
   }
 
@@ -155,7 +156,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     eventLogger.stop()
 
     // Verify file contains exactly the two events logged
-    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    val logData = EventLoggingWriterListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
     try {
       val lines = readLines(logData)
       val logStart = SparkListenerLogStart(SPARK_VERSION)
@@ -183,9 +184,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
-    val eventLogPath = eventLogger.logPath
+    val eventLogPath = eventLogger.getFilePath()
     val expectedLogDir = testDir.toURI()
-    assert(eventLogPath === EventLoggingListener.getLogPath(
+    assert(eventLogPath === EventLoggingWriterListener.getLogPath(
       expectedLogDir, sc.applicationId, None, compressionCodec.map(CompressionCodec.getShortName)))
 
     // Begin listening for events that trigger asserts
@@ -200,7 +201,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     eventExistenceListener.assertAllCallbacksInvoked()
 
     // Make sure expected events exist in the log file.
-    val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
+    val logData = EventLoggingWriterListener.openEventLog(new Path(eventLogger.getFilePath()),
+      fileSystem)
     val logStart = SparkListenerLogStart(SPARK_VERSION)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
@@ -238,7 +240,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
    * A listener that asserts certain events are logged by the given EventLoggingListener.
    * This is necessary because events are posted asynchronously in a different thread.
    */
-  private class EventExistenceListener(eventLogger: EventLoggingListener) extends SparkListener {
+  private class EventExistenceListener(eventLogger: EventLoggingWriterListener)
+    extends SparkListener {
     var jobStarted = false
     var jobEnded = false
     var appEnded = false
