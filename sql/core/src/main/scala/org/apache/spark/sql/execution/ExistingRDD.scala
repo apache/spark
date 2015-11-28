@@ -106,7 +106,7 @@ private[sql] case class PhysicalRDD(
 
   override def simpleString: String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
-    s"Scan ${metadataEntries.mkString(", ")} ${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 }
 
