@@ -161,7 +161,7 @@ private[spark] class ExternalSorter[K, V, C](
   // Information about a spilled file. Includes sizes in bytes of "batches" written by the
   // serializer as we periodically reset its stream, as well as number of elements in each
   // partition, used to efficiently keep track of partitions when merging.
-  private[this] case class SpilledFile(
+  private[collection] case class SpilledFile(
     file: File,
     blockId: BlockId,
     serializerBatchSizes: Array[Long],
