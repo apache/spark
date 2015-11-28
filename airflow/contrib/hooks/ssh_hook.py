@@ -42,9 +42,9 @@ class SSHHook(BaseHook):
         conn = self.get_connection(conn_id)
         self.key_file = conn.extra_dejson.get('key_file', None)
         self.connect_timeout = conn.extra_dejson.get('connect_timeout', None)
-        self.no_host_key_check = conn.extra_dejson('no_host_key_check', False)
-        self.tty = conn.extra_dejson('tty', False)
-        self.sshpass = conn.extra_dejson('sshpass', False)
+        self.no_host_key_check = conn.extra_dejson.get('no_host_key_check', False)
+        self.tty = conn.extra_dejson.get('tty', False)
+        self.sshpass = conn.extra_dejson.get('sshpass', False)
         self.conn = conn
 
     def get_conn(self):
