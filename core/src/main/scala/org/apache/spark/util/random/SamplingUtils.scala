@@ -57,10 +57,8 @@ private[spark] object SamplingUtils {
       while (input.hasNext) {
         val item = input.next()
         val replacementIndex = l < Int.MaxValue match {
-          case true =>
-            rand.nextInt(l.toInt)
-          case false =>
-            rand.nextInt()
+          case true => rand.nextInt(l.toInt)
+          case false => rand.nextInt()
         }
         if (replacementIndex < k) {
           reservoir(replacementIndex) = item
