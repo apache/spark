@@ -32,6 +32,7 @@ protocol or circumvent firewalls (as long as they are open for ssh traffic).
 """
 
 import subprocess
+from contextlib import contextmanager
 
 from airflow.hooks.base_hook import BaseHook
 from airflow import AirflowException
@@ -105,6 +106,7 @@ class SSHHook(BaseHook):
 
         return output
 
+    @contextmanager
     def tunnel(self, local_port, remote_port=None, remote_host="localhost"):
         tunnel_host = "{0}:{1}:{2}".format(local_port, remote_host, remote_port)
         proc = self._Popen(["-L", tunnel_host, "echo -n ready && cat"],
