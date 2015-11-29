@@ -788,6 +788,23 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
   }
 
+  test("covariance: covar_pop and covar_samp") {
+    // non-trivial example. To reproduce in python, use:
+    // >>> import numpy as np
+    // >>> a = np.array(range(20))
+    // >>> b = np.array([x * x - 2 * x + 3.5 for x in range(20)])
+    // >>> np.cov(a, b, bias = 0)[0][1]
+    // 595.0
+    // >>> np.cov(a, b, bias = 1)[0][1]
+    // 565.25
+    val df = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val cov_samp = df.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_samp - 595.0) < 1e-12)
+
+    val cov_pop = df.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_pop - 565.25) < 1e-12)
+  }
+
   test("no aggregation function (SPARK-11486)") {
     val df = sqlContext.range(20).selectExpr("id", "repeat(id, 1) as s")
       .groupBy("s").count()

@@ -309,6 +309,46 @@ object functions extends LegacyFunctions {
     countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
+   * Aggregate function: returns the population covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def covar_pop(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovPopulation(column1.expr, column2.expr)
+  }
+
+  /**
+   * Aggregate function: returns the population covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def covar_pop(columnName1: String, columnName2: String): Column = {
+    covar_pop(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def covar_samp(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovSample(column1.expr, column2.expr)
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def covar_samp(columnName1: String, columnName2: String): Column = {
+    covar_samp(Column(columnName1), Column(columnName2))
+  }
+
+  /**
    * Aggregate function: returns the first value in a group.
    *
    * @group agg_funcs

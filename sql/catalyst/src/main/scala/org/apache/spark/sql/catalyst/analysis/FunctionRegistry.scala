@@ -182,6 +182,8 @@ object FunctionRegistry {
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CovPopulation]("covar_pop"),
+    expression[CovSample]("covar_samp"),
     expression[First]("first"),
     expression[First]("first_value"),
     expression[Last]("last"),
