@@ -359,12 +359,12 @@ object StructType extends AbstractDataType {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-              oneSide.putBoolean("oneSide", false)
-              leftField.copy(
-                dataType = merge(leftType, rightType),
-                nullable = leftNullable || rightNullable,
-                metadata = oneSide.build())
-            }
+                oneSide.putBoolean("oneSide", false)
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable,
+                  metadata = oneSide.build())
+              }
               .orElse {
                 oneSide.putBoolean("oneSide", true)
                 Some(leftField.copy(metadata = oneSide.build()))
