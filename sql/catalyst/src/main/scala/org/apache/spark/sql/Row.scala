@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
-import scala.util.Try
+import scala.util.control.Exception._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -322,9 +322,12 @@ trait Row extends Serializable {
    */
   def getAsOpt[T](i: Int): Option[T] = {
     val value = {
-      if (isNullAt(i)) None
-      else Try(getAs[T](i)).toOption
+      if (i < length) {
+        if (isNullAt(i)) None
+        else catching(classOf[ClassCastException]) opt getAs[T](i)
+      } else None
     }
+
     value.asInstanceOf[Option[T]]
   }
 
@@ -343,13 +346,7 @@ trait Row extends Serializable {
    * also returned if either the schema is not defined or else the given fieldName does not exist
    * in the schema.
    */
-  def getAsOpt[T](fieldName: String): Option[T] = {
-    val value = {
-      if (isNullAt(fieldIndex(fieldName))) None
-      else Try(getAs[T](fieldName)).toOption
-    }
-    value.asInstanceOf[Option[T]]
-  }
+  def getAsOpt[T](fieldName: String): Option[T] = None.asInstanceOf[Option[T]]
 
   /**
    * Returns the value of a given fieldName.
