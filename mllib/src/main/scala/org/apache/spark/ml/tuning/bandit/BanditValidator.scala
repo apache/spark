@@ -108,7 +108,7 @@ trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
 class BanditValidator[M <: Model[M]](override val uid: String)
   extends Estimator[BanditValidatorModel[M]] with BanditValidatorParams[M] with Logging {
 
-  def this() = this(Identifiable.randomUID("bandit validation"))
+  def this() = this(Identifiable.randomUID("BanditValidator"))
 
   def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
@@ -146,6 +146,34 @@ class BanditValidator[M <: Model[M]](override val uid: String)
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
+  /**
+   * Aggregate all results in the summary variable. We record behaviors of every arm in the whole
+   * validation process. So there are `$(estimatorParamMaps).length * $(numFolds)` arms in total.
+   * Each arm records a `Tuple3` of "iteration", "evaluation result on training set", and
+   * "evaluation result on validation test".
+   */
+  private var trainingSummary: Option[Array[Array[(Int, Double, Double)]]] = None
+
+  def printSummary(): Unit = {
+    trainingSummary match {
+      case None => println("No summary recorded!")
+      case Some(x) =>
+        var i = 0
+        while (i < $(numFolds)) {
+          var j = 0
+          while (j < $(estimatorParamMaps).length) {
+            println(s"For #${i}-fold training, #${j}-arm, we get")
+            println(s"\t${x(i * $(estimatorParamMaps).length + j).mkString(", ")}")
+            j += 1
+          }
+          println()
+          println("===============================================================")
+          println()
+          i += 1
+        }
+    }
+  }
+
   override def fit(dataset: DataFrame): BanditValidatorModel[M] = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -175,8 +203,16 @@ class BanditValidator[M <: Model[M]](override val uid: String)
       val arms = epm.map(new Arm[M](est, None, _, eval, $(stepsPerPulling)))
 
       // Find the best arm with pre-defined search strategies
-      val bestArm = $(searchStrategy)
-        .search(totalBudget, arms, trainingDataset, validationDataset, eval.isLargerBetter)
+      val bestArm = $(searchStrategy).search(totalBudget, arms, trainingDataset, validationDataset,
+        eval.isLargerBetter, needRecord = true)
+
+      arms.zipWithIndex.foreach { case (arm, idx) =>
+        if (trainingSummary.isEmpty) {
+          trainingSummary = Some(Array.ofDim($(estimatorParamMaps).length * $(numFolds)))
+        }
+        trainingSummary.get(splitIndex * arms.length + idx) = arm.getHistory
+      }
+
       (bestArm, bestArm.getValidationResult(validationDataset))
     }
 
