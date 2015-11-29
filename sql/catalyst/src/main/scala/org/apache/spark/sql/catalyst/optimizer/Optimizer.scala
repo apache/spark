@@ -362,9 +362,14 @@ object LikeSimplification extends Rule[LogicalPlan] {
  * Null value propagation from bottom to top of the expression tree.
  */
 object NullPropagation extends Rule[LogicalPlan] {
+  def nonNullLiteral(e: Expression): Boolean = e match {
+    case Literal(null, _) => false
+    case _ => true
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e @ AggregateExpression(Count(Literal(null, _)), _, _) =>
+      case e @ AggregateExpression(Count(exprs), _, _) if !exprs.exists(nonNullLiteral) =>
         Cast(Literal(0L), e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal.create(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal.create(true, BooleanType)
@@ -377,16 +382,13 @@ object NullPropagation extends Rule[LogicalPlan] {
         Literal.create(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
-      case e @ AggregateExpression(Count(expr), mode, false) if !expr.nullable =>
+      case e @ AggregateExpression(Count(exprs), mode, false) if !exprs.exists(_.nullable) =>
         // This rule should be only triggered when isDistinct field is false.
         AggregateExpression(Count(Literal(1)), mode, isDistinct = false)
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
-        val newChildren = children.filter {
-          case Literal(null, _) => false
-          case _ => true
-        }
+        val newChildren = children.filter(nonNullLiteral)
         if (newChildren.length == 0) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {

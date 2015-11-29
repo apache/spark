@@ -426,30 +426,3 @@ case class Greatest(children: Seq[Expression]) extends Expression {
   }
 }
 
-/** Operator that drops a row when it contains any nulls. */
-case class DropAnyNull(child: Expression) extends UnaryExpression with ExpectsInputTypes {
-  override def nullable: Boolean = true
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StructType)
-
-  protected override def nullSafeEval(input: Any): InternalRow = {
-    val row = input.asInstanceOf[InternalRow]
-    if (row.anyNull) {
-      null
-    } else {
-      row
-    }
-  }
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval.anyNull()) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = $eval;
-        }
-      """
-    })
-  }
-}
