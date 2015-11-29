@@ -62,7 +62,7 @@ object BanditValidatorPerfTest {
       .setNumFolds(3)
       .setEvaluator(eval)
 
-    val result = Array(
+    Array(
       new StaticSearch,
       new SimpleBanditSearch,
       new SuccessiveEliminationSearch,
@@ -71,15 +71,16 @@ object BanditValidatorPerfTest {
       new LUCBSearch,
       new SuccessiveHalvingSearch,
       new SuccessiveRejectSearch
-    ).map { search =>
+    ).foreach { search =>
       banditVal.setSearchStrategy(search)
       val model = banditVal.fit(training)
       val auc = eval.evaluate(model.transform(test))
-      (search.getClass.getSimpleName, auc)
-    }
 
-    result.foreach { x =>
-      println(s"${x._1} -> ${x._2}")
+      val part1 = s"${search.getClass.getSimpleName} -> ${auc}"
+      val part2 = banditVal.printSummary()
+
+      sc.parallelize(Array(part1) ++ part2).repartition(1)
+        .saveAsTextFile(s"/Users/panda/data/small_datasets/result-${search.getClass.getSimpleName}")
     }
     sc.stop()
   }

@@ -154,24 +154,32 @@ class BanditValidator[M <: Model[M]](override val uid: String)
    */
   private var trainingSummary: Option[Array[Array[(Int, Double, Double)]]] = None
 
-  def printSummary(): Unit = {
+  def printSummary(): Array[String] = {
+    val resultBuilder = new StringBuilder()
+    val sepStr = Array.fill(100)("=").mkString("")
     trainingSummary match {
-      case None => println("No summary recorded!")
+      case None =>
+        val error = "No summary recorded!"
+        resultBuilder.append(error)
+        println(error)
       case Some(x) =>
         var i = 0
         while (i < $(numFolds)) {
           var j = 0
           while (j < $(estimatorParamMaps).length) {
-            println(s"For #${i}-fold training, #${j}-arm, we get")
-            println(s"\t${x(i * $(estimatorParamMaps).length + j).mkString(", ")}")
+            val hint = s"For #${i}-fold training, #${j}-arm, we get"
+            println(hint)
+            resultBuilder.append(hint)
+            val history = s"\t${x(i * $(estimatorParamMaps).length + j).mkString(", ")}"
+            println(history)
+            resultBuilder.append(history)
             j += 1
           }
-          println()
-          println("===============================================================")
-          println()
+          resultBuilder.append(sepStr)
           i += 1
         }
     }
+    resultBuilder.toArray
   }
 
   override def fit(dataset: DataFrame): BanditValidatorModel[M] = {
