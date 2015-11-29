@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -37,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection, SqlParser}
-import org.apache.spark.sql.execution.{EvaluatePython, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
+import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, QueryExecution, Queryable, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -112,8 +113,8 @@ private[sql] object DataFrame {
  */
 @Experimental
 class DataFrame private[sql](
-    @transient val sqlContext: SQLContext,
-    @DeveloperApi @transient val queryExecution: QueryExecution)
+    @transient override val sqlContext: SQLContext,
+    @DeveloperApi @transient override val queryExecution: QueryExecution)
   extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
@@ -281,6 +282,35 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def schema: StructType = queryExecution.analyzed.schema
+
+  /**
+   * Prints the schema to the console in a nice tree format.
+   * @group basic
+   * @since 1.3.0
+   */
+  // scalastyle:off println
+  override def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
+
+  /**
+   * Prints the plans (logical and physical) to the console for debugging purposes.
+   * @group basic
+   * @since 1.3.0
+   */
+  override def explain(extended: Boolean): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
+
+  /**
+   * Prints the physical plan to the console for debugging purposes.
+   * @since 1.3.0
+   */
+  override def explain(): Unit = explain(extended = false)
 
   /**
    * Returns all column names and their data types as an array.
@@ -1706,6 +1736,12 @@ class DataFrame private[sql](
     EvaluatePython.javaToPython(rdd)
   }
 
+  protected[sql] def collectToPython(): Int = {
+    withNewExecutionId {
+      PythonRDD.collectAndServe(javaToPython.rdd)
+    }
+  }
+
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
   // Deprecated methods
@@ -1713,9 +1749,9 @@ class DataFrame private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
-   * @deprecated As of 1.3.0, replaced by `toDF()`.
+   * @deprecated As of 1.3.0, replaced by `toDF()`. This will be removed in Spark 2.0.
    */
-  @deprecated("use toDF", "1.3.0")
+  @deprecated("Use toDF. This will be removed in Spark 2.0.", "1.3.0")
   def toSchemaRDD: DataFrame = this
 
   /**
@@ -1725,9 +1761,9 @@ class DataFrame private[sql](
    * given name; if you pass `false`, it will throw if the table already
    * exists.
    * @group output
-   * @deprecated As of 1.340, replaced by `write().jdbc()`.
+   * @deprecated As of 1.340, replaced by `write().jdbc()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.jdbc()", "1.4.0")
+  @deprecated("Use write.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
   def createJDBCTable(url: String, table: String, allowExisting: Boolean): Unit = {
     val w = if (allowExisting) write.mode(SaveMode.Overwrite) else write
     w.jdbc(url, table, new Properties)
@@ -1744,9 +1780,9 @@ class DataFrame private[sql](
    * the RDD in order via the simple statement
    * `INSERT INTO table VALUES (?, ?, ..., ?)` should not fail.
    * @group output
-   * @deprecated As of 1.4.0, replaced by `write().jdbc()`.
+   * @deprecated As of 1.4.0, replaced by `write().jdbc()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.jdbc()", "1.4.0")
+  @deprecated("Use write.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
   def insertIntoJDBC(url: String, table: String, overwrite: Boolean): Unit = {
     val w = if (overwrite) write.mode(SaveMode.Overwrite) else write.mode(SaveMode.Append)
     w.jdbc(url, table, new Properties)
@@ -1757,9 +1793,9 @@ class DataFrame private[sql](
    * Files that are written out using this method can be read back in as a [[DataFrame]]
    * using the `parquetFile` function in [[SQLContext]].
    * @group output
-   * @deprecated As of 1.4.0, replaced by `write().parquet()`.
+   * @deprecated As of 1.4.0, replaced by `write().parquet()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.parquet(path)", "1.4.0")
+  @deprecated("Use write.parquet(path). This will be removed in Spark 2.0.", "1.4.0")
   def saveAsParquetFile(path: String): Unit = {
     write.format("parquet").mode(SaveMode.ErrorIfExists).save(path)
   }
@@ -1782,8 +1818,9 @@ class DataFrame private[sql](
    *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.saveAsTable(tableName). This will be removed in Spark 2.0.", "1.4.0")
   def saveAsTable(tableName: String): Unit = {
     write.mode(SaveMode.ErrorIfExists).saveAsTable(tableName)
   }
@@ -1805,8 +1842,10 @@ class DataFrame private[sql](
    *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
+   *              This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.mode(mode).saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.mode(mode).saveAsTable(tableName). This will be removed in Spark 2.0.",
+    "1.4.0")
   def saveAsTable(tableName: String, mode: SaveMode): Unit = {
     write.mode(mode).saveAsTable(tableName)
   }
@@ -1829,8 +1868,10 @@ class DataFrame private[sql](
    *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.format(source).saveAsTable(tableName). This will be removed in Spark 2.0.",
+    "1.4.0")
   def saveAsTable(tableName: String, source: String): Unit = {
     write.format(source).saveAsTable(tableName)
   }
@@ -1853,8 +1894,10 @@ class DataFrame private[sql](
    *
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).saveAsTable(tableName). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def saveAsTable(tableName: String, source: String, mode: SaveMode): Unit = {
     write.format(source).mode(mode).saveAsTable(tableName)
   }
@@ -1877,9 +1920,10 @@ class DataFrame private[sql](
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
@@ -1907,9 +1951,10 @@ class DataFrame private[sql](
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName)",
-    "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).options(options).saveAsTable(tableName). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def saveAsTable(
       tableName: String,
       source: String,
@@ -1923,9 +1968,9 @@ class DataFrame private[sql](
    * using the default data source configured by spark.sql.sources.default and
    * [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
-   * @deprecated As of 1.4.0, replaced by `write().save(path)`.
+   * @deprecated As of 1.4.0, replaced by `write().save(path)`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.save(path)", "1.4.0")
+  @deprecated("Use write.save(path). This will be removed in Spark 2.0.", "1.4.0")
   def save(path: String): Unit = {
     write.save(path)
   }
@@ -1935,8 +1980,9 @@ class DataFrame private[sql](
    * using the default data source configured by spark.sql.sources.default.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().mode(mode).save(path)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.mode(mode).save(path)", "1.4.0")
+  @deprecated("Use write.mode(mode).save(path). This will be removed in Spark 2.0.", "1.4.0")
   def save(path: String, mode: SaveMode): Unit = {
     write.mode(mode).save(path)
   }
@@ -1946,8 +1992,9 @@ class DataFrame private[sql](
    * using [[SaveMode.ErrorIfExists]] as the save mode.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).save(path)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).save(path)", "1.4.0")
+  @deprecated("Use write.format(source).save(path). This will be removed in Spark 2.0.", "1.4.0")
   def save(path: String, source: String): Unit = {
     write.format(source).save(path)
   }
@@ -1957,8 +2004,10 @@ class DataFrame private[sql](
    * [[SaveMode]] specified by mode.
    * @group output
    * @deprecated As of 1.4.0, replaced by `write().format(source).mode(mode).save(path)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).save(path)", "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).save(path). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def save(path: String, source: String, mode: SaveMode): Unit = {
     write.format(source).mode(mode).save(path)
   }
@@ -1969,8 +2018,10 @@ class DataFrame private[sql](
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).save(path)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).options(options).save(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,
@@ -1985,8 +2036,10 @@ class DataFrame private[sql](
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().format(source).mode(mode).options(options).save(path)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.format(source).mode(mode).options(options).save()", "1.4.0")
+  @deprecated("Use write.format(source).mode(mode).options(options).save(). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def save(
       source: String,
       mode: SaveMode,
@@ -1994,14 +2047,15 @@ class DataFrame private[sql](
     write.format(source).mode(mode).options(options).save()
   }
 
-
   /**
    * Adds the rows from this RDD to the specified table, optionally overwriting the existing data.
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.mode(SaveMode.Append|SaveMode.Overwrite).saveAsTable(tableName). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def insertInto(tableName: String, overwrite: Boolean): Unit = {
     write.mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append).insertInto(tableName)
   }
@@ -2012,8 +2066,10 @@ class DataFrame private[sql](
    * @group output
    * @deprecated As of 1.4.0, replaced by
    *            `write().mode(SaveMode.Append).saveAsTable(tableName)`.
+   *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName)", "1.4.0")
+  @deprecated("Use write.mode(SaveMode.Append).saveAsTable(tableName). " +
+    "This will be removed in Spark 2.0.", "1.4.0")
   def insertInto(tableName: String): Unit = {
     write.mode(SaveMode.Append).insertInto(tableName)
   }

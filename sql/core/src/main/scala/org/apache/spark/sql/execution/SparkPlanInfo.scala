@@ -17,29 +17,30 @@
 
 package org.apache.spark.sql.execution
 
-import scala.util.control.NonFatal
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.metric.SQLMetricInfo
+import org.apache.spark.util.Utils
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.types.StructType
+/**
+ * :: DeveloperApi ::
+ * Stores information about a SQL SparkPlan.
+ */
+@DeveloperApi
+class SparkPlanInfo(
+    val nodeName: String,
+    val simpleString: String,
+    val children: Seq[SparkPlanInfo],
+    val metrics: Seq[SQLMetricInfo])
 
-/** A trait that holds shared code between DataFrames and Datasets. */
-private[sql] trait Queryable {
-  def schema: StructType
-  def queryExecution: QueryExecution
-  def sqlContext: SQLContext
+private[sql] object SparkPlanInfo {
 
-  override def toString: String = {
-    try {
-      schema.map(f => s"${f.name}: ${f.dataType.simpleString}").mkString("[", ", ", "]")
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+  def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
+    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
+        Utils.getFormattedClassName(metric.param))
     }
+    val children = plan.children.map(fromSparkPlan)
+
+    new SparkPlanInfo(plan.nodeName, plan.simpleString, children, metrics)
   }
-
-  def printSchema(): Unit
-
-  def explain(extended: Boolean): Unit
-
-  def explain(): Unit
 }

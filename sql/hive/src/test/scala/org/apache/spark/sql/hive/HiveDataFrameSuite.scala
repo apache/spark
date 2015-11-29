@@ -15,23 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.sql.hive
 
-import org.apache.spark.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.QueryTest
 
-private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
-
-  val parent = sparkUI
-
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
-
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-private[sql] object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
+  test("table name with schema") {
+    // regression test for SPARK-11778
+    hiveContext.sql("create schema usrdb")
+    hiveContext.sql("create table usrdb.test(c int)")
+    hiveContext.read.table("usrdb.test")
+    hiveContext.sql("drop table usrdb.test")
+    hiveContext.sql("drop schema usrdb")
+  }
 }
