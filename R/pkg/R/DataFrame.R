@@ -710,6 +710,7 @@ setMethod("collect",
                   df[[colName]] <- col
                 } else {
                   colType <- dtypes[[colIndex]][[2]]
+                  # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
