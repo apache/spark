@@ -36,12 +36,6 @@ trait Controllable[M <: Model[M]] extends Params with HasMaxIter {
   /** @group getParam */
   def getInitialModel: Option[M] = $(initialModel)
 
-  /** @group setParam */
-  def setInitialModel(model: Option[M]): this.type = set(initialModel, model)
-
-  /** @group setParam */
-  def setMaxIter(iter: Int): this.type = set(maxIter, iter)
-
   setDefault(initialModel -> None, maxIter -> 1)
 }
 

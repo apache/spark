@@ -243,8 +243,8 @@ class Arm[M <: Model[M]](
     if (model.isEmpty && initialModel.isDefined) {
       this.model = initialModel
     }
-    estimator.setInitialModel(model)
-    estimator.setMaxIter(maxIter)
+    estimator.set(estimator.initialModel, model)
+    estimator.set(estimator.maxIter, maxIter)
     this.model = Some(estimator.fit(dataset, estimatorParamMap))
     this
   }

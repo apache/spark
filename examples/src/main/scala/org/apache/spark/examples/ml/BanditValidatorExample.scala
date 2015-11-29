@@ -81,7 +81,7 @@ object BanditValidatorExample {
 
     val search = new SimpleBanditSearch
     banditval.setSearchStrategy(search)
-    banditval.setMaxIter(100)
+    banditval.setMaxIter(50)
     banditval.setStepsPerPulling(1)
 
     // Run cross-validation, and choose the best set of parameters.
