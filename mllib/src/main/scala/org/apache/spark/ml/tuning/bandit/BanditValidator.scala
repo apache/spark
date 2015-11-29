@@ -156,6 +156,13 @@ class BanditValidator[M <: Model[M]](override val uid: String)
     // Split data into k-fold
     val splits = MLUtils.kFold(dataset.rdd, $(numFolds), 0)
 
+    val totalBudget = if ($(maxIter) > 2 * epm.length) {
+      $(maxIter)
+    } else {
+      logInfo("The `maxIter` should be larger than `2 * arms size`.")
+      2 * epm.length + 1
+    }
+
     // Find the best arm with k-fold bandit validation
     val bestArms = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
@@ -166,7 +173,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
       val arms = epm.map(new Arm[M](est, None, _, eval, $(stepsPerPulling)))
 
       // Find the best arm with pre-defined search strategies
-      val bestArm = $(searchStrategy).search($(maxIter), arms, trainingDataset, validationDataset)
+      val bestArm = $(searchStrategy).search(totalBudget, arms, trainingDataset, validationDataset)
       (bestArm, bestArm.getValidationResult(validationDataset))
     }
 
@@ -218,7 +225,7 @@ class Arm[M <: Model[M]](
     val initialModel: Option[M],
     val estimatorParamMap: ParamMap,
     val evaluator: Evaluator,
-    val maxIter: Int) {
+    val stepsPerPulling: Int) {
 
   /**
    * Inner model to record intermediate training result.
@@ -244,7 +251,7 @@ class Arm[M <: Model[M]](
       this.model = initialModel
     }
     estimator.set(estimator.initialModel, model)
-    estimator.set(estimator.maxIter, maxIter)
+    estimator.set(estimator.maxIter, stepsPerPulling)
     this.model = Some(estimator.fit(dataset, estimatorParamMap))
     this
   }
