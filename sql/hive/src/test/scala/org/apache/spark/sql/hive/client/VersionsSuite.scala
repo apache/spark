@@ -45,7 +45,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
 
-  private val mavenRepo = Some("http://www.datanucleus.org/downloads/maven2")
+  private val mavenRepo = HiveContext.HIVE_METASTORE_MAVEN_REPO.defaultValue
 
   private def buildConf() = {
     lazy val warehousePath = Utils.createTempDir()
