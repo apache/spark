@@ -158,7 +158,7 @@ case class CovSample(
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
- 
+
   override def eval(buffer: InternalRow): Any = {
     val count = buffer.getLong(mutableAggBufferOffsetPlus3)
     if (count > 0) {
@@ -208,5 +208,5 @@ case class CovPopulation(
     } else {
       null
     }
-  } 
+  }
 }
