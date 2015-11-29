@@ -621,9 +621,13 @@ private[spark] class ApplicationMaster(
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-      // In cluster mode, do not rely on the disassociated event to exit
+      // In cluster mode, shut down reporterThread in order to avoid to re-allocating containers
+      // and do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
-      if (!isClusterMode) {
+      if (isClusterMode) {
+        reporterThread.interrupt()
+        reporterThread = null
+      } else {
         logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
         finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
       }
