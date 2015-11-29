@@ -72,6 +72,8 @@ test_that("infer types and check types", {
   expect_equal(infer_type(e), "map<string,integer>")
 
   expect_error(checkType("map<integer,integer>"), "Key type in a map must be string or character")
+
+  expect_equal(infer_type(as.raw(c(1, 2, 3))), "binary")
 })
 
 test_that("structType and structField", {
@@ -250,6 +252,10 @@ test_that("create DataFrame from list or data.frame", {
 
   mtcarsdf <- createDataFrame(sqlContext, mtcars)
   expect_equivalent(collect(mtcarsdf), mtcars)
+
+  bytes <- as.raw(c(1, 2, 3))
+  df <- createDataFrame(sqlContext, list(list(bytes)))
+  expect_equal(collect(df)[[1]][[1]], bytes)
 })
 
 test_that("create DataFrame with different data types", {

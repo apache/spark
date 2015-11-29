@@ -19,25 +19,30 @@
 # values are equivalent R types. This is stored in an environment to allow for
 # more efficient look up (environments use hashmaps).
 PRIMITIVE_TYPES <- as.environment(list(
-  "byte"="integer",
-  "tinyint"="integer",
-  "smallint"="integer",
-  "integer"="integer",
-  "bigint"="numeric",
-  "float"="numeric",
-  "double"="numeric",
-  "decimal"="numeric",
-  "string"="character",
-  "binary"="raw",
-  "boolean"="logical",
-  "timestamp"="POSIXct",
-  "date"="Date"))
+  "tinyint" = "integer",
+  "smallint" = "integer",
+  "int" = "integer",
+  "bigint" = "numeric",
+  "float" = "numeric",
+  "double" = "numeric",
+  "decimal" = "numeric",
+  "string" = "character",
+  "binary" = "raw",
+  "boolean" = "logical",
+  "timestamp" = "POSIXct",
+  "date" = "Date",
+  # following types are not SQL types returned by dtypes(). They are listed here for usage
+  # by checkType() in schema.R.
+  # TODO: refactor checkType() in schema.R.
+  "byte" = "integer",
+  "integer" = "integer"
+  ))
 
 # The complex data types. These do not have any direct mapping to R's types.
 COMPLEX_TYPES <- list(
-  "map"=NA,
-  "array"=NA,
-  "struct"=NA)
+  "map" = NA,
+  "array" = NA,
+  "struct" = NA)
 
 # The full list of data types.
 DATA_TYPES <- as.environment(c(as.list(PRIMITIVE_TYPES), COMPLEX_TYPES))
