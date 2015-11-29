@@ -630,11 +630,16 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
-  # Test base::colnames
+  # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
   expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
   colnames(m2) <- c("x","Y")
   expect_equal(colnames(m2), c("x", "Y"))
+
+  z <- list(a = 1, b = "c", c = 1:3)
+  expect_equal(names(z)[3], "c")
+  names(z)[3] <- "c2"
+  expect_equal(names(z)[3], "c2")
 })
 
 test_that("head() and first() return the correct data", {
