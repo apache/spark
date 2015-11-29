@@ -29,7 +29,8 @@ abstract class Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M]
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M]
 }
 
 /**
@@ -41,7 +42,8 @@ class StaticSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
@@ -51,7 +53,11 @@ class StaticSearch extends Search {
       i += 1
     }
 
-    val bestArm = arms.maxBy(arm => arm.getValidationResult(validationData))
+    val bestArm = if (isLargerBetter) {
+      arms.maxBy(arm => arm.getValidationResult(validationData))
+    } else {
+      arms.minBy(arm => arm.getValidationResult(validationData))
+    }
     bestArm
   }
 }
@@ -64,7 +70,12 @@ class SimpleBanditSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
     val alpha = 0.3
@@ -98,7 +109,12 @@ class ExponentialWeightsSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
     val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
@@ -127,7 +143,12 @@ class LILUCBSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
 
@@ -180,7 +201,12 @@ class LUCBSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
 
@@ -252,7 +278,12 @@ class SuccessiveHalvingSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
     val numOfHalvingIter = math.ceil(Utils.log2(numArms)).toInt
@@ -299,7 +330,12 @@ class SuccessiveRejectSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
 
@@ -346,7 +382,12 @@ class SuccessiveEliminationSearch extends Search {
       totalBudgets: Int,
       arms: Array[Arm[M]],
       trainingData: DataFrame,
-      validationData: DataFrame): Arm[M] = {
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true): Arm[M] = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
 
     val numArms = arms.length
     val delta = 0.1

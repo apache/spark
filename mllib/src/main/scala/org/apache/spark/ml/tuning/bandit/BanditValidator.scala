@@ -173,7 +173,8 @@ class BanditValidator[M <: Model[M]](override val uid: String)
       val arms = epm.map(new Arm[M](est, None, _, eval, $(stepsPerPulling)))
 
       // Find the best arm with pre-defined search strategies
-      val bestArm = $(searchStrategy).search(totalBudget, arms, trainingDataset, validationDataset)
+      val bestArm = $(searchStrategy)
+        .search(totalBudget, arms, trainingDataset, validationDataset, eval.isLargerBetter)
       (bestArm, bestArm.getValidationResult(validationDataset))
     }
 
