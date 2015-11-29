@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tuning.bandit
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
@@ -229,6 +231,22 @@ class Arm[M <: Model[M]](
     val stepsPerPulling: Int) {
 
   /**
+   * Perf-test variable to record arm pulling history. `Int` in the beginning stands for the time
+   * to pull this arm. The last two `Double`s to record evaluation result on training set and
+   * validation set.
+   * Since it's very costly to record these two results every time the code iterating, it will not
+   * be computed in production code.
+   */
+  private val history = new ArrayBuffer[(Int, Double, Double)]()
+
+  def setHistory(iter: Int, evalOnTrainingSet: Double, evalOnValidationSet: Double): this.type = {
+    history.append((iter, evalOnTrainingSet, evalOnValidationSet))
+    this
+  }
+
+  def getHistory: Array[(Int, Double, Double)] = history.toArray
+
+  /**
    * Inner model to record intermediate training result.
    */
   private var model: Option[M] = None
@@ -246,7 +264,11 @@ class Arm[M <: Model[M]](
    * Pull the arm to perform maxIter steps of the iterative [Estimator]. Model will be updated
    * after the pulling.
    */
-  def pull(dataset: DataFrame): this.type = {
+  def pull(
+      dataset: DataFrame,
+      iter: Int,
+      validationSet: Option[DataFrame] = None,
+      record: Boolean = false): this.type = {
     this.numPulls += 1
     if (model.isEmpty && initialModel.isDefined) {
       this.model = initialModel
@@ -254,6 +276,13 @@ class Arm[M <: Model[M]](
     estimator.set(estimator.initialModel, model)
     estimator.set(estimator.maxIter, stepsPerPulling)
     this.model = Some(estimator.fit(dataset, estimatorParamMap))
+    if (record) {
+      val validationResult = validationSet match {
+        case Some(data) => evaluator.evaluate(model.get.transform(data))
+        case None => Double.NaN
+      }
+      setHistory(iter, evaluator.evaluate(model.get.transform(dataset)), validationResult)
+    }
     this
   }
 

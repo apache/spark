@@ -30,7 +30,8 @@ abstract class Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M]
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M]
 }
 
 /**
@@ -43,13 +44,14 @@ class StaticSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
     var i = 0
     while (i  < totalBudgets) {
-      arms(i % numArms).pull(trainingData)
+      arms(i % numArms).pull(trainingData, i, Some(validationData), record = needRecord)
       i += 1
     }
 
@@ -71,7 +73,8 @@ class SimpleBanditSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -82,7 +85,7 @@ class SimpleBanditSearch extends Search {
     val initialRounds = math.max(1, (alpha * totalBudgets / numArms).toInt)
 
     for (i <- 0 until initialRounds) {
-      arms.foreach(_.pull(trainingData))
+      arms.foreach(_.pull(trainingData, i, Some(validationData), record = needRecord))
     }
 
     var currentBudget = initialRounds * numArms
@@ -92,7 +95,8 @@ class SimpleBanditSearch extends Search {
       .reverse.dropRight(numArms - numPreSelectedArms)
 
     while (currentBudget < totalBudgets) {
-      preSelectedArms(currentBudget % numPreSelectedArms).pull(trainingData)
+      preSelectedArms(currentBudget % numPreSelectedArms)
+        .pull(trainingData, currentBudget, Some(validationData), record = needRecord)
       currentBudget += 1
     }
 
@@ -110,7 +114,8 @@ class ExponentialWeightsSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -126,7 +131,7 @@ class ExponentialWeightsSearch extends Search {
       axpy(Utils.sum(wt), wt, pt)
       val it = if (t < numArms) t else Utils.chooseOne(pt)
       val arm = arms(it)
-      arm.pull(trainingData)
+      arm.pull(trainingData, t, Some(validationData), record = needRecord)
       lt.values(it) += arm.getValidationResult(validationData)
       wt.values(it) = math.exp(- eta * lt(it))
     }
@@ -144,7 +149,8 @@ class LILUCBSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -155,7 +161,7 @@ class LILUCBSearch extends Search {
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     val sumj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     for (i <- 0 until numArms) {
-      arms(i).pull(trainingData)
+      arms(i).pull(trainingData, i, Some(validationData), record = needRecord)
       sumj.values(i) += arms(i).getValidationResult(validationData)
       nj.values(i) += 1
     }
@@ -180,7 +186,7 @@ class LILUCBSearch extends Search {
 
     while (t < totalBudgets) {
       val it = Utils.argMin(ucbj)
-      arms(it).pull(trainingData)
+      arms(it).pull(trainingData, t, Some(validationData), record = needRecord)
       sumj.values(it) += arms(it).getValidationResult(validationData)
       nj.values(it) += 1
       ct.values(it) = 1.5 * math.sqrt(0.5 * math.log(5.0 * math.log(3.0 * nj(it)) / delta) / nj(it))
@@ -202,7 +208,8 @@ class LUCBSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -213,7 +220,7 @@ class LUCBSearch extends Search {
     val nj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     val sumj = Vectors.zeros(numArms).asInstanceOf[DenseVector]
     for (i <- 0 until numArms) {
-      arms(i).pull(trainingData)
+      arms(i).pull(trainingData, i, Some(validationData), record = needRecord)
       sumj.values(i) += arms(i).getValidationResult(validationData)
       nj.values(i) += 1
     }
@@ -245,7 +252,7 @@ class LUCBSearch extends Search {
       val inds1 = Utils.argSort(ucbj)
 
       var it = inds0(0)
-      arms(it).pull(trainingData)
+      arms(it).pull(trainingData, t, Some(validationData), record = needRecord)
       sumj.values(it) += arms(it).getValidationResult(validationData)
       nj.values(it) += 1
       t += 1
@@ -257,7 +264,7 @@ class LUCBSearch extends Search {
       ucbj.values(it) = sumj(it) / nj(it) - ctTmp
 
       it = if (inds1(0) == inds0(0)) inds1(1) else inds1(0)
-      arms(it).pull(trainingData)
+      arms(it).pull(trainingData, t, Some(validationData), record = needRecord)
       sumj.values(it) += arms(it).getValidationResult(validationData)
       nj.values(it) += 1
       t += 1
@@ -279,7 +286,8 @@ class SuccessiveHalvingSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -298,7 +306,7 @@ class SuccessiveHalvingSearch extends Search {
         var i = 0
         while (i < armsRef.length) {
           for (_ <- 0 until numOfCurrentPulling) {
-            armsRef(i).pull(trainingData)
+            armsRef(i).pull(trainingData, t, Some(validationData), record = needRecord)
             t += 1
           }
           i += 1
@@ -312,7 +320,7 @@ class SuccessiveHalvingSearch extends Search {
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armsRef(t % armsRef.length).pull(trainingData)
+        armsRef(t % armsRef.length).pull(trainingData, t, Some(validationData), record = needRecord)
         t += 1
       }
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
@@ -331,7 +339,8 @@ class SuccessiveRejectSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -351,7 +360,7 @@ class SuccessiveRejectSearch extends Search {
       var i = 0
       while (i < armsRef.length) {
         for (_ <- 0 until numOfCurrentPulling) {
-          armsRef(i).pull(trainingData)
+          armsRef(i).pull(trainingData, t, Some(validationData), record = needRecord)
           t += 1
         }
         i += 1
@@ -364,7 +373,7 @@ class SuccessiveRejectSearch extends Search {
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armsRef(t % armsRef.length).pull(trainingData)
+        armsRef(t % armsRef.length).pull(trainingData, t, Some(validationData), record = needRecord)
         t += 1
       }
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
@@ -383,7 +392,8 @@ class SuccessiveEliminationSearch extends Search {
       arms: Array[Arm[M]],
       trainingData: DataFrame,
       validationData: DataFrame,
-      isLargerBetter: Boolean = true): Arm[M] = {
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm[M] = {
 
     if (!isLargerBetter) {
       throw new UnsupportedOperationException("Unsupported OP fow now.")
@@ -394,7 +404,9 @@ class SuccessiveEliminationSearch extends Search {
 
     var armsRef = arms
 
-    armsRef.foreach(_.pull(trainingData))
+    armsRef.zipWithIndex.foreach { case (arm, idx) =>
+      arm.pull(trainingData, idx, Some(validationData), record = needRecord)
+    }
     var t = numArms
 
     val maxArmValidationResult = armsRef.map(_.getValidationResult(validationData)).max
@@ -414,7 +426,7 @@ class SuccessiveEliminationSearch extends Search {
     while (2 * t <= totalBudgets) {
       val numIter = t
       for (i <- 0 until numIter) {
-        armsRef(i % armsRef.length).pull(trainingData)
+        armsRef(i % armsRef.length).pull(trainingData, t, Some(validationData), record = needRecord)
         t += 1
       }
 
@@ -437,7 +449,7 @@ class SuccessiveEliminationSearch extends Search {
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
     } else {
       while (t < totalBudgets) {
-        armsRef(t % armsRef.length).pull(trainingData)
+        armsRef(t % armsRef.length).pull(trainingData, t, Some(validationData), record = needRecord)
         t += 1
       }
       armsRef.maxBy(arm => arm.getValidationResult(validationData))
