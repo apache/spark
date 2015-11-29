@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object BanditValidatorPerfTest {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setMaster("local[8]").setAppName("Cooking")
+    val conf = new SparkConf().setMaster("local[4]").setAppName("Cooking")
 
     val sc = new SparkContext(conf)
     val sqlCtx = new SQLContext(sc)

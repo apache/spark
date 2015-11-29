@@ -155,7 +155,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
   private var trainingSummary: Option[Array[Array[(Int, Double, Double)]]] = None
 
   def printSummary(): Array[String] = {
-    val resultBuilder = new StringBuilder()
+    val resultBuilder = new ArrayBuffer[String]()
     val sepStr = Array.fill(100)("=").mkString("")
     trainingSummary match {
       case None =>
