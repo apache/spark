@@ -880,14 +880,15 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  df4 <- select(df, countDistinct(df$age, df$name))
+  expect_equal(collect(df4)[[1, 1]], 2)
+
   expect_equal(collect(select(df, sum(df$age)))[1, 1], 49)
-
   expect_true(abs(collect(select(df, stddev(df$age)))[1, 1] - 7.778175) < 1e-6)
-
   expect_equal(collect(select(df, var_pop(df$age)))[1, 1], 30.25)
 
-  df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
-  expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+  df5 <- createDataFrame(sqlContext, list(list(a = "010101")))
+  expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
   # Test array_contains() and sort_array()
   df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
