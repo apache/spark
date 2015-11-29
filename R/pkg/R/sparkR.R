@@ -102,7 +102,8 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
-#'                  c("jarfile1.jar","jarfile2.jar"))
+#'                  "one.jar,two.jar,three.jar",
+#'                  "com.databricks:spark-avro_2.10:2.0.1,com.databricks:spark-csv_2.10:1.3.0")
 #'}
 
 sparkR.init <- function(
