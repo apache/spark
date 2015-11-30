@@ -109,6 +109,11 @@ class SaslRpcHandler extends RpcHandler {
   }
 
   @Override
+  public void receive(TransportClient client, byte[] message) {
+    delegate.receive(client, message);
+  }
+
+  @Override
   public StreamManager getStreamManager() {
     return delegate.getStreamManager();
   }

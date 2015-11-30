@@ -165,7 +165,7 @@ def main():
     # Switch the Hadoop profile based on the PR title:
     if "test-hadoop1.0" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop1.0"
-    if "test-hadoop2.2" in ghprb_pull_title:
+    if "test-hadoop2.0" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.0"
     if "test-hadoop2.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
