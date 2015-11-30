@@ -577,7 +577,7 @@ class WebPasswordAuthTest(unittest.TestCase):
         session = Session()
         user = models.User()
         password_user = PasswordUser(user)
-        password_user.username = 'airflow'
+        password_user.username = 'airflow_passwordauth'
         password_user.password = 'password'
         session.add(password_user)
         session.commit()
@@ -605,16 +605,13 @@ class WebPasswordAuthTest(unittest.TestCase):
     def test_login_logout_password_auth(self):
         assert configuration.getboolean('webserver', 'authenticate') is True
 
-        response = self.login('user1', 'userx')
+        response = self.login('user1', 'whatever')
         assert 'Incorrect login details' in response.data.decode('utf-8')
 
-        response = self.login('userz', 'user1')
+        response = self.login('airflow_passwordauth', 'wrongpassword')
         assert 'Incorrect login details' in response.data.decode('utf-8')
 
-        response = self.login('airflow', 'wrongpassword')
-        assert 'Incorrect login details' in response.data.decode('utf-8')
-
-        response = self.login('airflow', 'password')
+        response = self.login('airflow_passwordauth', 'password')
         assert 'Data Profiling' in response.data.decode('utf-8')
 
         response = self.logout()
@@ -694,6 +691,10 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
+        session = Session()
+        session.query(models.User).delete()
+        session.commit()
+        session.close()
         configuration.conf.set("webserver", "authenticate", "False")
 
 

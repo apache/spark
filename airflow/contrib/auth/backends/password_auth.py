@@ -108,6 +108,7 @@ def login(self, request):
         session = settings.Session()
         user = session.query(PasswordUser).filter(
             PasswordUser.username == username).first()
+
         if not user:
             session.close()
             raise AuthenticationError()
