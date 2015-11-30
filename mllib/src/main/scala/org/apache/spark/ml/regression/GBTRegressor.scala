@@ -201,7 +201,17 @@ final class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  val treePredictors = _trees.map(_.predictor(useCodeGen))
+  // We use two vals with options rather than lazy vals since we want the codeGen to be eagerly executed.
+  val treePredictors = useCodeGen match {
+    case false => Some(_trees.map(_.predictor()))
+    case true => None
+  }
+
+  val codeGenPredictors = useCodeGen match {
+    case false => None
+    case true => Some(_trees.map(_.codeGenPredictor()))
+  }
+
 
   override protected def transformImpl(dataset: DataFrame): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
@@ -215,7 +225,10 @@ final class GBTRegressionModel private[ml](
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
     // Classifies by thresholding sum of weighted tree predictions
-    val treePredictions = treePredictors.map(_(features))
+    val treePredictions: Array[Double] = useCodeGen match {
+      case false => treePredictors.get.map(_(features))
+      case true => codeGenPredictors.get.map(_.apply(features))
+    }
     blas.ddot(numTrees, treePredictions, 1, _treeWeights, 1)
   }
 

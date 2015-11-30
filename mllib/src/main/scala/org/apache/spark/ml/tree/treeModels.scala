@@ -29,13 +29,14 @@ private[ml] trait DecisionTreeModel {
   /** Root of the decision tree */
   def rootNode: Node
 
-  /** Returns a predictor based on the root node optionally using codegen. */
-  def predictor(codeGen: Boolean): Vector => Double = {
-    if (codeGen) {
-      CodeGenerationDecisionTreeModel.getScorer(rootNode)
-    } else {
-      ((f: Vector) => rootNode.predictImpl(f).prediction)
-    }
+  /** Returns a predictor based on the root node */
+  def predictor(): Vector => Double = {
+    ((f: Vector) => rootNode.predictImpl(f).prediction)
+  }
+
+  /** Returns a predictor based on the root node using code generation */
+  def codeGenPredictor() = {
+    CodeGenerationDecisionTreeModel.getScorer(rootNode)
   }
 
   /** Number of nodes in tree, including leaf nodes. */
