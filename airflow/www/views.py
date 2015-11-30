@@ -1969,6 +1969,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     }
     form_choices = {
         'conn_type': [
+            ('bigquery', 'BigQuery',),
             ('ftp', 'FTP',),
             ('hdfs', 'HDFS',),
             ('http', 'HTTP',),
