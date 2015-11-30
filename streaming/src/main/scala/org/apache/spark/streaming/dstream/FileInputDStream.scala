@@ -315,7 +315,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
+    // generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
+    initGeneratedRDDs()
     batchTimeToSelectedFiles = new mutable.HashMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
