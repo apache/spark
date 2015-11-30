@@ -626,6 +626,10 @@ class WebPasswordAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
+        session = Session()
+        session.query(models.User).delete()
+        session.commit()
+        session.close()
         configuration.conf.set("webserver", "authenticate", "False")
 
 

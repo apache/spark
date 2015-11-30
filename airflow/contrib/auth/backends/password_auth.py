@@ -109,9 +109,11 @@ def login(self, request):
         user = session.query(PasswordUser).filter(
             PasswordUser.username == username).first()
         if not user:
+            session.close()
             raise AuthenticationError()
 
         if not user.authenticate(password):
+            session.close()
             raise AuthenticationError()
         LOG.info("User %s successfully authenticated", username)
 
