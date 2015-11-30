@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# This is a port of Luigi's ssh implementation. All credits go there.
 import subprocess
 from contextlib import contextmanager
 
@@ -28,8 +29,6 @@ class SSHHook(BaseHook):
     """
     Light-weight remote execution library and utilities.
 
-    This is a port of Luigi's ssh implementation. All credits go there.
-
     Using this hook (which is just a convenience wrapper for subprocess),
     is created to let you stream data from a remotely stored file.
 
@@ -37,15 +36,19 @@ class SSHHook(BaseHook):
     set up ssh tunnels super easily using a python context manager (there is an example
     in the integration part of unittests).
 
-    Extra args that can be specified:
-        key_file (string): Typically the SSHHook uses the keys that are used by the user
-            airflow is running under. This sets the behavior to use another file instead.
-        connect_timeout (int): sets the connection timeout for this connection
-            no_host_key_check (bool): whether to check to host key. If True host keys will not
-            be checked, but are also not stored in the current users's known_hosts file.
-        tty (bool): allocate a tty
-        sshpass (bool): Use to non-interactivly perform password authentication by using
-            sshpass
+    :param key_file: Typically the SSHHook uses the keys that are used by the user
+        airflow is running under. This sets the behavior to use another file instead.
+    :type key_file: str
+    :param connect_timeout: sets the connection timeout for this connection.
+    :type connect_timeout: int
+    :param no_host_key_check: whether to check to host key. If True host keys will not
+        be checked, but are also not stored in the current users's known_hosts file.
+    :type no_host_key_check: bool
+    :param tty: allocate a tty.
+    :type tty: bool
+    :param sshpass: Use to non-interactively perform password authentication by using
+        sshpass.
+    :type sshpass: bool
     """
     def __init__(self, conn_id='ssh_default'):
         conn = self.get_connection(conn_id)
@@ -95,6 +98,7 @@ class SSHHook(BaseHook):
     def Popen(self, cmd, **kwargs):
         """
         Remote Popen
+
         :param cmd: command to remotely execute
         :param kwargs: extra arguments to Popen (see subprocess.Popen)
         :return: handle to subprocess
@@ -128,8 +132,11 @@ class SSHHook(BaseHook):
         after yourself when you are done with the tunnel.
 
         :param local_port:
+        :type local_port: int
         :param remote_port:
+        :type remote_port: int
         :param remote_host:
+        :type remote_host: str
         :return:
         """
         tunnel_host = "{0}:{1}:{2}".format(local_port, remote_host, remote_port)
