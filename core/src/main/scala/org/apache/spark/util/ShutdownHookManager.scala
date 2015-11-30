@@ -206,7 +206,7 @@ private[spark] object ShutdownHookManager extends Logging {
 private [util] class SparkShutdownHookManager {
 
   private val hooks = new PriorityQueue[SparkShutdownHook]()
-  private var shuttingDown = false
+  @volatile private var shuttingDown = false
 
   /**
    * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
@@ -232,22 +232,23 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
-  def runAll(): Unit = synchronized {
+  def runAll(): Unit = {
     shuttingDown = true
-    while (!hooks.isEmpty()) {
-      Try(Utils.logUncaughtExceptions(hooks.poll().run()))
+    var nextHook: SparkShutdownHook = null
+    while ({nextHook = hooks synchronized { hooks.poll() }; nextHook != null}) {
+      Try(Utils.logUncaughtExceptions(nextHook.run()))
     }
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = synchronized {
+  def add(priority: Int, hook: () => Unit): AnyRef = {
     checkState()
     val hookRef = new SparkShutdownHook(priority, hook)
-    hooks.add(hookRef)
+    hooks synchronized { hooks.add(hookRef) }
     hookRef
   }
 
-  def remove(ref: AnyRef): Boolean = synchronized {
-    hooks.remove(ref)
+  def remove(ref: AnyRef): Boolean = {
+    hooks synchronized { hooks.remove(ref) }
   }
 
   private def checkState(): Unit = {
