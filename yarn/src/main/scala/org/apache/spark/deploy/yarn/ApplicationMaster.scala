@@ -258,9 +258,9 @@ private[spark] class ApplicationMaster(
   }
 
   private def sparkContextStopped(sc: SparkContext) = {
-    sparkContextRef.compareAndSet(sc, null)
     reporterThread.interrupt()
     reporterThread = null
+    sparkContextRef.compareAndSet(sc, null)
   }
 
   private def registerAM(
