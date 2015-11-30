@@ -122,10 +122,10 @@ sparkR.init <- function(
   }
 
   if (length(sparkJars) > 1) {
-    stop("sparkJars parameter should be a common-separated list in one string")
+    stop("sparkJars parameter should be a comma-separated list in one string")
   }
   if (length(sparkPackages) > 1) {
-    stop("sparkPackages parameter should be a common-separated list in one string")
+    stop("sparkPackages parameter should be a comma-separated list in one string")
   }
 
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
