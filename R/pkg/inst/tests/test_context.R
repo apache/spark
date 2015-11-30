@@ -92,3 +92,13 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
                       " --driver-memory 4g sparkr-shell2"))
   # nolint end
 })
+
+test_that("sparkR.init parameter checks", {
+  sparkR.stop()
+  expect_error(sc <- sparkR.init(sparkJars = c("one.jar", "two.jar", "three.jar")),
+              "sparkJars parameter should be a common-separated list in one string")
+
+  expect_error(sc <- sparkR.init(sparkPackages = c("com.databricks:spark-avro_2.10:2.0.1",
+                                                   "com.databricks:spark-csv_2.10:1.3.0")),
+              "sparkPackages parameter should be a common-separated list in one string")
+})
