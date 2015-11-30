@@ -488,19 +488,35 @@ setMethod("initcap",
             column(jc)
           })
 
-#' isNaN
+#' isnan
 #'
-#' Return true iff the column is NaN.
+#' Return true if the column is NaN.
 #'
-#' @rdname isNaN
-#' @name isNaN
+#' @rdname isnan
+#' @name isnan
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{isNaN(df$c)}
-setMethod("isNaN",
+#' @examples \dontrun{isnan(df$c)}
+setMethod("isnan",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "isNaN", x@jc)
+            jc <- callJStatic("org.apache.spark.sql.functions", "isnan", x@jc)
+            column(jc)
+          })
+
+#' isnull
+#'
+#' Return true if the column is NULL.
+#'
+#' @rdname isnull
+#' @name isnull
+#' @family normal_funcs
+#' @export
+#' @examples \dontrun{isnull(df$c)}
+setMethod("isnull",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "isnull", x@jc)
             column(jc)
           })
 
