@@ -86,13 +86,13 @@ sparkR.stop <- function() {
 #' and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
-#' @param master The Spark master URL.
+#' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
-#' @param sparkEnvir Named list of environment variables to set on worker nodes.
-#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
-#' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkPackages Character string vector of packages from spark-packages.org
+#' @param sparkEnvir Named list of environment variables to set on worker nodes
+#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
+#' @param sparkJars Character string common-separated list of jar files to pass to the worker nodes
+#' @param sparkPackages Character string common-separated list of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -119,6 +119,13 @@ sparkR.init <- function(
     cat(paste("Re-using existing Spark Context.",
               "Please stop SparkR with sparkR.stop() or restart R to create a new Spark Context\n"))
     return(get(".sparkRjsc", envir = .sparkREnv))
+  }
+
+  if (length(sparkJars) > 1) {
+    stop("sparkJars parameter should be a common-separated list in one string")
+  }
+  if (length(sparkPackages) > 1) {
+    stop("sparkPackages parameter should be a common-separated list in one string")    
   }
 
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
