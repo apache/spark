@@ -212,7 +212,7 @@ private[sql] object ParquetFilters {
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
     val dataTypeOf = schema.filter { f =>
-      !f.metadata.contains("oneSide") || f.metadata.getBoolean("oneSide")
+      !f.metadata.contains("particular") || f.metadata.getBoolean("particular")
     }.map(f => f.name -> f.dataType).toMap
 
     relaxParquetValidTypeMap

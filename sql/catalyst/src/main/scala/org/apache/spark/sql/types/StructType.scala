@@ -352,22 +352,23 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
-        val oneSide = new MetadataBuilder()
+        // This metadata will record the fields that only exist in one of merged StructTypes
+        val particularMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                oneSide.putBoolean("oneSide", false)
+                particularMeta.putBoolean("particular", false)
                 leftField.copy(
                   dataType = merge(leftType, rightType),
                   nullable = leftNullable || rightNullable,
-                  metadata = oneSide.build())
+                  metadata = particularMeta.build())
               }
               .orElse {
-                oneSide.putBoolean("oneSide", true)
-                Some(leftField.copy(metadata = oneSide.build()))
+                particularMeta.putBoolean("particular", true)
+                Some(leftField.copy(metadata = particularMeta.build()))
               }
               .foreach(newFields += _)
         }
@@ -376,8 +377,8 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            oneSide.putBoolean("oneSide", true)
-            newFields += f.copy(metadata = oneSide.build())
+            particularMeta.putBoolean("particular", true)
+            newFields += f.copy(metadata = particularMeta.build())
           }
 
         StructType(newFields)
