@@ -1773,10 +1773,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
-    _stopHooks.foreach(_())
+    _stopHooks.foreach(hook => Utils.tryLogNonFatalError {
+      hook()
+    })
     logInfo("Successfully stopped SparkContext")
   }
-
 
   /**
    * Get Spark's home location from either a value set through the constructor,
