@@ -36,19 +36,18 @@ class SSHHook(BaseHook):
     As a bonus, :class:`SSHHook` also provides a really cool feature that let's you
     set up ssh tunnels super easily using a python context manager (there is an example
     in the integration part of unittests).
+
+    Extra args that can be specified:
+        key_file (string): Typically the SSHHook uses the keys that are used by the user
+            airflow is running under. This sets the behavior to use another file instead.
+        connect_timeout (int): sets the connection timeout for this connection
+            no_host_key_check (bool): whether to check to host key. If True host keys will not
+            be checked, but are also not stored in the current users's known_hosts file.
+        tty (bool): allocate a tty
+        sshpass (bool): Use to non-interactivly perform password authentication by using
+            sshpass
     """
     def __init__(self, conn_id='ssh_default'):
-        """
-        Extra args that can be specified:
-            key_file (string): Typically the SSHHook uses the keys that are used by the user
-                airflow is running under. This sets the behavior to use another file instead.
-            connect_timeout (int): sets the connection timeout for this connection
-                no_host_key_check (bool): whether to check to host key. If True host keys will not
-                be checked, but are also not stored in the current users's known_hosts file.
-            tty (bool): allocate a tty
-            sshpass (bool): Use to non-interactivly perform password authentication by using
-                sshpass
-        """
         conn = self.get_connection(conn_id)
         self.key_file = conn.extra_dejson.get('key_file', None)
         self.connect_timeout = conn.extra_dejson.get('connect_timeout', None)
