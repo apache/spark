@@ -27,6 +27,11 @@ checkStructField <- function(actual, expectedName, expectedType, expectedNullabl
   expect_equal(actual$nullable(), expectedNullable)
 }
 
+markUtf8 <- function(s) {
+  Encoding(s) <- "UTF-8"
+  s
+}
+
 # Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
@@ -546,11 +551,6 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  markUtf8 <- function(s) {
-    Encoding(s) <- "UTF-8"
-    s
-  }
-
   lines <- c("{\"name\":\"안녕하세요\"}",
              "{\"name\":\"您好\", \"age\":30}",
              "{\"name\":\"こんにちは\", \"age\":19}",
@@ -948,11 +948,11 @@ test_that("column functions", {
   # Test encode(), decode()
   bytes <- as.raw(c(0xe5, 0xa4, 0xa7, 0xe5, 0x8d, 0x83, 0xe4, 0xb8, 0x96, 0xe7, 0x95, 0x8c))
   df <- createDataFrame(sqlContext,
-                        list(list("大千世界", "utf-8", bytes)),
+                        list(list(markUtf8("大千世界"), "utf-8", bytes)),
                         schema = c("a", "b", "c"))
   result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
   expect_equal(result[[1]][[1]], bytes)
-  expect_equal(result[[2]], "大千世界")
+  expect_equal(result[[2]], markUtf8("大千世界"))
 })
 
 test_that("column binary mathfunctions", {
