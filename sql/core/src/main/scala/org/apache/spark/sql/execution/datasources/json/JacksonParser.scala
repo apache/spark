@@ -266,11 +266,7 @@ object JacksonParser {
                 } else {
                   array.toArray[InternalRow](schema)
                 }
-              case _ =>
-                sys.error(
-                  s"Failed to parse record $record. Please make sure that each line of " +
-                    "the file (or each string in the RDD) is a valid JSON object or " +
-                    "an array of JSON objects.")
+              case _ => failedRecord(record)
             }
           }
         } catch {
