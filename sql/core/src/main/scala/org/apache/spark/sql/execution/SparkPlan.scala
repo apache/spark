@@ -78,6 +78,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[sql] def longMetric(name: String): LongSQLMetric =
     metrics(name).asInstanceOf[LongSQLMetric]
 
+  /**
+   * Called in the driver to set the start time for the entire plan. Recursively set for the
+   * children. The executors use this to have an approximate timestamp for when the query starts.
+   * This should be used only for metrics as the clock cannot be sychronized across the cluster.
+   */
+  private[sql] var startTimeMs: Long = 0
+  private[sql] def setStartTimeMs(v: Long): Unit = {
+    startTimeMs = v
+    children.foreach(_.setStartTimeMs(v))
+  }
+
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!

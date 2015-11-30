@@ -149,6 +149,32 @@ private[sql] object SQLMetrics {
   }
 
   /**
+   * Create a timing metric that reports duration in millis relative to startTime.
+   *
+   * The expected usage pattern is:
+   * On the driver:
+   *   metric = createTimingMetric(..., System.currentTimeMillis)
+   * On each executor
+   *   < Do some work >
+   *   metric += System.currentTimeMillis
+   * The metric will then output the latest value across all the executors. This is a proxy for
+   * wall clock latency as it measures when the last executor finished this stage.
+   */
+  def createTimingMetric(sc: SparkContext, name: String, startTime: Long): LongSQLMetric = {
+    val stringValue = (values: Seq[Long]) => {
+      val validValues = values.filter(_ >= startTime)
+      if (validValues.isEmpty) {
+        // The clocks between the different machines are not perfectly synced so this can happen.
+        "0"
+      } else {
+        val max = validValues.max
+        Utils.msDurationToString(max - startTime)
+      }
+    }
+    createLongMetric(sc, name, stringValue, 0)
+  }
+
+  /**
    * A metric that its value will be ignored. Use this one when we need a metric parameter but don't
    * care about the value.
    */

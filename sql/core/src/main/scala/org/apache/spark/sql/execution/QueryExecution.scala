@@ -51,6 +51,9 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   // only used for execution.
   lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
 
+  // Set the start time for the entire plan.
+  executedPlan.setStartTimeMs(System.currentTimeMillis())
+
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 

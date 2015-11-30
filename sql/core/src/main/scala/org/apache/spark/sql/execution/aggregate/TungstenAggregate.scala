@@ -50,7 +50,9 @@ case class TungstenAggregate(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "blockPhaseFinishTime" -> SQLMetrics.createTimingMetric(
+      sparkContext, "blocking phase finish time", startTimeMs))
 
   override def outputsUnsafeRows: Boolean = true
 
@@ -84,7 +86,6 @@ case class TungstenAggregate(
     val spillSize = longMetric("spillSize")
 
     child.execute().mapPartitions { iter =>
-
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
@@ -108,6 +109,7 @@ case class TungstenAggregate(
             numOutputRows,
             dataSize,
             spillSize)
+        longMetric("blockPhaseFinishTime") += System.currentTimeMillis()
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())

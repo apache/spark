@@ -52,7 +52,9 @@ case class Sort(
 
   override private[sql] lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "blockPhaseFinishTime" -> SQLMetrics.createTimingMetric(
+      sparkContext, "blocking phase finish time", startTimeMs))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val schema = child.schema
@@ -89,6 +91,7 @@ case class Sort(
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
+      longMetric("blockPhaseFinishTime") += System.currentTimeMillis()
       dataSize += sorter.getPeakMemoryUsage
       spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
 
