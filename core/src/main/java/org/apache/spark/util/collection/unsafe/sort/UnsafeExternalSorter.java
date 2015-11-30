@@ -561,7 +561,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public boolean hasNext() {
-      if (!current.hasNext() && !iterators.isEmpty()) {
+      while (!current.hasNext() && !iterators.isEmpty()) {
         current = iterators.remove();
       }
       return current.hasNext();
