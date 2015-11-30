@@ -137,6 +137,13 @@ object JavaTypeInference {
     keyType -> valueType
   }
 
+  /**
+   * Returns the Spark SQL DataType for a given java class.  Where this is not an exact mapping
+   * to a native type, an ObjectType is returned.
+   *
+   * Unlike `inferDataType`, this function doesn't do any massaging of types into the Spark SQL type
+   * system.  As a result, ObjectType will be returned for things like boxed Integers.
+   */
   private def inferExternalType(cls: Class[_]): DataType = cls match {
     case c if c == java.lang.Boolean.TYPE => BooleanType
     case c if c == java.lang.Byte.TYPE => ByteType
@@ -149,6 +156,12 @@ object JavaTypeInference {
     case _ => ObjectType(cls)
   }
 
+  /**
+   * Returns an expression that can be used to construct an object of java bean `T` given an input
+   * row with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes
+   * of the same name as the constructor arguments.  Nested classes will have their fields accessed
+   * using UnresolvedExtractValue.
+   */
   def constructorFor(beanClass: Class[_]): Expression = {
     constructorFor(TypeToken.of(beanClass), None)
   }
@@ -294,14 +307,17 @@ object JavaTypeInference {
     }
   }
 
-  def extractorsFor(inputObject: Expression, beanClass: Class[_]): CreateNamedStruct = {
+  /**
+   * Returns expressions for extracting all the fields from the given type.
+   */
+  def extractorsFor(beanClass: Class[_]): CreateNamedStruct = {
+    val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
     extractorFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
   }
 
   private def extractorFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
 
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
-      val externalType = inferExternalType(elementType.getRawType)
       val (dataType, nullable) = inferDataType(elementType)
       if (ScalaReflection.isNativeType(dataType)) {
         NewInstance(
@@ -309,7 +325,7 @@ object JavaTypeInference {
           input :: Nil,
           dataType = ArrayType(dataType, nullable))
       } else {
-        MapObjects(extractorFor(_, elementType), input, externalType)
+        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))
       }
     }
 

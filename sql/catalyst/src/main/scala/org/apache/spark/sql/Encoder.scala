@@ -97,7 +97,14 @@ object Encoders {
    */
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
 
-  def bean[T](beanCls: Class[T]): Encoder[T] = ExpressionEncoder(beanCls)
+  /**
+   * Creates an encoder for Java Bean of type T.
+   *
+   * T must be publicly accessible.
+   *
+   * @since 1.6.0
+   */
+  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder(beanClass)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.

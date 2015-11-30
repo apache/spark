@@ -66,12 +66,12 @@ object ExpressionEncoder {
       ClassTag[T](cls))
   }
 
+  // TODO: improve error message for java bean encoder.
   def apply[T](beanClass: Class[T]): ExpressionEncoder[T] = {
     val schema = JavaTypeInference.inferDataType(beanClass)._1
     assert(schema.isInstanceOf[StructType])
 
-    val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    val toRowExpression = JavaTypeInference.extractorsFor(inputObject, beanClass)
+    val toRowExpression = JavaTypeInference.extractorsFor(beanClass)
     val fromRowExpression = JavaTypeInference.constructorFor(beanClass)
 
     new ExpressionEncoder[T](

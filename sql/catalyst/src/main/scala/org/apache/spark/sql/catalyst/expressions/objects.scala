@@ -600,10 +600,13 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
   override def dataType: DataType = ObjectType(tag.runtimeClass)
 }
 
+/**
+ * Initialize a Java Bean instance by setting its field values via setters.
+ */
 case class InitializeJavaBean(n: NewInstance, setters: Map[String, Expression])
   extends Expression {
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = n.nullable
   override def children: Seq[Expression] = n +: setters.values.toSeq
   override def dataType: DataType = n.dataType
 
