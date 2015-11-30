@@ -45,6 +45,18 @@ private[spark] object ShutdownHookManager extends Logging {
    */
   val TEMP_DIR_SHUTDOWN_PRIORITY = 25
 
+  /**
+   * The shutdown priority of disk block manager should be higher than temp directory.
+   */
+  val DISK_BLOCK_MANAGER_SHUTDOWN_PRIORITY = 26
+
+  /**
+   * The shutdown priority of Executor to do the cleanup of the current running tasks. Its
+   * priority should be higher than DiskBlockManager shutdown priority as the tasks may throw
+   * unhandled exceptions if temp directory cleanup is happening in parallel.
+   */
+  val EXECUTOR_SHUTDOWN_PRIORITY = 27
+
   private lazy val shutdownHooks = {
     val manager = new SparkShutdownHookManager()
     manager.install()

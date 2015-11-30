@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
@@ -109,7 +110,11 @@ private[spark] class Executor(
   // Executor for the heartbeat task.
   private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
+  private val shutdownHookLock = new Object()
+
   startDriverHeartbeater()
+
+  addShutdownHook()
 
   def launchTask(
       context: ExecutorBackend,
@@ -138,6 +143,24 @@ private[spark] class Executor(
     if (!isLocal) {
       env.stop()
     }
+  }
+
+  private def addShutdownHook(): AnyRef = {
+    ShutdownHookManager.addShutdownHook(ShutdownHookManager.EXECUTOR_SHUTDOWN_PRIORITY) { () =>
+      // Synchronized with the OOM task handler, which is sending its status update to driver.
+      // Please note that the assumption here is that OOM thread is still running and will gets
+      // the lock prior to this.
+      shutdownHookLock.synchronized {
+        // Cleanup all the tasks which are currently running, so that they would not through
+        // undesirable error messages during shutdown. Please note that kill interrupts all
+        // the running threads and tasks will be killed when interrupts are actually handled.
+        runningTasks.values.foreach(t => t.kill(true))
+      }
+      logInfo("shutdown hook called")
+
+      // Sleep to make sure that status update from OOM handle is flushed to driver.
+      Thread.sleep(conf.getInt("spark.executor.shutdownHookDelay", 300))
+   }
   }
 
   /** Returns the total amount of time this JVM process has spent in garbage collection. */
@@ -285,6 +308,12 @@ private[spark] class Executor(
         case cDE: CommitDeniedException =>
           val reason = cDE.toTaskEndReason
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+
+        case oom: OutOfMemoryError =>
+          shutdownHookLock.synchronized {
+            logError("Out of memory exception in " + Thread.currentThread(), oom)
+            execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskOutOfMemory))
+          }
 
         case t: Throwable =>
           // Attempt to exit cleanly by informing the driver of our failure.

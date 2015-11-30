@@ -144,10 +144,11 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   }
 
   private def addShutdownHook(): AnyRef = {
-    ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
-      logInfo("Shutdown hook called")
-      DiskBlockManager.this.doStop()
-    }
+    ShutdownHookManager.addShutdownHook(
+      ShutdownHookManager.DISK_BLOCK_MANAGER_SHUTDOWN_PRIORITY) { () =>
+        logInfo("Shutdown hook called")
+        DiskBlockManager.this.doStop()
+      }
   }
 
   /** Cleanup local dirs and stop shuffle sender. */
