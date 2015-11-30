@@ -34,6 +34,7 @@ We list major functionality from both below, with links to detailed guides.
   * [correlations](mllib-statistics.html#correlations)
   * [stratified sampling](mllib-statistics.html#stratified-sampling)
   * [hypothesis testing](mllib-statistics.html#hypothesis-testing)
+  * [streaming significance testing](mllib-statistics.html#streaming-significance-testing)
   * [random data generation](mllib-statistics.html#random-data-generation)
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
