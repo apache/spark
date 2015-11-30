@@ -208,7 +208,8 @@ Community contributed hooks
     :show-inheritance:
     :members:
         VerticaHook,
-        FTPHook
+        FTPHook,
+        SSHHook
 
 Executors
 ---------
