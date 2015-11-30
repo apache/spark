@@ -201,7 +201,8 @@ final class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  // We use two vals with options rather than lazy vals since we want the codeGen to be eagerly executed.
+  // We use two vals with options rather than lazy vals since we want the codeGen to be
+  // eagerly evaluated.
   val treePredictors = useCodeGen match {
     case false => Some(_trees.map(_.predictor()))
     case true => None

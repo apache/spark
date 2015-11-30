@@ -35,7 +35,7 @@ private[ml] trait DecisionTreeModel {
   }
 
   /** Returns a predictor based on the root node using code generation */
-  def codeGenPredictor() = {
+  def codeGenPredictor(): CallableVectorDouble = {
     CodeGenerationDecisionTreeModel.getScorer(rootNode)
   }
 

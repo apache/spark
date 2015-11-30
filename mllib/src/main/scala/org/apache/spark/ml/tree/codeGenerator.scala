@@ -138,20 +138,18 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
   }
 
   // Create a codegened scorer for a given node
-  def getScorer(root: Node): Vector => Double = {
+  def getScorer(root: Node): CallableVectorDouble = {
     val code =
       s"""
        @Override
-       ${nodeToFunction(root, "call")}
+       ${nodeToFunction(root, "apply")}
        """
-    trait CallableVectorDouble {
-      def call(v: Vector): Double
-    }
     val jfunc = compile(code,
       Array(classOf[Serializable], classOf[CallableVectorDouble])).newInstance()
-    def func(v: Vector): Double = {
-      jfunc.asInstanceOf[CallableVectorDouble].call(v)
-    }
-    func(_)
+    jfunc.asInstanceOf[CallableVectorDouble]
   }
+}
+
+trait CallableVectorDouble {
+  def apply(v: Vector): Double
 }
