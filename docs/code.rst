@@ -145,19 +145,18 @@ Macros are a way to expose objects to your templates and live under the
 
 A few commonly used libraries and methods are made available.
 
+
 =================================   ====================================
 Variable                            Description
 =================================   ====================================
-``macros.datetime``                 The standard lib's 
-                                    ``datetime.datetime``
-``macros.timedelta``                 The standard lib's 
-                                    ``datetime.timedelta``
-``macros.dateutil``                 A reference to the ``dateutil``
-                                    package
+``macros.datetime``                 The standard lib's ``datetime.datetime``
+``macros.timedelta``                 The standard lib's ``datetime.timedelta``
+``macros.dateutil``                 A reference to the ``dateutil`` package
 ``macros.time``                     The standard lib's ``time``
 ``macros.uuid``                     The standard lib's ``uuid``
 ``macros.random``                   The standard lib's ``random``
 =================================   ====================================
+
 
 Some airflow specific macros are also defined:
 
