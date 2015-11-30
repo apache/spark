@@ -129,3 +129,19 @@ For more information on how to run a subset of the tests, take a look at the nos
 
 See also the the list of test classes and methods in `tests/code.py`.
 
+## Changing Metadata Database
+
+When developing features the need may arise to persist information to the the
+metadata database. Airflow has alembic built-in to handle all schema changes.
+Alembic must be installed on your development machine before continuing.
+
+```
+# starting at the root of the project
+$ pwd
+~/airflow
+# change to the airflow directory
+$ cd airflow
+$ alembic revision -m "add new field to db"
+  Generating
+~/airflow/airflow/migrations/versions/12341123_add_new_field_to_db.py
+```
