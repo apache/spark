@@ -385,6 +385,22 @@ setGeneric("agg", function (x, ...) { standardGeneric("agg") })
 #' @export
 setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
+#' @rdname columns
+#' @export
+setGeneric("colnames", function(x, do.NULL = TRUE, prefix = "col") { standardGeneric("colnames") })
+
+#' @rdname columns
+#' @export
+setGeneric("colnames<-", function(x, value) { standardGeneric("colnames<-") })
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes", function(x) { standardGeneric("coltypes") })
+
+#' @rdname coltypes
+#' @export
+setGeneric("coltypes<-", function(x, value) { standardGeneric("coltypes<-") })
+
 #' @rdname schema
 #' @export
 setGeneric("columns", function(x) {standardGeneric("columns") })
@@ -397,7 +413,7 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 #' @export
 setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
 
-#' @rdname describe
+#' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
@@ -459,11 +475,11 @@ setGeneric("isLocal", function(x) { standardGeneric("isLocal") })
 #' @export
 setGeneric("limit", function(x, num) {standardGeneric("limit") })
 
-#' rdname merge
+#' @rdname merge
 #' @export
 setGeneric("merge")
 
-#' @rdname withColumn
+#' @rdname mutate
 #' @export
 setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
@@ -475,7 +491,7 @@ setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
 #' @export
 setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 
-#' @rdname withColumnRenamed
+#' @rdname rename
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
@@ -553,7 +569,7 @@ setGeneric("toJSON", function(x) { standardGeneric("toJSON") })
 
 setGeneric("toRDD", function(x) { standardGeneric("toRDD") })
 
-#' @rdname unionAll
+#' @rdname rbind
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
@@ -565,7 +581,7 @@ setGeneric("where", function(x, condition) { standardGeneric("where") })
 #' @export
 setGeneric("withColumn", function(x, colName, col) { standardGeneric("withColumn") })
 
-#' @rdname withColumnRenamed
+#' @rdname rename
 #' @export
 setGeneric("withColumnRenamed",
            function(x, existingCol, newCol) { standardGeneric("withColumnRenamed") })
@@ -700,9 +716,9 @@ setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") 
 #' @export
 setGeneric("crc32", function(x) { standardGeneric("crc32") })
 
-#' @rdname cumeDist
+#' @rdname cume_dist
 #' @export
-setGeneric("cumeDist", function(x) { standardGeneric("cumeDist") })
+setGeneric("cume_dist", function(x) { standardGeneric("cume_dist") })
 
 #' @rdname datediff
 #' @export
@@ -728,9 +744,9 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
-#' @rdname denseRank
+#' @rdname dense_rank
 #' @export
-setGeneric("denseRank", function(x) { standardGeneric("denseRank") })
+setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
 
 #' @rdname explode
 #' @export
@@ -872,9 +888,9 @@ setGeneric("ntile", function(x) { standardGeneric("ntile") })
 #' @export
 setGeneric("n_distinct", function(x, ...) { standardGeneric("n_distinct") })
 
-#' @rdname percentRank
+#' @rdname percent_rank
 #' @export
-setGeneric("percentRank", function(x) { standardGeneric("percentRank") })
+setGeneric("percent_rank", function(x) { standardGeneric("percent_rank") })
 
 #' @rdname pmod
 #' @export
@@ -913,9 +929,9 @@ setGeneric("reverse", function(x) { standardGeneric("reverse") })
 #' @export
 setGeneric("rint", function(x, ...) { standardGeneric("rint") })
 
-#' @rdname rowNumber
+#' @rdname row_number
 #' @export
-setGeneric("rowNumber", function(x) { standardGeneric("rowNumber") })
+setGeneric("row_number", function(x) { standardGeneric("row_number") })
 
 #' @rdname rpad
 #' @export
@@ -1081,7 +1097,3 @@ setGeneric("attach")
 #' @rdname with
 #' @export
 setGeneric("with")
-
-#' @rdname coltypes
-#' @export
-setGeneric("coltypes", function(x) { standardGeneric("coltypes") })

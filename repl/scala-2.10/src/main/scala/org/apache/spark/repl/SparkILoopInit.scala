@@ -123,18 +123,19 @@ private[repl] trait SparkILoopInit {
   def initializeSpark() {
     intp.beQuietDuring {
       command("""
-         @transient val sc = {
-           val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
-           println("Spark context available as sc.")
-           _sc
-         }
+        @transient val sc = {
+          val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
+          println("Spark context available as sc " +
+            s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
+          _sc
+        }
         """)
       command("""
-         @transient val sqlContext = {
-           val _sqlContext = org.apache.spark.repl.Main.interp.createSQLContext()
-           println("SQL context available as sqlContext.")
-           _sqlContext
-         }
+        @transient val sqlContext = {
+          val _sqlContext = org.apache.spark.repl.Main.interp.createSQLContext()
+          println("SQL context available as sqlContext.")
+          _sqlContext
+        }
         """)
       command("import org.apache.spark.SparkContext._")
       command("import sqlContext.implicits._")

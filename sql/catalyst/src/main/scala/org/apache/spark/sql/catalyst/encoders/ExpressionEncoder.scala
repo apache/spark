@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType}
+import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
 
 /**
- * A factory for constructing encoders that convert objects and primitves to and from the
+ * A factory for constructing encoders that convert objects and primitives to and from the
  * internal row format using catalyst expressions and code generation.  By default, the
  * expressions used to retrieve values from an input row when producing an object will be created as
  * follows:
@@ -44,20 +44,26 @@ import org.apache.spark.sql.types.{NullType, StructField, ObjectType, StructType
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T : TypeTag](flat: Boolean = false): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
     val cls = mirror.runtimeClass(typeTag[T].tpe)
+    val flat = !classOf[Product].isAssignableFrom(cls)
 
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
-    val constructExpression = ScalaReflection.constructorFor[T]
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
+    val fromRowExpression = ScalaReflection.constructorFor[T]
+
+    val schema = ScalaReflection.schemaFor[T] match {
+      case ScalaReflection.Schema(s: StructType, _) => s
+      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
+    }
 
     new ExpressionEncoder[T](
-      extractExpression.dataType,
+      schema,
       flat,
-      extractExpression.flatten,
-      constructExpression,
+      toRowExpression.flatten,
+      fromRowExpression,
       ClassTag[T](cls))
   }
 
@@ -70,7 +76,13 @@ object ExpressionEncoder {
     encoders.foreach(_.assertUnresolved())
 
     val schema = StructType(encoders.zipWithIndex.map {
-      case (e, i) => StructField(s"_${i + 1}", if (e.flat) e.schema.head.dataType else e.schema)
+      case (e, i) =>
+        val (dataType, nullable) = if (e.flat) {
+          e.schema.head.dataType -> e.schema.head.nullable
+        } else {
+          e.schema -> true
+        }
+        StructField(s"_${i + 1}", dataType, nullable)
     })
 
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
@@ -99,7 +111,7 @@ object ExpressionEncoder {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
-          case BoundReference(ordinal, dt, _) => GetInternalRowField(input, ordinal, dt)
+          case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
         }
       }
     }
