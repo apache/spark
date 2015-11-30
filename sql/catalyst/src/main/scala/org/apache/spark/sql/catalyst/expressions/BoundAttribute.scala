@@ -69,10 +69,17 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
-    s"""
-      boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-      $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-    """
+    if (nullable) {
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        $javaType ${ev.value} = $value;
+      """
+    }
   }
 }
 
