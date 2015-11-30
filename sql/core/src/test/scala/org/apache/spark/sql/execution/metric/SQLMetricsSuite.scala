@@ -317,7 +317,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("CartesianProduct", Map(
           "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 12L, // right is read 6 times
+          "number of right rows" -> 4L, // right is read twice
           "number of output rows" -> 12L)))
       )
     }

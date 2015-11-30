@@ -226,4 +226,11 @@ public final class UnsafeInMemorySorter {
     sorter.sort(array, 0, pos / 2, sortComparator);
     return new SortedIterator(pos / 2);
   }
+
+  /**
+   * Returns an iterator over record pointers in original order (inserted).
+   */
+  public SortedIterator getIterator() {
+    return new SortedIterator(pos / 2);
+  }
 }
