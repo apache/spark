@@ -244,8 +244,8 @@ private[sql] class DefaultWriterContainer(
           // This often means the most visible error to the user is misleading. Augment the error
           // to tell the user to look for the actual error.
           throw new SparkException("The output file already exists but this could be due to a " +
-            "failure from a earlier attempt. Look through the earlier logs for the first " +
-            "error.\n  File exists error: " + e)
+            "failure from an earlier attempt. Look through the earlier logs or stage page for " +
+            "the first error.\n  File exists error: " + e)
         }
         throw e
     }
