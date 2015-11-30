@@ -56,11 +56,7 @@ private[spark] object SamplingUtils {
       val rand = new XORShiftRandom(seed)
       while (input.hasNext) {
         val item = input.next()
-        val replacementIndex = if (l < Int.MaxValue) {
-          rand.nextInt(l.toInt)
-        } else {
-          rand.nextLong()
-        }
+        val replacementIndex = (rand.nextDouble() * l).toLong
         if (replacementIndex < k) {
           reservoir(replacementIndex.toInt) = item
         }
