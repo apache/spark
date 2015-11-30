@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import flask_login
 from flask_login import login_required, current_user, logout_user
 from flask import flash
@@ -60,7 +62,7 @@ class PasswordUser(models.User):
 
     def get_id(self):
         '''Returns the current user id as required by flask_login'''
-        return unicode(self.id)
+        return str(self.id)
 
     def data_profiling(self):
         '''Provides access to data profiling tools'''
