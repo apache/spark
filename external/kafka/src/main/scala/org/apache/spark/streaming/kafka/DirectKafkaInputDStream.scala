@@ -88,7 +88,9 @@ class DirectKafkaInputDStream[
   protected val kc = new KafkaCluster(kafkaParams)
 
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
-      "spark.streaming.kafka.maxRatePerPartition", 0)
+    "spark.streaming.kafka.maxRatePerPartition", 0)
+  private val skipRemainingRecords: Boolean = context.sparkContext.getConf.getBoolean(
+    "spark.streaming.kafka.skipRemainingRecords", false)
   protected def maxMessagesPerPartition: Option[Long] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
     val numPartitions = currentOffsets.keys.size
@@ -142,7 +144,9 @@ class DirectKafkaInputDStream[
   }
 
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
-    val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
+    val latestOffsets = latestLeaderOffsets(maxRetries)
+    val untilOffsets = clamp(latestOffsets)
+
     val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
@@ -165,7 +169,14 @@ class DirectKafkaInputDStream[
     val inputInfo = StreamInputInfo(id, rdd.count, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
-    currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
+    if (skipRemainingRecords) {
+      currentOffsets = latestOffsets.map { case (tp, lo) =>
+        tp -> lo.offset
+      }
+    } else {
+      currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
+    }
+
     Some(rdd)
   }
 
