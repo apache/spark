@@ -63,7 +63,7 @@ infer_type <- function(x) {
     })
     type <- Reduce(paste0, type)
     type <- paste0("struct<", substr(type, 1, nchar(type) - 1), ">")
-  } else if (length(x) > 1) {
+  } else if (length(x) > 1 && type != "binary") {
     paste0("array<", infer_type(x[[1]]), ">")
   } else {
     type

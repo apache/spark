@@ -30,7 +30,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var originalInstantiatedSQLContext: Option[SQLContext] = _
 
   override protected def beforeAll(): Unit = {
-    originalActiveSQLContext = SQLContext.getActiveContextOption()
+    originalActiveSQLContext = SQLContext.getActive()
     originalInstantiatedSQLContext = SQLContext.getInstantiatedContextOption()
 
     SQLContext.clearActive()

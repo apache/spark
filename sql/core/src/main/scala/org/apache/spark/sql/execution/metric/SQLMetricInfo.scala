@@ -15,29 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
-import org.apache.spark.util.Utils
-
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
+ * :: DeveloperApi ::
+ * Stores information about a SQL Metric.
  */
-private[spark]
-class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
-
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case TriggerThreadDump =>
-      context.reply(Utils.getThreadDump())
-  }
-
-}
-
-object ExecutorEndpoint {
-  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
-}
+@DeveloperApi
+class SQLMetricInfo(
+    val name: String,
+    val accumulatorId: Long,
+    val metricParam: String)
