@@ -21,7 +21,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DecimalType
 
-case class fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
+case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -89,10 +89,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
 
     val df0 = sqlContext.sparkContext.parallelize(Seq(
-      fact(20151123, 18, 35, "room1", 18.6),
-      fact(20151123, 18, 35, "room2", 22.4),
-      fact(20151123, 18, 36, "room1", 17.4),
-      fact(20151123, 18, 36, "room2", 25.6))).toDF()
+      Fact(20151123, 18, 35, "room1", 18.6),
+      Fact(20151123, 18, 35, "room2", 22.4),
+      Fact(20151123, 18, 36, "room1", 17.4),
+      Fact(20151123, 18, 36, "room2", 25.6))).toDF()
 
     val cube0 = df0.cube("date", "hour", "minute", "room_name").agg(Map("temp" -> "avg"))
     assert(cube0.where("date IS NULL").count > 0)
