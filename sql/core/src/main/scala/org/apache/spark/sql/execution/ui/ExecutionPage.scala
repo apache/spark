@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
+
+import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
