@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -125,6 +126,23 @@ class AnalysisSuite extends AnalysisTest {
       Project(testRelation.output,
         Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
           Project(testRelation.output :+ projected, testRelation)))
+    checkAnalysis(plan, expected)
+  }
+
+  test("pull out nondeterministic expressions from Join") {
+    val a = testRelation.output.head
+    val c = testRelation2.output(2)
+    val e = testRelation2.output(4)
+
+    val plan =
+      Join(testRelation, testRelation2, Inner,
+        Some(And(EqualTo(a, e), EqualTo(Rand(33) * c, c))))
+    val projected = Alias(Rand(33), "_nondeterministic")()
+    val expected =
+      Project(testRelation.output ++ testRelation2.output,
+        Join(Project(testRelation.output, testRelation),
+          Project(testRelation2.output :+ projected, testRelation2), Inner,
+          Some(And(EqualTo(a, Cast(e, IntegerType)), EqualTo(projected.toAttribute * c, c)))))
     checkAnalysis(plan, expected)
   }
 
