@@ -248,7 +248,6 @@ private[sql] class DefaultWriterContainer(
             "error.\n  File exists error: " + e)
         }
         throw e
-      case e: Exception => throw e
     }
     writer.initConverter(dataSchema)
 
