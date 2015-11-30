@@ -91,8 +91,8 @@ sparkR.stop <- function() {
 #' @param sparkHome Spark Home directory
 #' @param sparkEnvir Named list of environment variables to set on worker nodes
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
-#' @param sparkJars Character string common-separated list of jar files to pass to the worker nodes
-#' @param sparkPackages Character string common-separated list of packages from spark-packages.org
+#' @param sparkJars Character string comma-separated list of jar files to pass to the worker nodes
+#' @param sparkPackages Character string comma-separated list of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -125,7 +125,7 @@ sparkR.init <- function(
     stop("sparkJars parameter should be a common-separated list in one string")
   }
   if (length(sparkPackages) > 1) {
-    stop("sparkPackages parameter should be a common-separated list in one string")    
+    stop("sparkPackages parameter should be a common-separated list in one string")
   }
 
   jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
