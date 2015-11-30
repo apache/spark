@@ -579,9 +579,11 @@ class WebPasswordAuthTest(unittest.TestCase):
         password_user = PasswordUser(user)
         password_user.username = 'airflow_passwordauth'
         password_user.password = 'password'
+        print(password_user._password)
         session.add(password_user)
         session.commit()
         session.close()
+
 
     def get_csrf(self, response):
         tree = html.fromstring(response.data)

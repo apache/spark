@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+from sys import version_info
+
 import flask_login
 from flask_login import login_required, current_user, logout_user
 from flask import flash
@@ -25,7 +27,7 @@ login_manager.login_view = 'airflow.login'  # Calls login() bellow
 login_manager.login_message = None
 
 LOG = logging.getLogger(__name__)
-
+PY3 = version_info[0] == 3
 
 class AuthenticationError(Exception):
     pass
@@ -44,6 +46,8 @@ class PasswordUser(models.User):
     @password.setter
     def _set_password(self, plaintext):
         self._password = generate_password_hash(plaintext, 12)
+        if PY3:
+            self._password = str(self._password, 'utf-8')
 
     def authenticate(self, plaintext):
         return check_password_hash(self._password, plaintext)
