@@ -101,18 +101,17 @@ object JavaTypeInference {
         val (valueDataType, nullable) = inferDataType(valueType)
         (MapType(keyDataType, valueDataType, nullable), true)
 
-      case other =>
-        val properties = getJavaBeanProperties(other)
-        if (properties.length > 0) {
-          val fields = properties.map { property =>
-            val returnType = typeToken.method(property.getReadMethod).getReturnType
-            val (dataType, nullable) = inferDataType(returnType)
-            new StructField(property.getName, dataType, nullable)
-          }
-          (new StructType(fields), true)
-        } else {
-          throw new UnsupportedOperationException(s"Cannot infer data type for ${other.getName}")
+      case _ =>
+        // TODO: we should only collect properties that have getter and setter. However, some tests
+        // pass in scala case class as java bean class which doesn't have getter and setter.
+        val beanInfo = Introspector.getBeanInfo(typeToken.getRawType)
+        val properties = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+        val fields = properties.map { property =>
+          val returnType = typeToken.method(property.getReadMethod).getReturnType
+          val (dataType, nullable) = inferDataType(returnType)
+          new StructField(property.getName, dataType, nullable)
         }
+        (new StructType(fields), true)
     }
   }
 
@@ -387,17 +386,19 @@ object JavaTypeInference {
 
         case other =>
           val properties = getJavaBeanProperties(other)
-          assert(properties.length > 0)
-
-          CreateNamedStruct(properties.flatMap { p =>
-            val fieldName = p.getName
-            val fieldType = typeToken.method(p.getReadMethod).getReturnType
-            val fieldValue = Invoke(
-              inputObject,
-              p.getReadMethod.getName,
-              inferExternalType(fieldType.getRawType))
-            expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
-          })
+          if (properties.length > 0) {
+            CreateNamedStruct(properties.flatMap { p =>
+              val fieldName = p.getName
+              val fieldType = typeToken.method(p.getReadMethod).getReturnType
+              val fieldValue = Invoke(
+                inputObject,
+                p.getReadMethod.getName,
+                inferExternalType(fieldType.getRawType))
+              expressions.Literal(fieldName) :: extractorFor(fieldValue, fieldType) :: Nil
+            })
+          } else {
+            throw new UnsupportedOperationException(s"no encoder found for ${other.getName}")
+          }
       }
     }
   }

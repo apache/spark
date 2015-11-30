@@ -136,32 +136,16 @@ public class JavaDataFrameSuite {
       return a;
     }
 
-    public void setA(double a) {
-      this.a = a;
-    }
-
     public Integer[] getB() {
       return b;
-    }
-
-    public void setB(Integer[] b) {
-      this.b = b;
     }
 
     public Map<String, int[]> getC() {
       return c;
     }
 
-    public void setC(Map<String, int[]> c) {
-      this.c = c;
-    }
-
     public List<String> getD() {
       return d;
-    }
-
-    public void setD(List<String> d) {
-      this.d = d;
     }
   }
 
