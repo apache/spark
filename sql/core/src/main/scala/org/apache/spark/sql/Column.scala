@@ -222,16 +222,17 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   def gt(other: Any): Column = this > other
 
   /**
-   * Less than.
+   * Greater than.
    * {{{
-   *   // Scala: The following selects people younger than 21.
-   *   people.select( people("age") < 21 )
+   *   // Scala: The following selects people older than 21.
+   *   people.select( people("age") > lit(21) )
    *
    *   // Java:
-   *   people.select( people("age").lt(21) );
+   *   import static org.apache.spark.sql.functions.*;
+   *   people.select( people("age").gt(21) );
    * }}}
    *
-   * @group expr_ops
+   * @group java_expr_ops
    * @since 1.3.0
    */
   def < (other: Any): Column = LessThan(expr, lit(other).expr)
