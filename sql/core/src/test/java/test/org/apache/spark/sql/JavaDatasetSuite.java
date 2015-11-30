@@ -37,6 +37,7 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.GroupedDataset;
 import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 
 import static org.apache.spark.sql.functions.*;
 
@@ -505,5 +506,132 @@ public class JavaDatasetSuite implements Serializable {
   @Test(expected = UnsupportedOperationException.class)
   public void testKryoEncoderErrorMessageForPrivateClass() {
     Encoders.kryo(PrivateClassTest.class);
+  }
+
+  public class SimpleJavaBean implements Serializable {
+    private boolean a;
+    private int b;
+    private byte[] c;
+    private String[] d;
+    private List<String> e;
+
+    public boolean isA() {
+      return a;
+    }
+
+    public void setA(boolean a) {
+      this.a = a;
+    }
+
+    public int getB() {
+      return b;
+    }
+
+    public void setB(int b) {
+      this.b = b;
+    }
+
+    public byte[] getC() {
+      return c;
+    }
+
+    public void setC(byte[] c) {
+      this.c = c;
+    }
+
+    public String[] getD() {
+      return d;
+    }
+
+    public void setD(String[] d) {
+      this.d = d;
+    }
+
+    public List<String> getE() {
+      return e;
+    }
+
+    public void setE(List<String> e) {
+      this.e = e;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      SimpleJavaBean that = (SimpleJavaBean) o;
+
+      if (a != that.a) return false;
+      if (b != that.b) return false;
+      if (!Arrays.equals(c, that.c)) return false;
+      if (!Arrays.equals(d, that.d)) return false;
+      return e.equals(that.e);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = (a ? 1 : 0);
+      result = 31 * result + b;
+      result = 31 * result + Arrays.hashCode(c);
+      result = 31 * result + Arrays.hashCode(d);
+      result = 31 * result + e.hashCode();
+      return result;
+    }
+  }
+
+  public class NestedJavaBean implements Serializable {
+    private SimpleJavaBean a;
+
+    public SimpleJavaBean getA() {
+      return a;
+    }
+
+    public void setA(SimpleJavaBean a) {
+      this.a = a;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      NestedJavaBean that = (NestedJavaBean) o;
+
+      return a.equals(that.a);
+    }
+
+    @Override
+    public int hashCode() {
+      return a.hashCode();
+    }
+  }
+
+  @Test
+  public void testJavaBeanEncoder() {
+    OuterScopes.addOuterScope(this);
+    SimpleJavaBean obj1 = new SimpleJavaBean();
+    obj1.setA(true);
+    obj1.setB(3);
+    obj1.setC(new byte[]{1});
+    obj1.setD(new String[]{"hello"});
+    obj1.setE(Arrays.asList("a", "b"));
+    SimpleJavaBean obj2 = new SimpleJavaBean();
+    obj2.setA(false);
+    obj2.setB(30);
+    obj2.setC(new byte[]{2});
+    obj1.setD(new String[]{"world"});
+    obj2.setE(Arrays.asList("x", "y"));
+
+    List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
+    Dataset<SimpleJavaBean> ds = context.createDataset(data, Encoders.bean(SimpleJavaBean.class));
+    Assert.assertEquals(data, ds.collectAsList());
+
+    NestedJavaBean obj3 = new NestedJavaBean();
+    obj3.setA(obj1);
+
+    List<NestedJavaBean> data2 = Arrays.asList(obj3);
+    Dataset<NestedJavaBean> ds2 = context.createDataset(data2, Encoders.bean(NestedJavaBean.class));
+    Assert.assertEquals(data2, ds2.collectAsList());
   }
 }
