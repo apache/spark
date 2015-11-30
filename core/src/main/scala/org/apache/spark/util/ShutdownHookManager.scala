@@ -235,26 +235,24 @@ private [util] class SparkShutdownHookManager {
   def runAll(): Unit = {
     shuttingDown = true
     var nextHook: SparkShutdownHook = null
-    while ({nextHook = hooks synchronized { hooks.poll() }; nextHook != null}) {
+    while ({ nextHook = hooks.synchronized { hooks.poll() }; nextHook != null }) {
       Try(Utils.logUncaughtExceptions(nextHook.run()))
     }
   }
 
   def add(priority: Int, hook: () => Unit): AnyRef = {
-    checkState()
-    val hookRef = new SparkShutdownHook(priority, hook)
-    hooks synchronized { hooks.add(hookRef) }
-    hookRef
+    hooks.synchronized {
+      if (shuttingDown) {
+        throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
+      }
+      val hookRef = new SparkShutdownHook(priority, hook)
+      hooks.add(hookRef)
+      hookRef
+    }
   }
 
   def remove(ref: AnyRef): Boolean = {
-    hooks synchronized { hooks.remove(ref) }
-  }
-
-  private def checkState(): Unit = {
-    if (shuttingDown) {
-      throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
-    }
+    hooks.synchronized { hooks.remove(ref) }
   }
 
 }
