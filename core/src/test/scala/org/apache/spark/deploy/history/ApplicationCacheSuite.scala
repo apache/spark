@@ -35,7 +35,7 @@ import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.{Clock, ManualClock, Utils}
 import org.apache.spark.{Logging, SparkFunSuite}
 
 class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
@@ -450,7 +450,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
 
   test("Instantiate Filter") {
     // this is a regression test on the filter being constructable
-    val clazz = Class.forName(ApplicationCacheCheckFilterRelay.FILTER_NAME)
+    val clazz = Utils.classForName(ApplicationCacheCheckFilterRelay.FILTER_NAME)
     val instance = clazz.newInstance()
     instance shouldBe a [Filter]
   }

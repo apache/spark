@@ -554,7 +554,7 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
    * @param attemptId attempt ID
    */
   def registerFilter(ui: SparkUI,
-      appId: String, attemptId: Option[String] ) = {
+      appId: String, attemptId: Option[String] ): Unit = {
     require(ui != null)
     val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.REQUEST)
     val holder = new FilterHolder()
