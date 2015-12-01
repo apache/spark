@@ -387,6 +387,28 @@ See the [configuration page](configuration.html) for information on Spark config
     </ul>
   </td>
 </tr>
+<tr>
+  <td><code>spark.deploy.recoveryMode</code></td>
+  <td>NONE</td>
+  <td>
+    The recovery mode setting to recover submitted Spark jobs to Mesos cluster dispatcher when it failed and relaunches. The only options supported now is NONE and ZOOKEEPER.
+    This is only applicable for cluster mode when running with Mesos.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.zookeeper.url</code></td>
+  <td>(none)</td>
+  <td>
+    When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deploy.zookeeper.dir</code></td>
+  <td>/spark_mesos_dispatcher</td>
+  <td>
+    When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store Mesos cluster dispatcher state for recovery.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
