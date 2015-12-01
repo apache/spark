@@ -108,7 +108,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
-          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$")
+          "org.apache.spark.rdd.MapPartitionsWithPreparationRDD$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSQLParser")
       ) ++ Seq(
         // SPARK-11485
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.DataFrameHolder.df"),
@@ -142,6 +143,18 @@ object MimaExcludes {
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createDirectStream"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaUtilsPythonHelper.createRDD")
+      ) ++ Seq(
+        // SPARK-4557 Changed foreachRDD to use VoidFunction
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
+      ) ++ Seq(
+        // SPARK-11996 Make the executor thread dump work again
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
       )
     case v if v.startsWith("1.5") =>
       Seq(

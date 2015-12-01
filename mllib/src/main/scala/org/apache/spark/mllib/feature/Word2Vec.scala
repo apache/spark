@@ -145,8 +145,8 @@ class Word2Vec extends Serializable with Logging {
 
   private var trainWordsCount = 0
   private var vocabSize = 0
-  private var vocab: Array[VocabWord] = null
-  private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private var vocab: Array[VocabWord] = null
+  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
@@ -316,12 +316,15 @@ class Word2Vec extends Serializable with Logging {
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
     var alpha = learningRate
+
     for (k <- 1 to numIterations) {
+      val bcSyn0Global = sc.broadcast(syn0Global)
+      val bcSyn1Global = sc.broadcast(syn1Global)
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
         val syn1Modify = new Array[Int](vocabSize)
-        val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
+        val model = iter.foldLeft((bcSyn0Global.value, bcSyn1Global.value, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
             var wc = wordCount
@@ -405,6 +408,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
+      bcSyn0Global.unpersist(false)
+      bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
 
@@ -432,9 +437,9 @@ class Word2Vec extends Serializable with Logging {
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Since("1.1.0")
-class Word2VecModel private[mllib] (
-    private val wordIndex: Map[String, Int],
-    private val wordVectors: Array[Float]) extends Serializable with Saveable {
+class Word2VecModel private[spark] (
+    private[spark] val wordIndex: Map[String, Int],
+    private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.

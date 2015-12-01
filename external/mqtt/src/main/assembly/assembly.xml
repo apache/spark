@@ -24,7 +24,7 @@
   <fileSets>
     <fileSet>
       <directory>${project.build.directory}/scala-${scala.binary.version}/test-classes</directory>
-      <outputDirectory>/</outputDirectory>
+      <outputDirectory></outputDirectory>
     </fileSet>
   </fileSets>
 

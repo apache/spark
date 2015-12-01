@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class Normalizer(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, Normalizer] with Writable {
+  extends UnaryTransformer[Vector, Vector, Normalizer] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("normalizer"))
 
@@ -56,17 +56,11 @@ class Normalizer(override val uid: String)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object Normalizer extends Readable[Normalizer] {
+object Normalizer extends DefaultParamsReadable[Normalizer] {
 
   @Since("1.6.0")
-  override def read: Reader[Normalizer] = new DefaultParamsReader[Normalizer]
-
-  @Since("1.6.0")
-  override def load(path: String): Normalizer = read.load(path)
+  override def load(path: String): Normalizer = super.load(path)
 }
