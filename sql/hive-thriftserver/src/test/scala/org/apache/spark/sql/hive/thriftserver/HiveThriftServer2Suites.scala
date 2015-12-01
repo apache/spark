@@ -501,15 +501,15 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("JDBC metadata") {
-//    withStatement { statement =>
-//      Seq(
-//        "CREATE TABLE test_table (col INT)",
-//
-//        "CREATE DATABASE test_db",
-//        "USE test_db",
-//        "CREATE TABLE test_table (col INT)"
-//      ).foreach(statement.executeUpdate)
-//    }
+    withStatement { statement =>
+      Seq(
+        "CREATE TABLE test_table (col INT)",
+
+        "CREATE DATABASE test_db",
+        "USE test_db",
+        "CREATE TABLE test_table (col INT)"
+      ).foreach(statement.executeUpdate)
+    }
 
     withConnection { connection =>
       val schemas = connection.getMetaData.getSchemas
@@ -519,13 +519,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
           Row("default", null),
           Row("test_db", null)))
     }
-//
-//    withStatement { statement =>
-//      Seq(
-//        "DROP TABLE IF EXISTS test_table",
-//        "DROP DATABASE test_db"
-//      ).foreach(statement.execute)
-//    }
+
+    withStatement { statement =>
+      Seq(
+        "DROP TABLE IF EXISTS test_table",
+        "DROP DATABASE test_db"
+      ).foreach(statement.execute)
+    }
   }
 
   test("SPARK-11043 check operation log root directory") {
