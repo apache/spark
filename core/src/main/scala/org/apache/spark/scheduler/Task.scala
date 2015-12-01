@@ -33,8 +33,9 @@ import org.apache.spark.util.Utils
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
- * - [[org.apache.spark.scheduler.ShuffleMapTask]]
- * - [[org.apache.spark.scheduler.ResultTask]]
+ *
+ *  - [[org.apache.spark.scheduler.ShuffleMapTask]]
+ *  - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
  * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task

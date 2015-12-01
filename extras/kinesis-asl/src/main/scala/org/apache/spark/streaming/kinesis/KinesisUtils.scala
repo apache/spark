@@ -226,12 +226,13 @@ object KinesisUtils {
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
    * Note:
-   * - The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   *   on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   *   gets AWS credentials.
-   * - The region of the `endpointUrl` will be used for DynamoDB and CloudWatch.
-   * - The Kinesis application name used by the Kinesis Client Library (KCL) will be the app name in
-   *   [[org.apache.spark.SparkConf]].
+   *
+   *  - The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
+   *    on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
+   *    gets AWS credentials.
+   *  - The region of the `endpointUrl` will be used for DynamoDB and CloudWatch.
+   *  - The Kinesis application name used by the Kinesis Client Library (KCL) will be the app name
+   *    in [[org.apache.spark.SparkConf]].
    *
    * @param ssc StreamingContext object
    * @param streamName   Kinesis stream name

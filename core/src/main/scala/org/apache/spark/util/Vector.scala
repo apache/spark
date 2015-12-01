@@ -122,6 +122,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
   override def toString: String = elements.mkString("(", ", ", ")")
 }
 
+@deprecated("Use Vectors.dense from Spark's mllib.linalg package instead.", "1.0.0")
 object Vector {
   def apply(elements: Array[Double]): Vector = new Vector(elements)
 

@@ -46,17 +46,18 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * https://github.com/awslabs/amazon-kinesis-client
  *
  * The way this Receiver works is as follows:
- * - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
- *   KinesisRecordProcessor
- * - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
- *   inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
- * - When the block generator defines a block, then the recorded sequence number ranges that were
- *   inserted into the block are recorded separately for being used later.
- * - When the block is ready to be pushed, the block is pushed and the ranges are reported as
- *   metadata of the block. In addition, the ranges are used to find out the latest sequence
- *   number for each shard that can be checkpointed through the DynamoDB.
- * - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
- *   number for it own shard.
+ *
+ *  - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
+ *    KinesisRecordProcessor
+ *  - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
+ *    inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
+ *  - When the block generator defines a block, then the recorded sequence number ranges that were
+ *    inserted into the block are recorded separately for being used later.
+ *  - When the block is ready to be pushed, the block is pushed and the ranges are reported as
+ *    metadata of the block. In addition, the ranges are used to find out the latest sequence
+ *    number for each shard that can be checkpointed through the DynamoDB.
+ *  - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
+ *    number for it own shard.
  *
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)

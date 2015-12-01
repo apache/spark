@@ -81,11 +81,13 @@ class GradientDescent private[spark] (private var gradient: Gradient, private va
    * Set the convergence tolerance. Default 0.001
    * convergenceTol is a condition which decides iteration termination.
    * The end of iteration is decided based on below logic.
-   * - If the norm of the new solution vector is >1, the diff of solution vectors
-   *   is compared to relative tolerance which means normalizing by the norm of
-   *   the new solution vector.
-   * - If the norm of the new solution vector is <=1, the diff of solution vectors
-   *   is compared to absolute tolerance which is not normalizing.
+   *
+   *  - If the norm of the new solution vector is >1, the diff of solution vectors
+   *    is compared to relative tolerance which means normalizing by the norm of
+   *    the new solution vector.
+   *  - If the norm of the new solution vector is <=1, the diff of solution vectors
+   *    is compared to absolute tolerance which is not normalizing.
+   *
    * Must be between 0.0 and 1.0 inclusively.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
