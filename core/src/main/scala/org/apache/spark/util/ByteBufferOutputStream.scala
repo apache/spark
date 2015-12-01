@@ -23,7 +23,7 @@ import java.nio.ByteBuffer
 /**
  * Provide a zero-copy way to convert data in ByteArrayOutputStream to ByteBuffer
  */
-private[spark] class ByteBufferOutputStream(val size: Int) extends ByteArrayOutputStream(size) {
+private[spark] class ByteBufferOutputStream(capacity: Int) extends ByteArrayOutputStream(capacity) {
 
   def this() = this(32)
 
