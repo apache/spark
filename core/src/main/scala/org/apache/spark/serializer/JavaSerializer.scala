@@ -24,7 +24,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util.ByteBufferInputStream
+import org.apache.spark.util.Utils
 
 private[spark] class JavaSerializationStream(
     out: OutputStream, counterReset: Int, extraDebugInfo: Boolean)
@@ -95,11 +96,11 @@ private[spark] class JavaSerializerInstance(
   extends SerializerInstance {
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
-    val bos = new ByteBufferOutputStream()
+    val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
     out.writeObject(t)
     out.close()
-    bos.toByteBuffer
+    ByteBuffer.wrap(bos.toByteArray)
   }
 
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
