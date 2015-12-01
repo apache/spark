@@ -1070,6 +1070,7 @@ class TaskInstance(Base):
         yesterday_ds = (self.execution_date - timedelta(1)).isoformat()[:10]
         tomorrow_ds = (self.execution_date + timedelta(1)).isoformat()[:10]
         ds_nodash = ds.replace('-', '')
+        iso = self.execution_date.isoformat()
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
 
@@ -1096,6 +1097,8 @@ class TaskInstance(Base):
         return {
             'dag': task.dag,
             'ds': ds,
+            'ts': iso,
+            'ts_nodash': iso.replace('-', '').replace(':', ''),
             'yesterday_ds': yesterday_ds,
             'tomorrow_ds': tomorrow_ds,
             'END_DATE': ds,

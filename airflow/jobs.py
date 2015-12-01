@@ -795,11 +795,11 @@ class BackfillJob(BaseJob):
         executor.end()
         session.close()
         if failed:
-            logging.error(
+            msg = (
                 "------------------------------------------\n"
                 "Some tasks instances failed, "
                 "here's the list:\n{}".format(failed))
-            sys.exit(1)
+            raise AirflowException(msg)
         logging.info("All done. Exiting.")
 
 
