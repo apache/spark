@@ -335,24 +335,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Int]),
-      ("a", 30), ("b", 3), ("c", 1))
+      ds.groupBy(_._1).agg(sum("_2").as[Long]),
+      ("a", 30L), ("b", 3L), ("c", 1L))
   }
 
   test("typed aggregation: expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Int], sum($"_2" + 1).as[Long]),
-      ("a", 30, 32L), ("b", 3, 5L), ("c", 1, 2L))
+      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
+      ("a", 30L, 32L), ("b", 3L, 5L), ("c", 1L, 2L))
   }
 
   test("typed aggregation: expr, expr, expr") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Int], sum($"_2" + 1).as[Long], count("*").as[Long]),
-      ("a", 30, 32L, 2L), ("b", 3, 5L, 2L), ("c", 1, 2L, 1L))
+      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
+      ("a", 30L, 32L, 2L), ("b", 3L, 5L, 2L), ("c", 1L, 2L, 1L))
   }
 
   test("typed aggregation: expr, expr, expr, expr") {
@@ -360,11 +360,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       ds.groupBy(_._1).agg(
-        sum("_2").as[Int],
+        sum("_2").as[Long],
         sum($"_2" + 1).as[Long],
         count("*").as[Long],
         avg("_2").as[Double]),
-      ("a", 30, 32L, 2L, 15.0), ("b", 3, 5L, 2L, 1.5), ("c", 1, 2L, 1L, 1.0))
+      ("a", 30L, 32L, 2L, 15.0), ("b", 3L, 5L, 2L, 1.5), ("c", 1L, 2L, 1L, 1.0))
   }
 
   test("cogroup") {
@@ -475,6 +475,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ((new java.lang.Integer(22), "2"), (nullInt, "1")),
       ((nullInt, "1"), (new java.lang.Integer(22), "2")),
       ((new java.lang.Integer(22), "2"), (new java.lang.Integer(22), "2")))
+  }
+
+  test("change encoder with compatible schema") {
+    val ds = Seq(2 -> 2.toByte, 3 -> 3.toByte).toDF("a", "b").as[ClassData]
+    assert(ds.collect().toSeq == Seq(ClassData("2", 2), ClassData("3", 3)))
   }
 }
 
