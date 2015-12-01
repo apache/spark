@@ -1217,6 +1217,7 @@ class SQLContext private[sql](
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext(self)
+      SQLContext.clearSqlListener()
     }
   })
 
