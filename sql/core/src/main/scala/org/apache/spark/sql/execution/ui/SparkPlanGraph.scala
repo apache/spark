@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.execution.SparkPlanInfo
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -48,27 +48,27 @@ private[sql] object SparkPlanGraph {
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
-  def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
+  def apply(plan: SparkPlan): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges)
+    buildSparkPlanGraphNode(plan, nodeIdGenerator, nodes, edges)
     new SparkPlanGraph(nodes, edges)
   }
 
   private def buildSparkPlanGraphNode(
-      planInfo: SparkPlanInfo,
+      plan: SparkPlan,
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = planInfo.metrics.map { metric =>
-      SQLPlanMetric(metric.name, metric.accumulatorId,
-        SQLMetrics.getMetricParam(metric.metricParam))
+    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+      SQLPlanMetric(metric.name.getOrElse(key), metric.id,
+        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
     }
     val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), planInfo.nodeName, planInfo.simpleString, metrics)
+      nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
     nodes += node
-    val childrenNodes = planInfo.children.map(
+    val childrenNodes = plan.children.map(
       child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
     for (child <- childrenNodes) {
       edges += SparkPlanGraphEdge(child.id, node.id)

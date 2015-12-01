@@ -109,6 +109,10 @@ private[spark] class Executor(
   // Executor for the heartbeat task.
   private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
+  // must be initialized before running startDriverHeartbeat()
+  private val heartbeatReceiverRef =
+    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
+
   startDriverHeartbeater()
 
   def launchTask(
@@ -410,9 +414,6 @@ private[spark] class Executor(
       }
     }
   }
-
-  private val heartbeatReceiverRef =
-    RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
