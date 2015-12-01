@@ -67,7 +67,7 @@ object ExpressionEncoder {
   }
 
   // TODO: improve error message for java bean encoder.
-  def apply[T](beanClass: Class[T]): ExpressionEncoder[T] = {
+  def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
     val schema = JavaTypeInference.inferDataType(beanClass)._1
     assert(schema.isInstanceOf[StructType])
 

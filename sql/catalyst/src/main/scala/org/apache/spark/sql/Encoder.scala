@@ -102,9 +102,18 @@ object Encoders {
    *
    * T must be publicly accessible.
    *
+   * supported types for java bean field:
+   *  - primitive types: boolean, int, double, etc.
+   *  - boxed types: Boolean, Integer, Double, etc.
+   *  - String
+   *  - java.math.BigDecimal
+   *  - time related: java.sql.Date, java.sql.Timestamp
+   *  - collection types: only array and java.util.List currently, map support is in progress
+   *  - nested java bean.
+   *
    * @since 1.6.0
    */
-  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder(beanClass)
+  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.

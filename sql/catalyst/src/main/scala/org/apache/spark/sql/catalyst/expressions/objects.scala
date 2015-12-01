@@ -603,34 +603,34 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 /**
  * Initialize a Java Bean instance by setting its field values via setters.
  */
-case class InitializeJavaBean(n: NewInstance, setters: Map[String, Expression])
+case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
   extends Expression {
 
-  override def nullable: Boolean = n.nullable
-  override def children: Seq[Expression] = n +: setters.values.toSeq
-  override def dataType: DataType = n.dataType
+  override def nullable: Boolean = beanInstance.nullable
+  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
+  override def dataType: DataType = beanInstance.dataType
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val instance = n.gen(ctx)
+    val instanceGen = beanInstance.gen(ctx)
 
     val initialize = setters.map {
       case (setterMethod, fieldValue) =>
         val fieldGen = fieldValue.gen(ctx)
         s"""
            ${fieldGen.code}
-           ${instance.value}.$setterMethod(${fieldGen.value});
+           ${instanceGen.value}.$setterMethod(${fieldGen.value});
          """
     }
 
-    ev.isNull = instance.isNull
-    ev.value = instance.value
+    ev.isNull = instanceGen.isNull
+    ev.value = instanceGen.value
 
     s"""
-      ${instance.code}
-      if (!${instance.isNull}) {
+      ${instanceGen.code}
+      if (!${instanceGen.isNull}) {
         ${initialize.mkString("\n")}
       }
      """

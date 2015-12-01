@@ -31,15 +31,15 @@ import org.apache.spark.Accumulator;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.GroupedDataset;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
   private transient JavaSparkContext jsc;
@@ -613,14 +613,14 @@ public class JavaDatasetSuite implements Serializable {
     SimpleJavaBean obj1 = new SimpleJavaBean();
     obj1.setA(true);
     obj1.setB(3);
-    obj1.setC(new byte[]{1});
+    obj1.setC(new byte[]{1, 2});
     obj1.setD(new String[]{"hello"});
     obj1.setE(Arrays.asList("a", "b"));
     SimpleJavaBean obj2 = new SimpleJavaBean();
     obj2.setA(false);
     obj2.setB(30);
-    obj2.setC(new byte[]{2});
-    obj1.setD(new String[]{"world"});
+    obj2.setC(new byte[]{3, 4});
+    obj2.setD(new String[]{"world"});
     obj2.setE(Arrays.asList("x", "y"));
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
@@ -633,5 +633,27 @@ public class JavaDatasetSuite implements Serializable {
     List<NestedJavaBean> data2 = Arrays.asList(obj3);
     Dataset<NestedJavaBean> ds2 = context.createDataset(data2, Encoders.bean(NestedJavaBean.class));
     Assert.assertEquals(data2, ds2.collectAsList());
+
+    Row row1 = new GenericRow(new Object[]{
+      true,
+      3,
+      new byte[]{1, 2},
+      new String[]{"hello"},
+      Arrays.asList("a", "b")});
+    Row row2 = new GenericRow(new Object[]{
+      false,
+      30,
+      new byte[]{3, 4},
+      new String[]{"world"},
+      Arrays.asList("x", "y")});
+    StructType schema = new StructType()
+      .add("a", BooleanType, false)
+      .add("b", IntegerType, false)
+      .add("c", BinaryType)
+      .add("d", createArrayType(StringType))
+      .add("e", createArrayType(StringType));
+    Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
+      .as(Encoders.bean(SimpleJavaBean.class));
+    Assert.assertEquals(data, ds3.collectAsList());
   }
 }

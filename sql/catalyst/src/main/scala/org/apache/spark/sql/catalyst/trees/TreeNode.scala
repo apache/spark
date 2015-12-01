@@ -205,7 +205,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           }
         case nonChild: AnyRef => nonChild
         case null => null
-      }.view.force
+      }.view.force // `mapValues` is lazy and we need to force it to materialize
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
@@ -287,7 +287,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
             arg
           }
         case other => other
-      }.view.force
+      }.view.force // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if containsChild(arg) =>

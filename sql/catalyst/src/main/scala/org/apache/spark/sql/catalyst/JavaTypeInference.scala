@@ -382,6 +382,9 @@ object JavaTypeInference {
           toCatalystArray(inputObject, elementType(typeToken))
 
         case _ if mapType.isAssignableFrom(typeToken) =>
+          // TODO: for java map, if we get the keys and values by `keySet` and `values`, we can
+          // not guarantee they have same iteration order(which is different from scala map).
+          // A possible solution is creating a new `MapObjects` that can iterate a map directly.
           throw new UnsupportedOperationException("map type is not supported currently")
 
         case other =>
