@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.metric
+package org.apache.spark.network.protocol;
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * :: DeveloperApi ::
- * Stores information about a SQL Metric.
+ * Abstract class for response messages.
  */
-@DeveloperApi
-class SQLMetricInfo(
-    val name: String,
-    val accumulatorId: Long,
-    val metricParam: String)
+public abstract class AbstractResponseMessage extends AbstractMessage implements ResponseMessage {
+
+  protected AbstractResponseMessage(ManagedBuffer body, boolean isBodyInFrame) {
+    super(body, isBodyInFrame);
+  }
+
+  public abstract ResponseMessage createFailureResponse(String error);
+}

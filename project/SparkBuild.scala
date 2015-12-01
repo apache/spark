@@ -160,7 +160,12 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value,
+      "-source", javacJVMVersion.value
+    ),
+    // This -target option cannot be set in the Compile configuration scope since `javadoc` doesn't
+    // play nicely with it; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629 for
+    // additional discussion and explanation.
+    javacOptions in (Compile, compile) ++= Seq(
       "-target", javacJVMVersion.value
     ),
 
@@ -547,9 +552,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, streamingFlumeSink, yarn, testTags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
