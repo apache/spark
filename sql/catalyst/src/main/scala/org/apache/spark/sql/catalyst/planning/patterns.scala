@@ -137,28 +137,34 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   *          Filter
   *            |
   *        inner Join
-  *          /    \            ---->      (filters, Seq(plan1, plan2), input)
-  *  inner join    plan2
+  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+  *      Filter   plan2
+  *        |
+  *  inner join
   *      /    \
-  *   input    plan1
+  *   plan0    plan1
   */
-object FilterAndInnerJoins extends PredicateHelper {
-  def unapply(plan: LogicalPlan): Option[(LogicalPlan, Seq[LogicalPlan], Seq[Expression])] =
-    plan match {
-      case f @ Filter(filterCondition, j @ Join(left, right, Inner, None)) =>
+object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
-        // flatten all inner joins, which are next to each other and has no condition
-        def flattenJoin(plan: LogicalPlan): (LogicalPlan, Seq[LogicalPlan]) = plan match {
-          case Join(left, right, Inner, None) =>
-            val (input, joins) = flattenJoin(left)
-            (input, joins ++ Seq(right))
-          case _ => (plan, Seq())
-        }
+  // flatten all inner joins, which are next to each other
+  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
+    case Join(left, right, Inner, cond) =>
+      // only find the nested join on left, because we can only generate the plan like that
+      val (plans, conditions) = flattenJoin(left)
+      (plans ++ Seq(right), conditions ++ cond.toSeq)
 
-        val allConditions = splitConjunctivePredicates(filterCondition)
-        val (input, joins) = flattenJoin(j)
-        Some((input, joins, allConditions))
+    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+      val (plans, conditions) = flattenJoin(j)
+      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
+    case _ => (Seq(plan), Seq())
+  }
+
+  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, Inner, _) =>
+      Some(flattenJoin(j))
     case _ => None
   }
 }
