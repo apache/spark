@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
+import org.apache.spark.storage.StorageStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -52,68 +53,80 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList
+    listener.synchronized {
+      val activeStorageStatusList = listener.storageStatusList
+      val activeExecutorsTable  = listingExecTable(activeStorageStatusList, true)
+      val deadStorageStatusList = listener.deadStorageStatusList
+      val deadExecutorsTable  = listingExecTable(deadStorageStatusList, false)
+      val content =
+        <span>
+          <h4>ActiveExecutors({activeStorageStatusList.size})</h4> {activeExecutorsTable}
+          <h4>DeadExecutors({deadStorageStatusList.size})</h4> {deadExecutorsTable}
+        </span>
+
+      UIUtils.headerSparkPage("Executors", content, parent)
+    }
+  }
+
+  private def listingExecTable(storageStatusList: Seq[StorageStatus], isActive: Boolean)
+      : Seq[Node] = {
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield
-      ExecutorsPage.getExecInfo(listener, statusId)
+      ExecutorsPage.getExecInfo(listener, statusId, isActive)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
+    val isShowThreadDump = threadDumpEnabled && isActive
 
-    val execTable =
-      <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
-        <thead>
-          <th>Executor ID</th>
-          <th>Address</th>
-          <th>RDD Blocks</th>
-          <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
-          <th>Disk Used</th>
-          <th>Active Tasks</th>
-          <th>Failed Tasks</th>
-          <th>Complete Tasks</th>
-          <th>Total Tasks</th>
-          <th>Task Time</th>
-          <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
-          <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
-          <th>
-            <!-- Place the shuffle write tooltip on the left (rather than the default position
+    <div class="row-fluid">
+      <div class="span12">
+        {
+          if (isActive) {
+            <ul class="unstyled">
+              <li><strong>Memory:</strong>
+                {Utils.bytesToString(memUsed)} Used
+                ({Utils.bytesToString(maxMem)} Total) </li>
+              <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
+            </ul>
+          }
+        }
+        <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
+          <thead>
+            <th>Executor ID</th>
+            <th>Address</th>
+            <th>RDD Blocks</th>
+            <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
+            <th>Disk Used</th>
+            <th>Active Tasks</th>
+            <th>Failed Tasks</th>
+            <th>Complete Tasks</th>
+            <th>Total Tasks</th>
+            <th>Task Time</th>
+            <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
+            <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
+            <th>
+              <!-- Place the shuffle write tooltip on the left (rather than the default position
               of on top) because the shuffle write column is the last column on the right side and
               the tooltip is wider than the column, so it doesn't fit on top. -->
             <span data-toggle="tooltip" data-placement="left" title={ToolTips.SHUFFLE_WRITE}>
               Shuffle Write
             </span>
-          </th>
-          {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
-          {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
-        </thead>
-        <tbody>
-          {execInfoSorted.map(execRow(_, logsExist))}
-        </tbody>
-      </table>
-
-    val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
-            <li><strong>Memory:</strong>
-              {Utils.bytesToString(memUsed)} Used
-              ({Utils.bytesToString(maxMem)} Total) </li>
-            <li><strong>Disk:</strong> {Utils.bytesToString(diskUsed)} Used </li>
-          </ul>
-        </div>
+            </th>
+            {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
+            {if (isShowThreadDump) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+          </thead>
+          <tbody>
+            {execInfoSorted.map(execRow(_, logsExist, isShowThreadDump))}
+          </tbody>
+        </table>
       </div>
-      <div class = "row">
-        <div class="span12">
-          {execTable}
-        </div>
-      </div>;
-
-    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
+    </div>
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary, logsExist: Boolean): Seq[Node] = {
+  private def execRow(info: ExecutorSummary, logsExist: Boolean, isShowThreadDump: Boolean)
+      : Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -160,7 +173,7 @@ private[ui] class ExecutorsPage(
         }
       }
       {
-        if (threadDumpEnabled) {
+        if (isShowThreadDump) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")
           <td>
             <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
@@ -176,8 +189,12 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
-    val status = listener.storageStatusList(statusId)
+  def getExecInfo(listener: ExecutorsListener, statusId: Int, isActive: Boolean): ExecutorSummary = {
+    val status = if (isActive) {
+      listener.storageStatusList(statusId)
+    } else {
+      listener.deadStorageStatusList(statusId)
+    }
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
     val rddBlocks = status.numBlocks

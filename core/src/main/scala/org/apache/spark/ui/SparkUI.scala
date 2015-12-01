@@ -181,7 +181,7 @@ private[spark] object SparkUI {
     }
 
     val environmentListener = new EnvironmentListener
-    val storageStatusListener = new StorageStatusListener
+    val storageStatusListener = new StorageStatusListener(conf)
     val executorsListener = new ExecutorsListener(storageStatusListener)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)

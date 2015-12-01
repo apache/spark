@@ -59,6 +59,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
 
   def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
+  def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
+
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
