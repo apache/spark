@@ -250,6 +250,8 @@ object SparkBuild extends PomBuild {
   /* Spark SQL Core console settings */
   enable(SQL.settings)(sql)
 
+  enable(Catalyst.settings)(catalyst)
+
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
@@ -380,6 +382,15 @@ object SQL {
         |import sqlContext._
       """.stripMargin,
     cleanupCommands in console := "sc.stop()"
+  )
+}
+
+object Catalyst {
+  lazy val settings = Seq(
+    // Catalyst's tests can run in parallel within the same JVM since they don't launch
+    // SparkContexts.
+    parallelExecution in Test := true,
+    testForkedParallel in Test := true
   )
 }
 
@@ -671,7 +682,6 @@ object TestSettings {
       }
       Seq[File]()
     },
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
       "-groups",
