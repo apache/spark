@@ -126,7 +126,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   /**
-   * Returns Aliased [[Expressions]] that could be used to construct a flattened version of this
+   * Returns Aliased [[Expression]]s that could be used to construct a flattened version of this
    * StructType.
    */
   def flatten: Seq[NamedExpression] = valExprs.zip(names).map {

@@ -131,9 +131,9 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.groupBy(_._1).agg(
         sum(_._2),
-        expr("sum(_2)").as[Int],
+        expr("sum(_2)").as[Long],
         count("*")),
-      ("a", 30, 30, 2L), ("b", 3, 3, 2L), ("c", 1, 1, 1L))
+      ("a", 30, 30L, 2L), ("b", 3, 3L, 2L), ("c", 1, 1L, 1L))
   }
 
   test("typed aggregation: complex case") {
