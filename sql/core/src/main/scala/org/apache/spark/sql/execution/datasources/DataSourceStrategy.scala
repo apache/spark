@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
@@ -316,13 +318,19 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
 
-    val metadata = {
-      val pushedFiltersString = pushedFilters.mkString("[", ",", "] ")
-      val maybeInputPathsString = relation.relation match {
-        case r: HadoopFsRelation => Some(r.paths.mkString(", "))
-        case _ => None
+    val metadata: Map[String, String] = {
+      val pairs = ArrayBuffer.empty[(String, String)]
+
+      if (pushedFilters.nonEmpty) {
+        pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
       }
-      Map(PUSHED_FILTERS -> pushedFiltersString) ++ maybeInputPathsString.map(INPUT_PATHS -> _)
+
+      relation.relation match {
+        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.paths.mkString(", ")
+        case _ =>
+      }
+
+      pairs.toMap
     }
 
     if (projects.map(_.toAttribute) == projects &&

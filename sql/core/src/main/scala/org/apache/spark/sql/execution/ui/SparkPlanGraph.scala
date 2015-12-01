@@ -98,7 +98,7 @@ private[ui] case class SparkPlanGraphNode(
 
     builder ++= name
 
-    def truncateLongText(text: String) = {
+    def truncateLongText(text: String): String = {
       if (text.length > 50) {
         text.take(50) + "..."
       } else {
