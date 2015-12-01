@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtract
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{StructField, ObjectType, StructType}
@@ -235,12 +236,13 @@ case class ExpressionEncoder[T](
 
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
+    val optimizedPlan = SimplifyCasts(analyzedPlan)
 
     // In order to construct instances of inner classes (for example those declared in a REPL cell),
     // we need an instance of the outer scope.  This rule substitues those outer objects into
     // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
     // registry.
-    copy(fromRowExpression = analyzedPlan.expressions.head.children.head transform {
+    copy(fromRowExpression = optimizedPlan.expressions.head.children.head transform {
       case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
         val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
         if (outer == null) {
