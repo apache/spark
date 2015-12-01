@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
 
-  protected[spark] def specializeSingleDistinctAggPlanning: Boolean
+  protected[spark] def aggregationPlanning15: Boolean
 }
 
 /**
@@ -32,12 +32,12 @@ object EmptyConf extends CatalystConf {
     throw new UnsupportedOperationException
   }
 
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = {
+  protected[spark] override def aggregationPlanning15: Boolean = {
     throw new UnsupportedOperationException
   }
 }
 
 /** A CatalystConf that can be used for local testing. */
 case class SimpleCatalystConf(caseSensitiveAnalysis: Boolean) extends CatalystConf {
-  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean = true
+  protected[spark] override def aggregationPlanning15: Boolean = false
 }

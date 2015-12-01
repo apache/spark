@@ -123,13 +123,11 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
-      // When the flag is set to specialize single distinct agg planning,
-      // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column.
+    val shouldRewrite = if (conf.aggregationPlanning15) {
+      // use the same plan as Spark 1.5 (one shuffle) for single distinct
       distinctAggGroups.size > 1
     } else {
-      distinctAggGroups.size >= 1
+      distinctAggGroups.nonEmpty
     }
     if (shouldRewrite) {
       // Create the attributes for the grouping id and the group by clause.
