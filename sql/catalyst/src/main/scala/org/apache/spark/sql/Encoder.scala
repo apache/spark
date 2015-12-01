@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import java.lang.reflect.Modifier
 
+import org.apache.spark.annotation.Experimental
+
+import scala.annotation.implicitNotFound
 import scala.reflect.{ClassTag, classTag}
 
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
@@ -26,13 +29,51 @@ import org.apache.spark.sql.catalyst.expressions.{DecodeUsingSerializer, BoundRe
 import org.apache.spark.sql.types._
 
 /**
+ * :: Experimental ::
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
  *
- * Encoders are not intended to be thread-safe and thus they are allow to avoid internal locking
- * and reuse internal buffers to improve performance.
+ * == Scala ==
+ * Encoders are generally created automatically though implicits from a `SQLContext`.
+ *
+ * {{{
+ *   import sqlContext.implicits._
+ *
+ *   val ds = Seq(1, 2, 3).toDS() // implicitly provided (sqlContext.implicits.newIntEncoder)
+ * }}}
+ *
+ * == Java ==
+ * Encoders are specified by calling static methods on [[Encoders]].
+ *
+ * {{{
+ *   List<String> data = Arrays.asList("abc", "abc", "xyz");
+ *   Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+ * }}}
+ *
+ * Encoders can be composed into tuples:
+ *
+ * {{{
+ *   Encoder<Tuple2<Integer, String>> encoder2 = Encoders.tuple(Encoders.INT(), Encoders.STRING());
+ *   List<Tuple2<Integer, String>> data2 = Arrays.asList(new scala.Tuple2(1, "a");
+ *   Dataset<Tuple2<Integer, String>> ds2 = context.createDataset(data2, encoder2);
+ * }}}
+ *
+ * Or constructed from Java Beans:
+ *
+ * {{{
+ *   Encoders.bean(MyClass.class);
+ * }}}
+ *
+ * == Implementation ==
+ *  - Encoders are not intended to be thread-safe and thus they are allowed to avoid internal
+ *  locking and reuse internal buffers to improve performance.
  *
  * @since 1.6.0
  */
+@Experimental
+@implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
+  "(Int, String, etc) and Products (case classes) and primitive types are supported by " +
+  "importing sqlContext.implicits._  Support for serializing other types will be added in future " +
+  "releases.")
 trait Encoder[T] extends Serializable {
 
   /** Returns the schema of encoding this type of object as a Row. */
@@ -43,10 +84,12 @@ trait Encoder[T] extends Serializable {
 }
 
 /**
- * Methods for creating encoders.
+ * :: Experimental ::
+ * Methods for creating an [[Encoder]].
  *
  * @since 1.6.0
  */
+@Experimental
 object Encoders {
 
   /**
