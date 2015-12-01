@@ -55,9 +55,9 @@ private[ui] class ExecutorsPage(
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStorageStatusList = listener.activeStorageStatusList
-      val activeExecutorsTable  = listingExecTable(activeStorageStatusList, true)
+      val activeExecutorsTable = listingExecTable(activeStorageStatusList, true)
       val deadStorageStatusList = listener.deadStorageStatusList
-      val deadExecutorsTable  = listingExecTable(deadStorageStatusList, false)
+      val deadExecutorsTable = listingExecTable(deadStorageStatusList, false)
       val content =
         <span>
           <h4>ActiveExecutors({activeStorageStatusList.size})</h4> {activeExecutorsTable}
@@ -79,6 +79,7 @@ private[ui] class ExecutorsPage(
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
     val isShowThreadDump = threadDumpEnabled && isActive
 
+    // scalastyle:off
     <div class="row-fluid">
       <div class="span12">
         {
@@ -122,6 +123,7 @@ private[ui] class ExecutorsPage(
         </table>
       </div>
     </div>
+    // scalastyle:on
   }
 
   /** Render an HTML row representing an executor */
@@ -189,7 +191,8 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  def getExecInfo(listener: ExecutorsListener, statusId: Int, isActive: Boolean): ExecutorSummary = {
+  def getExecInfo(listener: ExecutorsListener, statusId: Int, isActive: Boolean)
+      : ExecutorSummary = {
     val status = if (isActive) {
       listener.activeStorageStatusList(statusId)
     } else {
