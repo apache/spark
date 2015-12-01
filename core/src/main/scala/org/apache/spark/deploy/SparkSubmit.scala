@@ -545,6 +545,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+    }
+
+    // assure a keytab is available from any place in a JVM
+    if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
         if (!new File(args.keytab).exists()) {

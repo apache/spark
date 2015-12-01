@@ -358,14 +358,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
   The full path to the file that contains the keytab for the principal specified above.
   This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
-  for renewing the login tickets and the delegation tokens periodically.
+  for renewing the login tickets and the delegation tokens periodically. (Works also with the "local" master)
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.principal</code></td>
   <td>(none)</td>
   <td>
-  Principal to be used to login to KDC, while running on secure HDFS.
+  Principal to be used to login to KDC, while running on secure HDFS. (Works also with the "local" master)
   </td>
 </tr>
 <tr>
