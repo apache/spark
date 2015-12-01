@@ -1193,7 +1193,7 @@ class KafkaStreamTests(PySparkStreamingTestCase):
             ssc2 = StreamingContext.getOrCreate(tmpdir, setup)
             ssc2.start()
             ssc2.awaitTermination(3)
-            ssc2.stop(False)
+            ssc2.stop(stopSparkContext=False, stopGraceFully=True)
             ssc2 = None
         finally:
             shutil.rmtree(tmpdir)
