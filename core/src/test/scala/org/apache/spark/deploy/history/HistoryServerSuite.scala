@@ -28,6 +28,7 @@ import com.codahale.metrics.Counter
 import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.JsonAST.JArray
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.when
@@ -275,13 +276,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     // this test dir is explictly deleted on successful runs; retained for diagnostics when
     // not
-    val testDir = Utils.createDirectory(System.getProperty("java.io.tmpdir", "logs"))
+    val logDir = Utils.createDirectory(System.getProperty("java.io.tmpdir", "logs"))
 
     // a new conf is used with the background thread set and running at its fastest
     // alllowed refresh rate (1Hz)
     val myConf = new SparkConf()
-      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath)
-      .set("spark.eventLog.dir", testDir.getAbsolutePath)
+      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.eventLog.dir", logDir.getAbsolutePath)
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
       .set("spark.history.cache.window", "200ms")
@@ -289,10 +290,27 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val provider = new FsHistoryProvider(myConf)
     val securityManager = new SecurityManager(myConf)
 
+    val sc = new SparkContext("local", "test", myConf)
+    val logDirUri = logDir.toURI
+    val logDirPath = new Path(logDirUri)
+    val fs = FileSystem.get(logDirUri, sc.hadoopConfiguration)
+
+    def listDir(dir: Path): Seq[FileStatus] = {
+      val statuses = fs.listStatus(dir)
+      statuses.flatMap(
+        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
+    }
+
+    def dumpLogDir(): Unit = {
+      listDir(logDirPath).foreach { status =>
+        val s = status.toString
+        logInfo(s)
+      }
+    }
+
     // stop the server with the old config, and start the new one
     server.stop()
     server = new HistoryServer(myConf, provider, securityManager, 18080)
-    val sc = new SparkContext("local", "test", myConf)
     server.initialize()
     server.bind()
     try {
@@ -356,22 +374,28 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       activeJobs() should have size 0
       completedJobs() should have size 1
       getNumJobs("") should be(1)
-      assert(metrics.lookupCount.getCount > 1,
-        s"lookup count too low in $metrics")
+      assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+      logInfo("Before executing job")
+      dumpLogDir()
 
-      // second job
+      // second job needs a delay to ensure file timestamps are different
+      Thread.sleep(10)
+
       val d2 = sc.parallelize(1 to 10)
       d2.count()
-      val stdTimeout = timeout(40 seconds)
+      dumpLogDir()
+
+      val stdTimeout = timeout(20 seconds)
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2
       }
       eventually(stdTimeout, stdInterval) {
         // this fails with patch https://github.com/apache/spark/pull/6935 as well, I'm not sure why
+        val finalFileStatus = fs.getFileStatus(logDirPath)
         val numJobs = getNumJobs("")
         assert(numJobs == 2,
-          s"jobs not updated, server=$server, page = ${HistoryServerSuite.getUrl(appIdRoot)}")
+          s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
         }
 
       getNumJobs("/jobs") should be (2)
@@ -382,7 +406,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       d.count()
       getNumJobs("/jobs") should be (3)
       // no need to retain the test dir now the tests complete
-      testDir.deleteOnExit();
+      logDir.deleteOnExit();
     } finally {
       sc.stop()
     }
@@ -408,6 +432,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.write(json)
     out.close()
   }
+
 }
 
 object HistoryServerSuite {
