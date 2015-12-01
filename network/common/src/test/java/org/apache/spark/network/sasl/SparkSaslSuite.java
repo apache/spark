@@ -22,7 +22,7 @@ import static org.mockito.Mockito.*;
 
 import java.io.File;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -57,6 +57,7 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -123,39 +124,53 @@ public class SparkSaslSuite {
   }
 
   @Test
-  public void testSaslAuthentication() throws Exception {
+  public void testSaslAuthentication() throws Throwable {
     testBasicSasl(false);
   }
 
   @Test
-  public void testSaslEncryption() throws Exception {
+  public void testSaslEncryption() throws Throwable {
     testBasicSasl(true);
   }
 
-  private void testBasicSasl(boolean encrypt) throws Exception {
+  private void testBasicSasl(boolean encrypt) throws Throwable {
     RpcHandler rpcHandler = mock(RpcHandler.class);
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) {
-          byte[] message = (byte[]) invocation.getArguments()[1];
+          ByteBuffer message = (ByteBuffer) invocation.getArguments()[1];
           RpcResponseCallback cb = (RpcResponseCallback) invocation.getArguments()[2];
-          assertEquals("Ping", new String(message, StandardCharsets.UTF_8));
-          cb.onSuccess("Pong".getBytes(StandardCharsets.UTF_8));
+          assertEquals("Ping", JavaUtils.bytesToString(message));
+          cb.onSuccess(JavaUtils.stringToBytes("Pong"));
           return null;
         }
       })
       .when(rpcHandler)
-      .receive(any(TransportClient.class), any(byte[].class), any(RpcResponseCallback.class));
+      .receive(any(TransportClient.class), any(ByteBuffer.class), any(RpcResponseCallback.class));
 
     SaslTestCtx ctx = new SaslTestCtx(rpcHandler, encrypt, false);
     try {
-      byte[] response = ctx.client.sendRpcSync("Ping".getBytes(StandardCharsets.UTF_8),
-                                               TimeUnit.SECONDS.toMillis(10));
-      assertEquals("Pong", new String(response, StandardCharsets.UTF_8));
+      ByteBuffer response = ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
+        TimeUnit.SECONDS.toMillis(10));
+      assertEquals("Pong", JavaUtils.bytesToString(response));
     } finally {
       ctx.close();
       // There should be 2 terminated events; one for the client, one for the server.
-      verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
+      Throwable error = null;
+      long deadline = System.nanoTime() + TimeUnit.NANOSECONDS.convert(10, TimeUnit.SECONDS);
+      while (deadline > System.nanoTime()) {
+        try {
+          verify(rpcHandler, times(2)).connectionTerminated(any(TransportClient.class));
+          error = null;
+          break;
+        } catch (Throwable t) {
+          error = t;
+          TimeUnit.MILLISECONDS.sleep(10);
+        }
+      }
+      if (error != null) {
+        throw error;
+      }
     }
   }
 
@@ -325,8 +340,8 @@ public class SparkSaslSuite {
     SaslTestCtx ctx = null;
     try {
       ctx = new SaslTestCtx(mock(RpcHandler.class), true, true);
-      ctx.client.sendRpcSync("Ping".getBytes(StandardCharsets.UTF_8),
-                             TimeUnit.SECONDS.toMillis(10));
+      ctx.client.sendRpcSync(JavaUtils.stringToBytes("Ping"),
+        TimeUnit.SECONDS.toMillis(10));
       fail("Should have failed to send RPC to server.");
     } catch (Exception e) {
       assertFalse(e.getCause() instanceof TimeoutException);

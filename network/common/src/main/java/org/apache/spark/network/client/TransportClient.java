@@ -20,6 +20,7 @@ package org.apache.spark.network.client;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.ByteBuffer;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,7 @@ import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.OneWayMessage;
 import org.apache.spark.network.protocol.RpcRequest;
@@ -212,7 +214,7 @@ public class TransportClient implements Closeable {
    * @param callback Callback to handle the RPC's reply.
    * @return The RPC's id.
    */
-  public long sendRpc(byte[] message, final RpcResponseCallback callback) {
+  public long sendRpc(ByteBuffer message, final RpcResponseCallback callback) {
     final String serverAddr = NettyUtils.getRemoteAddress(channel);
     final long startTime = System.currentTimeMillis();
     logger.trace("Sending RPC to {}", serverAddr);
@@ -220,7 +222,7 @@ public class TransportClient implements Closeable {
     final long requestId = Math.abs(UUID.randomUUID().getLeastSignificantBits());
     handler.addRpcRequest(requestId, callback);
 
-    channel.writeAndFlush(new RpcRequest(requestId, message)).addListener(
+    channel.writeAndFlush(new RpcRequest(requestId, new NioManagedBuffer(message))).addListener(
       new ChannelFutureListener() {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
@@ -249,12 +251,12 @@ public class TransportClient implements Closeable {
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.
    */
-  public byte[] sendRpcSync(byte[] message, long timeoutMs) {
-    final SettableFuture<byte[]> result = SettableFuture.create();
+  public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
+    final SettableFuture<ByteBuffer> result = SettableFuture.create();
 
     sendRpc(message, new RpcResponseCallback() {
       @Override
-      public void onSuccess(byte[] response) {
+      public void onSuccess(ByteBuffer response) {
         result.set(response);
       }
 
@@ -279,8 +281,8 @@ public class TransportClient implements Closeable {
    *
    * @param message The message to send.
    */
-  public void send(byte[] message) {
-    channel.writeAndFlush(new OneWayMessage(message));
+  public void send(ByteBuffer message) {
+    channel.writeAndFlush(new OneWayMessage(new NioManagedBuffer(message)));
   }
 
   /**
