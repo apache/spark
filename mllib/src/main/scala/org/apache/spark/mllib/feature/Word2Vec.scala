@@ -31,15 +31,14 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.mllib.linalg.{Vector, Vectors, DenseMatrix, BLAS, DenseVector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.sql.{SQLContext, Row}
+import org.apache.spark.sql.SQLContext
 
 /**
  *  Entry in vocabulary
@@ -53,7 +52,6 @@ private case class VocabWord(
 )
 
 /**
- * :: Experimental ::
  * Word2Vec creates vector representation of words in a text corpus.
  * The algorithm first constructs a vocabulary from the corpus
  * and then learns vector representation of words in the vocabulary.
@@ -71,7 +69,6 @@ private case class VocabWord(
  * Distributed Representations of Words and Phrases and their Compositionality.
  */
 @Since("1.1.0")
-@Experimental
 class Word2Vec extends Serializable with Logging {
 
   private var vectorSize = 100
@@ -148,8 +145,8 @@ class Word2Vec extends Serializable with Logging {
 
   private var trainWordsCount = 0
   private var vocabSize = 0
-  private var vocab: Array[VocabWord] = null
-  private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private var vocab: Array[VocabWord] = null
+  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
@@ -319,12 +316,15 @@ class Word2Vec extends Serializable with Logging {
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
     var alpha = learningRate
+
     for (k <- 1 to numIterations) {
+      val bcSyn0Global = sc.broadcast(syn0Global)
+      val bcSyn1Global = sc.broadcast(syn1Global)
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
         val syn1Modify = new Array[Int](vocabSize)
-        val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
+        val model = iter.foldLeft((bcSyn0Global.value, bcSyn1Global.value, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
             var wc = wordCount
@@ -408,6 +408,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
+      bcSyn0Global.unpersist(false)
+      bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
 
@@ -427,7 +429,6 @@ class Word2Vec extends Serializable with Logging {
 }
 
 /**
- * :: Experimental ::
  * Word2Vec model
  * @param wordIndex maps each word to an index, which can retrieve the corresponding
  *                  vector from wordVectors
@@ -435,11 +436,10 @@ class Word2Vec extends Serializable with Logging {
  *                    to the word mapped with index i can be retrieved by the slice
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
-@Experimental
 @Since("1.1.0")
-class Word2VecModel private[mllib] (
-    private val wordIndex: Map[String, Int],
-    private val wordVectors: Array[Float]) extends Serializable with Saveable {
+class Word2VecModel private[spark] (
+    private[spark] val wordIndex: Map[String, Int],
+    private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
@@ -558,7 +558,6 @@ class Word2VecModel private[mllib] (
 }
 
 @Since("1.4.0")
-@Experimental
 object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordIndex(model: Map[String, Array[Float]]): Map[String, Int] = {

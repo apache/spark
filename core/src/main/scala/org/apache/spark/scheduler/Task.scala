@@ -25,16 +25,17 @@ import scala.collection.mutable.HashMap
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.unsafe.memory.TaskMemoryManager
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
- * - [[org.apache.spark.scheduler.ShuffleMapTask]]
- * - [[org.apache.spark.scheduler.ResultTask]]
+ *
+ *  - [[org.apache.spark.scheduler.ShuffleMapTask]]
+ *  - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
  * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
@@ -89,10 +90,6 @@ private[spark] abstract class Task[T](
     } finally {
       context.markTaskCompleted()
       try {
-        Utils.tryLogNonFatalError {
-          // Release memory used by this thread for shuffles
-          SparkEnv.get.shuffleMemoryManager.releaseMemoryForThisTask()
-        }
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
           SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()

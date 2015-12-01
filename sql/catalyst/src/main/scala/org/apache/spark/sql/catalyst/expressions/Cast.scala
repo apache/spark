@@ -22,7 +22,7 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{StringUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -104,8 +104,7 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType)
-  extends UnaryExpression with CodegenFallback {
+case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -204,8 +203,8 @@ case class Cast(child: Expression, dataType: DataType)
     if (d.isNaN || d.isInfinite) null else (d * 1000000L).toLong
   }
 
-  // converting milliseconds to us
-  private[this] def longToTimestamp(t: Long): Long = t * 1000L
+  // converting seconds to us
+  private[this] def longToTimestamp(t: Long): Long = t * 1000000L
   // converting us to seconds
   private[this] def timestampToLong(ts: Long): Long = math.floor(ts.toDouble / 1000000L).toLong
   // converting us to seconds in double
@@ -647,7 +646,7 @@ case class Cast(child: Expression, dataType: DataType)
 
   private[this] def decimalToTimestampCode(d: String): String =
     s"($d.toBigDecimal().bigDecimal().multiply(new java.math.BigDecimal(1000000L))).longValue()"
-  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000L"
+  private[this] def longToTimeStampCode(l: String): String = s"$l * 1000000L"
   private[this] def timestampToIntegerCode(ts: String): String =
     s"java.lang.Math.floor((double) $ts / 1000000L)"
   private[this] def timestampToDoubleCode(ts: String): String = s"$ts / 1000000.0"
@@ -914,4 +913,13 @@ case class Cast(child: Expression, dataType: DataType)
         $evPrim = $result.copy();
       """
   }
+}
+
+/**
+ * Cast the child expression to the target data type, but will throw error if the cast might
+ * truncate, e.g. long -> int, timestamp -> data.
+ */
+case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String])
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
 }

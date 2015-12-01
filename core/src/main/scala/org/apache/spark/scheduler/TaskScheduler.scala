@@ -22,7 +22,8 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 
 /**
- * Low-level task scheduler interface, currently implemented exclusively by TaskSchedulerImpl.
+ * Low-level task scheduler interface, currently implemented exclusively by
+ * [[org.apache.spark.scheduler.TaskSchedulerImpl]].
  * This interface allows plugging in different task schedulers. Each TaskScheduler schedules tasks
  * for a single SparkContext. These schedulers get sets of tasks submitted to them from the
  * DAGScheduler for each stage, and are responsible for sending the tasks to the cluster, running

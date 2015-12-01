@@ -27,6 +27,11 @@ import struct
 import shutil
 from functools import reduce
 
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
+
 if sys.version_info[:2] <= (2, 6):
     try:
         import unittest2 as unittest
@@ -43,6 +48,7 @@ from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPar
 from pyspark.streaming.flume import FlumeUtils
 from pyspark.streaming.mqtt import MQTTUtils
 from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+from pyspark.streaming.listener import StreamingListener
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -397,6 +403,196 @@ class BasicOperationTests(PySparkStreamingTestCase):
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
+    def test_failed_func(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], time: Time)
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream = self.ssc.queueStream(input)
+
+        def failed_func(i):
+            raise ValueError("This is a special error")
+
+        input_stream.map(failed_func).pprint()
+        self.ssc.start()
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func2(self):
+        # Test failure in
+        # TransformFunction.apply(rdd: Option[RDD[_]], rdd2: Option[RDD[_]], time: Time)
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream1 = self.ssc.queueStream(input)
+        input_stream2 = self.ssc.queueStream(input)
+
+        def failed_func(rdd1, rdd2):
+            raise ValueError("This is a special error")
+
+        input_stream1.transformWith(failed_func, input_stream2, True).pprint()
+        self.ssc.start()
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+    def test_failed_func_with_reseting_failure(self):
+        input = [self.sc.parallelize([d], 1) for d in range(4)]
+        input_stream = self.ssc.queueStream(input)
+
+        def failed_func(i):
+            if i == 1:
+                # Make it fail in the second batch
+                raise ValueError("This is a special error")
+            else:
+                return i
+
+        # We should be able to see the results of the 3rd and 4th batches even if the second batch
+        # fails
+        expected = [[0], [2], [3]]
+        self.assertEqual(expected, self._collect(input_stream.map(failed_func), 3))
+        try:
+            self.ssc.awaitTerminationOrTimeout(10)
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue("This is a special error" in failure)
+            return
+
+        self.fail("a failed func should throw an error")
+
+
+class StreamingListenerTests(PySparkStreamingTestCase):
+
+    duration = .5
+
+    class BatchInfoCollector(StreamingListener):
+
+        def __init__(self):
+            super(StreamingListener, self).__init__()
+            self.batchInfosCompleted = []
+            self.batchInfosStarted = []
+            self.batchInfosSubmitted = []
+
+        def onBatchSubmitted(self, batchSubmitted):
+            self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
+
+        def onBatchStarted(self, batchStarted):
+            self.batchInfosStarted.append(batchStarted.batchInfo())
+
+        def onBatchCompleted(self, batchCompleted):
+            self.batchInfosCompleted.append(batchCompleted.batchInfo())
+
+    def test_batch_info_reports(self):
+        batch_collector = self.BatchInfoCollector()
+        self.ssc.addStreamingListener(batch_collector)
+        input = [[1], [2], [3], [4]]
+
+        def func(dstream):
+            return dstream.map(int)
+        expected = [[1], [2], [3], [4]]
+        self._test_func(input, func, expected)
+
+        batchInfosSubmitted = batch_collector.batchInfosSubmitted
+        batchInfosStarted = batch_collector.batchInfosStarted
+        batchInfosCompleted = batch_collector.batchInfosCompleted
+
+        self.wait_for(batchInfosCompleted, 4)
+
+        self.assertGreaterEqual(len(batchInfosSubmitted), 4)
+        for info in batchInfosSubmitted:
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+
+            for streamId in info.streamIdToInputInfo():
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
+
+            for outputOpId in info.outputOperationInfos():
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), -1)
+                self.assertGreaterEqual(outputInfo.endTime(), -1)
+                self.assertIsNone(outputInfo.failureReason())
+
+            self.assertEqual(info.schedulingDelay(), -1)
+            self.assertEqual(info.processingDelay(), -1)
+            self.assertEqual(info.totalDelay(), -1)
+            self.assertEqual(info.numRecords(), 0)
+
+        self.assertGreaterEqual(len(batchInfosStarted), 4)
+        for info in batchInfosStarted:
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+
+            for streamId in info.streamIdToInputInfo():
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
+
+            for outputOpId in info.outputOperationInfos():
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), -1)
+                self.assertGreaterEqual(outputInfo.endTime(), -1)
+                self.assertIsNone(outputInfo.failureReason())
+
+            self.assertGreaterEqual(info.schedulingDelay(), 0)
+            self.assertEqual(info.processingDelay(), -1)
+            self.assertEqual(info.totalDelay(), -1)
+            self.assertEqual(info.numRecords(), 0)
+
+        self.assertGreaterEqual(len(batchInfosCompleted), 4)
+        for info in batchInfosCompleted:
+            self.assertGreaterEqual(info.batchTime().milliseconds(), 0)
+            self.assertGreaterEqual(info.submissionTime(), 0)
+
+            for streamId in info.streamIdToInputInfo():
+                streamInputInfo = info.streamIdToInputInfo()[streamId]
+                self.assertGreaterEqual(streamInputInfo.inputStreamId(), 0)
+                self.assertGreaterEqual(streamInputInfo.numRecords, 0)
+                for key in streamInputInfo.metadata():
+                    self.assertIsNotNone(streamInputInfo.metadata()[key])
+                self.assertIsNotNone(streamInputInfo.metadataDescription())
+
+            for outputOpId in info.outputOperationInfos():
+                outputInfo = info.outputOperationInfos()[outputOpId]
+                self.assertGreaterEqual(outputInfo.batchTime().milliseconds(), 0)
+                self.assertGreaterEqual(outputInfo.id(), 0)
+                self.assertIsNotNone(outputInfo.name())
+                self.assertIsNotNone(outputInfo.description())
+                self.assertGreaterEqual(outputInfo.startTime(), 0)
+                self.assertGreaterEqual(outputInfo.endTime(), 0)
+                self.assertIsNone(outputInfo.failureReason())
+
+            self.assertGreaterEqual(info.schedulingDelay(), 0)
+            self.assertGreaterEqual(info.processingDelay(), 0)
+            self.assertGreaterEqual(info.totalDelay(), 0)
+            self.assertEqual(info.numRecords(), 0)
+
 
 class WindowFunctionTests(PySparkStreamingTestCase):
 
@@ -453,6 +649,17 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         d1 = self.ssc.queueStream(input1)
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 0.1, 0.1))
         self.assertRaises(ValueError, lambda: d1.reduceByKeyAndWindow(None, None, 1, 0.1))
+
+    def test_reduce_by_key_and_window_with_none_invFunc(self):
+        input = [range(1), range(2), range(3), range(4), range(5), range(6)]
+
+        def func(dstream):
+            return dstream.map(lambda x: (x, 1))\
+                .reduceByKeyAndWindow(operator.add, None, 5, 1)\
+                .filter(lambda kv: kv[1] > 0).count()
+
+        expected = [[2], [4], [6], [6], [6], [6]]
+        self._test_func(input, func, expected)
 
 
 class StreamingContextTests(PySparkStreamingTestCase):
@@ -591,6 +798,13 @@ class StreamingContextTests(PySparkStreamingTestCase):
         self.ssc = StreamingContext.getActiveOrCreate(None, setupFunc)
         self.assertTrue(self.setupCalled)
 
+    def test_await_termination_or_timeout(self):
+        self._add_input_stream()
+        self.ssc.start()
+        self.assertFalse(self.ssc.awaitTerminationOrTimeout(0.001))
+        self.ssc.stop(False)
+        self.assertTrue(self.ssc.awaitTerminationOrTimeout(0.001))
+
 
 class CheckpointTests(unittest.TestCase):
 
@@ -599,12 +813,16 @@ class CheckpointTests(unittest.TestCase):
     @staticmethod
     def tearDownClass():
         # Clean up in the JVM just in case there has been some issues in Python API
-        jStreamingContextOption = StreamingContext._jvm.SparkContext.getActive()
-        if jStreamingContextOption.nonEmpty():
-            jStreamingContextOption.get().stop()
-        jSparkContextOption = SparkContext._jvm.SparkContext.get()
-        if jSparkContextOption.nonEmpty():
-            jSparkContextOption.get().stop()
+        if SparkContext._jvm is not None:
+            jStreamingContextOption = \
+                SparkContext._jvm.org.apache.spark.streaming.StreamingContext.getActive()
+            if jStreamingContextOption.nonEmpty():
+                jStreamingContextOption.get().stop()
+
+    def setUp(self):
+        self.ssc = None
+        self.sc = None
+        self.cpd = None
 
     def tearDown(self):
         if self.ssc is not None:
@@ -613,6 +831,34 @@ class CheckpointTests(unittest.TestCase):
             self.sc.stop()
         if self.cpd is not None:
             shutil.rmtree(self.cpd)
+
+    def test_transform_function_serializer_failure(self):
+        inputd = tempfile.mkdtemp()
+        self.cpd = tempfile.mkdtemp("test_transform_function_serializer_failure")
+
+        def setup():
+            conf = SparkConf().set("spark.default.parallelism", 1)
+            sc = SparkContext(conf=conf)
+            ssc = StreamingContext(sc, 0.5)
+
+            # A function that cannot be serialized
+            def process(time, rdd):
+                sc.parallelize(range(1, 10))
+
+            ssc.textFileStream(inputd).foreachRDD(process)
+            return ssc
+
+        self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
+        try:
+            self.ssc.start()
+        except:
+            import traceback
+            failure = traceback.format_exc()
+            self.assertTrue(
+                "It appears that you are attempting to reference SparkContext" in failure)
+            return
+
+        self.fail("using SparkContext in process should fail because it's not Serializable")
 
     def test_get_or_create_and_get_active_or_create(self):
         inputd = tempfile.mkdtemp()
@@ -636,7 +882,7 @@ class CheckpointTests(unittest.TestCase):
         self.cpd = tempfile.mkdtemp("test_streaming_cps")
         self.setupCalled = False
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
-        self.assertFalse(self.setupCalled)
+        self.assertTrue(self.setupCalled)
 
         self.ssc.start()
 
@@ -682,11 +928,11 @@ class CheckpointTests(unittest.TestCase):
         # Verify that getOrCreate() uses existing SparkContext
         self.ssc.stop(True, True)
         time.sleep(1)
-        sc = SparkContext(SparkConf())
+        self.sc = SparkContext(conf=SparkConf())
         self.setupCalled = False
         self.ssc = StreamingContext.getOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == sc)
+        self.assertTrue(self.ssc.sparkContext == self.sc)
 
         # Verify the getActiveOrCreate() recovers from checkpoint files
         self.ssc.stop(True, True)
@@ -705,11 +951,11 @@ class CheckpointTests(unittest.TestCase):
         # Verify that getActiveOrCreate() uses existing SparkContext
         self.ssc.stop(True, True)
         time.sleep(1)
-        self.sc = SparkContext(SparkConf())
+        self.sc = SparkContext(conf=SparkConf())
         self.setupCalled = False
         self.ssc = StreamingContext.getActiveOrCreate(self.cpd, setup)
         self.assertFalse(self.setupCalled)
-        self.assertTrue(self.ssc.sparkContext == sc)
+        self.assertTrue(self.ssc.sparkContext == self.sc)
 
         # Verify that getActiveOrCreate() calls setup() in absence of checkpoint files
         self.ssc.stop(True, True)
@@ -892,6 +1138,51 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.wait_for(offsetRanges, 1)
 
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+    def test_topic_and_partition_equality(self):
+        topic_and_partition_a = TopicAndPartition("foo", 0)
+        topic_and_partition_b = TopicAndPartition("foo", 0)
+        topic_and_partition_c = TopicAndPartition("bar", 0)
+        topic_and_partition_d = TopicAndPartition("foo", 1)
+
+        self.assertEqual(topic_and_partition_a, topic_and_partition_b)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_c)
+        self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_rdd_message_handler(self):
+        """Test Python direct Kafka RDD MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 1, "c": 2}
+        offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress()}
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+        rdd = KafkaUtils.createRDD(self.sc, kafkaParams, offsetRanges,
+                                   messageHandler=getKeyAndDoubleMessage)
+        self._validateRddResult({"aa": 1, "bb": 1, "cc": 2}, rdd)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_message_handler(self):
+        """Test the Python direct Kafka stream MessageHandler."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        def getKeyAndDoubleMessage(m):
+            return m and (m.key, m.message * 2)
+
+        stream = KafkaUtils.createDirectStream(self.ssc, [topic], kafkaParams,
+                                               messageHandler=getKeyAndDoubleMessage)
+        self._validateStreamResult({"aa": 1, "bb": 2, "cc": 3}, stream)
 
 
 class FlumeStreamTests(PySparkStreamingTestCase):
@@ -1118,6 +1409,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
             "awsAccessKey", "awsSecretKey")
 
+    @unittest.skip("Enable it when we fix SPAKR-12058")
     def test_kinesis_stream(self):
         if not are_kinesis_tests_enabled:
             sys.stderr.write(
@@ -1281,7 +1573,8 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests]
+                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests,
+                 StreamingListenerTests]
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
@@ -1300,7 +1593,16 @@ if __name__ == "__main__":
             "or 'build/mvn -Pkinesis-asl package' before running this test.")
 
     sys.stderr.write("Running tests: %s \n" % (str(testcases)))
+    failed = False
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-        unittest.TextTestRunner(verbosity=3).run(tests)
+        if xmlrunner:
+            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+        else:
+            result = unittest.TextTestRunner(verbosity=3).run(tests)
+            if not result.wasSuccessful():
+                failed = True
+    sys.exit(failed)

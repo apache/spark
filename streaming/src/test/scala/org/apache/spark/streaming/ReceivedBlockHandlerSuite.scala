@@ -254,7 +254,7 @@ class ReceivedBlockHandlerSuite
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)

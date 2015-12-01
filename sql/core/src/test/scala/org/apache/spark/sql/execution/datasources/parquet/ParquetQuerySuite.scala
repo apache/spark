@@ -22,8 +22,8 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{TableIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -249,6 +249,19 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       checkAnswer(
         sqlContext.read.schema(userDefinedSchema).parquet(path),
         Row(Row(0L, 1L)))
+    }
+  }
+
+  test("SPARK-11997 parquet with null partition values") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sqlContext.range(1, 3)
+        .selectExpr("if(id % 2 = 0, null, id) AS n", "id")
+        .write.partitionBy("n").parquet(path)
+
+      checkAnswer(
+        sqlContext.read.parquet(path).filter("n is null"),
+        Row(2, null))
     }
   }
 

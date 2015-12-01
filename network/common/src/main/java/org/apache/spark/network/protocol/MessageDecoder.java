@@ -63,6 +63,18 @@ public final class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
       case RpcFailure:
         return RpcFailure.decode(in);
 
+      case OneWayMessage:
+        return OneWayMessage.decode(in);
+
+      case StreamRequest:
+        return StreamRequest.decode(in);
+
+      case StreamResponse:
+        return StreamResponse.decode(in);
+
+      case StreamFailure:
+        return StreamFailure.decode(in);
+
       default:
         throw new IllegalArgumentException("Unexpected message type: " + msgType);
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 
@@ -41,7 +43,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
-  private val transportConf = SparkTransportConf.fromSparkConf(conf, numCores)
+  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -133,9 +135,9 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       data
     }
 
-    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteArray,
+    client.sendRpc(new UploadBlock(appId, execId, blockId.toString, levelBytes, array).toByteBuffer,
       new RpcResponseCallback {
-        override def onSuccess(response: Array[Byte]): Unit = {
+        override def onSuccess(response: ByteBuffer): Unit = {
           logTrace(s"Successfully uploaded block $blockId")
           result.success((): Unit)
         }

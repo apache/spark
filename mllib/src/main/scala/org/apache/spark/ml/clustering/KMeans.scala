@@ -18,19 +18,19 @@
 package org.apache.spark.ml.clustering
 
 import javax.xml.transform.stream.StreamResult
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.ml.param.{Param, Params, IntParam, ParamMap}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.ml.pmml.PMMLExportable
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-
 
 /**
  * Common params for KMeans and KMeansModel
@@ -97,8 +97,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-  private val parentModel: MLlibKMeansModel) extends Model[KMeansModel] with KMeansParams
-    with PMMLExportable {
+    private val parentModel: MLlibKMeansModel)
+  extends Model[KMeansModel] with KMeansParams with MLWritable with PMMLExportable {
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
@@ -134,12 +134,59 @@ class KMeansModel private[ml] (
     parentModel.computeCost(data)
   }
 
+
   /**
    * Export the model to stream result in PMML format
    */
   @Since("1.6.0")
   override def toPMML(streamResult: StreamResult): Unit = {
     parentModel.toPMML(streamResult)
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
+}
+
+@Since("1.6.0")
+object KMeansModel extends MLReadable[KMeansModel] {
+
+  @Since("1.6.0")
+  override def read: MLReader[KMeansModel] = new KMeansModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): KMeansModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[KMeansModel]] */
+  private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
+
+    private case class Data(clusterCenters: Array[Vector])
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: cluster centers
+      val data = Data(instance.clusterCenters)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class KMeansModelReader extends MLReader[KMeansModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[KMeansModel].getName
+
+    override def load(path: String): KMeansModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath).select("clusterCenters").head()
+      val clusterCenters = data.getAs[Seq[Vector]](0).toArray
+      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
 
@@ -153,7 +200,7 @@ class KMeansModel private[ml] (
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel] with KMeansParams {
+  extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
   setDefault(
     k -> 2,
@@ -220,4 +267,11 @@ class KMeans @Since("1.5.0") (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+}
+
+@Since("1.6.0")
+object KMeans extends DefaultParamsReadable[KMeans] {
+
+  @Since("1.6.0")
+  override def load(path: String): KMeans = super.load(path)
 }

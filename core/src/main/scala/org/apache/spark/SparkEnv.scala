@@ -38,9 +38,8 @@ import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
+import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
-import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{AkkaUtils, RpcUtils, Utils}
 
 /**
@@ -67,13 +66,9 @@ class SparkEnv (
     val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
-    val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    // TODO: unify these *MemoryManager classes (SPARK-10984)
     val memoryManager: MemoryManager,
-    val shuffleMemoryManager: ShuffleMemoryManager,
-    val executorMemoryManager: ExecutorMemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
@@ -95,7 +90,6 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
-      Option(httpFileServer).foreach(_.stop())
       mapOutputTracker.stop()
       shuffleManager.stop()
       broadcastManager.stop()
@@ -190,6 +184,7 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus,
+      numCores: Int,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
@@ -202,6 +197,7 @@ object SparkEnv extends Logging {
       port,
       isDriver = true,
       isLocal = isLocal,
+      numUsableCores = numCores,
       listenerBus = listenerBus,
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
@@ -241,8 +237,8 @@ object SparkEnv extends Logging {
       port: Int,
       isDriver: Boolean,
       isLocal: Boolean,
+      numUsableCores: Int,
       listenerBus: LiveListenerBus = null,
-      numUsableCores: Int = 0,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     // Listener bus is only used on the driver
@@ -254,19 +250,29 @@ object SparkEnv extends Logging {
 
     // Create the ActorSystem for Akka and get the port it binds to.
     val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
+    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager,
+      clientMode = !isDriver)
     val actorSystem: ActorSystem =
       if (rpcEnv.isInstanceOf[AkkaRpcEnv]) {
         rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
       } else {
+        val actorSystemPort = if (port == 0) 0 else rpcEnv.address.port + 1
         // Create a ActorSystem for legacy codes
-        AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)._1
+        AkkaUtils.createActorSystem(
+          actorSystemName + "ActorSystem",
+          hostname,
+          actorSystemPort,
+          conf,
+          securityManager
+        )._1
       }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
+    // In the non-driver case, the RPC env's address may be null since it may not be listening
+    // for incoming connections.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else {
+    } else if (rpcEnv.address != null) {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
     }
 
@@ -330,7 +336,7 @@ object SparkEnv extends Logging {
     val shortShuffleMgrNames = Map(
       "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
       "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
-      "tungsten-sort" -> "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager")
+      "tungsten-sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
@@ -338,12 +344,10 @@ object SparkEnv extends Logging {
     val useLegacyMemoryManager = conf.getBoolean("spark.memory.useLegacyMode", false)
     val memoryManager: MemoryManager =
       if (useLegacyMemoryManager) {
-        new StaticMemoryManager(conf)
+        new StaticMemoryManager(conf, numUsableCores)
       } else {
-        new UnifiedMemoryManager(conf)
+        UnifiedMemoryManager(conf, numUsableCores)
       }
-
-    val shuffleMemoryManager = ShuffleMemoryManager.create(conf, memoryManager, numUsableCores)
 
     val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
 
@@ -360,17 +364,6 @@ object SparkEnv extends Logging {
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val cacheManager = new CacheManager(blockManager)
-
-    val httpFileServer =
-      if (isDriver) {
-        val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(conf, securityManager, fileServerPort)
-        server.initialize()
-        conf.set("spark.fileserver.uri", server.serverUri)
-        server
-      } else {
-        null
-      }
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
@@ -403,15 +396,6 @@ object SparkEnv extends Logging {
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
-    val executorMemoryManager: ExecutorMemoryManager = {
-      val allocator = if (conf.getBoolean("spark.unsafe.offHeap", false)) {
-        MemoryAllocator.UNSAFE
-      } else {
-        MemoryAllocator.HEAP
-      }
-      new ExecutorMemoryManager(allocator)
-    }
-
     val envInstance = new SparkEnv(
       executorId,
       rpcEnv,
@@ -425,12 +409,9 @@ object SparkEnv extends Logging {
       blockTransferService,
       blockManager,
       securityManager,
-      httpFileServer,
       sparkFilesDir,
       metricsSystem,
       memoryManager,
-      shuffleMemoryManager,
-      executorMemoryManager,
       outputCommitCoordinator,
       conf)
 

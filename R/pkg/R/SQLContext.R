@@ -17,27 +17,33 @@
 
 # SQLcontext.R: SQLContext-driven functions
 
+
+# Map top level R type to SQL type
+getInternalType <- function(x) {
+  # class of POSIXlt is c("POSIXlt" "POSIXt")
+  switch(class(x)[[1]],
+         integer = "integer",
+         character = "string",
+         logical = "boolean",
+         double = "double",
+         numeric = "double",
+         raw = "binary",
+         list = "array",
+         struct = "struct",
+         environment = "map",
+         Date = "date",
+         POSIXlt = "timestamp",
+         POSIXct = "timestamp",
+         stop(paste("Unsupported type for DataFrame:", class(x))))
+}
+
 #' infer the SQL type
 infer_type <- function(x) {
   if (is.null(x)) {
     stop("can not infer type from NULL")
   }
 
-  # class of POSIXlt is c("POSIXlt" "POSIXt")
-  type <- switch(class(x)[[1]],
-                 integer = "integer",
-                 character = "string",
-                 logical = "boolean",
-                 double = "double",
-                 numeric = "double",
-                 raw = "binary",
-                 list = "array",
-                 struct = "struct",
-                 environment = "map",
-                 Date = "date",
-                 POSIXlt = "timestamp",
-                 POSIXct = "timestamp",
-                 stop(paste("Unsupported type for DataFrame:", class(x))))
+  type <- getInternalType(x)
 
   if (type == "map") {
     stopifnot(length(x) > 0)
@@ -57,7 +63,7 @@ infer_type <- function(x) {
     })
     type <- Reduce(paste0, type)
     type <- paste0("struct<", substr(type, 1, nchar(type) - 1), ">")
-  } else if (length(x) > 1) {
+  } else if (length(x) > 1 && type != "binary") {
     paste0("array<", infer_type(x[[1]]), ">")
   } else {
     type
@@ -90,19 +96,25 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
       if (is.null(schema)) {
         schema <- names(data)
       }
-      n <- nrow(data)
-      m <- ncol(data)
+
       # get rid of factor type
-      dropFactor <- function(x) {
+      cleanCols <- function(x) {
         if (is.factor(x)) {
           as.character(x)
         } else {
           x
         }
       }
-      data <- lapply(1:n, function(i) {
-        lapply(1:m, function(j) { dropFactor(data[i,j]) })
-      })
+
+      # drop factors and wrap lists
+      data <- setNames(lapply(data, cleanCols), NULL)
+
+      # check if all columns have supported type
+      lapply(data, getInternalType)
+
+      # convert to rows
+      args <- list(FUN = list, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+      data <- do.call(mapply, append(args, data))
   }
   if (is.list(data)) {
     sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sqlContext)
@@ -144,7 +156,6 @@ createDataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0
   }
 
   stopifnot(class(schema) == "structType")
-  # schemaString <- tojson(schema)
 
   jrdd <- getJRDD(lapply(rdd, function(x) x), "row")
   srdd <- callJMethod(jrdd, "rdd")
@@ -160,22 +171,21 @@ as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(sqlContext, data, schema, samplingRatio)
 }
 
-# toDF
-#
-# Converts an RDD to a DataFrame by infer the types.
-#
-# @param x An RDD
-#
-# @rdname DataFrame
-# @export
-# @examples
-#\dontrun{
-# sc <- sparkR.init()
-# sqlContext <- sparkRSQL.init(sc)
-# rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
-# df <- toDF(rdd)
-# }
-
+#' toDF
+#'
+#' Converts an RDD to a DataFrame by infer the types.
+#'
+#' @param x An RDD
+#'
+#' @rdname DataFrame
+#' @noRd
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' rdd <- lapply(parallelize(sc, 1:10), function(x) list(a=x, b=as.character(x)))
+#' df <- toDF(rdd)
+#'}
 setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
 setMethod("toDF", signature(x = "RDD"),
@@ -217,23 +227,23 @@ jsonFile <- function(sqlContext, path) {
 }
 
 
-# JSON RDD
-#
-# Loads an RDD storing one JSON object per string as a DataFrame.
-#
-# @param sqlContext SQLContext to use
-# @param rdd An RDD of JSON string
-# @param schema A StructType object to use as schema
-# @param samplingRatio The ratio of simpling used to infer the schema
-# @return A DataFrame
-# @export
-# @examples
-#\dontrun{
-# sc <- sparkR.init()
-# sqlContext <- sparkRSQL.init(sc)
-# rdd <- texFile(sc, "path/to/json")
-# df <- jsonRDD(sqlContext, rdd)
-# }
+#' JSON RDD
+#'
+#' Loads an RDD storing one JSON object per string as a DataFrame.
+#'
+#' @param sqlContext SQLContext to use
+#' @param rdd An RDD of JSON string
+#' @param schema A StructType object to use as schema
+#' @param samplingRatio The ratio of simpling used to infer the schema
+#' @return A DataFrame
+#' @noRd
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' rdd <- texFile(sc, "path/to/json")
+#' df <- jsonRDD(sqlContext, rdd)
+#'}
 
 # TODO: support schema
 jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
@@ -452,14 +462,21 @@ dropTempTable <- function(sqlContext, tableName) {
 #'
 #' @param sqlContext SQLContext to use
 #' @param path The path of files to load
-#' @param source the name of external data source
+#' @param source The name of external data source
+#' @param schema The data schema defined in structType
 #' @return DataFrame
+#' @rdname read.df
+#' @name read.df
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' df1 <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' schema <- structType(structField("name", "string"),
+#'                      structField("info", "map<string,double>"))
+#' df2 <- read.df(sqlContext, mapTypeJsonPath, "json", schema)
+#' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
 #' }
 
 read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
@@ -482,9 +499,8 @@ read.df <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) 
   dataFrame(sdf)
 }
 
-#' @aliases loadDF
-#' @export
-
+#' @rdname read.df
+#' @name loadDF
 loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
   read.df(sqlContext, path, source, schema, ...)
 }

@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -706,6 +706,24 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
+   * performance API to be used carefully only if we are sure that the RDD elements are
+   * serializable and don't require closure cleaning.
+   *
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
+   */
+  private[spark] def mapPartitionsInternal[U: ClassTag](
+      f: Iterator[T] => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
+      preservesPartitioning)
+  }
+
+  /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    *
@@ -1119,11 +1137,9 @@ abstract class RDD[T: ClassTag](
   def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
-   * :: Experimental ::
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
    */
-  @Experimental
   def countApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = withScope {
@@ -1152,10 +1168,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Approximate version of countByValue().
    */
-  @Experimental
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] = withScope {
@@ -1174,7 +1188,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Return approximate number of distinct elements in the RDD.
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
@@ -1190,7 +1203,6 @@ abstract class RDD[T: ClassTag](
    * @param sp The precision value for the sparse set, between 0 and 32.
    *           If `sp` equals 0, the sparse representation is skipped.
    */
-  @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = withScope {
     require(p >= 4, s"p ($p) must be >= 4")
     require(sp <= 32, s"sp ($sp) must be <= 32")
@@ -1315,7 +1327,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by the specified
-   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of
+   * [[takeOrdered]]. For example:
    * {{{
    *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
    *   // returns Array(12)

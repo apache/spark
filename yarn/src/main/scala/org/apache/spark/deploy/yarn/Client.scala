@@ -225,7 +225,31 @@ private[spark] class Client(
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
-    appContext.setResource(capability)
+
+    if (sparkConf.contains("spark.yarn.am.nodeLabelExpression")) {
+      try {
+        val amRequest = Records.newRecord(classOf[ResourceRequest])
+        amRequest.setResourceName(ResourceRequest.ANY)
+        amRequest.setPriority(Priority.newInstance(0))
+        amRequest.setCapability(capability)
+        amRequest.setNumContainers(1)
+        val amLabelExpression = sparkConf.get("spark.yarn.am.nodeLabelExpression")
+        val method = amRequest.getClass.getMethod("setNodeLabelExpression", classOf[String])
+        method.invoke(amRequest, amLabelExpression)
+
+        val setResourceRequestMethod =
+          appContext.getClass.getMethod("setAMContainerResourceRequest", classOf[ResourceRequest])
+        setResourceRequestMethod.invoke(appContext, amRequest)
+      } catch {
+        case e: NoSuchMethodException =>
+          logWarning("Ignoring spark.yarn.am.nodeLabelExpression because the version " +
+            "of YARN does not support it")
+          appContext.setResource(capability)
+      }
+    } else {
+      appContext.setResource(capability)
+    }
+
     appContext
   }
 
@@ -258,7 +282,8 @@ private[spark] class Client(
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
-        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
+        "Please check the values of 'yarn.scheduler.maximum-allocation-mb' and/or " +
+        "'yarn.nodemanager.resource.memory-mb'.")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
@@ -1311,11 +1336,11 @@ object Client extends Logging {
    *
    * This method uses two configuration values:
    *
-   * - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
-   *   only be valid in the gateway node.
-   * - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
-   *   contain, for example, env variable references, which will be expanded by the NMs when
-   *   starting containers.
+   *  - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
+   *    only be valid in the gateway node.
+   *  - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
+   *    contain, for example, env variable references, which will be expanded by the NMs when
+   *    starting containers.
    *
    * If either config is not available, the input path is returned.
    */
@@ -1337,55 +1362,8 @@ object Client extends Logging {
       conf: Configuration,
       credentials: Credentials) {
     if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      val mirror = universe.runtimeMirror(getClass.getClassLoader)
-
-      try {
-        val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-        val hiveConf = hiveConfClass.newInstance()
-
-        val hiveConfGet = (param: String) => Option(hiveConfClass
-          .getMethod("get", classOf[java.lang.String])
-          .invoke(hiveConf, param))
-
-        val metastore_uri = hiveConfGet("hive.metastore.uris")
-
-        // Check for local metastore
-        if (metastore_uri != None && metastore_uri.get.toString.size > 0) {
-          val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
-          val hive = hiveClass.getMethod("get").invoke(null, hiveConf.asInstanceOf[Object])
-
-          val metastore_kerberos_principal_conf_var = mirror.classLoader
-            .loadClass("org.apache.hadoop.hive.conf.HiveConf$ConfVars")
-            .getField("METASTORE_KERBEROS_PRINCIPAL").get("varname").toString
-
-          val principal = hiveConfGet(metastore_kerberos_principal_conf_var)
-
-          val username = Option(UserGroupInformation.getCurrentUser().getUserName)
-          if (principal != None && username != None) {
-            val tokenStr = hiveClass.getMethod("getDelegationToken",
-              classOf[java.lang.String], classOf[java.lang.String])
-              .invoke(hive, username.get, principal.get).asInstanceOf[java.lang.String]
-
-            val hive2Token = new Token[DelegationTokenIdentifier]()
-            hive2Token.decodeFromUrlString(tokenStr)
-            credentials.addToken(new Text("hive.server2.delegation.token"), hive2Token)
-            logDebug("Added hive.Server2.delegation.token to conf.")
-            hiveClass.getMethod("closeCurrent").invoke(null)
-          } else {
-            logError("Username or principal == NULL")
-            logError(s"""username=${username.getOrElse("(NULL)")}""")
-            logError(s"""principal=${principal.getOrElse("(NULL)")}""")
-            throw new IllegalArgumentException("username and/or principal is equal to null!")
-          }
-        } else {
-          logDebug("HiveMetaStore configured in localmode")
-        }
-      } catch {
-        case e: java.lang.NoSuchMethodException => { logInfo("Hive Method not found " + e); return }
-        case e: java.lang.ClassNotFoundException => { logInfo("Hive Class not found " + e); return }
-        case e: Exception => { logError("Unexpected Exception " + e)
-          throw new RuntimeException("Unexpected exception", e)
-        }
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
+        credentials.addToken(new Text("hive.server2.delegation.token"), _)
       }
     }
   }
