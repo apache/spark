@@ -228,10 +228,11 @@ class GroupedDataset[K, V] private[sql](
     val namedColumns =
       columns.map(
         _.withInputType(resolvedVEncoder, dataAttributes).named)
-    val keyColumn = if (groupingAttributes.length > 1) {
-      Alias(CreateStruct(groupingAttributes), "key")()
-    } else {
+    val keyColumn = if (resolvedKEncoder.flat) {
+      assert(groupingAttributes.length == 1)
       groupingAttributes.head
+    } else {
+      Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)

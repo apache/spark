@@ -272,6 +272,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3 -> "abcxyz", 5 -> "hello")
   }
 
+  test("groupBy single field class, count") {
+    val ds = Seq("abc", "xyz", "hello").toDS()
+    val count = ds.groupBy(s => Tuple1(s.length)).count()
+
+    checkAnswer(
+      count,
+      (Tuple1(3), 2L), (Tuple1(5), 1L)
+    )
+  }
+
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupBy($"_1")
@@ -280,6 +290,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       agged,
       ("a", 30), ("b", 3), ("c", 1))
+  }
+
+  test("groupBy columns, count") {
+    val ds = Seq("a" -> 1, "b" -> 1, "a" -> 2).toDS()
+    val count = ds.groupBy($"_1").count()
+
+    checkAnswer(
+      count,
+      (Row("a"), 2L), (Row("b"), 1L))
   }
 
   test("groupBy columns asKey, map") {

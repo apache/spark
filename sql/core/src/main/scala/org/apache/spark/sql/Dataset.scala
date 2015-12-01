@@ -70,7 +70,7 @@ class Dataset[T] private[sql](
    * implicit so that we can use it when constructing new [[Dataset]] objects that have the same
    * object type (that will be possibly resolved to a different schema).
    */
-  private implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
+  private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
