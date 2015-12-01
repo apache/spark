@@ -467,28 +467,55 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   /**
+   * @group expr_ops
+   * @deprecated As of 1.6.0, replaced by `isnan`. This will be removed in Spark 2.0.
+   */
+  @deprecated("Use isnan. This will be removed in Spark 2.0.", "1.6.0")
+  def isNaN: Column = isnan
+
+  /**
    * True if the current expression is NaN.
    *
    * @group expr_ops
-   * @since 1.5.0
+   * @since 1.6.0
    */
-  def isNaN: Column = withExpr { IsNaN(expr) }
+  def isnan: Column = withExpr { IsNaN(expr) }
+
+  /**
+   * @group expr_ops
+   * @deprecated As of 1.6.0, replaced by `isnull`. This will be removed in Spark 2.0.
+   */
+  def isNull: Column = isnull
 
   /**
    * True if the current expression is null.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 1.6.0
    */
-  def isNull: Column = withExpr { IsNull(expr) }
+  def isnull: Column = withExpr { IsNull(expr) }
+
+  /**
+   * @group expr_ops
+   * @deprecated As of 1.6.0, replaced by `isnotnull`. This will be removed in Spark 2.0.
+   */
+  def isNotNull: Column = isnotnull
 
   /**
    * True if the current expression is NOT null.
    *
    * @group expr_ops
-   * @since 1.3.0
+   * @since 1.6.0
    */
-  def isNotNull: Column = withExpr { IsNotNull(expr) }
+  def isnotnull: Column = withExpr { IsNotNull(expr) }
+
+  /**
+   * True if the current expression is NOT null.
+   *
+   * @group expr_ops
+   * @since 1.6.0
+   */
+  def notnull: Column = isnotnull
 
   /**
    * Boolean OR.

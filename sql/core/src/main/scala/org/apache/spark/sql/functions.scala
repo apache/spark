@@ -866,6 +866,22 @@ object functions extends LegacyFunctions {
   def isnull(e: Column): Column = withExpr { IsNull(e.expr) }
 
   /**
+   * Return true iff the column is NOT null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def isnotnull(e: Column): Column = withExpr { IsNotNull(e.expr) }
+
+  /**
+   * Return true iff the column is NOT null.
+   *
+   * @group normal_funcs
+   * @since 1.6.0
+   */
+  def notnull(e: Column): Column = isnotnull(e)
+
+  /**
    * A column expression that generates monotonically increasing 64-bit integers.
    *
    * The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.

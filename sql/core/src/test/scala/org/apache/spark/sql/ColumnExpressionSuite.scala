@@ -265,9 +265,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       complexData.collect().toSeq.map(r => Row(!r.getBoolean(3))))
   }
 
-  test("isNull") {
+  test("isnull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.toDF.where($"s".isnull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
 
     checkAnswer(
@@ -275,9 +275,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(true, false))
   }
 
-  test("isNotNull") {
+  test("isnotnull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.toDF.where($"s".isnotnull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
 
     checkAnswer(
@@ -285,7 +285,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(false, true))
   }
 
-  test("isNaN") {
+  test("isnan") {
     val testData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(Double.NaN, Float.NaN) ::
       Row(math.log(-1), math.log(-3).toFloat) ::
@@ -294,11 +294,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("a", DoubleType), StructField("b", FloatType))))
 
     checkAnswer(
-      testData.select($"a".isNaN, $"b".isNaN),
+      testData.select($"a".isnan, $"b".isnan),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      testData.select(isNaN($"a"), isNaN($"b")),
+      testData.select(isnan($"a"), isnan($"b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
