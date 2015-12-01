@@ -172,7 +172,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
 
   override def afterFunction() {
     super.afterFunction()
-    StreamingContext.getActive().foreach { _.stop() }
+    if (ssc != null) { ssc.stop() }
     Utils.deleteRecursively(new File(checkpointDir))
   }
 
