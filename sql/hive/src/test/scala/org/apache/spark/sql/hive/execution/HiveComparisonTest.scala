@@ -435,8 +435,6 @@ abstract class HiveComparisonTest
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)
               if (isSpeculative && !reset) {
-                // TODO: log this at a very low level that won't appear in the console appender
-                // then throw a custom exception
                 fail("Failed on first run; retrying")
               } else {
                 fail(errorMessage)
@@ -448,16 +446,27 @@ abstract class HiveComparisonTest
         new FileOutputStream(new File(passedDirectory, testCaseName)).close()
       }
 
+      val canSpeculativelyTryWithoutReset: Boolean = {
+        val excludedSubstrings = Seq(
+          "into table",
+          "create table",
+          "drop index"
+        )
+        !queryList.map(_.toLowerCase).exists { query =>
+          excludedSubstrings.exists(s => query.contains(s))
+        }
+      }
+
       try {
         try {
-          if (tryWithoutResettingFirst) {
+          if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
             doTest(reset = false, isSpeculative = true)
           } else {
             doTest(reset)
           }
         } catch {
           case tf: org.scalatest.exceptions.TestFailedException =>
-            if (tryWithoutResettingFirst) {
+            if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
               logWarning("Test failed without reset(); retrying with reset()")
               doTest(reset = true)
             } else {
