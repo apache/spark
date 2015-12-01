@@ -278,6 +278,23 @@ abstract class HiveComparisonTest
           TestHive.reset()
         }
 
+        // Many tests drop indexes on src and srcpart at the beginning, so we need to load those
+        // tables here. Since DROP INDEX DDL is just passed to Hive, it bypasses the analyzer and
+        // thus the tables referenced in those DDL commands cannot be extracted for use by our
+        // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
+        // command expect these tables to exist.
+        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        for (table <- Seq("src", "srcpart")) {
+          val hasMatchingQuery = queryList.exists { query =>
+            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            normalizedQuery.endsWith(table) || normalizedQuery.contains(s"from $table")
+          }
+          if (hasShowTableCommand || hasMatchingQuery) {
+            println(s"Loading $table")
+            TestHive.loadTestTable(table)
+          }
+        }
+
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i) =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
