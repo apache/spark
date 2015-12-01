@@ -138,18 +138,16 @@ class InternalTrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassT
           // If the RDD is not partitioned the right way, let us repartition it using the
           // partition index as the key. This is to ensure that state RDD is always partitioned
           // before creating another state RDD using it
-          val kvRDD = rdd.mapPartitions { iter =>
-            iter.map { x => (TaskContext.get().partitionId(), x)}
-          }
-          kvRDD.partitionBy(partitioner).mapPartitions(iter => iter.map { _._2 },
-            preservesPartitioning = true)
+          TrackStateRDD.createFromRDD[K, V, S, E](
+            rdd.flatMap { _.stateMap.getAll() }, partitioner, validTime)
         } else {
           rdd
         }
       case None =>
         TrackStateRDD.createFromPairRDD[K, V, S, E](
           spec.getInitialStateRDD().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
-          partitioner, validTime
+          partitioner,
+          validTime
         )
     }
 

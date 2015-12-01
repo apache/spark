@@ -478,7 +478,7 @@ class TrackStateByKeySuite extends SparkFunSuite
   }
 
 
-  test("trackStateByKey - drivery failure recovery") {
+  test("trackStateByKey - driver failure recovery") {
     val inputData =
       Seq(
         Seq(),
