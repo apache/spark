@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
-
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
  * either side can borrow memory from the other.
@@ -41,98 +40,105 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * The implication is that attempts to cache blocks may fail if execution has already eaten
  * up most of the storage space, in which case the new blocks will be evicted immediately
  * according to their respective storage levels.
+ *
+ * @param storageRegionSize Size of the storage region, in bytes.
+ *                          This region is not statically reserved; execution can borrow from
+ *                          it if necessary. Cached blocks can be evicted only if actual
+ *                          storage memory usage exceeds this region.
  */
-private[spark] class UnifiedMemoryManager(
+private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
     maxMemory: Long,
+    private val storageRegionSize: Long,
     numCores: Int)
-  extends MemoryManager(conf, numCores) {
+  extends MemoryManager(
+    conf,
+    numCores,
+    storageRegionSize,
+    maxMemory - storageRegionSize) {
 
-  def this(conf: SparkConf, numCores: Int) {
-    this(conf, UnifiedMemoryManager.getMaxMemory(conf), numCores)
-  }
+  // We always maintain this invariant:
+  assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
 
-  /**
-   * Size of the storage region, in bytes.
-   *
-   * This region is not statically reserved; execution can borrow from it if necessary.
-   * Cached blocks can be evicted only if actual storage memory usage exceeds this region.
-   */
-  private val storageRegionSize: Long = {
-    (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
-  }
-
-  /**
-   * Total amount of memory, in bytes, not currently occupied by either execution or storage.
-   */
-  private def totalFreeMemory: Long = synchronized {
-    assert(_executionMemoryUsed <= maxMemory)
-    assert(_storageMemoryUsed <= maxMemory)
-    assert(_executionMemoryUsed + _storageMemoryUsed <= maxMemory)
-    maxMemory - _executionMemoryUsed - _storageMemoryUsed
-  }
-
-  /**
-   * Total available memory for execution, in bytes.
-   * In this model, this is equivalent to the amount of memory not occupied by storage.
-   */
-  override def maxExecutionMemory: Long = synchronized {
-    maxMemory - _storageMemoryUsed
-  }
-
-  /**
-   * Total available memory for storage, in bytes.
-   * In this model, this is equivalent to the amount of memory not occupied by execution.
-   */
   override def maxStorageMemory: Long = synchronized {
-    maxMemory - _executionMemoryUsed
+    maxMemory - onHeapExecutionMemoryPool.memoryUsed
   }
 
   /**
-   * Acquire N bytes of memory for execution, evicting cached blocks if necessary.
+   * Try to acquire up to `numBytes` of execution memory for the current task and return the
+   * number of bytes obtained, or 0 if none can be allocated.
    *
-   * This method evicts blocks only up to the amount of memory borrowed by storage.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return number of bytes successfully granted (<= N).
+   * This call may block until there is enough free memory in some situations, to make sure each
+   * task has a chance to ramp up to at least 1 / 2N of the total memory pool (where N is the # of
+   * active tasks) before it is forced to spill. This can happen if the number of tasks increase
+   * but an older task had a lot of memory already.
    */
-  private[memory] override def doAcquireExecutionMemory(
+  override private[memory] def acquireExecutionMemory(
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Long = synchronized {
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
-    val memoryBorrowedByStorage = math.max(0, _storageMemoryUsed - storageRegionSize)
-    // If there is not enough free memory AND storage has borrowed some execution memory,
-    // then evict as much memory borrowed by storage as needed to grant this request
-    val shouldEvictStorage = totalFreeMemory < numBytes && memoryBorrowedByStorage > 0
-    if (shouldEvictStorage) {
-      val spaceToEnsure = math.min(numBytes, memoryBorrowedByStorage)
-      memoryStore.ensureFreeSpace(spaceToEnsure, evictedBlocks)
+    memoryMode match {
+      case MemoryMode.ON_HEAP =>
+        if (numBytes > onHeapExecutionMemoryPool.memoryFree) {
+          val extraMemoryNeeded = numBytes - onHeapExecutionMemoryPool.memoryFree
+          // There is not enough free memory in the execution pool, so try to reclaim memory from
+          // storage. We can reclaim any free memory from the storage pool. If the storage pool
+          // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
+          // the memory that storage has borrowed from execution.
+          val memoryReclaimableFromStorage =
+            math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
+          if (memoryReclaimableFromStorage > 0) {
+            // Only reclaim as much space as is necessary and available:
+            val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
+              math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
+            onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+          }
+        }
+        onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP =>
+        // For now, we only support on-heap caching of data, so we do not need to interact with
+        // the storage pool when allocating off-heap memory. This will change in the future, though.
+        super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
     }
-    val bytesToGrant = math.min(numBytes, totalFreeMemory)
-    _executionMemoryUsed += bytesToGrant
-    bytesToGrant
   }
 
-  /**
-   * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
-   * Blocks evicted in the process, if any, are added to `evictedBlocks`.
-   * @return whether all N bytes were successfully granted.
-   */
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
-    memoryStore.ensureFreeSpace(blockId, numBytes, evictedBlocks)
-    val enoughMemory = totalFreeMemory >= numBytes
-    if (enoughMemory) {
-      _storageMemoryUsed += numBytes
+    if (numBytes > storageMemoryPool.memoryFree) {
+      // There is not enough free memory in the storage pool, so try to borrow free memory from
+      // the execution pool.
+      val memoryBorrowedFromExecution = Math.min(onHeapExecutionMemoryPool.memoryFree, numBytes)
+      onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
+      storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
     }
-    enoughMemory
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
   }
 
+  override def acquireUnrollMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    acquireStorageMemory(blockId, numBytes, evictedBlocks)
+  }
 }
 
-private object UnifiedMemoryManager {
+object UnifiedMemoryManager {
+
+  def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
+    val maxMemory = getMaxMemory(conf)
+    new UnifiedMemoryManager(
+      conf,
+      maxMemory = maxMemory,
+      storageRegionSize =
+        (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
+      numCores = numCores)
+  }
 
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.

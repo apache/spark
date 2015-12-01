@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class SecurityManagerSuite extends SparkFunSuite {
 
@@ -221,6 +221,27 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.akkaSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
+  }
+
+  test("missing secret authentication key") {
+    val conf = new SparkConf().set("spark.authenticate", "true")
+    intercept[IllegalArgumentException] {
+      new SecurityManager(conf)
+    }
+  }
+
+  test("secret authentication key") {
+    val key = "very secret key"
+    val conf = new SparkConf()
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(key === new SecurityManager(conf).getSecretKey())
+
+    val keyFromEnv = "very secret key from env"
+    val conf2 = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
 }

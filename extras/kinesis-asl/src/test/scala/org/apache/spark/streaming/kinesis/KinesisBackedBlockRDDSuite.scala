@@ -22,7 +22,8 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
-class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll {
+abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
+  extends KinesisFunSuite with BeforeAndAfterAll {
 
   private val testData = 1 to 8
 
@@ -37,13 +38,12 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
   private var sc: SparkContext = null
   private var blockManager: BlockManager = null
 
-
   override def beforeAll(): Unit = {
     runIfTestsEnabled("Prepare KinesisTestUtils") {
       testUtils = new KinesisTestUtils()
       testUtils.createStream()
 
-      shardIdToDataAndSeqNumbers = testUtils.pushData(testData)
+      shardIdToDataAndSeqNumbers = testUtils.pushData(testData, aggregate = aggregateTestData)
       require(shardIdToDataAndSeqNumbers.size > 1, "Need data to be sent to multiple shards")
 
       shardIds = shardIdToDataAndSeqNumbers.keySet.toSeq
@@ -247,3 +247,9 @@ class KinesisBackedBlockRDDSuite extends KinesisFunSuite with BeforeAndAfterAll 
     Array.tabulate(num) { i => new StreamBlockId(0, i) }
   }
 }
+
+class WithAggregationKinesisBackedBlockRDDSuite
+  extends KinesisBackedBlockRDDTests(aggregateTestData = true)
+
+class WithoutAggregationKinesisBackedBlockRDDSuite
+  extends KinesisBackedBlockRDDTests(aggregateTestData = false)

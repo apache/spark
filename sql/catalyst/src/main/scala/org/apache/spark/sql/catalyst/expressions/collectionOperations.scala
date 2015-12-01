@@ -68,6 +68,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val lt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -89,6 +91,8 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   private lazy val gt: Comparator[Any] = {
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
     new Comparator[Any]() {
@@ -109,7 +113,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def nullSafeEval(array: Any, ascending: Any): Any = {
     val elementType = base.dataType.asInstanceOf[ArrayType].elementType
     val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(data, if (ascending.asInstanceOf[Boolean]) lt else gt)
+    }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 

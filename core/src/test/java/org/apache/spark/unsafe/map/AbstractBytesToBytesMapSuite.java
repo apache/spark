@@ -17,40 +17,120 @@
 
 package org.apache.spark.unsafe.map;
 
-import java.lang.Exception;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.spark.memory.TaskMemoryManager;
-import org.junit.*;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.junit.Assert.*;
+import scala.Tuple2;
+import scala.Tuple2$;
+import scala.runtime.AbstractFunction1;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.memory.GrantEverythingMemoryManager;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
-import org.apache.spark.unsafe.memory.*;
+import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.memory.MemoryLocation;
+import org.apache.spark.util.Utils;
+
+import static org.hamcrest.Matchers.greaterThan;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.mockito.AdditionalAnswers.returnsSecondArg;
+import static org.mockito.Answers.RETURNS_SMART_NULLS;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Mockito.when;
 
 
 public abstract class AbstractBytesToBytesMapSuite {
 
   private final Random rand = new Random(42);
 
-  private GrantEverythingMemoryManager memoryManager;
+  private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
   private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+
+  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  File tempDir;
+
+  @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
+  @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
+
+  private static final class CompressStream extends AbstractFunction1<OutputStream, OutputStream> {
+    @Override
+    public OutputStream apply(OutputStream stream) {
+      return stream;
+    }
+  }
 
   @Before
   public void setup() {
     memoryManager =
-      new GrantEverythingMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator()));
+      new TestMemoryManager(
+        new SparkConf()
+          .set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())
+          .set("spark.memory.offHeapSize", "256mb"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
+    spillFilesCreated.clear();
+    MockitoAnnotations.initMocks(this);
+    when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+      @Override
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+        TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+        File file = File.createTempFile("spillFile", ".spill", tempDir);
+        spillFilesCreated.add(file);
+        return Tuple2$.MODULE$.apply(blockId, file);
+      }
+    });
+    when(blockManager.getDiskWriter(
+      any(BlockId.class),
+      any(File.class),
+      any(SerializerInstance.class),
+      anyInt(),
+      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      @Override
+      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+        Object[] args = invocationOnMock.getArguments();
+
+        return new DiskBlockObjectWriter(
+          (File) args[1],
+          (SerializerInstance) args[2],
+          (Integer) args[3],
+          new CompressStream(),
+          false,
+          (ShuffleWriteMetrics) args[4],
+          (BlockId) args[0]
+        );
+      }
+    });
+    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
+      .then(returnsSecondArg());
   }
 
   @After
   public void tearDown() {
+    Utils.deleteRecursively(tempDir);
+    tempDir = null;
+
     Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     if (taskMemoryManager != null) {
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
@@ -415,9 +495,8 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void failureToAllocateFirstPage() {
-    memoryManager.markExecutionAsOutOfMemory();
+    memoryManager.limit(1024);  // longArray
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
-    memoryManager.markExecutionAsOutOfMemory();
     try {
       final long[] emptyArray = new long[0];
       final BytesToBytesMap.Location loc =
@@ -439,7 +518,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       int i;
       for (i = 0; i < 127; i++) {
         if (i > 0) {
-          memoryManager.markExecutionAsOutOfMemory();
+          memoryManager.limit(0);
         }
         final long[] arr = new long[]{i};
         final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
@@ -453,6 +532,44 @@ public abstract class AbstractBytesToBytesMapSuite {
       Assert.assertFalse(success);
     } finally {
       map.free();
+    }
+  }
+
+  @Test
+  public void spillInIterator() throws IOException {
+    BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, blockManager, 1, 0.75, 1024, false);
+    try {
+      int i;
+      for (i = 0; i < 1024; i++) {
+        final long[] arr = new long[]{i};
+        final BytesToBytesMap.Location loc = map.lookup(arr, Platform.LONG_ARRAY_OFFSET, 8);
+        loc.putNewKey(arr, Platform.LONG_ARRAY_OFFSET, 8, arr, Platform.LONG_ARRAY_OFFSET, 8);
+      }
+      BytesToBytesMap.MapIterator iter = map.iterator();
+      for (i = 0; i < 100; i++) {
+        iter.next();
+      }
+      // Non-destructive iterator is not spillable
+      Assert.assertEquals(0, iter.spill(1024L * 10));
+      for (i = 100; i < 1024; i++) {
+        iter.next();
+      }
+
+      BytesToBytesMap.MapIterator iter2 = map.destructiveIterator();
+      for (i = 0; i < 100; i++) {
+        iter2.next();
+      }
+      Assert.assertTrue(iter2.spill(1024) >= 1024);
+      for (i = 100; i < 1024; i++) {
+        iter2.next();
+      }
+      assertFalse(iter2.hasNext());
+    } finally {
+      map.free();
+      for (File spillFile : spillFilesCreated) {
+        assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
+          spillFile.exists());
+      }
     }
   }
 
@@ -500,7 +617,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           Platform.LONG_ARRAY_OFFSET,
           8);
         newPeakMemory = map.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0 && i > 0) {
+        if (i % numRecordsPerPage == 0) {
           // We allocated a new page for this record, so peak memory should change
           assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
         } else {
@@ -517,13 +634,6 @@ public abstract class AbstractBytesToBytesMapSuite {
     } finally {
       map.free();
     }
-  }
-
-  @Test
-  public void testAcquirePageInConstructor() {
-    final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 1, PAGE_SIZE_BYTES);
-    assertEquals(1, map.getNumDataPages());
-    map.free();
   }
 
 }

@@ -117,7 +117,6 @@ options for deployment:
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
-* [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system

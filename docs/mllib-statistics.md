@@ -521,6 +521,31 @@ print(testResult) # summary of the test including the p-value, test statistic,
 </div>
 </div>
 
+### Streaming Significance Testing
+MLlib provides online implementations of some tests to support use cases
+like A/B testing. These tests may be performed on a Spark Streaming
+`DStream[(Boolean,Double)]` where the first element of each tuple
+indicates control group (`false`) or treatment group (`true`) and the
+second element is the value of an observation.
+
+Streaming significance testing supports the following parameters:
+
+* `peacePeriod` - The number of initial data points from the stream to
+ignore, used to mitigate novelty effects.
+* `windowSize` - The number of past batches to perform hypothesis
+testing over. Setting to `0` will perform cumulative processing using
+all prior batches.
+
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+[`StreamingTest`](api/scala/index.html#org.apache.spark.mllib.stat.test.StreamingTest)
+provides streaming hypothesis testing.
+
+{% include_example scala/org/apache/spark/examples/mllib/StreamingTestExample.scala %}
+</div>
+</div>
+
 
 ## Random data generation
 
@@ -594,7 +619,7 @@ sc = ... # SparkContext
 
 # Generate a random double RDD that contains 1 million i.i.d. values drawn from the
 # standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-u = RandomRDDs.uniformRDD(sc, 1000000L, 10)
+u = RandomRDDs.normalRDD(sc, 1000000L, 10)
 # Apply a transform to get a random double RDD following `N(1, 4)`.
 v = u.map(lambda x: 1.0 + 2.0 * x)
 {% endhighlight %}

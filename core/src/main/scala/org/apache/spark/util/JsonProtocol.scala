@@ -372,9 +372,10 @@ private[spark] object JsonProtocol {
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
         ("Attempt Number" -> taskCommitDenied.attemptNumber)
-      case ExecutorLostFailure(executorId, isNormalExit) =>
+      case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
         ("Executor ID" -> executorId) ~
-        ("Normal Exit" -> isNormalExit)
+        ("Exit Caused By App" -> exitCausedByApp) ~
+        ("Loss Reason" -> reason.map(_.toString))
       case _ => Utils.emptyJson
     }
     ("Reason" -> reason) ~ json
@@ -402,6 +403,7 @@ private[spark] object JsonProtocol {
     ("RDD ID" -> rddInfo.id) ~
     ("Name" -> rddInfo.name) ~
     ("Scope" -> rddInfo.scope.map(_.toJson)) ~
+    ("Callsite" -> callsiteToJson(rddInfo.callSite)) ~
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
@@ -409,6 +411,11 @@ private[spark] object JsonProtocol {
     ("Memory Size" -> rddInfo.memSize) ~
     ("ExternalBlockStore Size" -> rddInfo.externalBlockStoreSize) ~
     ("Disk Size" -> rddInfo.diskSize)
+  }
+
+  def callsiteToJson(callsite: CallSite): JValue = {
+    ("Short Form" -> callsite.shortForm) ~
+    ("Long Form" -> callsite.longForm)
   }
 
   def storageLevelToJson(storageLevel: StorageLevel): JValue = {
@@ -817,10 +824,13 @@ private[spark] object JsonProtocol {
         val attemptNo = Utils.jsonOption(json \ "Attempt Number").map(_.extract[Int]).getOrElse(-1)
         TaskCommitDenied(jobId, partitionId, attemptNo)
       case `executorLostFailure` =>
-        val isNormalExit = Utils.jsonOption(json \ "Normal Exit").
-          map(_.extract[Boolean])
+        val exitCausedByApp = Utils.jsonOption(json \ "Exit Caused By App").map(_.extract[Boolean])
         val executorId = Utils.jsonOption(json \ "Executor ID").map(_.extract[String])
-        ExecutorLostFailure(executorId.getOrElse("Unknown"), isNormalExit.getOrElse(false))
+        val reason = Utils.jsonOption(json \ "Loss Reason").map(_.extract[String])
+        ExecutorLostFailure(
+          executorId.getOrElse("Unknown"),
+          exitCausedByApp.getOrElse(true),
+          reason)
       case `unknownReason` => UnknownReason
     }
   }
@@ -854,6 +864,9 @@ private[spark] object JsonProtocol {
     val scope = Utils.jsonOption(json \ "Scope")
       .map(_.extract[String])
       .map(RDDOperationScope.fromJson)
+    val callsite = Utils.jsonOption(json \ "Callsite")
+      .map(callsiteFromJson)
+      .getOrElse(CallSite.empty)
     val parentIds = Utils.jsonOption(json \ "Parent IDs")
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
@@ -866,12 +879,18 @@ private[spark] object JsonProtocol {
       .getOrElse(json \ "Tachyon Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
-    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, parentIds, scope)
+    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel, parentIds, callsite, scope)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.externalBlockStoreSize = externalBlockStoreSize
     rddInfo.diskSize = diskSize
     rddInfo
+  }
+
+  def callsiteFromJson(json: JValue): CallSite = {
+    val shortForm = (json \ "Short Form").extract[String]
+    val longForm = (json \ "Long Form").extract[String]
+    CallSite(shortForm, longForm)
   }
 
   def storageLevelFromJson(json: JValue): StorageLevel = {

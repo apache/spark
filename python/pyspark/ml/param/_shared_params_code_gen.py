@@ -118,7 +118,8 @@ if __name__ == "__main__":
         ("inputCols", "input column names.", None),
         ("outputCol", "output column name.", "self.uid + '__output'"),
         ("numFeatures", "number of features.", None),
-        ("checkpointInterval", "checkpoint interval (>= 1).", None),
+        ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
+         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None),
         ("seed", "random seed.", "hash(type(self).__name__)"),
         ("tol", "the convergence tolerance for iterative algorithms.", None),
         ("stepSize", "Step size to be used for each iteration of optimization.", None),
@@ -135,7 +136,9 @@ if __name__ == "__main__":
          "values >= 0. The class with largest value p/t is predicted, where p is the original " +
          "probability of that class and t is the class' threshold.", None),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
-         "all instance weights as 1.0.", None)]
+         "all instance weights as 1.0.", None),
+        ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
+         "default value is 'auto'.", "'auto'")]
 
     code = []
     for name, doc, defaultValueStr in shared:
@@ -155,7 +158,8 @@ if __name__ == "__main__":
         ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation."),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
-         "Caching can speed up training of deeper trees.")]
+         "Caching can speed up training of deeper trees. Users can set how often should the " +
+         "cache be checkpointed or disable it by setting checkpointInterval.")]
 
     decisionTreeCode = '''class DecisionTreeParams(Params):
     """

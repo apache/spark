@@ -28,16 +28,22 @@ public class TaskMemoryManagerSuite {
   @Test
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
-    manager.allocatePage(4096);  // leak memory
+      new StaticMemoryManager(
+        new SparkConf().set("spark.unsafe.offHeap", "false"),
+        Long.MAX_VALUE,
+        Long.MAX_VALUE,
+        1),
+      0);
+    manager.allocatePage(4096, null);  // leak memory
+    Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
   }
 
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
-    final MemoryBlock dataPage = manager.allocatePage(256);
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "true")), 0);
+    final MemoryBlock dataPage = manager.allocatePage(256, null);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
     final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
@@ -49,11 +55,53 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new GrantEverythingMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
-    final MemoryBlock dataPage = manager.allocatePage(256);
+      new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false")), 0);
+    final MemoryBlock dataPage = manager.allocatePage(256, null);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
+  }
+
+  @Test
+  public void cooperativeSpilling() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    c1.use(100);
+    assert(c1.getUsed() == 100);
+    c2.use(100);
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
+    c1.use(100);
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
+
+    c1.use(50);
+    assert(c1.getUsed() == 50);  // spilled
+    assert(c2.getUsed() == 0);
+    c2.use(50);
+    assert(c1.getUsed() == 50);
+    assert(c2.getUsed() == 50);
+
+    c1.use(100);
+    assert(c1.getUsed() == 100);
+    assert(c2.getUsed() == 0);  // spilled
+
+    c1.free(20);
+    assert(c1.getUsed() == 80);
+    c2.use(10);
+    assert(c1.getUsed() == 80);
+    assert(c2.getUsed() == 10);
+    c2.use(100);
+    assert(c2.getUsed() == 100);
+    assert(c1.getUsed() == 0);  // spilled
+
+    c1.free(0);
+    c2.free(100);
+    assert(manager.cleanUpAllAllocatedMemory() == 0);
   }
 
 }

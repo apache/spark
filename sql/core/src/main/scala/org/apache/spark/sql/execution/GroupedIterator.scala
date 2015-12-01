@@ -27,7 +27,7 @@ object GroupedIterator {
       keyExpressions: Seq[Expression],
       inputSchema: Seq[Attribute]): Iterator[(InternalRow, Iterator[InternalRow])] = {
     if (input.hasNext) {
-      new GroupedIterator(input, keyExpressions, inputSchema)
+      new GroupedIterator(input.buffered, keyExpressions, inputSchema)
     } else {
       Iterator.empty
     }
@@ -64,7 +64,7 @@ object GroupedIterator {
  * @param inputSchema The schema of the rows in the `input` iterator.
  */
 class GroupedIterator private(
-    input: Iterator[InternalRow],
+    input: BufferedIterator[InternalRow],
     groupingExpressions: Seq[Expression],
     inputSchema: Seq[Attribute])
   extends Iterator[(InternalRow, Iterator[InternalRow])] {
@@ -83,10 +83,17 @@ class GroupedIterator private(
 
   /** Holds a copy of an input row that is in the current group. */
   var currentGroup = currentRow.copy()
-  var currentIterator: Iterator[InternalRow] = null
-  assert(keyOrdering.compare(currentGroup, currentRow) == 0)
 
-  // Return true if we already have the next iterator or fetching a new iterator is successful.
+  assert(keyOrdering.compare(currentGroup, currentRow) == 0)
+  var currentIterator = createGroupValuesIterator()
+
+  /**
+   * Return true if we already have the next iterator or fetching a new iterator is successful.
+   *
+   * Note that, if we get the iterator by `next`, we should consume it before call `hasNext`,
+   * because we will consume the input data to skip to next group while fetching a new iterator,
+   * thus make the previous iterator empty.
+   */
   def hasNext: Boolean = currentIterator != null || fetchNextGroupIterator
 
   def next(): (InternalRow, Iterator[InternalRow]) = {
@@ -96,46 +103,64 @@ class GroupedIterator private(
     ret
   }
 
-  def fetchNextGroupIterator(): Boolean = {
-    if (currentRow != null || input.hasNext) {
-      val inputIterator = new Iterator[InternalRow] {
-        // Return true if we have a row and it is in the current group, or if fetching a new row is
-        // successful.
-        def hasNext = {
-          (currentRow != null && keyOrdering.compare(currentGroup, currentRow) == 0) ||
-            fetchNextRowInGroup()
-        }
+  private def fetchNextGroupIterator(): Boolean = {
+    assert(currentIterator == null)
 
-        def fetchNextRowInGroup(): Boolean = {
-          if (currentRow != null || input.hasNext) {
+    if (currentRow == null && input.hasNext) {
+      currentRow = input.next()
+    }
+
+    if (currentRow == null) {
+      // These is no data left, return false.
+      false
+    } else {
+      // Skip to next group.
+      while (input.hasNext && keyOrdering.compare(currentGroup, currentRow) == 0) {
+        currentRow = input.next()
+      }
+
+      if (keyOrdering.compare(currentGroup, currentRow) == 0) {
+        // We are in the last group, there is no more groups, return false.
+        false
+      } else {
+        // Now the `currentRow` is the first row of next group.
+        currentGroup = currentRow.copy()
+        currentIterator = createGroupValuesIterator()
+        true
+      }
+    }
+  }
+
+  private def createGroupValuesIterator(): Iterator[InternalRow] = {
+    new Iterator[InternalRow] {
+      def hasNext: Boolean = currentRow != null || fetchNextRowInGroup()
+
+      def next(): InternalRow = {
+        assert(hasNext)
+        val res = currentRow
+        currentRow = null
+        res
+      }
+
+      private def fetchNextRowInGroup(): Boolean = {
+        assert(currentRow == null)
+
+        if (input.hasNext) {
+          // The inner iterator should NOT consume the input into next group, here we use `head` to
+          // peek the next input, to see if we should continue to process it.
+          if (keyOrdering.compare(currentGroup, input.head) == 0) {
+            // Next input is in the current group.  Continue the inner iterator.
             currentRow = input.next()
-            if (keyOrdering.compare(currentGroup, currentRow) == 0) {
-              // The row is in the current group.  Continue the inner iterator.
-              true
-            } else {
-              // We got a row, but its not in the right group.  End this inner iterator and prepare
-              // for the next group.
-              currentIterator = null
-              currentGroup = currentRow.copy()
-              false
-            }
+            true
           } else {
-            // There is no more input so we are done.
+            // Next input is not in the right group.  End this inner iterator.
             false
           }
-        }
-
-        def next(): InternalRow = {
-          assert(hasNext) // Ensure we have fetched the next row.
-          val res = currentRow
-          currentRow = null
-          res
+        } else {
+          // There is no more data, return false.
+          false
         }
       }
-      currentIterator = inputIterator
-      true
-    } else {
-      false
     }
   }
 }

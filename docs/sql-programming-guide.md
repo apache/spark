@@ -160,7 +160,7 @@ showDF(df)
 
 ## DataFrame Operations
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
 
 Here we include some basic examples of structured data processing using DataFrames:
 
@@ -882,6 +882,44 @@ saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 </div>
 </div>
 
+### Run SQL on files directly
+
+Instead of using read API to load a file into DataFrame and query it, you can also query that
+file directly with SQL.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+DataFrame df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+df <- sql(sqlContext, "SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+</div>
+
 ### Save Modes
 
 Save operations can optionally take a `SaveMode`, that specifies how to handle existing data if
@@ -944,7 +982,8 @@ when a table is dropped.
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.
+of the original data. When writing Parquet files, all columns are automatically converted to be nullable for 
+compatibility reasons.
 
 ### Loading Data Programmatically
 
@@ -1047,15 +1086,6 @@ teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
 for (teenName in collect(teenNames)) {
   cat(teenName, "\n")
 }
-{% endhighlight %}
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.sql("REFRESH TABLE my_table")
 {% endhighlight %}
 
 </div>
@@ -1598,8 +1628,10 @@ YARN cluster. The convenient way to do this is adding them through the `--jars` 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a `HiveContext`.  When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
-directory.
+hive-site.xml, the context automatically creates `metastore_db` in the current directory and
+creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
+Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
+the spark application.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -1788,6 +1820,7 @@ the Data Sources API.  The following options are supported:
       register itself with the JDBC subsystem.
     </td>
   </tr>
+  
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
     <td>
@@ -1797,6 +1830,13 @@ the Data Sources API.  The following options are supported:
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned.
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code>fetchSize</code></td>
+    <td>
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
 </table>
@@ -2018,6 +2058,20 @@ You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 1.5 to 1.6
+
+ - From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
+   connection owns a copy of their own SQL configuration and temporary function registry.  Cached
+   tables are still shared though.  If you prefer to run the Thrift server in the old single-session
+   mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
+   this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
+
+   {% highlight bash %}
+   ./sbin/start-thriftserver.sh \
+     --conf spark.sql.hive.thriftServer.singleSession=true \
+     ...
+   {% endhighlight %}
 
 ## Upgrading From Spark SQL 1.4 to 1.5
 
@@ -2256,7 +2310,7 @@ Several caching related features are not supported yet:
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 1.2.1. Also see http://spark.apache.org/docs/latest/sql-programming-guide.html#interacting-with-different-versions-of-hive-metastore).
+(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

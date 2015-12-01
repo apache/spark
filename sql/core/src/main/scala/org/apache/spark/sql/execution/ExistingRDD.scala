@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
-import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.{HadoopFsRelation, BaseRelation}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.{Row, SQLContext}
 
@@ -74,6 +74,10 @@ private[sql] case class LogicalRDD(
 
   override def children: Seq[LogicalPlan] = Nil
 
+  override protected final def otherCopyArgs: Seq[AnyRef] = {
+    sqlContext :: Nil
+  }
+
   override def newInstance(): LogicalRDD.this.type =
     LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
 
@@ -93,7 +97,9 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    extraInformation: String) extends LeafNode {
+    extraInformation: String,
+    override val outputsUnsafeRows: Boolean = false)
+  extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
@@ -104,29 +110,9 @@ private[sql] object PhysicalRDD {
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
-      relation: BaseRelation): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString)
+      relation: BaseRelation,
+      extraInformation: String = ""): PhysicalRDD = {
+    PhysicalRDD(output, rdd, relation.toString + extraInformation,
+      relation.isInstanceOf[HadoopFsRelation])
   }
-}
-
-/** Logical plan node for scanning data from a local collection. */
-private[sql]
-case class LogicalLocalTable(output: Seq[Attribute], rows: Seq[InternalRow])(sqlContext: SQLContext)
-   extends LogicalPlan with MultiInstanceRelation {
-
-  override def children: Seq[LogicalPlan] = Nil
-
-  override def newInstance(): this.type =
-    LogicalLocalTable(output.map(_.newInstance()), rows)(sqlContext).asInstanceOf[this.type]
-
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LogicalRDD(_, otherRDD) => rows == rows
-    case _ => false
-  }
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    // TODO: Improve the statistics estimation.
-    // This is made small enough so it can be broadcasted.
-    sizeInBytes = sqlContext.conf.autoBroadcastJoinThreshold - 1
-  )
 }
