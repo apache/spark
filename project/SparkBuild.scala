@@ -155,13 +155,15 @@ object SparkBuild extends PomBuild {
       if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
+    // TODO(thunterdb) how to set these based on the current version of the JVM?
     javacJVMVersion := "1.7",
     scalacJVMVersion := "1.7",
 
     javacOptions in Compile ++= Seq(
-      "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value,
-      "-target", javacJVMVersion.value
+      "-encoding", "UTF-8"
+      // TODO(thunterdb) make it conditional for <= "1.7"
+      //"-source", javacJVMVersion.value,
+      //"-target", javacJVMVersion.value
     ),
 
     scalacOptions in Compile ++= Seq(
