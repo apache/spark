@@ -443,13 +443,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       defaultOverrides()
 
       runSqlHive("USE default")
-
-      // Just loading src makes a lot of tests pass.  This is because some tests do something like
-      // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
-      // Analyzer and thus the test table auto-loading mechanism.
-      // Remove after we handle more DDL operations natively.
-      loadTestTable("src")
-      loadTestTable("srcpart")
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
