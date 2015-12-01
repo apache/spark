@@ -35,10 +35,10 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off$
 
-public class JavaStopWordsRemover {
+public class JavaStopWordsRemoverExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaStopWordsRemover");
+    SparkConf conf = new SparkConf().setAppName("JavaStopWordsRemoverExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 

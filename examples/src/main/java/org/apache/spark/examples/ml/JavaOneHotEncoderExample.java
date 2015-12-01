@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
-// $example on$
+// $example off$
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-// $example off
+// $example off$
 
 public class JavaOneHotEncoderExample {
   public static void main(String[] args) {

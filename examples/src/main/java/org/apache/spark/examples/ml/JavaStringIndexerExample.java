@@ -51,7 +51,7 @@ public class JavaStringIndexerExample {
       RowFactory.create(5, "c")
     ));
     StructType schema = new StructType(new StructField[]{
-      createStructField("id", DoubleType, false),
+      createStructField("id", IntegerType, false),
       createStructField("category", StringType, false)
     });
     DataFrame df = sqlContext.createDataFrame(jrdd, schema);

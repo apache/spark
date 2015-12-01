@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
-// $example on$
+// $example off$
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -50,7 +50,7 @@ public class JavaTokenizerExample {
     ));
 
     StructType schema = new StructType(new StructField[]{
-      new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("label", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 

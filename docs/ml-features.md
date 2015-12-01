@@ -737,7 +737,7 @@ This example below demonstrates how to transform vectors using a transforming ve
 Refer to the [ElementwiseProduct Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ElementwiseProduct)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/ElementWiseProductExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/ElementwiseProductExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">

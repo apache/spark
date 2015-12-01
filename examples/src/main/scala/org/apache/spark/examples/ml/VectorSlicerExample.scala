@@ -26,6 +26,7 @@ import org.apache.spark.sql.types.StructType
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.linalg.Vectors
 
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
@@ -34,7 +35,7 @@ object VectorSlicerExample {
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val data = Array(Row(-2.0, 2.3, 0.0))
+    val data = Array(Row(Vectors.dense(-2.0, 2.3, 0.0)))
 
     val defaultAttr = NumericAttribute.defaultAttr
     val attrs = Array("f1", "f2", "f3").map(defaultAttr.withName)

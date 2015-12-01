@@ -45,7 +45,7 @@ public class JavaVectorIndexerExample {
     VectorIndexerModel indexerModel = indexer.fit(data);
 
     Map<Integer, Map<Double, Integer>> categoryMaps = indexerModel.javaCategoryMaps();
-    System.out.print("Chose " + categoryMaps.size() + "categorical features:");
+    System.out.print("Chose " + categoryMaps.size() + " categorical features:");
     for (Integer feature : categoryMaps.keySet()) {
       System.out.print(" " + feature);
     }
