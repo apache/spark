@@ -64,12 +64,12 @@ abstract class QueryTest extends PlanTest {
    *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
    *    which performs a subset of the checks done by this function.
    */
-  protected def checkAnswer[T : Encoder](
-      ds: => Dataset[T],
+  protected def checkAnswer[T](
+      ds: Dataset[T],
       expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
-      sqlContext.createDataset(expectedAnswer).toDF().collect().toSeq)
+      sqlContext.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
 
     checkDecoding(ds, expectedAnswer: _*)
   }
