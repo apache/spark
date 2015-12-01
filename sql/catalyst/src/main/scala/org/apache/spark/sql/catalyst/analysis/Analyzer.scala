@@ -223,10 +223,13 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        // TODO: We need to use bitmasks to determine which grouping expressions need to be
-        // set as nullable. For example, if we have GROUPING SETS ((a,b), a), we do not need
-        // to change the nullability of a.
-        val attributeMap = groupByAliases.map(a => (a -> a.toAttribute.withNullability(true))).toMap
+        val attributeMap = groupByAliases.zipWithIndex.map { case (a, idx) =>
+          if (x.bitmasks.exists(bitmask => (bitmask & 1 << idx) == 0)) {
+            (a -> a.toAttribute.withNullability(true))
+          } else {
+            (a -> a.toAttribute)
+          }
+        }.toMap
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map {
           // If an expression is an aggregate (contains a AggregateExpression) then we dont change
