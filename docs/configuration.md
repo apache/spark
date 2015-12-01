@@ -565,6 +565,13 @@ Apart from these, the following properties are also available, and may be useful
     How many finished batches the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.retainedDeadExecutors</code></td>
+  <td>100</td>
+  <td>
+    How many dead executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization

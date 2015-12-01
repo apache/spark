@@ -69,7 +69,7 @@ private[ui] class ExecutorsPage(
   }
 
   private def listingExecTable(storageStatusList: Seq[StorageStatus], isActive: Boolean)
-      : Seq[Node] = {
+    : Seq[Node] = {
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
@@ -77,7 +77,7 @@ private[ui] class ExecutorsPage(
       ExecutorsPage.getExecInfo(listener, statusId, isActive)
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
-    val isShowThreadDump = threadDumpEnabled && isActive
+    val shouldShowThreadDump = threadDumpEnabled && isActive
 
     // scalastyle:off
     <div class="row-fluid">
@@ -115,10 +115,10 @@ private[ui] class ExecutorsPage(
             </span>
             </th>
             {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
-            {if (isShowThreadDump) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
+            {if (shouldShowThreadDump) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
           </thead>
           <tbody>
-            {execInfoSorted.map(execRow(_, logsExist, isShowThreadDump))}
+            {execInfoSorted.map(execRow(_, logsExist, shouldShowThreadDump))}
           </tbody>
         </table>
       </div>
@@ -127,8 +127,8 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummary, logsExist: Boolean, isShowThreadDump: Boolean)
-      : Seq[Node] = {
+  private def execRow(info: ExecutorSummary, logsExist: Boolean, shouldShowThreadDump: Boolean)
+    : Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
