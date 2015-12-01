@@ -30,7 +30,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * may be written by Netty in a more efficient manner (i.e., zero-copy write).
  * Similarly, the client-side decoding will reuse the Netty ByteBuf as the buffer.
  */
-public final class ChunkFetchSuccess extends ResponseWithBody {
+public final class ChunkFetchSuccess extends AbstractResponseMessage {
   public final StreamChunkId streamChunkId;
 
   public ChunkFetchSuccess(StreamChunkId streamChunkId, ManagedBuffer buffer) {
@@ -67,14 +67,14 @@ public final class ChunkFetchSuccess extends ResponseWithBody {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamChunkId, body);
+    return Objects.hashCode(streamChunkId, body());
   }
 
   @Override
   public boolean equals(Object other) {
     if (other instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess o = (ChunkFetchSuccess) other;
-      return streamChunkId.equals(o.streamChunkId) && body.equals(o.body);
+      return streamChunkId.equals(o.streamChunkId) && super.equals(o);
     }
     return false;
   }
@@ -83,7 +83,7 @@ public final class ChunkFetchSuccess extends ResponseWithBody {
   public String toString() {
     return Objects.toStringHelper(this)
       .add("streamChunkId", streamChunkId)
-      .add("buffer", body)
+      .add("buffer", body())
       .toString();
   }
 }

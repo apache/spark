@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle.mesos;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,11 +55,11 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
 
   public void registerDriverWithShuffleService(String host, int port) throws IOException {
     checkInit();
-    byte[] registerDriver = new RegisterDriver(appId).toByteArray();
+    ByteBuffer registerDriver = new RegisterDriver(appId).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
     client.sendRpc(registerDriver, new RpcResponseCallback() {
       @Override
-      public void onSuccess(byte[] response) {
+      public void onSuccess(ByteBuffer response) {
         logger.info("Successfully registered app " + appId + " with external shuffle service.");
       }
 

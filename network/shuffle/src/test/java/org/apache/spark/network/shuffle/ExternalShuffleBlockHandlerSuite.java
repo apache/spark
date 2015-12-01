@@ -60,12 +60,12 @@ public class ExternalShuffleBlockHandlerSuite {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ExecutorShuffleInfo config = new ExecutorShuffleInfo(new String[] {"/a", "/b"}, 16, "sort");
-    byte[] registerMessage = new RegisterExecutor("app0", "exec1", config).toByteArray();
+    ByteBuffer registerMessage = new RegisterExecutor("app0", "exec1", config).toByteBuffer();
     handler.receive(client, registerMessage, callback);
     verify(blockResolver, times(1)).registerExecutor("app0", "exec1", config);
 
-    verify(callback, times(1)).onSuccess((byte[]) any());
-    verify(callback, never()).onFailure((Throwable) any());
+    verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
+    verify(callback, never()).onFailure(any(Throwable.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -77,17 +77,18 @@ public class ExternalShuffleBlockHandlerSuite {
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
     when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
     when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    byte[] openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" }).toByteArray();
+    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
+      .toByteBuffer();
     handler.receive(client, openBlocks, callback);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
 
-    ArgumentCaptor<byte[]> response = ArgumentCaptor.forClass(byte[].class);
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
     verify(callback, times(1)).onSuccess(response.capture());
     verify(callback, never()).onFailure((Throwable) any());
 
     StreamHandle handle =
-      (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response.getValue());
+      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
     assertEquals(2, handle.numChunks);
 
     @SuppressWarnings("unchecked")
@@ -104,7 +105,7 @@ public class ExternalShuffleBlockHandlerSuite {
   public void testBadMessages() {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    byte[] unserializableMsg = new byte[] { 0x12, 0x34, 0x56 };
+    ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
     try {
       handler.receive(client, unserializableMsg, callback);
       fail("Should have thrown");
@@ -112,7 +113,7 @@ public class ExternalShuffleBlockHandlerSuite {
       // pass
     }
 
-    byte[] unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1], new byte[2]).toByteArray();
+    ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1], new byte[2]).toByteBuffer();
     try {
       handler.receive(client, unexpectedMsg, callback);
       fail("Should have thrown");
@@ -120,7 +121,7 @@ public class ExternalShuffleBlockHandlerSuite {
       // pass
     }
 
-    verify(callback, never()).onSuccess((byte[]) any());
-    verify(callback, never()).onFailure((Throwable) any());
+    verify(callback, never()).onSuccess(any(ByteBuffer.class));
+    verify(callback, never()).onFailure(any(Throwable.class));
   }
 }

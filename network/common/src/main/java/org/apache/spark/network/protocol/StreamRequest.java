@@ -29,7 +29,7 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
  * The stream ID is an arbitrary string that needs to be negotiated between the two endpoints before
  * the data can be streamed.
  */
-public final class StreamRequest implements RequestMessage {
+public final class StreamRequest extends AbstractMessage implements RequestMessage {
    public final String streamId;
 
    public StreamRequest(String streamId) {

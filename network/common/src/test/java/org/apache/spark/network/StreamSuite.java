@@ -116,7 +116,10 @@ public class StreamSuite {
     };
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+      public void receive(
+          TransportClient client,
+          ByteBuffer message,
+          RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
 

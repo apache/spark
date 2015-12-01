@@ -241,16 +241,14 @@ private[netty] class NettyRpcEnv(
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
-  private[netty] def serialize(content: Any): Array[Byte] = {
-    val buffer = javaSerializerInstance.serialize(content)
-    java.util.Arrays.copyOfRange(
-      buffer.array(), buffer.arrayOffset + buffer.position, buffer.arrayOffset + buffer.limit)
+  private[netty] def serialize(content: Any): ByteBuffer = {
+    javaSerializerInstance.serialize(content)
   }
 
-  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: Array[Byte]): T = {
+  private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
-        javaSerializerInstance.deserialize[T](ByteBuffer.wrap(bytes))
+        javaSerializerInstance.deserialize[T](bytes)
       }
     }
   }
@@ -557,7 +555,7 @@ private[netty] class NettyRpcHandler(
 
   override def receive(
       client: TransportClient,
-      message: Array[Byte],
+      message: ByteBuffer,
       callback: RpcResponseCallback): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postRemoteMessage(messageToDispatch, callback)
@@ -565,12 +563,12 @@ private[netty] class NettyRpcHandler(
 
   override def receive(
       client: TransportClient,
-      message: Array[Byte]): Unit = {
+      message: ByteBuffer): Unit = {
     val messageToDispatch = internalReceive(client, message)
     dispatcher.postOneWayMessage(messageToDispatch)
   }
 
-  private def internalReceive(client: TransportClient, message: Array[Byte]): RequestMessage = {
+  private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostName, addr.getPort)

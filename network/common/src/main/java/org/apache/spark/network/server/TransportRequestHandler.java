@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.server;
 
+import java.nio.ByteBuffer;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
@@ -26,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
@@ -143,10 +146,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   private void processRpcRequest(final RpcRequest req) {
     try {
-      rpcHandler.receive(reverseClient, req.message, new RpcResponseCallback() {
+      rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
         @Override
-        public void onSuccess(byte[] response) {
-          respond(new RpcResponse(req.requestId, response));
+        public void onSuccess(ByteBuffer response) {
+          respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
         }
 
         @Override
@@ -157,14 +160,18 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
       respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+    } finally {
+      req.body().release();
     }
   }
 
   private void processOneWayMessage(OneWayMessage req) {
     try {
-      rpcHandler.receive(reverseClient, req.message);
+      rpcHandler.receive(reverseClient, req.body().nioByteBuffer());
     } catch (Exception e) {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
+    } finally {
+      req.body().release();
     }
   }
 

@@ -99,7 +99,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   }
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, Message request) {
+  public void channelRead0(ChannelHandlerContext ctx, Message request) throws Exception {
     if (request instanceof RequestMessage) {
       requestHandler.handle((RequestMessage) request);
     } else {

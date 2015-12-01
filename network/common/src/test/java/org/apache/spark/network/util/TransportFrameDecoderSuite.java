@@ -118,6 +118,27 @@ public class TransportFrameDecoderSuite {
     }
   }
 
+  @Test
+  public void testSplitLengthField() throws Exception {
+    byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
+    ByteBuf buf = Unpooled.buffer(frame.length + 8);
+    buf.writeLong(frame.length + 8);
+    buf.writeBytes(frame);
+
+    TransportFrameDecoder decoder = new TransportFrameDecoder();
+    ChannelHandlerContext ctx = mockChannelHandlerContext();
+    try {
+      decoder.channelRead(ctx, buf.readSlice(RND.nextInt(7)).retain());
+      verify(ctx, never()).fireChannelRead(any(ByteBuf.class));
+      decoder.channelRead(ctx, buf);
+      verify(ctx).fireChannelRead(any(ByteBuf.class));
+      assertEquals(0, buf.refCnt());
+    } finally {
+      decoder.channelInactive(ctx);
+      release(buf);
+    }
+  }
+
   @Test(expected = IllegalArgumentException.class)
   public void testNegativeFrameSize() throws Exception {
     testInvalidFrame(-1);
@@ -183,7 +204,7 @@ public class TransportFrameDecoderSuite {
     try {
       decoder.channelRead(ctx, frame);
     } finally {
-      frame.release();
+      release(frame);
     }
   }
 

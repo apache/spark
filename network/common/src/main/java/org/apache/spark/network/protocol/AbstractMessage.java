@@ -18,23 +18,37 @@
 package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
 
 /**
- * Abstract class for response messages that contain a large data portion kept in a separate
- * buffer. These messages are treated especially by MessageEncoder.
+ * Abstract class for messages which optionally contain a body kept in a separate buffer.
  */
-public abstract class ResponseWithBody implements ResponseMessage {
-  public final ManagedBuffer body;
-  public final boolean isBodyInFrame;
+public abstract class AbstractMessage implements Message {
+  private final ManagedBuffer body;
+  private final boolean isBodyInFrame;
 
-  protected ResponseWithBody(ManagedBuffer body, boolean isBodyInFrame) {
+  protected AbstractMessage() {
+    this(null, false);
+  }
+
+  protected AbstractMessage(ManagedBuffer body, boolean isBodyInFrame) {
     this.body = body;
     this.isBodyInFrame = isBodyInFrame;
   }
 
-  public abstract ResponseMessage createFailureResponse(String error);
+  @Override
+  public ManagedBuffer body() {
+    return body;
+  }
+
+  @Override
+  public boolean isBodyInFrame() {
+    return isBodyInFrame;
+  }
+
+  protected boolean equals(AbstractMessage other) {
+    return isBodyInFrame == other.isBodyInFrame && Objects.equal(body, other.body);
+  }
+
 }

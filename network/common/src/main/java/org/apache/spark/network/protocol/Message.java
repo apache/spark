@@ -19,17 +19,25 @@ package org.apache.spark.network.protocol;
 
 import io.netty.buffer.ByteBuf;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
+
 /** An on-the-wire transmittable message. */
 public interface Message extends Encodable {
   /** Used to identify this request type. */
   Type type();
+
+  /** An optional body for the message. */
+  ManagedBuffer body();
+
+  /** Whether to include the body of the message in the same frame as the message. */
+  boolean isBodyInFrame();
 
   /** Preceding every serialized Message is its type, which allows us to deserialize it. */
   public static enum Type implements Encodable {
     ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
     RpcRequest(3), RpcResponse(4), RpcFailure(5),
     StreamRequest(6), StreamResponse(7), StreamFailure(8),
-    OneWayMessage(9);
+    OneWayMessage(9), User(-1);
 
     private final byte id;
 
@@ -57,6 +65,7 @@ public interface Message extends Encodable {
         case 7: return StreamResponse;
         case 8: return StreamFailure;
         case 9: return OneWayMessage;
+        case -1: throw new IllegalArgumentException("User type messages cannot be decoded.");
         default: throw new IllegalArgumentException("Unknown message type: " + id);
       }
     }

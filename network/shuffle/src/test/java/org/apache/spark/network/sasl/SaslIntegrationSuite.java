@@ -18,6 +18,7 @@
 package org.apache.spark.network.sasl;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -52,6 +53,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -107,8 +109,8 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     String msg = "Hello, World!";
-    byte[] resp = client.sendRpcSync(msg.getBytes(), TIMEOUT_MS);
-    assertEquals(msg, new String(resp)); // our rpc handler should just return the given msg
+    ByteBuffer resp = client.sendRpcSync(JavaUtils.stringToBytes(msg), TIMEOUT_MS);
+    assertEquals(msg, JavaUtils.bytesToString(resp));
   }
 
   @Test
@@ -136,7 +138,7 @@ public class SaslIntegrationSuite {
 
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     try {
-      client.sendRpcSync(new byte[13], TIMEOUT_MS);
+      client.sendRpcSync(ByteBuffer.allocate(13), TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("Expected SaslMessage"));
@@ -144,7 +146,7 @@ public class SaslIntegrationSuite {
 
     try {
       // Guessing the right tag byte doesn't magically get you in...
-      client.sendRpcSync(new byte[] { (byte) 0xEA }, TIMEOUT_MS);
+      client.sendRpcSync(ByteBuffer.wrap(new byte[] { (byte) 0xEA }), TIMEOUT_MS);
       fail("Should have failed");
     } catch (Exception e) {
       assertTrue(e.getMessage(), e.getMessage().contains("java.lang.IndexOutOfBoundsException"));
@@ -222,13 +224,13 @@ public class SaslIntegrationSuite {
         new String[] { System.getProperty("java.io.tmpdir") }, 1,
         "org.apache.spark.shuffle.sort.SortShuffleManager");
       RegisterExecutor regmsg = new RegisterExecutor("app-1", "0", executorInfo);
-      client1.sendRpcSync(regmsg.toByteArray(), TIMEOUT_MS);
+      client1.sendRpcSync(regmsg.toByteBuffer(), TIMEOUT_MS);
 
       // Make a successful request to fetch blocks, which creates a new stream. But do not actually
       // fetch any blocks, to keep the stream open.
       OpenBlocks openMessage = new OpenBlocks("app-1", "0", blockIds);
-      byte[] response = client1.sendRpcSync(openMessage.toByteArray(), TIMEOUT_MS);
-      StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteArray(response);
+      ByteBuffer response = client1.sendRpcSync(openMessage.toByteBuffer(), TIMEOUT_MS);
+      StreamHandle stream = (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response);
       long streamId = stream.streamId;
 
       // Create a second client, authenticated with a different app ID, and try to read from
@@ -275,7 +277,7 @@ public class SaslIntegrationSuite {
   /** RPC handler which simply responds with the message it received. */
   public static class TestRpcHandler extends RpcHandler {
     @Override
-    public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+    public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
       callback.onSuccess(message);
     }
 

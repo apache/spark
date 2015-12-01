@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.server;
 
+import java.nio.ByteBuffer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +46,7 @@ public abstract class RpcHandler {
    */
   public abstract void receive(
       TransportClient client,
-      byte[] message,
+      ByteBuffer message,
       RpcResponseCallback callback);
 
   /**
@@ -62,7 +64,7 @@ public abstract class RpcHandler {
    *               of this RPC. This will always be the exact same object for a particular channel.
    * @param message The serialized bytes of the RPC.
    */
-  public void receive(TransportClient client, byte[] message) {
+  public void receive(TransportClient client, ByteBuffer message) {
     receive(client, message, ONE_WAY_CALLBACK);
   }
 
@@ -79,7 +81,7 @@ public abstract class RpcHandler {
     private final Logger logger = LoggerFactory.getLogger(OneWayRpcCallback.class);
 
     @Override
-    public void onSuccess(byte[] response) {
+    public void onSuccess(ByteBuffer response) {
       logger.warn("Response provided for one-way RPC.");
     }
 

@@ -82,10 +82,10 @@ public class ProtocolSuite {
   @Test
   public void requests() {
     testClientToServer(new ChunkFetchRequest(new StreamChunkId(1, 2)));
-    testClientToServer(new RpcRequest(12345, new byte[0]));
-    testClientToServer(new RpcRequest(12345, new byte[100]));
+    testClientToServer(new RpcRequest(12345, new TestManagedBuffer(0)));
+    testClientToServer(new RpcRequest(12345, new TestManagedBuffer(10)));
     testClientToServer(new StreamRequest("abcde"));
-    testClientToServer(new OneWayMessage(new byte[100]));
+    testClientToServer(new OneWayMessage(new TestManagedBuffer(10)));
   }
 
   @Test
@@ -94,8 +94,8 @@ public class ProtocolSuite {
     testServerToClient(new ChunkFetchSuccess(new StreamChunkId(1, 2), new TestManagedBuffer(0)));
     testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), "this is an error"));
     testServerToClient(new ChunkFetchFailure(new StreamChunkId(1, 2), ""));
-    testServerToClient(new RpcResponse(12345, new byte[0]));
-    testServerToClient(new RpcResponse(12345, new byte[1000]));
+    testServerToClient(new RpcResponse(12345, new TestManagedBuffer(0)));
+    testServerToClient(new RpcResponse(12345, new TestManagedBuffer(100)));
     testServerToClient(new RpcFailure(0, "this is an error"));
     testServerToClient(new RpcFailure(0, ""));
     // Note: buffer size must be "0" since StreamResponse's buffer is written differently to the

@@ -15,22 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.server;
+package org.apache.spark.network.protocol;
 
-import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * Handles either request or response messages coming off of Netty. A MessageHandler instance
- * is associated with a single Netty Channel (though it may have multiple clients on the same
- * Channel.)
+ * Abstract class for response messages.
  */
-public abstract class MessageHandler<T extends Message> {
-  /** Handles the receipt of a single message. */
-  public abstract void handle(T message) throws Exception;
+public abstract class AbstractResponseMessage extends AbstractMessage implements ResponseMessage {
 
-  /** Invoked when an exception was caught on the Channel. */
-  public abstract void exceptionCaught(Throwable cause);
+  protected AbstractResponseMessage(ManagedBuffer body, boolean isBodyInFrame) {
+    super(body, isBodyInFrame);
+  }
 
-  /** Invoked when the channel this MessageHandler is on has been unregistered. */
-  public abstract void channelUnregistered();
+  public abstract ResponseMessage createFailureResponse(String error);
 }

@@ -136,7 +136,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
   }
 
   @Override
-  public void handle(ResponseMessage message) {
+  public void handle(ResponseMessage message) throws Exception {
     String remoteAddress = NettyUtils.getRemoteAddress(channel);
     if (message instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) message;
@@ -144,11 +144,11 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       if (listener == null) {
         logger.warn("Ignoring response for block {} from {} since it is not outstanding",
           resp.streamChunkId, remoteAddress);
-        resp.body.release();
+        resp.body().release();
       } else {
         outstandingFetches.remove(resp.streamChunkId);
-        listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body);
-        resp.body.release();
+        listener.onSuccess(resp.streamChunkId.chunkIndex, resp.body());
+        resp.body().release();
       }
     } else if (message instanceof ChunkFetchFailure) {
       ChunkFetchFailure resp = (ChunkFetchFailure) message;
@@ -166,10 +166,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       RpcResponseCallback listener = outstandingRpcs.get(resp.requestId);
       if (listener == null) {
         logger.warn("Ignoring response for RPC {} from {} ({} bytes) since it is not outstanding",
-          resp.requestId, remoteAddress, resp.response.length);
+          resp.requestId, remoteAddress, resp.body().size());
       } else {
         outstandingRpcs.remove(resp.requestId);
-        listener.onSuccess(resp.response);
+        try {
+          listener.onSuccess(resp.body().nioByteBuffer());
+        } finally {
+          resp.body().release();
+        }
       }
     } else if (message instanceof RpcFailure) {
       RpcFailure resp = (RpcFailure) message;
