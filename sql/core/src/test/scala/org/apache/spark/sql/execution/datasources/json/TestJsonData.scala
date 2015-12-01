@@ -188,6 +188,12 @@ private[json] trait TestJsonData {
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """]""" :: Nil)
 
+  def additionalCorruptRecords: RDD[String] =
+    sqlContext.sparkContext.parallelize(
+      """{"dummy":"test"}""" ::
+      """42""" ::
+      """     ","ian":"test"}""" :: Nil)
+
   def emptyRecords: RDD[String] =
     sqlContext.sparkContext.parallelize(
       """{""" ::
