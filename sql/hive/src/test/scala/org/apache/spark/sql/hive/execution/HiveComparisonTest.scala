@@ -287,7 +287,9 @@ abstract class HiveComparisonTest
         for (table <- Seq("src", "srcpart")) {
           val hasMatchingQuery = queryList.exists { query =>
             val normalizedQuery = query.toLowerCase.stripSuffix(";")
-            normalizedQuery.endsWith(table) || normalizedQuery.contains(s"from $table")
+            normalizedQuery.endsWith(table) ||
+              normalizedQuery.contains(s"from $table") ||
+              normalizedQuery.contains(s"from default.$table")
           }
           if (hasShowTableCommand || hasMatchingQuery) {
             TestHive.loadTestTable(table)
