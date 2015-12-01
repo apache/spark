@@ -270,7 +270,7 @@
     <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
-      <version>0.8.1</version>
+      <version>0.8.2</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
