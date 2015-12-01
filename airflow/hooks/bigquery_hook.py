@@ -5,6 +5,8 @@ import pandas
 from airflow.hooks.dbapi_hook import DbApiHook
 from apiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials
+from pandas.io.gbq import GbqConnector, _parse_data as gbq_parse_data
+from pandas.tools.merge import concat
 
 logging.getLogger("bigquery").setLevel(logging.INFO)
 
@@ -58,20 +60,29 @@ class BigQueryHook(DbApiHook):
         connection_info = self.get_connection(self.bigquery_conn_id)
         connection_extras = connection_info.extra_dejson
         project = connection_extras['project']
-        response = service.jobs().query(projectId=project, body={
-            "query": bql,
-        }).execute()
+        connector = BigQueryPandasConnector(project, service)
+        schema, pages = connector.run_query(bql, verbose=False)
+        dataframe_list = []
 
-        if len(response['rows']) > 0:
-            # Extract column names from response.
-            columns = [c['name'] for c in response['schema']['fields']]
+        while len(pages) > 0:
+            page = pages.pop()
+            dataframe_list.append(gbq_parse_data(schema, page))
 
-            # Extract data into a two-dimensional list of values.
-            data = []
-            for row in response['rows']:
-                row = map(lambda kv: kv['v'], row['f'])
-                data.append(row)
-
-            return pandas.DataFrame(data, columns = columns)
+        if len(dataframe_list) > 0:
+            return concat(dataframe_list, ignore_index=True)
         else:
-            return pandas.DataFrame()
+            return gbq_parse_data(schema, [])
+
+class BigQueryPandasConnector(GbqConnector):
+    """
+    This connector behaves identically to GbqConnector (from Pandas), except
+    that it allows the service to be injected, and disables a call to
+    self.get_credentials(). This allows Airflow to use BigQuery with Pandas
+    without forcing a three legged OAuth connection. Instead, we can inject
+    service account credentials into the binding.
+    """
+    def __init__(self, project_id, service, reauth=False):
+        self.test_google_api_imports()
+        self.project_id = project_id
+        self.reauth = reauth
+        self.service = service
