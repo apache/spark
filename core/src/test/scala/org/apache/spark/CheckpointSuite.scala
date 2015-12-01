@@ -21,7 +21,8 @@ import java.io.File
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.CheckpointSuite._
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.rdd._
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
@@ -74,8 +75,10 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
 
     // Test whether the checkpoint file has been created
     if (reliableCheckpoint) {
-      assert(
-        collectFunc(sparkContext.checkpointFile[U](operatedRDD.getCheckpointFile.get)) === result)
+      assert(operatedRDD.getCheckpointFile.nonEmpty)
+      val recoveredRDD = sparkContext.checkpointFile[U](operatedRDD.getCheckpointFile.get)
+      assert(collectFunc(recoveredRDD) === result)
+      assert(recoveredRDD.partitioner === operatedRDD.partitioner)
     }
 
     // Test whether dependencies have been changed from its earlier parent RDD
@@ -211,9 +214,14 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
   }
 
   /** Run a test twice, once for local checkpointing and once for reliable checkpointing. */
-  protected def runTest(name: String)(body: Boolean => Unit): Unit = {
+  protected def runTest(
+      name: String,
+      skipLocalCheckpoint: Boolean = false
+    )(body: Boolean => Unit): Unit = {
     test(name + " [reliable checkpoint]")(body(true))
-    test(name + " [local checkpoint]")(body(false))
+    if (!skipLocalCheckpoint) {
+      test(name + " [local checkpoint]")(body(false))
+    }
   }
 
   /**
@@ -262,6 +270,49 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     val result = flatMappedRDD.collect()
     assert(flatMappedRDD.dependencies.head.rdd != parCollection)
     assert(flatMappedRDD.collect() === result)
+  }
+
+  runTest("checkpointing partitioners", skipLocalCheckpoint = true) { _: Boolean =>
+
+    def testPartitionerCheckpointing(
+        partitioner: Partitioner,
+        corruptPartitionerFile: Boolean = false
+      ): Unit = {
+      val rddWithPartitioner = sc.makeRDD(1 to 4).map { _ -> 1 }.partitionBy(partitioner)
+      rddWithPartitioner.checkpoint()
+      rddWithPartitioner.count()
+      assert(rddWithPartitioner.getCheckpointFile.get.nonEmpty,
+        "checkpointing was not successful")
+
+      if (corruptPartitionerFile) {
+        // Overwrite the partitioner file with garbage data
+        val checkpointDir = new Path(rddWithPartitioner.getCheckpointFile.get)
+        val fs = checkpointDir.getFileSystem(sc.hadoopConfiguration)
+        val partitionerFile = fs.listStatus(checkpointDir)
+            .find(_.getPath.getName.contains("partitioner"))
+            .map(_.getPath)
+        require(partitionerFile.nonEmpty, "could not find the partitioner file for testing")
+        val output = fs.create(partitionerFile.get, true)
+        output.write(100)
+        output.close()
+      }
+
+      val newRDD = sc.checkpointFile[(Int, Int)](rddWithPartitioner.getCheckpointFile.get)
+      assert(newRDD.collect().toSet === rddWithPartitioner.collect().toSet, "RDD not recovered")
+
+      if (!corruptPartitionerFile) {
+        assert(newRDD.partitioner != None, "partitioner not recovered")
+        assert(newRDD.partitioner === rddWithPartitioner.partitioner,
+          "recovered partitioner does not match")
+      } else {
+        assert(newRDD.partitioner == None, "partitioner unexpectedly recovered")
+      }
+    }
+
+    testPartitionerCheckpointing(partitioner)
+
+    // Test that corrupted partitioner file does not prevent recovery of RDD
+    testPartitionerCheckpointing(partitioner, corruptPartitionerFile = true)
   }
 
   runTest("RDDs with one-to-one dependencies") { reliableCheckpoint: Boolean =>
