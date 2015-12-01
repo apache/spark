@@ -259,10 +259,30 @@ class Column(object):
 
         >>> df.select(df.name.substr(1, 3).alias("col")).collect()
         [Row(col=u'Ali'), Row(col=u'Bob')]
+        >>> df.select(df.name[1:3].alias("col")).collect()
+        [Row(col=u'Ali'), Row(col=u'Bob')]
+        >>> df.select(df.name[2:].alias("col")).collect()
+        [Row(col=u'lice'), Row(col=u'ob')]
         """
         if type(startPos) != type(length):
             raise TypeError("Can not mix the type")
         if isinstance(startPos, (int, long)):
+            javaMaxInt = 2147483647
+            if startPos > javaMaxInt:
+               raise ValueError("startPos is larger than the java max int value "
+                                "which is not supported by pyspark, startPos=" + str(startPos))
+
+            if length == sys.maxint:
+               # length == sys.maxint when using syntax str[1:]
+               # cut it down to java max int because java api of substr only support int type
+               # of length
+               warnings.warn("PySpark's substr only support int type of length, "
+                              "please make sure the length you specify is less than 2147483647")
+               length = javaMaxInt
+            elif length > javaMaxInt:
+               raise ValueError("length is larger than the java max int value "
+                                "which is not supported by pyspark, length=" + str(length))
+
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, length._jc)
