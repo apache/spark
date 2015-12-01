@@ -273,8 +273,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     implicit val webDriver: WebDriver = new HtmlUnitDriver
     implicit val formats = org.json4s.DefaultFormats
 
-    val testDir = Utils.createTempDir()
-    testDir.deleteOnExit()
+    // this test dir is explictly deleted on successful runs; retained for diagnostics when
+    // not
+    val testDir = Utils.createDirectory(System.getProperty("java.io.tmpdir", "logs"))
 
     // a new conf is used with the background thread set and running at its fastest
     // alllowed refresh rate (1Hz)
@@ -283,7 +284,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.eventLog.dir", testDir.getAbsolutePath)
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
-      .set("spark.history.cache.window", "50ms")
+      .set("spark.history.cache.window", "200ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = new SecurityManager(myConf)
@@ -361,7 +362,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // second job
       val d2 = sc.parallelize(1 to 10)
       d2.count()
-      val stdTimeout = timeout(20 seconds)
+      val stdTimeout = timeout(40 seconds)
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2
@@ -380,7 +381,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // one can get re-attached
       d.count()
       getNumJobs("/jobs") should be (3)
-
+      // no need to retain the test dir now the tests complete
+      testDir.deleteOnExit();
     } finally {
       sc.stop()
     }

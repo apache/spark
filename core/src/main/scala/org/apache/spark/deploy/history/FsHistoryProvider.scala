@@ -176,12 +176,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Disable the background thread during tests.
     if (!conf.contains("spark.testing")) {
       // A task that periodically checks for event log updates on disk.
+      logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
       pool.scheduleWithFixedDelay(getRunner(checkForLogs), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
         // A task that periodically cleans event logs on disk.
         pool.scheduleWithFixedDelay(getRunner(cleanLogs), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
+    } else {
+      logDebug("Background update thread disabled for testing")
     }
   }
 
@@ -243,6 +246,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private[history] def checkForLogs(): Unit = {
     try {
       val newLastScanTime = getNewLastScanTime()
+      logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
       val logInfos: Seq[FileStatus] = statusList
@@ -261,6 +265,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .sortWith { case (entry1, entry2) =>
           entry1.getModificationTime() >= entry2.getModificationTime()
       }
+
+      logDebug(s"New attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
 
       logInfos.grouped(20)
         .map { batch =>

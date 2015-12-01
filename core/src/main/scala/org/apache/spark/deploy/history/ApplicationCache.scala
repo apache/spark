@@ -19,8 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
 
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
-import javax.servlet.{DispatcherType, ServletException, FilterConfig, FilterChain, ServletResponse, ServletRequest, Filter}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 
 import scala.collection.JavaConverters._
 
