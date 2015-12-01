@@ -217,10 +217,12 @@ class SchedulerJob(BaseJob):
 
         self.dag_id = dag_id
         self.subdir = subdir
+
         if test_mode:
             self.num_runs = 1
-        else:
+        elif num_runs and num_runs > 0:
             self.num_runs = num_runs
+
         self.refresh_dags_every = refresh_dags_every
         self.do_pickle = do_pickle
         super(SchedulerJob, self).__init__(*args, **kwargs)

@@ -215,5 +215,6 @@ have been tested on Redhat based systems. You can copy those ``/usr/lib/systemd/
 Airflow will run under ``airflow:airflow``. If not (or if you are running on a non Redhat based system) you
 probably need adjust the unit files.
 
-Environment configuration is picked up from ``/etc/sysconfig/airflow`` in which you can define, for
-example, ``AIRFLOW_HOME`` or ``AIRFLOW_CONFIG``.
+Environment configuration is picked up from ``/etc/sysconfig/airflow``. An example file is supplied
+ . Make sure to specify the ``SCHEDULER_RUNS`` variable in this file when you run the schduler. You
+ can also define here, for example, ``AIRFLOW_HOME`` or ``AIRFLOW_CONFIG``.
