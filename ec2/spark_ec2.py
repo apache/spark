@@ -51,7 +51,7 @@ else:
     raw_input = input
     xrange = range
 
-SPARK_EC2_VERSION = "1.5.1"
+SPARK_EC2_VERSION = "1.5.2"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
