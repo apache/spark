@@ -123,7 +123,8 @@ if __name__ == "__main__":
         ("inputCols", "input column names.", None, None),
         ("outputCol", "output column name.", "self.uid + '__output'", None),
         ("numFeatures", "number of features.", None, int),
-        ("checkpointInterval", "checkpoint interval (>= 1).", None, int),
+        ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
+         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None, int),
         ("seed", "random seed.", "hash(type(self).__name__)", int),
         ("tol", "the convergence tolerance for iterative algorithms.", None, float),
         ("stepSize", "Step size to be used for each iteration of optimization.", None, float),
@@ -162,7 +163,8 @@ if __name__ == "__main__":
         ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation."),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
-         "Caching can speed up training of deeper trees.")]
+         "Caching can speed up training of deeper trees. Users can set how often should the " +
+         "cache be checkpointed or disable it by setting checkpointInterval.")]
 
     decisionTreeCode = '''class DecisionTreeParams(Params):
     """

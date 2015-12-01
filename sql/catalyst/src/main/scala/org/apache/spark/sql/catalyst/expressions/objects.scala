@@ -21,7 +21,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.serializer.{KryoSerializerInstance, KryoSerializer}
+import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
@@ -178,6 +178,15 @@ case class Invoke(
   }
 }
 
+object NewInstance {
+  def apply(
+      cls: Class[_],
+      arguments: Seq[Expression],
+      propagateNull: Boolean = false,
+      dataType: DataType): NewInstance =
+    new NewInstance(cls, arguments, propagateNull, dataType, None)
+}
+
 /**
  * Constructs a new instance of the given class, using the result of evaluating the specified
  * expressions as arguments.
@@ -189,12 +198,15 @@ case class Invoke(
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
+ * @param outerPointer If the object being constructed is an inner class the outerPointer must
+ *                     for the containing class must be specified.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
-    propagateNull: Boolean = true,
-    dataType: DataType) extends Expression {
+    propagateNull: Boolean,
+    dataType: DataType,
+    outerPointer: Option[Literal]) extends Expression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -209,30 +221,38 @@ case class NewInstance(
     val argGen = arguments.map(_.gen(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    if (propagateNull) {
-      val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-        s"${ev.isNull} = ${ev.value} == null;"
-      } else {
-        ""
-      }
+    val outer = outerPointer.map(_.gen(ctx))
 
-      val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
+    val setup =
       s"""
-        ${argGen.map(_.code).mkString("\n")}
+         ${argGen.map(_.code).mkString("\n")}
+         ${outer.map(_.code.mkString("")).getOrElse("")}
+       """.stripMargin
+
+    val constructorCall = outer.map { gen =>
+      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+    }.getOrElse {
+      s"new $className($argString)"
+    }
+
+    if (propagateNull) {
+      val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
+
+      s"""
+        $setup
 
         boolean ${ev.isNull} = true;
         $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-
         if ($argsNonNull) {
-          ${ev.value} = new $className($argString);
+          ${ev.value} = $constructorCall;
           ${ev.isNull} = false;
         }
        """
     } else {
       s"""
-        ${argGen.map(_.code).mkString("\n")}
+        $setup
 
-        $javaType ${ev.value} = new $className($argString);
+        $javaType ${ev.value} = $constructorCall;
         final boolean ${ev.isNull} = ${ev.value} == null;
       """
     }
@@ -274,10 +294,9 @@ case class UnwrapOption(
 /**
  * Converts the result of evaluating `child` into an option, checking both the isNull bit and
  * (in the case of reference types) equality with null.
- * @param optionType The datatype to be held inside of the Option.
  * @param child The expression to evaluate and wrap.
  */
-case class WrapOption(optionType: DataType, child: Expression)
+case class WrapOption(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = ObjectType(classOf[Option[_]])
@@ -290,14 +309,13 @@ case class WrapOption(optionType: DataType, child: Expression)
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val javaType = ctx.javaType(optionType)
     val inputObject = child.gen(ctx)
 
     s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = false;
-      scala.Option<$javaType> ${ev.value} =
+      scala.Option ${ev.value} =
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
@@ -328,7 +346,8 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
  * as an ArrayType.  This is similar to a typical map operation, but where the lambda function
  * is expressed using catalyst expressions.
  *
- * The following collection ObjectTypes are currently supported: Seq, Array, ArrayData
+ * The following collection ObjectTypes are currently supported:
+ *   Seq, Array, ArrayData, java.util.List
  *
  * @param function A function that returns an expression, given an attribute that can be used
  *                 to access the current value.  This is does as a lambda function so that
@@ -346,6 +365,9 @@ case class MapObjects(
   private lazy val completeFunction = function(loopAttribute)
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
+    case NullType =>
+      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
+      (i: String) => s".get($i, $nullTypeClassName)"
     case IntegerType => (i: String) => s".getInt($i)"
     case LongType => (i: String) => s".getLong($i)"
     case FloatType => (i: String) => s".getFloat($i)"
@@ -365,6 +387,8 @@ case class MapObjects(
       (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
       (".length", (i: String) => s"[$i]", false)
+    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      (".size()", (i: String) => s".get($i)", false)
     case ArrayType(t, _) =>
       val (sqlType, primitiveElement) = t match {
         case m: MapType => (m, false)
@@ -496,50 +520,39 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression {
   }
 }
 
-case class GetInternalRowField(child: Expression, ordinal: Int, dataType: DataType)
-  extends UnaryExpression {
-
-  override def nullable: Boolean = true
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val row = child.gen(ctx)
-    s"""
-      ${row.code}
-      final boolean ${ev.isNull} = ${row.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${ev.value} = ${ctx.getValue(row.value, dataType, ordinal.toString)};
-      }
-    """
-  }
-}
-
-/** Serializes an input object using Kryo serializer. */
-case class SerializeWithKryo(child: Expression) extends UnaryExpression {
+/**
+ * Serializes an input object using a generic serializer (Kryo or Java).
+ * @param kryo if true, use Kryo. Otherwise, use Java.
+ */
+case class EncodeUsingSerializer(child: Expression, kryo: Boolean) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val input = child.gen(ctx)
-    val kryo = ctx.freshName("kryoSerializer")
-    val kryoClass = classOf[KryoSerializer].getName
-    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
-    val sparkConfClass = classOf[SparkConf].getName
+    // Code to initialize the serializer.
+    val serializer = ctx.freshName("serializer")
+    val (serializerClass, serializerInstanceClass) = {
+      if (kryo) {
+        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+      } else {
+        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val sparkConf = s"new ${classOf[SparkConf].getName}()"
     ctx.addMutableState(
-      kryoInstanceClass,
-      kryo,
-      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+      serializerInstanceClass,
+      serializer,
+      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
 
+    // Code to serialize.
+    val input = child.gen(ctx)
     s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
-        ${ev.value} = $kryo.serialize(${input.value}, null).array();
+        ${ev.value} = $serializer.serialize(${input.value}, null).array();
       }
      """
   }
@@ -548,32 +561,78 @@ case class SerializeWithKryo(child: Expression) extends UnaryExpression {
 }
 
 /**
- * Deserializes an input object using Kryo serializer. Note that the ClassTag is not an implicit
- * parameter because TreeNode cannot copy implicit parameters.
+ * Serializes an input object using a generic serializer (Kryo or Java).  Note that the ClassTag
+ * is not an implicit parameter because TreeNode cannot copy implicit parameters.
+ * @param kryo if true, use Kryo. Otherwise, use Java.
  */
-case class DeserializeWithKryo[T](child: Expression, tag: ClassTag[T]) extends UnaryExpression {
+case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
+  extends UnaryExpression {
 
   override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    val input = child.gen(ctx)
-    val kryo = ctx.freshName("kryoSerializer")
-    val kryoClass = classOf[KryoSerializer].getName
-    val kryoInstanceClass = classOf[KryoSerializerInstance].getName
-    val sparkConfClass = classOf[SparkConf].getName
+    // Code to initialize the serializer.
+    val serializer = ctx.freshName("serializer")
+    val (serializerClass, serializerInstanceClass) = {
+      if (kryo) {
+        (classOf[KryoSerializer].getName, classOf[KryoSerializerInstance].getName)
+      } else {
+        (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val sparkConf = s"new ${classOf[SparkConf].getName}()"
     ctx.addMutableState(
-      kryoInstanceClass,
-      kryo,
-      s"$kryo = ($kryoInstanceClass) new $kryoClass(new $sparkConfClass()).newInstance();")
+      serializerInstanceClass,
+      serializer,
+      s"$serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();")
 
+    // Code to serialize.
+    val input = child.gen(ctx)
     s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = (${ctx.javaType(dataType)})
-          $kryo.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
+          $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
       }
      """
   }
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
+}
+
+/**
+ * Initialize a Java Bean instance by setting its field values via setters.
+ */
+case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
+  extends Expression {
+
+  override def nullable: Boolean = beanInstance.nullable
+  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
+  override def dataType: DataType = beanInstance.dataType
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val instanceGen = beanInstance.gen(ctx)
+
+    val initialize = setters.map {
+      case (setterMethod, fieldValue) =>
+        val fieldGen = fieldValue.gen(ctx)
+        s"""
+           ${fieldGen.code}
+           ${instanceGen.value}.$setterMethod(${fieldGen.value});
+         """
+    }
+
+    ev.isNull = instanceGen.isNull
+    ev.value = instanceGen.value
+
+    s"""
+      ${instanceGen.code}
+      if (!${instanceGen.isNull}) {
+        ${initialize.mkString("\n")}
+      }
+     """
+  }
 }

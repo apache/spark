@@ -35,7 +35,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may
-actually require one to prevent any sort of starvation issues.
+actually require more than 1 thread to prevent any sort of starvation issues.
 
 Properties that specify some time duration should be configured with a unit of time.
 The following format is accepted:
@@ -1020,6 +1020,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the executor to listen on. This is used for communicating with the driver.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>
@@ -1027,6 +1028,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver's HTTP file server to listen on.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>

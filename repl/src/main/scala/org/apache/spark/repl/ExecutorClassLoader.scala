@@ -34,7 +34,9 @@ import org.apache.spark.util.ParentClassLoader
 /**
  * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
  * used to load classes defined by the interpreter when the REPL is used.
- * Allows the user to specify if user class path should be first
+ * Allows the user to specify if user class path should be first.
+ * This class loader delegates getting/finding resources to parent loader,
+ * which makes sense until REPL never provide resource dynamically.
  */
 class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader,
     userClassPathFirst: Boolean) extends ClassLoader with Logging {
@@ -55,6 +57,14 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
     }
   }
 
+  override def getResource(name: String): URL = {
+    parentLoader.getResource(name)
+  }
+
+  override def getResources(name: String): java.util.Enumeration[URL] = {
+    parentLoader.getResources(name)
+  }
+
   override def findClass(name: String): Class[_] = {
     userClassPathFirst match {
       case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
@@ -65,7 +75,13 @@ class ExecutorClassLoader(conf: SparkConf, classUri: String, parent: ClassLoader
           case e: ClassNotFoundException => {
             val classOption = findClassLocally(name)
             classOption match {
-              case None => throw new ClassNotFoundException(name, e)
+              case None =>
+                // If this class has a cause, it will break the internal assumption of Janino
+                // (the compiler used for Spark SQL code-gen).
+                // See org.codehaus.janino.ClassLoaderIClassLoader's findIClass, you will see
+                // its behavior will be changed if there is a cause and the compilation
+                // of generated class will fail.
+                throw new ClassNotFoundException(name)
               case Some(a) => a
             }
           }

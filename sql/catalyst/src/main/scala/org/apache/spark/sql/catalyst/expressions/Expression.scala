@@ -94,13 +94,9 @@ abstract class Expression extends TreeNode[Expression] {
   def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
-      // as a function, `subExprState.fnName`. Just call that.
-      val code =
-        s"""
-           |/* $this */
-           |${subExprState.fnName}(${ctx.INPUT_ROW});
-         """.stripMargin.trim
-      GeneratedExpressionCode(code, subExprState.code.isNull, subExprState.code.value)
+      // as a function and called in advance. Just use it.
+      val code = s"/* $this */"
+      GeneratedExpressionCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val primitive = ctx.freshName("primitive")
@@ -206,7 +202,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyString: String = {
     transform {
-      case a: AttributeReference => PrettyAttribute(a.name)
+      case a: AttributeReference => PrettyAttribute(a.name, a.dataType)
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }

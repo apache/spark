@@ -20,6 +20,7 @@ Both use [MLlib decision trees](ml-decision-tree.html) as their base models.
 Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  In this section, we demonstrate the Pipelines API for ensembles.
 
 The main differences between this API and the [original MLlib ensembles API](mllib-ensembles.html) are:
+
 * support for ML Pipelines
 * separation of classification vs. regression
 * use of DataFrame metadata to distinguish continuous and categorical features

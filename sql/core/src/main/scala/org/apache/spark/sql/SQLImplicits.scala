@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -28,25 +24,45 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.types.StructField
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A collection of implicit methods for converting common Scala objects into [[DataFrame]]s.
+ *
+ * @since 1.6.0
  */
 abstract class SQLImplicits {
+
   protected def _sqlContext: SQLContext
 
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ProductEncoder[T]
+  /** @since 1.6.0 */
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
 
-  implicit def newIntEncoder: Encoder[Int] = FlatEncoder[Int]
-  implicit def newLongEncoder: Encoder[Long] = FlatEncoder[Long]
-  implicit def newDoubleEncoder: Encoder[Double] = FlatEncoder[Double]
-  implicit def newFloatEncoder: Encoder[Float] = FlatEncoder[Float]
-  implicit def newByteEncoder: Encoder[Byte] = FlatEncoder[Byte]
-  implicit def newShortEncoder: Encoder[Short] = FlatEncoder[Short]
-  implicit def newBooleanEncoder: Encoder[Boolean] = FlatEncoder[Boolean]
-  implicit def newStringEncoder: Encoder[String] = FlatEncoder[String]
+  /** @since 1.6.0 */
+  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  /** @since 1.6.0 */
+
+  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+
+  /** @since 1.6.0 */
+  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
 
   /**
    * Creates a [[Dataset]] from an RDD.
@@ -87,9 +103,9 @@ abstract class SQLImplicits {
     DataFrameHolder(_sqlContext.createDataFrame(data))
   }
 
-  // Do NOT add more implicit conversions. They are likely to break source compatibility by
-  // making existing implicit conversions ambiguous. In particular, RDD[Double] is dangerous
-  // because of [[DoubleRDDFunctions]].
+  // Do NOT add more implicit conversions for primitive types.
+  // They are likely to break source compatibility by making existing implicit conversions
+  // ambiguous. In particular, RDD[Double] is dangerous because of [[DoubleRDDFunctions]].
 
   /**
    * Creates a single column DataFrame from an RDD[Int].

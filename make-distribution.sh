@@ -69,9 +69,6 @@ while (( "$#" )); do
       echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
       ;;
-    --skip-java-test)
-      SKIP_JAVA_TEST=true
-      ;;
     --with-tachyon)
       SPARK_TACHYON=true
       ;;
