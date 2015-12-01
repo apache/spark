@@ -72,6 +72,7 @@ class Analyzer(
       ResolveReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
+      ResolveUpCast ::
       ResolveSortReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -88,8 +89,7 @@ class Analyzer(
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases,
-      ResolveUpCast)
+      CleanupAliases)
   )
 
   /**
@@ -1191,6 +1191,8 @@ object ResolveUpCast extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformAllExpressions {
+      case u @ UpCast(child, _, _) if !child.resolved => u
+
       case UpCast(child, dataType, walkedTypePath) => (child.dataType, dataType) match {
         case (from: NumericType, to: DecimalType) if !to.isWiderThan(from) =>
           fail(child, to, walkedTypePath)
@@ -1200,6 +1202,8 @@ object ResolveUpCast extends Rule[LogicalPlan] {
           fail(child, to, walkedTypePath)
         case (TimestampType, DateType) =>
           fail(child, DateType, walkedTypePath)
+        case (StringType, to: NumericType) =>
+          fail(child, to, walkedTypePath)
         case _ => Cast(child, dataType)
       }
     }

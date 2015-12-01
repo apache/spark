@@ -920,4 +920,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
  * truncate, e.g. long -> int, timestamp -> data.
  */
 case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String])
-  extends UnaryExpression with Unevaluable
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+}

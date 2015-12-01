@@ -149,15 +149,16 @@ class EncoderResolutionSuite extends PlanTest {
   castSuccess[Int, Long]
   castSuccess[java.sql.Date, java.sql.Timestamp]
   castSuccess[Long, String]
-  castSuccess[String, Long]
   castSuccess[Int, java.math.BigDecimal]
   castSuccess[Long, java.math.BigDecimal]
-  castSuccess[Double, java.math.BigDecimal]
 
   castFail[Long, Int]
   castFail[java.sql.Timestamp, java.sql.Date]
   castFail[java.math.BigDecimal, Double]
+  castFail[Double, java.math.BigDecimal]
   castFail[java.math.BigDecimal, Int]
+  castFail[String, Long]
+
 
   private def castSuccess[T: TypeTag, U: TypeTag]: Unit = {
     val from = ExpressionEncoder[T]
