@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.Queryable
 
 abstract class QueryTest extends PlanTest {
 
@@ -163,9 +164,9 @@ abstract class QueryTest extends PlanTest {
   }
 
   /**
-   * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
+   * Asserts that a given [[Queryable]] will be executed using the given number of cached results.
    */
-  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
+  def assertCached(query: Queryable, numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached

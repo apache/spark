@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
@@ -75,12 +74,12 @@ private[sql] class CacheManager extends Logging {
   }
 
   /**
-   * Caches the data produced by the logical representation of the given [[DataFrame]]. Unlike
-   * `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because recomputing
-   * the in-memory columnar representation of the underlying table is expensive.
+   * Caches the data produced by the logical representation of the given [[Queryable]].
+   * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
+   * recomputing the in-memory columnar representation of the underlying table is expensive.
    */
   private[sql] def cacheQuery(
-      query: DataFrame,
+      query: Queryable,
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
@@ -95,13 +94,13 @@ private[sql] class CacheManager extends Logging {
             sqlContext.conf.useCompression,
             sqlContext.conf.columnBatchSize,
             storageLevel,
-            sqlContext.executePlan(query.logicalPlan).executedPlan,
+            sqlContext.executePlan(planToCache).executedPlan,
             tableName))
     }
   }
 
-  /** Removes the data for the given [[DataFrame]] from the cache */
-  private[sql] def uncacheQuery(query: DataFrame, blocking: Boolean = true): Unit = writeLock {
+  /** Removes the data for the given [[Queryable]] from the cache */
+  private[sql] def uncacheQuery(query: Queryable, blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
@@ -109,9 +108,11 @@ private[sql] class CacheManager extends Logging {
     cachedData.remove(dataIndex)
   }
 
-  /** Tries to remove the data for the given [[DataFrame]] from the cache if it's cached */
+  /** Tries to remove the data for the given [[Queryable]] from the cache
+    * if it's cached
+    */
   private[sql] def tryUncacheQuery(
-      query: DataFrame,
+      query: Queryable,
       blocking: Boolean = true): Boolean = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
@@ -123,12 +124,12 @@ private[sql] class CacheManager extends Logging {
     found
   }
 
-  /** Optionally returns cached data for the given [[DataFrame]] */
-  private[sql] def lookupCachedData(query: DataFrame): Option[CachedData] = readLock {
+  /** Optionally returns cached data for the given [[Queryable]] */
+  private[sql] def lookupCachedData(query: Queryable): Option[CachedData] = readLock {
     lookupCachedData(query.queryExecution.analyzed)
   }
 
-  /** Optionally returns cached data for the given LogicalPlan. */
+  /** Optionally returns cached data for the given [[LogicalPlan]]. */
   private[sql] def lookupCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
     cachedData.find(cd => plan.sameResult(cd.plan))
   }

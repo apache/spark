@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
@@ -565,7 +566,7 @@ class Dataset[T] private[sql](
    * combined.
    *
    * Note that, this function is not a typical set union operation, in that it does not eliminate
-   * duplicate items.  As such, it is analagous to `UNION ALL` in SQL.
+   * duplicate items.  As such, it is analogous to `UNION ALL` in SQL.
    * @since 1.6.0
    */
   def union(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Union)
@@ -617,7 +618,6 @@ class Dataset[T] private[sql](
       case e if e.flat => Alias(rightOutput.head, "_2")()
       case _ => Alias(CreateStruct(rightOutput), "_2")()
     }
-
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
@@ -697,11 +697,55 @@ class Dataset[T] private[sql](
    */
   def takeAsList(num: Int): java.util.List[T] = java.util.Arrays.asList(take(num) : _*)
 
+  /**
+    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+    * @since 1.6.0
+    */
+  def persist(): this.type = {
+    sqlContext.cacheManager.cacheQuery(this)
+    this
+  }
+
+  /**
+    * Persist this [[Dataset]] with the default storage level (`MEMORY_AND_DISK`).
+    * @since 1.6.0
+    */
+  def cache(): this.type = persist()
+
+  /**
+    * Persist this [[Dataset]] with the given storage level.
+    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+    *                 `MEMORY_AND_DISK_2`, etc.
+    * @group basic
+    * @since 1.6.0
+    */
+  def persist(newLevel: StorageLevel): this.type = {
+    sqlContext.cacheManager.cacheQuery(this, None, newLevel)
+    this
+  }
+
+  /**
+    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+    * @param blocking Whether to block until all blocks are deleted.
+    * @since 1.6.0
+    */
+  def unpersist(blocking: Boolean): this.type = {
+    sqlContext.cacheManager.tryUncacheQuery(this, blocking)
+    this
+  }
+
+  /**
+    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
+    * @since 1.6.0
+    */
+  def unpersist(): this.type = unpersist(blocking = false)
+
   /* ******************** *
    *  Internal Functions  *
    * ******************** */
 
-  private[sql] def logicalPlan = queryExecution.analyzed
+  private[sql] def logicalPlan: LogicalPlan = queryExecution.analyzed
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
     new Dataset[T](sqlContext, sqlContext.executePlan(f(logicalPlan)), tEncoder)
