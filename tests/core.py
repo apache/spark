@@ -563,6 +563,75 @@ class WebUiTests(unittest.TestCase):
         pass
 
 
+class WebPasswordAuthTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.conf.set("webserver", "authenticate", "True")
+        configuration.conf.set("webserver", "auth_backend", "airflow.contrib.auth.backends.password_auth")
+
+        app = application.create_app()
+        app.config['TESTING'] = True
+        self.app = app.test_client()
+        from airflow.contrib.auth.backends.password_auth import PasswordUser
+
+        session = Session()
+        user = models.User()
+        password_user = PasswordUser(user)
+        password_user.username = 'airflow_passwordauth'
+        password_user.password = 'password'
+        print(password_user._password)
+        session.add(password_user)
+        session.commit()
+        session.close()
+
+
+    def get_csrf(self, response):
+        tree = html.fromstring(response.data)
+        form = tree.find('.//form')
+
+        return form.find('.//input[@name="_csrf_token"]').value
+
+    def login(self, username, password):
+        response = self.app.get('/admin/airflow/login')
+        csrf_token = self.get_csrf(response)
+
+        return self.app.post('/admin/airflow/login', data=dict(
+            username=username,
+            password=password,
+            csrf_token=csrf_token
+        ), follow_redirects=True)
+
+    def logout(self):
+        return self.app.get('/admin/airflow/logout', follow_redirects=True)
+
+    def test_login_logout_password_auth(self):
+        assert configuration.getboolean('webserver', 'authenticate') is True
+
+        response = self.login('user1', 'whatever')
+        assert 'Incorrect login details' in response.data.decode('utf-8')
+
+        response = self.login('airflow_passwordauth', 'wrongpassword')
+        assert 'Incorrect login details' in response.data.decode('utf-8')
+
+        response = self.login('airflow_passwordauth', 'password')
+        assert 'Data Profiling' in response.data.decode('utf-8')
+
+        response = self.logout()
+        assert 'form-signin' in response.data.decode('utf-8')
+
+    def test_unauthorized_password_auth(self):
+        response = self.app.get("/admin/airflow/landing_times")
+        self.assertEqual(response.status_code, 302)
+
+    def tearDown(self):
+        configuration.test_mode()
+        session = Session()
+        session.query(models.User).delete()
+        session.commit()
+        session.close()
+        configuration.conf.set("webserver", "authenticate", "False")
+
+
 class WebLdapAuthTest(unittest.TestCase):
 
     def setUp(self):
@@ -624,6 +693,10 @@ class WebLdapAuthTest(unittest.TestCase):
 
     def tearDown(self):
         configuration.test_mode()
+        session = Session()
+        session.query(models.User).delete()
+        session.commit()
+        session.close()
         configuration.conf.set("webserver", "authenticate", "False")
 
 
