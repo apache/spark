@@ -343,7 +343,7 @@ class SQLContext private[sql](
     * @group cachemgmt
     * @since 1.3.0
     */
-  def isCached(qName: Queryable): Boolean = {
+  private[sql] def isCached(qName: Queryable): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
 
