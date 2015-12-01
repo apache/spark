@@ -78,12 +78,12 @@ class TypedColumn[-T, U](
  * A new column is constructed based on the input columns present in a dataframe:
  *
  * {{{
- *   df("columnName")           // On a specific DataFrame.
- *   col("columnName")          // A generic column no yet associcated with a DataFrame.
- *   col("columnName.field")    // Extracting a struct field
+ *   df("columnName")            // On a specific DataFrame.
+ *   col("columnName")           // A generic column no yet associcated with a DataFrame.
+ *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
- *   $"columnName"              // Scala short hand for a named column.
- *   expr("a + 1")              // A column that is constructed from a parsed SQL Expression.
+ *   $"columnName"               // Scala short hand for a named column.
+ *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
  * }}}
  *
  * [[Column]] objects can be composed to form complex expressions:
