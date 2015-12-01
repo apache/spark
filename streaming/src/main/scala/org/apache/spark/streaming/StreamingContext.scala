@@ -627,8 +627,6 @@ class StreamingContext private[streaming] (
         logInfo("StreamingContext started")
       case ACTIVE =>
         logWarning("StreamingContext has already been started")
-      case PARTIALLY_STOPPED =>
-        throw new IllegalStateException("StreamingContext is partially stopped")
       case STOPPED =>
         throw new IllegalStateException("StreamingContext has already been stopped")
     }
@@ -708,14 +706,13 @@ class StreamingContext private[streaming] (
         case STOPPED =>
           logWarning("StreamingContext has already been stopped")
           state = STOPPED
-        case ACTIVE | PARTIALLY_STOPPED =>
+        case ACTIVE =>
           // It's important that we don't set state = STOPPED until the very end of this case,
           // since we need to ensure that we're still able to call `stop()` to recover from
           // a partially-stopped StreamingContext which resulted from this `stop()` call being
-          // interrupted. See SPARK-12001 for more details. Instead, we record that we're in the
-          // process of stopping. Because the body of this case can be executed twice in the case
-          // of a partial stop, all methods called here need to be idempotent.
-          state = PARTIALLY_STOPPED
+          // interrupted. See SPARK-12001 for more details. Because the body of this case can be
+          // executed twice in the case of a partial stop, all methods called here need to be
+          // idempotent.
           scheduler.stop(stopGracefully)
           // Removing the streamingSource to de-register the metrics on stop()
           env.metricsSystem.removeSource(streamingSource)

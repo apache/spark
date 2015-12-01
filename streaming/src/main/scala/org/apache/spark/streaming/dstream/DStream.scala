@@ -220,7 +220,7 @@ abstract class DStream[T: ClassTag] (
         throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "starting a context is not supported")
-      case StreamingContextState.PARTIALLY_STOPPED | StreamingContextState.STOPPED =>
+      case StreamingContextState.STOPPED =>
         throw new IllegalStateException(
           "Adding new inputs, transformations, and output operations after " +
             "stopping a context is not supported")
