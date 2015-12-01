@@ -31,11 +31,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-
-
-// These classes are here to avoid issues with serialization and integration with quasiquotes.
-class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
-class LongHashSet extends org.apache.spark.util.collection.OpenHashSet[Long]
+import org.apache.spark.util.Utils
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -109,15 +105,15 @@ class CodeGenContext {
 
   // State used for subexpression elimination.
   case class SubExprEliminationState(
-    val isLoaded: String, code: GeneratedExpressionCode, val fnName: String)
+      isLoaded: String,
+      code: GeneratedExpressionCode,
+      fnName: String)
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  val subExprEliminationExprs: mutable.HashMap[Expression, SubExprEliminationState] =
-    mutable.HashMap[Expression, SubExprEliminationState]()
+  val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
   // The collection of isLoaded variables that need to be reset on each row.
-  val subExprIsLoadedVariables: mutable.ArrayBuffer[String] =
-    mutable.ArrayBuffer.empty[String]
+  val subExprIsLoadedVariables = mutable.ArrayBuffer.empty[String]
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -205,8 +201,6 @@ class CodeGenContext {
     case _: StructType => "InternalRow"
     case _: ArrayType => "ArrayData"
     case _: MapType => "MapData"
-    case dt: OpenHashSetUDT if dt.elementType == IntegerType => classOf[IntegerHashSet].getName
-    case dt: OpenHashSetUDT if dt.elementType == LongType => classOf[LongHashSet].getName
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
@@ -273,6 +267,49 @@ class CodeGenContext {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.sql.catalyst.util.TypeUtils.compareBinary($c1, $c2)"
     case NullType => "0"
+    case array: ArrayType =>
+      val elementType = array.elementType
+      val elementA = freshName("elementA")
+      val isNullA = freshName("isNullA")
+      val elementB = freshName("elementB")
+      val isNullB = freshName("isNullB")
+      val compareFunc = freshName("compareArray")
+      val minLength = freshName("minLength")
+      val funcCode: String =
+        s"""
+          public int $compareFunc(ArrayData a, ArrayData b) {
+            int lengthA = a.numElements();
+            int lengthB = b.numElements();
+            int $minLength = (lengthA > lengthB) ? lengthB : lengthA;
+            for (int i = 0; i < $minLength; i++) {
+              boolean $isNullA = a.isNullAt(i);
+              boolean $isNullB = b.isNullAt(i);
+              if ($isNullA && $isNullB) {
+                // Nothing
+              } else if ($isNullA) {
+                return -1;
+              } else if ($isNullB) {
+                return 1;
+              } else {
+                ${javaType(elementType)} $elementA = ${getValue("a", elementType, "i")};
+                ${javaType(elementType)} $elementB = ${getValue("b", elementType, "i")};
+                int comp = ${genComp(elementType, elementA, elementB)};
+                if (comp != 0) {
+                  return comp;
+                }
+              }
+            }
+
+            if (lengthA < lengthB) {
+              return -1;
+            } else if (lengthA > lengthB) {
+              return 1;
+            }
+            return 0;
+          }
+        """
+      addNewFunction(compareFunc, funcCode)
+      s"this.$compareFunc($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")
@@ -290,6 +327,18 @@ class CodeGenContext {
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException("cannot generate compare code for un-comparable type")
+  }
+
+  /**
+    * Generates code for greater of two expressions.
+    *
+    * @param dataType data type of the expressions
+    * @param c1 name of the variable of expression 1's output
+    * @param c2 name of the variable of expression 2's output
+    */
+  def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
+    case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
+    case _ => s"(${genComp(dataType, c1, c2)}) > 0"
   }
 
   /**
@@ -361,7 +410,7 @@ class CodeGenContext {
       val expr = e.head
       val isLoaded = freshName("isLoaded")
       val isNull = freshName("isNull")
-      val primitive = freshName("primitive")
+      val value = freshName("value")
       val fnName = freshName("evalExpr")
 
       // Generate the code for this expression tree and wrap it in a function.
@@ -373,13 +422,13 @@ class CodeGenContext {
            |    ${code.code.trim}
            |    $isLoaded = true;
            |    $isNull = ${code.isNull};
-           |    $primitive = ${code.value};
+           |    $value = ${code.value};
            |  }
            |}
            """.stripMargin
       code.code = fn
       code.isNull = isNull
-      code.value = primitive
+      code.value = value
 
       addNewFunction(fnName, fn)
 
@@ -406,8 +455,8 @@ class CodeGenContext {
       // optimizations.
       addMutableState("boolean", isLoaded, s"$isLoaded = false;")
       addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), primitive,
-        s"$primitive = ${defaultValue(expr.dataType)};")
+      addMutableState(javaType(expr.dataType), value,
+        s"$value = ${defaultValue(expr.dataType)};")
       subExprIsLoadedVariables += isLoaded
 
       val state = SubExprEliminationState(isLoaded, code, fnName)
@@ -487,7 +536,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(getClass.getClassLoader)
+    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(

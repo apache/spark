@@ -23,8 +23,6 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.tuning.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 
@@ -46,9 +44,7 @@ public class JavaTrainValidationSplitExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
 
-    DataFrame data = jsql.createDataFrame(
-      MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt"),
-      LabeledPoint.class);
+    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Prepare training and test data.
     DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);

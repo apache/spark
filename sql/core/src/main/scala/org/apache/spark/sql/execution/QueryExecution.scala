@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
-  @VisibleForTesting
   def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
 
   lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
@@ -80,7 +77,6 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |${stringOrError(optimizedPlan)}
        |== Physical Plan ==
        |${stringOrError(executedPlan)}
-       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
     """.stripMargin.trim
   }
 }

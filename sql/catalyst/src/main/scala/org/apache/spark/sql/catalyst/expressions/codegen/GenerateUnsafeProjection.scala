@@ -39,7 +39,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
-    case dt: OpenHashSetUDT => false  // it's not a standard UDT
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
     case _ => false
   }
@@ -309,13 +308,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     in.map(BindReferences.bindReference(_, inputSchema))
 
   def generate(
-    expressions: Seq[Expression],
-    subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
+      expressions: Seq[Expression],
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
     create(canonicalize(expressions), subexpressionEliminationEnabled)
   }
 
   protected def create(expressions: Seq[Expression]): UnsafeProjection = {
-    create(expressions, false)
+    create(expressions, subexpressionEliminationEnabled = false)
   }
 
   private def create(
@@ -325,7 +324,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
     val code = s"""
-      public Object generate($exprType[] exprs) {
+      public java.lang.Object generate($exprType[] exprs) {
         return new SpecificUnsafeProjection(exprs);
       }
 
@@ -343,7 +342,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         // Scala.Function1 need this
-        public Object apply(Object row) {
+        public java.lang.Object apply(java.lang.Object row) {
           return apply((InternalRow) row);
         }
 

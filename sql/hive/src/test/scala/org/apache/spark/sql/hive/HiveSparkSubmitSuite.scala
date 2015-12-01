@@ -23,7 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
@@ -42,14 +42,14 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
-  // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
-  // add a timestamp to provide more diagnosis information.
+  with BeforeAndAfterEach
   with ResetSystemProperties
   with Timeouts {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
-  def beforeAll() {
+  override def beforeEach() {
+    super.beforeEach()
     System.setProperty("spark.testing", "true")
   }
 
@@ -66,6 +66,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -79,6 +80,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -93,6 +95,7 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       "--class", "Main",
       testJar)
     runSparkSubmit(args)
@@ -104,6 +107,9 @@ class HiveSparkSubmitSuite
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -114,6 +120,9 @@ class HiveSparkSubmitSuite
       "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }

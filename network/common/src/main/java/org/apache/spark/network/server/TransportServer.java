@@ -31,12 +31,15 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.apache.spark.network.util.*;
+import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.util.IOMode;
+import org.apache.spark.network.util.NettyUtils;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Server for the efficient, low-level streaming service.
@@ -54,9 +57,13 @@ public class TransportServer implements Closeable {
   private ChannelFuture channelFuture;
   private int port = -1;
 
-  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
+  /**
+   * Creates a TransportServer that binds to the given host and the given port, or to any available
+   * if 0. If you don't want to bind to any special host, set "hostToBind" to null.
+   * */
   public TransportServer(
       TransportContext context,
+      String hostToBind,
       int portToBind,
       RpcHandler appRpcHandler,
       List<TransportServerBootstrap> bootstraps) {
@@ -67,7 +74,7 @@ public class TransportServer implements Closeable {
     this.sslEncryptionHandler = context.getSslEncryptionHandler();
 
     try {
-      init(portToBind);
+      init(hostToBind, portToBind);
     } catch (RuntimeException e) {
       JavaUtils.closeQuietly(this);
       throw e;
@@ -81,7 +88,7 @@ public class TransportServer implements Closeable {
     return port;
   }
 
-  private void init(int portToBind) {
+  private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
@@ -111,7 +118,9 @@ public class TransportServer implements Closeable {
 
     initHandler();
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(portToBind));
+    InetSocketAddress address = hostToBind == null ?
+        new InetSocketAddress(portToBind): new InetSocketAddress(hostToBind, portToBind);
+    channelFuture = bootstrap.bind(address);
     channelFuture.syncUninterruptibly();
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();

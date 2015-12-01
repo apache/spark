@@ -42,7 +42,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
   private val transportConf = SparkTransportConf.fromSparkConf(
-    conf, numCores, Some(securityManager.btsSSLOptions))
+    conf, "shuffle", numCores, Some(securityManager.btsSSLOptions))
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
