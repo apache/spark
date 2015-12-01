@@ -38,7 +38,7 @@ class FilterPushdownSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
-        ReorderInnerJoin,
+        ReorderJoin,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,

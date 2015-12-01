@@ -42,7 +42,7 @@ object DefaultOptimizer extends Optimizer {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
-      ReorderInnerJoin,
+      ReorderJoin,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -711,12 +711,13 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
-  * Reorder the inner joins so that the bottom ones have at least one condition.
-  *
-  * TODO: support outer joins
+  * Reorder the joins so that the bottom ones have at least one condition.
   */
-object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
+object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
+  /**
+    * Reorder the joins so that the bottom ones have at least one condition.
+    */
   def reorder(
       input: LogicalPlan,
       joins: Seq[LogicalPlan],
@@ -744,6 +745,7 @@ object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // TODO: support outer join
     case FilterAndInnerJoins(input, joins, filterConditions) if joins.size > 1 =>
       assert(filterConditions.nonEmpty)
       val joined = reorder(input, joins, filterConditions)
