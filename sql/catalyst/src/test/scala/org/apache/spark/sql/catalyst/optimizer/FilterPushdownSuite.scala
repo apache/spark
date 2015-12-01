@@ -38,7 +38,6 @@ class FilterPushdownSuite extends PlanTest {
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
-        ReorderJoin,
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
@@ -544,25 +543,6 @@ class FilterPushdownSuite extends PlanTest {
       lleft.join(
         left.join(right, condition = Some("x.b".attr === "y.b".attr)),
           condition = Some("z.a".attr === "x.b".attr))
-        .analyze
-
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
-  }
-
-  test("joins: reorder inner joins") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
-    val z = testRelation.subquery('z)
-
-    val originalQuery = {
-      x.join(y).join(z)
-        .where(("x.b".attr === "z.b".attr) && ("y.d".attr === "z.a".attr))
-    }
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      x.join(z, condition = Some("x.b".attr === "z.b".attr))
-        .join(y, condition = Some("y.d".attr === "z.a".attr))
         .analyze
 
     comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
