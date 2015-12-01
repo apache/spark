@@ -514,6 +514,7 @@ public class JavaDatasetSuite implements Serializable {
     private byte[] c;
     private String[] d;
     private List<String> e;
+    private List<Long> f;
 
     public boolean isA() {
       return a;
@@ -555,6 +556,14 @@ public class JavaDatasetSuite implements Serializable {
       this.e = e;
     }
 
+    public List<Long> getF() {
+      return f;
+    }
+
+    public void setF(List<Long> f) {
+      this.f = f;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -566,7 +575,8 @@ public class JavaDatasetSuite implements Serializable {
       if (b != that.b) return false;
       if (!Arrays.equals(c, that.c)) return false;
       if (!Arrays.equals(d, that.d)) return false;
-      return e.equals(that.e);
+      if (!e.equals(that.e)) return false;
+      return f.equals(that.f);
     }
 
     @Override
@@ -576,6 +586,7 @@ public class JavaDatasetSuite implements Serializable {
       result = 31 * result + Arrays.hashCode(c);
       result = 31 * result + Arrays.hashCode(d);
       result = 31 * result + e.hashCode();
+      result = 31 * result + f.hashCode();
       return result;
     }
   }
@@ -614,14 +625,16 @@ public class JavaDatasetSuite implements Serializable {
     obj1.setA(true);
     obj1.setB(3);
     obj1.setC(new byte[]{1, 2});
-    obj1.setD(new String[]{"hello"});
+    obj1.setD(new String[]{"hello", null});
     obj1.setE(Arrays.asList("a", "b"));
+    obj1.setF(Arrays.asList(100L, null, 200L));
     SimpleJavaBean obj2 = new SimpleJavaBean();
     obj2.setA(false);
     obj2.setB(30);
     obj2.setC(new byte[]{3, 4});
-    obj2.setD(new String[]{"world"});
+    obj2.setD(new String[]{null, "world"});
     obj2.setE(Arrays.asList("x", "y"));
+    obj2.setF(Arrays.asList(300L, null, 400L));
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
     Dataset<SimpleJavaBean> ds = context.createDataset(data, Encoders.bean(SimpleJavaBean.class));
@@ -638,20 +651,23 @@ public class JavaDatasetSuite implements Serializable {
       true,
       3,
       new byte[]{1, 2},
-      new String[]{"hello"},
-      Arrays.asList("a", "b")});
+      new String[]{"hello", null},
+      Arrays.asList("a", "b"),
+      Arrays.asList(100L, null, 200L)});
     Row row2 = new GenericRow(new Object[]{
       false,
       30,
       new byte[]{3, 4},
-      new String[]{"world"},
-      Arrays.asList("x", "y")});
+      new String[]{null, "world"},
+      Arrays.asList("x", "y"),
+      Arrays.asList(300L, null, 400L)});
     StructType schema = new StructType()
       .add("a", BooleanType, false)
       .add("b", IntegerType, false)
       .add("c", BinaryType)
       .add("d", createArrayType(StringType))
-      .add("e", createArrayType(StringType));
+      .add("e", createArrayType(StringType))
+      .add("f", createArrayType(LongType));
     Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
