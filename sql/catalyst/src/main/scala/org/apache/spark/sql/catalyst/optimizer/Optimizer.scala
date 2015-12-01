@@ -22,6 +22,7 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.FilterAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -711,44 +712,42 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 
 /**
   * Reorder the inner joins so that the bottom ones have at least one condition.
+  *
+  * TODO: support outer joins
   */
 object ReorderInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  def reorder(
+      input: LogicalPlan,
+      joins: Seq[LogicalPlan],
+      conditions: Seq[Expression]): LogicalPlan = {
+    // filter out the conditions that could be pushed down to `joined`
+    val otherConditions = conditions.filterNot { cond =>
+      cond.references.subsetOf(input.outputSet)
+    }
+    if (joins.isEmpty) {
+      input
+    } else if (otherConditions.isEmpty) {
+      // no condition for these joins, so put them in original order
+      (Seq(input) ++ joins).reduceLeft(Join(_, _, Inner, None))
+    } else {
+      // find out the first join that have at least one condition
+      val conditionalJoin = joins.find { plan =>
+        val refs = input.outputSet ++ plan.outputSet
+        otherConditions.exists(cond => cond.references.subsetOf(refs))
+      }
+      assert(conditionalJoin.isDefined)
+      val picked = conditionalJoin.get
+      val joined = Join(input, picked, Inner, None)
+      reorder(joined, joins.filterNot(_ eq picked), otherConditions)
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-
-    // This will only be matched once, because Filter will be pushed down to join by
-    // PushPredicateThroughJoin
-    case f @ Filter(filterCondition, j @ Join(left, right, Inner, None)) =>
-
-      // flatten all inner joins, which are next to each other and has no condition
-      def flattenJoin(plan: LogicalPlan): (LogicalPlan, Seq[LogicalPlan]) = plan match {
-        case Join(left, right, Inner, None) =>
-        val (root, joins) = flattenJoin(left)
-        (root, joins ++ Seq(right))
-        case _ => (plan, Seq())
-      }
-
-      val allConditions = splitConjunctivePredicates(filterCondition)
-      var (joined, toJoins) = flattenJoin(j)
-      // filter out the conditions that could be pushed down to `joined`
-      var otherConditions = allConditions.filterNot { cond =>
-        cond.references.subsetOf(joined.outputSet)
-      }
-      while (toJoins.nonEmpty && otherConditions.nonEmpty) {
-        // find out the first join that have at least one condition for it
-        val conditionalJoin = toJoins.find { plan =>
-          val refs = joined.outputSet ++ plan.outputSet
-          otherConditions.exists(cond => cond.references.subsetOf(refs))
-        }
-        assert(conditionalJoin.isDefined)
-        val picked = conditionalJoin.get
-        joined = Join(joined, picked, Inner, None)
-        toJoins = toJoins.filterNot(_ eq picked)
-        otherConditions = allConditions.filterNot { cond =>
-          cond.references.subsetOf(joined.outputSet)
-        }
-      }
-      joined = (Seq(joined) ++ toJoins).reduceLeft(Join(_, _, Inner, None))
-      Filter(filterCondition, joined)
+    case FilterAndInnerJoins(input, joins, filterConditions) if joins.size > 1 =>
+      assert(filterConditions.nonEmpty)
+      val joined = reorder(input, joins, filterConditions)
+      Filter(filterConditions.reduceLeft(And), joined)
   }
 }
 
