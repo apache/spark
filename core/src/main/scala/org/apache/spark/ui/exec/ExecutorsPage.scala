@@ -54,7 +54,7 @@ private[ui] class ExecutorsPage(
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val activeStorageStatusList = listener.storageStatusList
+      val activeStorageStatusList = listener.activeStorageStatusList
       val activeExecutorsTable  = listingExecTable(activeStorageStatusList, true)
       val deadStorageStatusList = listener.deadStorageStatusList
       val deadExecutorsTable  = listingExecTable(deadStorageStatusList, false)
@@ -191,7 +191,7 @@ private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
   def getExecInfo(listener: ExecutorsListener, statusId: Int, isActive: Boolean): ExecutorSummary = {
     val status = if (isActive) {
-      listener.storageStatusList(statusId)
+      listener.activeStorageStatusList(statusId)
     } else {
       listener.deadStorageStatusList(statusId)
     }

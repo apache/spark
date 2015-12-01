@@ -29,7 +29,7 @@ private[v1] class ExecutorListResource(ui: SparkUI) {
   def executorList(): Seq[ExecutorSummary] = {
     val listener = ui.executorsListener
     listener.synchronized {
-      val storageStatusList = listener.storageStatusList
+      val storageStatusList = listener.activeStorageStatusList
       (0 until storageStatusList.size).map { statusId =>
         ExecutorsPage.getExecInfo(listener, statusId, true)
       }
