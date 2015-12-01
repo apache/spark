@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.metric
+package org.apache.spark.util
 
-import org.apache.spark.annotation.DeveloperApi
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 
 /**
- * :: DeveloperApi ::
- * Stores information about a SQL Metric.
+ * Provide a zero-copy way to convert data in ByteArrayOutputStream to ByteBuffer
  */
-@DeveloperApi
-class SQLMetricInfo(
-    val name: String,
-    val accumulatorId: Long,
-    val metricParam: String)
+private[spark] class ByteBufferOutputStream extends ByteArrayOutputStream {
+
+  def toByteBuffer: ByteBuffer = {
+    return ByteBuffer.wrap(buf, 0, count)
+  }
+}
