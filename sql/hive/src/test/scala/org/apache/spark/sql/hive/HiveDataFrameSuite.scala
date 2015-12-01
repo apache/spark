@@ -15,29 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.sql.hive
 
-import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.QueryTest
 
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
-
-/**
- * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
- */
-private[spark]
-class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
-
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case TriggerThreadDump =>
-      context.reply(Utils.getThreadDump())
+class HiveDataFrameSuite extends QueryTest with TestHiveSingleton {
+  test("table name with schema") {
+    // regression test for SPARK-11778
+    hiveContext.sql("create schema usrdb")
+    hiveContext.sql("create table usrdb.test(c int)")
+    hiveContext.read.table("usrdb.test")
+    hiveContext.sql("drop table usrdb.test")
+    hiveContext.sql("drop schema usrdb")
   }
-
-}
-
-object ExecutorEndpoint {
-  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
 }

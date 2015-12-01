@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types.StructType
-
-import scala.util.control.NonFatal
 
 /** A trait that holds shared code between DataFrames and Datasets. */
 private[sql] trait Queryable {
@@ -37,31 +37,9 @@ private[sql] trait Queryable {
     }
   }
 
-  /**
-   * Prints the schema to the console in a nice tree format.
-   * @group basic
-   * @since 1.3.0
-   */
-  // scalastyle:off println
-  def printSchema(): Unit = println(schema.treeString)
-  // scalastyle:on println
+  def printSchema(): Unit
 
-  /**
-   * Prints the plans (logical and physical) to the console for debugging purposes.
-   * @since 1.3.0
-   */
-  def explain(extended: Boolean): Unit = {
-    val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
-      // scalastyle:off println
-      r => println(r.getString(0))
-      // scalastyle:on println
-    }
-  }
+  def explain(extended: Boolean): Unit
 
-  /**
-   * Only prints the physical plan to the console for debugging purposes.
-   * @since 1.3.0
-   */
-  def explain(): Unit = explain(extended = false)
+  def explain(): Unit
 }
