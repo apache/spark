@@ -28,8 +28,7 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    dataFrame = sqlContext.read.format("libsvm")
-        .load("data/mllib/sample_libsvm_data.txt")
+    dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Normalize each Vector using $L^1$ norm.
     normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)

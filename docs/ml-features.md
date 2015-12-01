@@ -279,7 +279,6 @@ Refer to the [NGram Java docs](api/java/org/apache/spark/ml/feature/NGram.html)
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaNGramExample.java %}
-{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -888,7 +887,6 @@ Refer to the [VectorSlicer Java docs](api/java/org/apache/spark/ml/feature/Vecto
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
-{% endhighlight %}
 </div>
 </div>
 

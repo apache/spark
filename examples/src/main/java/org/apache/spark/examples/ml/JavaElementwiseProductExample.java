@@ -29,6 +29,7 @@ import java.util.List;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.ElementwiseProduct;
 import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
@@ -36,7 +37,6 @@ import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-import org.apache.spark.mllib.linalg.VectorUDT;
 // $example off$
 
 public class JavaElementwiseProductExample {
@@ -53,7 +53,7 @@ public class JavaElementwiseProductExample {
     ));
 
     List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataTypes.createStructField("id", new VectorUDT(), false));
+    fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("vector", new VectorUDT(), false));
 
     StructType schema = DataTypes.createStructType(fields);

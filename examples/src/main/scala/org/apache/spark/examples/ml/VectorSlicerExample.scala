@@ -21,12 +21,12 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.feature.VectorSlicer
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.Vectors
 
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
