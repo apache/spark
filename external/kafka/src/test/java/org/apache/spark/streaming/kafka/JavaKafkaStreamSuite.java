@@ -75,7 +75,7 @@ public class JavaKafkaStreamSuite implements Serializable {
     sent.put("b", 3);
     sent.put("c", 10);
 
-    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.createTopic(topic, 1);
     kafkaTestUtils.sendMessages(topic, sent);
 
     HashMap<String, String> kafkaParams = new HashMap<String, String>();

@@ -152,10 +152,10 @@ private[kafka] class KafkaTestUtils extends Logging {
   }
 
   /** Create a Kafka topic and wait until it propagated to the whole cluster */
-  def createTopic(topic: String): Unit = {
-    AdminUtils.createTopic(zkClient, topic, 1, 1)
+  def createTopic(topic: String, partitions: Int = 1): Unit = {
+    AdminUtils.createTopic(zkClient, topic, partitions, 1)
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(topic, 0)
+    (0 until partitions).foreach { p => waitUntilMetadataIsPropagated(topic, p) }
   }
 
   /** Java-friendly function for sending messages to the Kafka broker */
