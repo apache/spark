@@ -215,7 +215,9 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
 
   /** Run a test twice, once for local checkpointing and once for reliable checkpointing. */
   protected def runTest(
-    name: String, skipLocalCheckpoint: Boolean = false)(body: Boolean => Unit): Unit = {
+      name: String,
+      skipLocalCheckpoint: Boolean = false
+    )(body: Boolean => Unit): Unit = {
     test(name + " [reliable checkpoint]")(body(true))
     if (!skipLocalCheckpoint) {
       test(name + " [local checkpoint]")(body(false))

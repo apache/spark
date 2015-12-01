@@ -48,7 +48,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   /**
    * Return the path of the checkpoint directory this RDD reads data from.
    */
-  override def getCheckpointFile: Option[String] = Some(checkpointPath)
+  override val getCheckpointFile: Option[String] = Some(checkpointPath)
 
   override val partitioner: Option[Partitioner] = {
     _partitioner.orElse {
@@ -114,7 +114,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
   /**
    * Write RDD to checkpoint files and return a ReliableCheckpointRDD representing the RDD.
    */
-  def createCheckpointedRDD[T: ClassTag](
+  def writeRDDToCheckpointDirectory[T: ClassTag](
       originalRDD: RDD[T],
       checkpointDir: String,
       blockSize: Int = -1): ReliableCheckpointRDD[T] = {
@@ -200,7 +200,11 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
   }
 
-  def writePartitionerToCheckpointDir(
+  /**
+   * Write a partitioner to the given RDD checkpoint directory. This is done on a best-effort
+   * basis; any exception while writing the partitioner is caught, logged and ignored.
+   */
+  private def writePartitionerToCheckpointDir(
     sc: SparkContext, partitioner: Partitioner, checkpointDirPath: Path): Unit = {
     try {
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
@@ -221,7 +225,13 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     }
   }
 
-  def readCheckpointedPartitionerFile(
+
+  /**
+   * Read a partitioner from the given RDD checkpoint directory, if it exists.
+   * This is done on a best-effort basis; any exception while reading the partitioner is
+   * caught, logged and ignored.
+   */
+  private def readCheckpointedPartitionerFile(
       sc: SparkContext,
       checkpointDirPath: String): Option[Partitioner] = {
     try {
