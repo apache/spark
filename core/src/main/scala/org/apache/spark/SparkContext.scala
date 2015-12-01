@@ -29,7 +29,7 @@ import java.util.UUID.randomUUID
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{ListBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
@@ -241,6 +241,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private val _stopHooks = new ListBuffer[() => Unit]()
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -1615,6 +1616,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Adds a stop hook which can be used to clean up additional resource. This is called when the
+   * sparkContext is being stopped.
+   */
+  private[spark] def addStopHook(hook: () => Unit): Unit = {
+    _stopHooks += hook
+  }
+
+  /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
@@ -1760,9 +1769,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
+    _stopHooks.foreach(hook => Utils.tryLogNonFatalError {
+      hook()
+    })
     logInfo("Successfully stopped SparkContext")
   }
-
 
   /**
    * Get Spark's home location from either a value set through the constructor,

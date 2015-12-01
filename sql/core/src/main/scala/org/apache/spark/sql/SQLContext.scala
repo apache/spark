@@ -78,6 +78,12 @@ class SQLContext private[sql](
   }
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
+  sparkContext.addStopHook(() => {
+    SQLContext.clearInstantiatedContext()
+    SQLContext.clearActive()
+    SQLContext.clearSqlListener()
+  })
+
   // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
   // wants to create a new root SQLContext (a SLQContext that is not created by newSession).
   private val allowMultipleContexts =
