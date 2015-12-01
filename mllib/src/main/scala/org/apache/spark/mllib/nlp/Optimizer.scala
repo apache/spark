@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.nlp
+package org.apache.spark.mllib.nlp
 
 import scala.collection.mutable.ArrayBuffer
 
-private[ml] class Lbfgs {
+private[mllib] class Optimizer {
 
   private var w: ArrayBuffer[Double] = new ArrayBuffer[Double]()
   private var v: ArrayBuffer[Double] = new ArrayBuffer[Double]()
@@ -62,7 +62,7 @@ private[ml] class Lbfgs {
   private var stmax: Double = 0.0
 
 
-  def lbfgs(size: Int, x: ArrayBuffer[Double], f: Double,
+  def optimizer(size: Int, x: ArrayBuffer[Double], f: Double,
             g: ArrayBuffer[Double], C: Float): Unit = {
     val msize: Int = 5
     var bound: Int = 0

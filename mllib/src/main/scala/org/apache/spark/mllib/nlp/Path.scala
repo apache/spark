@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.nlp
+package org.apache.spark.mllib.nlp
 
 import scala.collection.mutable.ArrayBuffer
 
-private[ml] class Path extends Serializable {
+private[mllib] class Path extends Serializable {
   var rnode: Node = new Node
   var lnode: Node = new Node
   var cost: Double = 0.0

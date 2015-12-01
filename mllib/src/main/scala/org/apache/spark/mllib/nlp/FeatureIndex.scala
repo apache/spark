@@ -14,16 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.nlp
+package org.apache.spark.mllib.nlp
 
 import java.io.{ByteArrayOutputStream, FileInputStream, FileOutputStream, File}
+
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 
 import scala.StringBuilder
 import scala.collection.mutable
 import scala.io.Source._
 import scala.collection.mutable.ArrayBuffer
 
-private[ml] class FeatureIndex extends Serializable {
+private[mllib] class FeatureIndex extends Serializable {
   var maxid: Int = 0
   var alpha: ArrayBuffer[Double] = ArrayBuffer[Double]()
   var alpha_float: ArrayBuffer[Float] = ArrayBuffer[Float]()
@@ -44,6 +47,7 @@ private[ml] class FeatureIndex extends Serializable {
     "_B+5", "_B+6", "_B+7", "_B+8")
   val featureCache: ArrayBuffer[Int] = new ArrayBuffer[Int]()
   val featureCacheH: ArrayBuffer[Int] = new ArrayBuffer[Int]()
+  @transient var sc: SparkContext = _
 
   def getFeatureCacheIdx(fVal: Int): Int = {
     var i: Int = 0
@@ -64,33 +68,42 @@ private[ml] class FeatureIndex extends Serializable {
     featureCacheH
   }
 
-  def openTemplate(filename: String): Unit = {
-    val lineIter: Iterator[String] = fromFile(filename).getLines()
-    val line: Array[String] = lineIter.toArray
+  /**
+   * Read one template file
+   * @param template
+   */
+  def openTemplate(template: String): Unit = {
+    val lines = template.split("\n")
     var i: Int = 0
-    while (i < line.length) {
-      if (line(i).charAt(0) == 'U') {
-        unigram_templs += line(i)
-      } else if (line(i).charAt(0) == 'B') {
-        bigram_templs += line(i)
+    while (i < lines.length) {
+      if (lines(i).charAt(0) == 'U') {
+        unigram_templs += lines(i)
+      } else if (lines(i).charAt(0) == 'B') {
+        bigram_templs += lines(i)
       }
       i += 1
     }
     make_templs()
   }
 
-  def openTagSet(filename: String): FeatureIndex = {
-    val lineIter: Iterator[String] = fromFile(filename).getLines()
-    val line: Array[String] = lineIter.toArray
-    var lineHead = line(0).charAt(0)
+  /**
+   * Parse the feature file. If Sentences or paragraphs are defined as a unit
+   * for processing, they should be saved in a string. Multiple units are saved
+   * in the RDD.
+   * @param train
+   * @return
+   */
+  def openTagSet(train: String): FeatureIndex = {
+    val lines = train.split("\n")
+    var lineHead = lines(0).charAt(0)
     var tag: Array[String] = null
     var i: Int = 0
     var max: Int = 0
     var j: Int = 1
-    while (i < line.length) {
-      lineHead = line(i).charAt(0)
+    while (i < lines.length) {
+      lineHead = lines(i).charAt(0)
       if (lineHead != '\0' && lineHead != ' ' && lineHead != '\t') {
-        tag = line(i).split('|')
+        tag = lines(i).split('|')
         if (tag.length > max) {
           max = tag.length
         }
@@ -128,6 +141,10 @@ private[ml] class FeatureIndex extends Serializable {
     }
   }
 
+  /**
+   * Expand the feature size based on template.
+   * @param freq
+   */
   def shrink(freq: Integer): Unit = {
     var newMaxId: Int = 0
     val key: String = null
@@ -151,6 +168,11 @@ private[ml] class FeatureIndex extends Serializable {
     }
   }
 
+  /**
+   * Set node relationship and its feature index.
+   * Node represents a word.
+   * @param tagger
+   */
   def rebuildFeatures(tagger: Tagger): Unit = {
     var cur: Int = 0
     var i: Int = 0
@@ -193,6 +215,10 @@ private[ml] class FeatureIndex extends Serializable {
     }
   }
 
+  /**
+   * Build feature index
+   * @param tagger
+   */
   def buildFeatures(tagger: Tagger): Unit = {
     var os: String = null
     var id: Integer = 0
@@ -227,6 +253,10 @@ private[ml] class FeatureIndex extends Serializable {
     }
   }
 
+  /**
+   * @param src
+   * @return
+   */
   def getId(src: String): Integer = {
     var n: Int = maxid
     var idx: Int = 0
@@ -253,6 +283,13 @@ private[ml] class FeatureIndex extends Serializable {
     }
   }
 
+  /**
+   * Apply template to source files
+   * @param src
+   * @param idx
+   * @param tagger
+   * @return
+   */
   def applyRule(src: String, idx: Integer, tagger: Tagger): String = {
     var dest: String = ""
     var r: String = ""
@@ -274,6 +311,12 @@ private[ml] class FeatureIndex extends Serializable {
     dest
   }
 
+  /**
+   * @param src
+   * @param pos
+   * @param tagger
+   * @return
+   */
   def getIndex(src: String, pos: Integer, tagger: Tagger): String = {
     var neg: Integer = 1
     var col: Integer = 0
@@ -379,19 +422,18 @@ private[ml] class FeatureIndex extends Serializable {
     p
   }
 
-  def save(fileName: String, binFile: String): Unit = {
+  /**
+   * Return the model in text format
+   * @param sc
+   * @return
+   */
+  def saveModelTxt(sc: SparkContext): RDD[String] = {
     var y_str: String = ""
     var i: Int = 0
     var templ_str: String = ""
     val keys: ArrayBuffer[String] = new ArrayBuffer[String]()
     val values: ArrayBuffer[Int] = new ArrayBuffer[Int]()
-    var contents: String = ""
-    val sb: mutable.StringBuilder = new StringBuilder()
-    val outputFile = new File(fileName)
-    val outputStream = new FileOutputStream(outputFile)
-    val bFile = new File(binFile)
-    val bStream = new FileOutputStream(bFile)
-
+    val contents: ArrayBuffer[String] = new ArrayBuffer[String]()
     while (i < y.size) {
       y_str += y(i)
       y_str += '\0'
@@ -416,59 +458,50 @@ private[ml] class FeatureIndex extends Serializable {
     dic.foreach { (pair) => keys.append(pair._1) }
     dic.foreach { (pair) => values.append(pair._2._1) }
 
-    contents += "maxid_" + maxid + "\n"
-    contents += "xsize" + xsize + "\n"
-    contents += y_str + "\n"
-    contents += templ_str + "\n"
+    contents.append("maxid=" + maxid + "\n")
+    contents.append("xsize=" + xsize + "\n")
+    contents.append(y_str + "\n")
+    contents.append(templ_str + "\n")
     i = 0
     while (i < keys.size) {
-      contents += keys(i) + " " + values(i) + "\n"
+      contents.append(keys(i) + " " + values(i) + "\n")
       i += 1
     }
-    outputStream.write(contents.toCharArray.map(_.toByte))
-    contents = ""
     i = 0
+    while (i < maxid) {
+      contents.append(alpha(i) + "\n")
+      i += 1
+    }
+    sc.parallelize(contents)
+  }
+
+  /**
+   * @return
+   */
+  def saveModel(): String = {
+    var contents: String = ""
+    var i: Int = 0
     while (i < maxid) {
       contents += alpha(i) + "\n"
       i += 1
     }
-    outputStream.write(contents.toCharArray.map(_.toByte))
-    outputStream.close()
-
-    contents += "a" + "\n"
+    contents += "a\n"
     i = 0
     while (i < featureCache.size) {
       contents += featureCache(i) + "\n"
       i += 1
     }
-    contents += "b" + "\n"
+    contents += "b\n"
     i = 0
     while (i < featureCacheH.size) {
       contents += featureCacheH(i) + "\n"
       i += 1
     }
     contents += "c"
-    bStream.write(contents.toCharArray.map(_.toByte))
-    bStream.close()
+    contents
   }
 
-  def openFromArray(binFile: String, encoding: String = "UTF-8"): Unit = {
-    val inStream = new FileInputStream(binFile)
-    val outStream = new ByteArrayOutputStream
-    try {
-      var reading = true
-      while (reading) {
-        inStream.read() match {
-          case 'c' => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
-      inStream.close()
-    }
-    val contents: String = new String(outStream.toByteArray, encoding)
+  def openFromArray(contents: String): Unit = {
     var i: Int = 0
     var j: Int = 0
     var d: String = ""

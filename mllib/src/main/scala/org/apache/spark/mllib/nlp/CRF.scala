@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.nlp
+package org.apache.spark.mllib.nlp
 
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.DeveloperApi
 
-private[spark] class CRF {
+private[mllib] class CRF {
   private val freq: Integer = 1
   private val maxiter: Integer = 100000
   private val cost: Double = 1.0
@@ -29,20 +31,33 @@ private[spark] class CRF {
   private val threadNum: Integer = Runtime.getRuntime.availableProcessors()
   private val threadPool: Array[CRFThread] = new Array[CRFThread](threadNum)
   private var featureIdx: FeatureIndex = new FeatureIndex()
+  private var modelTxt: RDD[String] = null
 
-  def verify(model: String, test: String, testResult: String): Unit = {
+  /**
+   * Verify the CRF model
+   * @param test
+   * @param model
+   * @return
+   */
+  def verify(test: String,
+             model: String): String = {
     var tagger: Tagger = new Tagger()
-    var out: String = null
     featureIdx = featureIdx.openTagSet(test)
     tagger.open(featureIdx)
     tagger = tagger.read(test)
-    featureIdx.openFromArray("./CRFConfig/model_file")
+    featureIdx.openFromArray(model)
     tagger.parse()
-    out = tagger.createOutput()
-    tagger.saveTestResult(out, testResult)
+    tagger.createOutput()
   }
 
-  def learn(template: String, train: String): Unit = {
+  /**
+   * Train the CRF model
+   * @param template
+   * @param train
+   * @return
+   */
+  def learn(template: String,
+            train: String): String = {
     var tagger: Tagger = new Tagger()
     var taggerList: ArrayBuffer[Tagger] = new ArrayBuffer[Tagger]()
     featureIdx.openTemplate(template)
@@ -55,9 +70,26 @@ private[spark] class CRF {
     featureIdx.shrink(freq)
     featureIdx.initAlpha(featureIdx.maxid)
     runCRF(taggerList, featureIdx, featureIdx.alpha)
-    featureIdx.save("./CRFConfig/model_file.txt",
-      "./CRFConfig/model_file")
+    val sc: SparkContext = CRF.getSparkContext
+    modelTxt = featureIdx.saveModelTxt(sc)
+    val model: String = featureIdx.saveModel()
+    model
   }
+
+  /**
+   * Get model details in text format
+   * @return
+   */
+  def getModelTxt(): RDD[String] = {
+    modelTxt
+  }
+
+  /**
+   * Parse segments in the sentences or paragraph
+   * @param tagger
+   * @param featureIndex
+   * @param alpha
+   */
 
   def runCRF(tagger: ArrayBuffer[Tagger], featureIndex: FeatureIndex,
              alpha: ArrayBuffer[Double]): Unit = {
@@ -66,7 +98,7 @@ private[spark] class CRF {
     var converge: Int = 0
     var itr: Int = 0
     var all: Int = 0
-    val lbfgs = new Lbfgs()
+    val opt = new Optimizer()
     var i: Int = 0
     var k: Int = 0
 
@@ -122,19 +154,22 @@ private[spark] class CRF {
       if (diff == 0) {
         itr = maxiter + 1 // break
       }
-      lbfgs.lbfgs(featureIndex.maxid, alpha, threadPool(0).obj, threadPool(0).expected, C)
+      opt.optimizer(featureIndex.maxid, alpha, threadPool(0).obj, threadPool(0).expected, C)
       itr += 1
     }
   }
 
-  private[ml] class CRFThread extends Thread {
+  /**
+   * Use multiple threads to parse the segments
+   */
+  class CRFThread extends Thread {
     var x: ArrayBuffer[Tagger] = null
     var start_i: Int = 0
     var err: Int = 0
     var zeroOne: Int = 0
     var size: Int = 0
     var obj: Double = 0.0
-    val expected: ArrayBuffer[Double] = new ArrayBuffer[Double]()
+    var expected: ArrayBuffer[Double] = new ArrayBuffer[Double]()
 
     def initExpected(): Unit = {
       var i: Int = 0
@@ -144,6 +179,9 @@ private[spark] class CRF {
       }
     }
 
+    /**
+     * Train CRF model and calculate the expectations
+     */
     override def run(): Unit = {
       var idx: Int = 0
       initExpected()
@@ -159,15 +197,75 @@ private[spark] class CRF {
   }
 }
 
+
 @DeveloperApi
 object CRF {
-  def runCRF(template: String, train: String): Unit = {
+  @transient var sc: SparkContext = _
+  /**
+   * Get part of templates and paragraphs from RDD
+   * Train CRF Model
+   * @param template
+   * @param train
+   * @return
+   */
+  def runCRF(template: RDD[String],
+             train: RDD[String]): RDD[String] = {
     val crf = new CRF()
-    crf.learn(template, train)
+    val templates: Array[String] = template.toLocalIterator.toArray
+    val features: Array[String] = train.toLocalIterator.toArray
+    val model: ArrayBuffer[String] = new ArrayBuffer[String]()
+    var i: Int = 0
+    var j: Int = 0
+    sc = template.sparkContext
+    while (i < templates.length) {
+      while (j < features.length) {
+        model.append(crf.learn(templates(i), features(j)))
+        j += 1
+      }
+      i += 1
+    }
+    sc.parallelize(model)
   }
 
-  def verifyCRF(model: String, test: String, testResult: String): Unit = {
+  /**
+   * Verify CRF model after call runCRF and get the model.
+   * @param test
+   * @param model
+   * @return
+   */
+  def verifyCRF(test: RDD[String],
+                model: RDD[String]): RDD[String] = {
     val crf = new CRF()
-    crf.verify(model, test, testResult)
+    val tests: Array[String] = test.toLocalIterator.toArray
+    val models: Array[String] = model.toLocalIterator.toArray
+    val result: ArrayBuffer[String] = new ArrayBuffer[String]()
+    var i: Int = 0
+    var j: Int = 0
+    sc = test.sparkContext
+    while (i < tests.length) {
+      while (j < models.length) {
+        result.append(crf.verify(tests(i), models(j)))
+        j += 1
+      }
+      i += 1
+    }
+    sc.parallelize(result)
+  }
+
+  /**
+   * Get CRF model detail in texts.
+   * @return
+   */
+  def getModelTxt(): CRFModel = {
+    val crf = new CRF()
+    new CRFModel(crf.getModelTxt())
+  }
+
+  def getSparkContext: SparkContext = {
+    if (sc != null) {
+      sc
+    } else {
+      null
+    }
   }
 }

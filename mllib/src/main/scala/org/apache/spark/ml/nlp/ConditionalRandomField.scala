@@ -14,14 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.ml.nlp
 
-import org.apache.spark.{Logging, SparkFunSuite}
-import org.scalatest.{Matchers, BeforeAndAfterAll}
+import org.apache.spark.mllib.nlp.{CRF, CRFModel}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, DataFrame}
 
-class CRFTests extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
-  CRF.runCRF("./CRFConfig/template_file",
-    "./CRFConfig/train_file")
-  CRF.verifyCRF("./CRFConfig/model_file",
-    "./CRFConfig/test_file", "./CRFConfig/test_result")
+class ConditionalRandomField {
+  def train(template: DataFrame,
+            sentences: DataFrame): CRFModel = {
+    val t = template.select().
+      map { case Row(template: String) => template }
+    val src = sentences.select().map { case Row(s: String) => s }
+    val resultRDD: RDD[String] = CRF.runCRF(t, src)
+    val model = new CRFModel(resultRDD)
+    model
+  }
+
+  def verify(sentences: DataFrame,
+             modelExp: DataFrame): CRFModel = {
+    val md = modelExp.select().map { case Row(exp: String) => exp }
+    val src = sentences.select().map { case Row(s: String) => s }
+    val result = new CRFModel(CRF.verifyCRF(src, md))
+    result
+  }
+
 }

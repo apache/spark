@@ -14,14 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.ml.nlp
+package org.apache.spark.mllib.nlp
 
 import java.io.{FileOutputStream, File}
+
+import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source._
 
-private[ml] class Tagger extends Serializable {
+private[mllib] class Tagger extends Serializable {
   var mode: Integer = 2
   // LEARN
   var vlevel: Int = 0
@@ -39,36 +41,42 @@ private[ml] class Tagger extends Serializable {
   var result: ArrayBuffer[Integer] = new ArrayBuffer[Integer]()
   val MINUS_LOG_EPSILON = 50
 
+  /**
+   * Get the feature index
+   * @param featureIndex
+   */
   def open(featureIndex: FeatureIndex): Unit = {
     feature_idx = featureIndex
     ysize = feature_idx.y.size
   }
 
-  def read(filename: String): Tagger = {
-    val lineIter: Iterator[String] = fromFile(filename).getLines()
-    val line: Array[String] = lineIter.toArray
+  /**
+   * Read feature files, one RDD contains many features files.
+   * Each feature is a string in the RDD. The feature should be correspondent
+   * with template file. User needs prepare the relationship beforehand.
+   * @param feature
+   * @return
+   */
+  def read(feature: String): Tagger = {
     var i: Int = 0
+    val lines = feature.split("\n")
     var columns: Array[String] = null
     var j: Int = 0
-    // val tmp: Array[String] = feature_idx.y.toArray
-    while (i < line.length) {
-      if (line(i).charAt(0) != '\0'
-        && line(i).charAt(0) != ' '
-        && line(i).charAt(0) != '\t') {
-        columns = line(i).split('|')
+    while (i < lines.length) {
+      if (lines(i).charAt(0) != '\0'
+        && lines(i).charAt(0) != ' '
+        && lines(i).charAt(0) != '\t') {
+        columns = lines(i).split('|')
         x.append(columns)
-        if (mode == 2) {
-          // LEARN
-          while (j < ysize) {
-            if (feature_idx.y(j) == columns(feature_idx.xsize)) {
-              answer.append(j)
-              j = ysize // break
-            }
-            j += 1
+        while (j < ysize) {
+          if (feature_idx.y(j) == columns(feature_idx.xsize)) {
+            answer.append(j)
+            j = ysize // break
           }
-          j = 0
-          result.append(0)
+          j += 1
         }
+        j = 0
+        result.append(0)
       }
       i += 1
     }
@@ -83,6 +91,10 @@ private[ml] class Tagger extends Serializable {
     feature_idx.buildFeatures(this)
   }
 
+  /**
+   * Build the matrix to calculate
+   * cost of each node according to template
+   */
   def buildLattice(): Unit = {
     var i: Int = 0
     var j: Int = 0
@@ -118,6 +130,11 @@ private[ml] class Tagger extends Serializable {
     }
   }
 
+  /**
+   *Calculate the expectation of each node
+   * https://en.wikipedia.org/wiki/Forward%E2%80%93backward_algorithm
+   * http://www.cs.columbia.edu/~mcollins/fb.pdf
+   */
   def forwardBackward(): Unit = {
     var idx: Int = x.length - 1
     var i: Int = 0
@@ -149,6 +166,12 @@ private[ml] class Tagger extends Serializable {
     }
   }
 
+  /**
+   * Get the max expectation in the nodes and predicts the most likely label
+   * http://www.cs.utah.edu/~piyush/teaching/structured_prediction.pdf
+   * http://www.weizmann.ac.il/mathusers/vision/courses/2007_2/files/introcrf.pdf
+   * Page 15
+   */
   def viterbi(): Unit = {
     var bestc: Double = -1e37
     var best: Node = null
@@ -193,13 +216,16 @@ private[ml] class Tagger extends Serializable {
     }
     nd = best
     while (nd != null) {
-      // printf("x=%d,y=%d\n", nd.x, nd.y)
       result.update(nd.x, nd.y)
       nd = nd.prev
     }
     cost = -node(x.length - 1)(result(x.length - 1)).bestCost
   }
 
+  /**
+   * @param expected
+   * @return
+   */
   def gradient(expected: ArrayBuffer[Double]): Double = {
     var s: Double = 0.0
     var lNode: Node = null
@@ -272,6 +298,13 @@ private[ml] class Tagger extends Serializable {
     err
   }
 
+  /**
+   * It is to simplify the log likelihood.
+   * @param x
+   * @param y
+   * @param flg
+   * @return
+   */
   def logsumexp(x: Double, y: Double, flg: Boolean): Double = {
     if (flg) return y
     val vMin: Double = math.min(x, y)
@@ -301,7 +334,7 @@ private[ml] class Tagger extends Serializable {
   def createOutput(): String = {
     var i: Int = 0
     var j: Int = 0
-    var content: String = ""
+    var content: String = null
     while (i < x.size) {
       while (j < x(i).length) {
         content += x(i)(j) + "|"
@@ -315,10 +348,4 @@ private[ml] class Tagger extends Serializable {
     content
   }
 
-  def saveTestResult(content: String, fileName: String): Unit = {
-    val outputFile = new File(fileName)
-    val outputStream = new FileOutputStream(outputFile)
-    outputStream.write(content.toCharArray.map(_.toByte))
-    outputStream.close()
-  }
 }
