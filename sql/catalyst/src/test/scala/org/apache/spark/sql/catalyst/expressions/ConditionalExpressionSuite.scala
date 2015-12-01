@@ -231,18 +231,4 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
   }
-
-  test("function dropAnyNull") {
-    val drop = DropAnyNull(CreateStruct(Seq('a.string.at(0), 'b.string.at(1))))
-    val a = create_row("a", "q")
-    val nullStr: String = null
-    checkEvaluation(drop, a, a)
-    checkEvaluation(drop, null, create_row("b", nullStr))
-    checkEvaluation(drop, null, create_row(nullStr, nullStr))
-
-    val row = 'r.struct(
-      StructField("a", StringType, false),
-      StructField("b", StringType, true)).at(0)
-    checkEvaluation(DropAnyNull(row), null, create_row(null))
-  }
 }
