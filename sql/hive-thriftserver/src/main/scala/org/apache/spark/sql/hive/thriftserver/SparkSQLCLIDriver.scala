@@ -194,6 +194,22 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         logWarning(e.getMessage)
     }
 
+    // add shutdown hook to flush the history to history file
+    Runtime.getRuntime.addShutdownHook(new Thread(new Runnable() {
+      override def run() = {
+        reader.getHistory match {
+          case h: FileHistory =>
+            try {
+              h.flush()
+            } catch {
+              case e: IOException =>
+                logWarning("WARNING: Failed to write command history file: " + e.getMessage)
+            }
+          case _ =>
+        }
+      }
+    }))
+
     // TODO: missing
 /*
     val clientTransportTSocketField = classOf[CliSessionState].getDeclaredField("transport")
@@ -290,7 +306,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(tokens, hconf)
 
       if (proc != null) {
         // scalastyle:off println

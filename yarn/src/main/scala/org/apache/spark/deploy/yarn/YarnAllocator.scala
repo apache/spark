@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
@@ -95,6 +95,10 @@ private[yarn] class YarnAllocator(
   // list of requesters that should be responded to once we find out why the given executor
   // was lost.
   private val pendingLossReasonRequests = new HashMap[String, mutable.Buffer[RpcCallContext]]
+
+  // Maintain loss reasons for already released executors, it will be added when executor loss
+  // reason is got from AM-RM call, and be removed after querying this loss reason.
+  private val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
@@ -157,15 +161,19 @@ private[yarn] class YarnAllocator(
   def getNumExecutorsFailed: Int = numExecutorsFailed
 
   /**
-   * Number of container requests that have not yet been fulfilled.
+   * A sequence of pending container requests that have not yet been fulfilled.
    */
-  def getNumPendingAllocate: Int = getNumPendingAtLocation(ANY_HOST)
+  def getPendingAllocate: Seq[ContainerRequest] = getPendingAtLocation(ANY_HOST)
 
   /**
-   * Number of container requests at the given location that have not yet been fulfilled.
+   * A sequence of pending container requests at the given location that have not yet been
+   * fulfilled.
    */
-  private def getNumPendingAtLocation(location: String): Int =
-    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala.map(_.size).sum
+  private def getPendingAtLocation(location: String): Seq[ContainerRequest] = {
+    amClient.getMatchingRequests(RM_REQUEST_PRIORITY, location, resource).asScala
+      .flatMap(_.asScala)
+      .toSeq
+  }
 
   /**
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
@@ -198,8 +206,7 @@ private[yarn] class YarnAllocator(
    */
   def killExecutor(executorId: String): Unit = synchronized {
     if (executorIdToContainer.contains(executorId)) {
-      val container = executorIdToContainer.remove(executorId).get
-      containerIdToExecutorId.remove(container.getId)
+      val container = executorIdToContainer.get(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning -= 1
     } else {
@@ -251,20 +258,31 @@ private[yarn] class YarnAllocator(
    * Visible for testing.
    */
   def updateResourceRequests(): Unit = {
-    val numPendingAllocate = getNumPendingAllocate
+    val pendingAllocate = getPendingAllocate
+    val numPendingAllocate = pendingAllocate.size
     val missing = targetNumExecutors - numPendingAllocate - numExecutorsRunning
 
-    // TODO. Consider locality preferences of pending container requests.
-    // Since the last time we made container requests, stages have completed and been submitted,
-    // and that the localities at which we requested our pending executors
-    // no longer apply to our current needs. We should consider to remove all outstanding
-    // container requests and add requests anew each time to avoid this.
     if (missing > 0) {
       logInfo(s"Will request $missing executor containers, each with ${resource.getVirtualCores} " +
         s"cores and ${resource.getMemory} MB memory including $memoryOverhead MB overhead")
 
+      // Split the pending container request into three groups: locality matched list, locality
+      // unmatched list and non-locality list. Take the locality matched container request into
+      // consideration of container placement, treat as allocated containers.
+      // For locality unmatched and locality free container requests, cancel these container
+      // requests, since required locality preference has been changed, recalculating using
+      // container placement strategy.
+      val (localityMatched, localityUnMatched, localityFree) = splitPendingAllocationsByLocality(
+        hostToLocalTaskCounts, pendingAllocate)
+
+      // Remove the outdated container request and recalculate the requested container number
+      localityUnMatched.foreach(amClient.removeContainerRequest)
+      localityFree.foreach(amClient.removeContainerRequest)
+      val updatedNumContainer = missing + localityUnMatched.size + localityFree.size
+
       val containerLocalityPreferences = containerPlacementStrategy.localityOfRequestedContainers(
-        missing, numLocalityAwareTasks, hostToLocalTaskCounts, allocatedHostToContainersMap)
+        updatedNumContainer, numLocalityAwareTasks, hostToLocalTaskCounts,
+          allocatedHostToContainersMap, localityMatched)
 
       for (locality <- containerLocalityPreferences) {
         val request = createContainerRequest(resource, locality.nodes, locality.racks)
@@ -291,7 +309,7 @@ private[yarn] class YarnAllocator(
    * Creates a container request, handling the reflection required to use YARN features that were
    * added in recent versions.
    */
-  protected def createContainerRequest(
+  private def createContainerRequest(
       resource: Resource,
       nodes: Array[String],
       racks: Array[String]): ContainerRequest = {
@@ -463,7 +481,7 @@ private[yarn] class YarnAllocator(
             (true, memLimitExceededLogMessage(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
-          case unknown =>
+          case _ =>
             numExecutorsFailed += 1
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
@@ -475,7 +493,7 @@ private[yarn] class YarnAllocator(
         } else {
           logInfo(containerExitReason)
         }
-        ExecutorExited(0, exitCausedByApp, containerExitReason)
+        ExecutorExited(exitStatus, exitCausedByApp, containerExitReason)
       } else {
         // If we have already released this container, then it must mean
         // that the driver has explicitly requested it to be killed
@@ -499,9 +517,18 @@ private[yarn] class YarnAllocator(
 
       containerIdToExecutorId.remove(containerId).foreach { eid =>
         executorIdToContainer.remove(eid)
-        pendingLossReasonRequests.remove(eid).foreach { pendingRequests =>
-          // Notify application of executor loss reasons so it can decide whether it should abort
-          pendingRequests.foreach(_.reply(exitReason))
+        pendingLossReasonRequests.remove(eid) match {
+          case Some(pendingRequests) =>
+            // Notify application of executor loss reasons so it can decide whether it should abort
+            pendingRequests.foreach(_.reply(exitReason))
+
+          case None =>
+            // We cannot find executor for pending reasons. This is because completed container
+            // is processed before querying pending result. We should store it for later query.
+            // This is usually happened when explicitly killing a container, the result will be
+            // returned in one AM-RM communication. So query RPC will be later than this completed
+            // container process.
+            releasedExecutorLossReasons.put(eid, exitReason)
         }
         if (!alreadyReleased) {
           // The executor could have gone away (like no route to host, node failure, etc)
@@ -523,8 +550,14 @@ private[yarn] class YarnAllocator(
     if (executorIdToContainer.contains(eid)) {
       pendingLossReasonRequests
         .getOrElseUpdate(eid, new ArrayBuffer[RpcCallContext]) += context
+    } else if (releasedExecutorLossReasons.contains(eid)) {
+      // Executor is already released explicitly before getting the loss reason, so directly send
+      // the pre-stored lost reason
+      context.reply(releasedExecutorLossReasons.remove(eid).get)
     } else {
       logWarning(s"Tried to get the loss reason for non-existent executor $eid")
+      context.sendFailure(
+        new SparkException(s"Fail to find loss reason for non-existent executor $eid"))
     }
   }
 
@@ -534,6 +567,43 @@ private[yarn] class YarnAllocator(
   }
 
   private[yarn] def getNumUnexpectedContainerRelease = numUnexpectedContainerRelease
+
+  private[yarn] def getNumPendingLossReasonRequests: Int = synchronized {
+    pendingLossReasonRequests.size
+  }
+
+  /**
+   * Split the pending container requests into 3 groups based on current localities of pending
+   * tasks.
+   * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
+   *                             container placement hint.
+   * @param pendingAllocations A sequence of pending allocation container request.
+   * @return A tuple of 3 sequences, first is a sequence of locality matched container
+   *         requests, second is a sequence of locality unmatched container requests, and third is a
+   *         sequence of locality free container requests.
+   */
+  private def splitPendingAllocationsByLocality(
+      hostToLocalTaskCount: Map[String, Int],
+      pendingAllocations: Seq[ContainerRequest]
+    ): (Seq[ContainerRequest], Seq[ContainerRequest], Seq[ContainerRequest]) = {
+    val localityMatched = ArrayBuffer[ContainerRequest]()
+    val localityUnMatched = ArrayBuffer[ContainerRequest]()
+    val localityFree = ArrayBuffer[ContainerRequest]()
+
+    val preferredHosts = hostToLocalTaskCount.keySet
+    pendingAllocations.foreach { cr =>
+      val nodes = cr.getNodes
+      if (nodes == null) {
+        localityFree += cr
+      } else if (nodes.asScala.toSet.intersect(preferredHosts).nonEmpty) {
+        localityMatched += cr
+      } else {
+        localityUnMatched += cr
+      }
+    }
+
+    (localityMatched.toSeq, localityUnMatched.toSeq, localityFree.toSeq)
+  }
 
 }
 

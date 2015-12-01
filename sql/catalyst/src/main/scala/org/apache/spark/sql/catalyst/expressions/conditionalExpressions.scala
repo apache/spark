@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{NullType, BooleanType, DataType}
+import org.apache.spark.sql.types._
 
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -348,19 +348,22 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} < 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
           ${ev.isNull} = false;
-          ${ev.value} = ${evalChildren(i).value};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
@@ -403,19 +406,23 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val evalChildren = children.map(_.gen(ctx))
-    def updateEval(i: Int): String =
+    val first = evalChildren(0)
+    val rest = evalChildren.drop(1)
+    def updateEval(eval: GeneratedExpressionCode): String =
       s"""
-        if (!${evalChildren(i).isNull} && (${ev.isNull} ||
-          ${ctx.genComp(dataType, evalChildren(i).value, ev.value)} > 0)) {
+        ${eval.code}
+        if (!${eval.isNull} && (${ev.isNull} ||
+          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
           ${ev.isNull} = false;
-          ${ev.value} = ${evalChildren(i).value};
+          ${ev.value} = ${eval.value};
         }
       """
     s"""
-      ${evalChildren.map(_.code).mkString("\n")}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${children.indices.map(updateEval).mkString("\n")}
+      ${first.code}
+      boolean ${ev.isNull} = ${first.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
+      ${rest.map(updateEval).mkString("\n")}
     """
   }
 }
+

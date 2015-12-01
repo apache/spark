@@ -17,15 +17,16 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SQLContext;
+
 // $example on$
 import java.util.Map;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
 // $example off$
 
 public class JavaVectorIndexerExample {
@@ -41,11 +42,11 @@ public class JavaVectorIndexerExample {
       .setInputCol("features")
       .setOutputCol("indexed")
       .setMaxCategories(10);
-
     VectorIndexerModel indexerModel = indexer.fit(data);
 
     Map<Integer, Map<Double, Integer>> categoryMaps = indexerModel.javaCategoryMaps();
     System.out.print("Chose " + categoryMaps.size() + " categorical features:");
+
     for (Integer feature : categoryMaps.keySet()) {
       System.out.print(" " + feature);
     }

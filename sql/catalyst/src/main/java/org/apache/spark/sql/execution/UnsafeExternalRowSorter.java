@@ -170,13 +170,6 @@ final class UnsafeExternalRowSorter {
     return sort();
   }
 
-  /**
-   * Return true if UnsafeExternalRowSorter can sort rows with the given schema, false otherwise.
-   */
-  public static boolean supportsSchema(StructType schema) {
-    return UnsafeProjection.canSupport(schema);
-  }
-
   private static final class RowComparator extends RecordComparator {
     private final Ordering<InternalRow> ordering;
     private final int numFields;

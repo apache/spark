@@ -48,76 +48,15 @@ MLPC employes backpropagation for learning the model. We use logistic loss funct
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-
-{% highlight scala %}
-import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.Row
-
-// Load training data
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt").toDF()
-// Split the data into train and test
-val splits = data.randomSplit(Array(0.6, 0.4), seed = 1234L)
-val train = splits(0)
-val test = splits(1)
-// specify layers for the neural network: 
-// input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)
-val layers = Array[Int](4, 5, 4, 3)
-// create the trainer and set its parameters
-val trainer = new MultilayerPerceptronClassifier()
-  .setLayers(layers)
-  .setBlockSize(128)
-  .setSeed(1234L)
-  .setMaxIter(100)
-// train the model
-val model = trainer.fit(train)
-// compute precision on the test set
-val result = model.transform(test)
-val predictionAndLabels = result.select("prediction", "label")
-val evaluator = new MulticlassClassificationEvaluator()
-  .setMetricName("precision")
-println("Precision:" + evaluator.evaluate(predictionAndLabels))
-{% endhighlight %}
-
+{% include_example scala/org/apache/spark/examples/ml/MultilayerPerceptronClassifierExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaMultilayerPerceptronClassifierExample.java %}
+</div>
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
-import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-
-// Load training data
-String path = "data/mllib/sample_multiclass_classification_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-DataFrame dataFrame = sqlContext.createDataFrame(data, LabeledPoint.class);
-// Split the data into train and test
-DataFrame[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
-DataFrame train = splits[0];
-DataFrame test = splits[1];
-// specify layers for the neural network:
-// input layer of size 4 (features), two intermediate of size 5 and 4 and output of size 3 (classes)
-int[] layers = new int[] {4, 5, 4, 3};
-// create the trainer and set its parameters
-MultilayerPerceptronClassifier trainer = new MultilayerPerceptronClassifier()
-  .setLayers(layers)
-  .setBlockSize(128)
-  .setSeed(1234L)
-  .setMaxIter(100);
-// train the model
-MultilayerPerceptronClassificationModel model = trainer.fit(train);
-// compute precision on the test set
-DataFrame result = model.transform(test);
-DataFrame predictionAndLabels = result.select("prediction", "label");
-MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
-  .setMetricName("precision");
-System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));
-{% endhighlight %}
+<div data-lang="python" markdown="1">
+{% include_example python/ml/multilayer_perceptron_classification.py %}
 </div>
 
 </div>
