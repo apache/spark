@@ -34,7 +34,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
  *     def zero: Int = 0
  *     def reduce(b: Int, a: Data): Int = b + a.i
  *     def merge(b1: Int, b2: Int): Int = b1 + b2
- *     def present(r: Int): Int = r
+ *     def finish(r: Int): Int = r
  *   }.toColumn()
  *
  *   val ds: Dataset[Data] = ...

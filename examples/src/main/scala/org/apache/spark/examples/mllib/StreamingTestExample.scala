@@ -64,6 +64,7 @@ object StreamingTestExample {
       dir.toString
     })
 
+    // $example on$
     val data = ssc.textFileStream(dataDir).map(line => line.split(",") match {
       case Array(label, value) => (label.toBoolean, value.toDouble)
     })
@@ -75,6 +76,7 @@ object StreamingTestExample {
 
     val out = streamingTest.registerStream(data)
     out.print()
+    // $example off$
 
     // Stop processing if test becomes significant or we time out
     var timeoutCounter = numBatchesTimeout
