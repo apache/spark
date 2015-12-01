@@ -1150,6 +1150,55 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_transform_with_checkpoint(self):
+        """Test the Python direct Kafka stream transform with checkpoint correctly recovered."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        self.ssc.stop(False)
+        self.ssc = None
+        tmpdir = "checkpoint-test-%d" % random.randint(0, 10000)
+
+        def setup():
+            ssc = StreamingContext(self.sc, 0.5)
+            ssc.checkpoint(tmpdir)
+            stream = KafkaUtils.createDirectStream(ssc, [topic], kafkaParams)
+            stream.transform(transformWithOffsetRanges).count().pprint()
+            return ssc
+
+        try:
+            ssc1 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc1.start()
+            self.wait_for(offsetRanges, 1)
+            self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+            # To make sure some checkpoint is written
+            time.sleep(3)
+            ssc1.stop(False)
+            ssc1 = None
+
+            # Restart again to make sure the checkpoint is recovered correctly
+            ssc2 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc2.start()
+            ssc2.awaitTermination(3)
+            ssc2.stop(stopSparkContext=False, stopGraceFully=True)
+            ssc2 = None
+        finally:
+            shutil.rmtree(tmpdir)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd_message_handler(self):
         """Test Python direct Kafka RDD MessageHandler."""
         topic = self._randomTopic()
