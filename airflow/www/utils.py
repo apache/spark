@@ -18,9 +18,6 @@ from wtforms.compat import text_type
 from airflow import configuration, models, settings, utils
 AUTHENTICATE = configuration.getboolean('webserver', 'AUTHENTICATE')
 
-dagbag = models.DagBag(
-    os.path.expanduser(configuration.get('core', 'DAGS_FOLDER')))
-
 
 class LoginMixin(object):
     def is_accessible(self):
@@ -114,9 +111,13 @@ def notify_owner(f):
     '''
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
+        """
         if request.args.get('confirmed') == "true":
             dag_id = request.args.get('dag_id')
             task_id = request.args.get('task_id')
+            dagbag = models.DagBag(
+                os.path.expanduser(configuration.get('core', 'DAGS_FOLDER')))
+
             dag = dagbag.get_dag(dag_id)
             task = dag.get_task(task_id)
 
@@ -147,6 +148,7 @@ def notify_owner(f):
                     ''').render(**locals())
                 if task.email:
                     utils.send_email(task.email, subject, content)
+        """
         return f(*args, **kwargs)
     return wrapper
 
