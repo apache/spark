@@ -270,7 +270,7 @@ class Column(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def substr(self, startPos, length = None):
+    def substr(self, startPos, length=None):
         """
         Return a :class:`Column` which is a substring of the column.
 
