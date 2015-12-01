@@ -733,9 +733,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       // find out the first join that have at least one join condition
       val conditionalJoin = rest.find { plan =>
         val refs = left.outputSet ++ plan.outputSet
-        conditions.filterNot(_.references.subsetOf(left.outputSet))
-          .filterNot(_.references.subsetOf(plan.outputSet))
-          .exists(cond => cond.references.subsetOf(refs))
+        conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
+          .exists(_.references.subsetOf(refs))
       }
       // pick the next one if no condition left
       val right = conditionalJoin.getOrElse(rest.head)
