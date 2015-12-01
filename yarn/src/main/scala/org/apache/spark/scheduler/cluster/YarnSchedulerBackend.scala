@@ -158,6 +158,11 @@ private[spark] abstract class YarnSchedulerBackend(
     new YarnDriverEndpoint(rpcEnv, properties)
   }
 
+  override def stop(): Unit = {
+    requestTotalExecutors(0, 0, Map.empty)
+    super.stop()
+  }
+
   /**
    * Reset the state of SchedulerBackend to the initial state. This is happened when AM is failed
    * and re-registered itself to driver after a failure. The stale state in driver should be

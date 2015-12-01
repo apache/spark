@@ -262,7 +262,6 @@ private[spark] class ApplicationMaster(
   }
 
   private def sparkContextStopped(sc: SparkContext) = {
-    sc.requestTotalExecutors(0, 0, Map.empty)
     sparkContextRef.compareAndSet(sc, null)
   }
 
