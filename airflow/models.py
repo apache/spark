@@ -158,8 +158,9 @@ class DagBag(object):
                 dag = self.dags[dag_id]
         else:
             orm_dag = DagModel.get_current(dag_id)
-            self.process_file(
-                filepath=orm_dag.fileloc, only_if_updated=False)
+            if orm_dag:
+                self.process_file(filepath=orm_dag.fileloc,
+                                  only_if_updated=False)
             if dag_id in self.dags:
                 dag = self.dags[dag_id]
             else:
