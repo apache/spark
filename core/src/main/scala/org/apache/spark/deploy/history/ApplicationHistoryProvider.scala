@@ -21,7 +21,6 @@ import java.util.zip.ZipOutputStream
 
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.Clock
 
 private[spark] case class ApplicationAttemptInfo(
     attemptId: Option[String],

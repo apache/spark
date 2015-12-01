@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 
+import javax.servlet.Filter
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
@@ -26,6 +28,7 @@ import scala.language.postfixOps
 import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
+import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.Mockito._
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
@@ -154,6 +157,8 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
     when(ui.getAppName).thenReturn(name)
     when(ui.appName).thenReturn(name)
+    val handler = new ServletContextHandler()
+    when(ui.getHandlers).thenReturn(Seq(handler))
     ui
   }
 
@@ -442,4 +447,12 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     expectLoadAndEvictionCounts(5, 1)
 
   }
+
+  test("Instantiate Filter") {
+    // this is a regression test on the filter being constructable
+    val clazz = Class.forName(ApplicationCacheCheckFilterRelay.FILTER_NAME)
+    val instance = clazz.newInstance()
+    instance shouldBe a [Filter]
+  }
+
 }

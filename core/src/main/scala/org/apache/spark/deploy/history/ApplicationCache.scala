@@ -20,17 +20,18 @@ package org.apache.spark.deploy.history
 import java.util.NoSuchElementException
 
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
-import javax.servlet.{ServletException, FilterConfig, FilterChain, ServletResponse, ServletRequest, Filter}
+import javax.servlet.{DispatcherType, ServletException, FilterConfig, FilterChain, ServletResponse, ServletRequest, Filter}
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
 import com.google.common.util.concurrent.ListenableFuture
+import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.Logging
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.ui.{SparkUI, JettyUtils}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Clock
 
 /**
@@ -99,10 +100,15 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
 
   /**
    * Perform any startup operations. This includes declaring this instance
-   * as the cache to use in the [[ApplicationCacheCheckFilter]].
+   * as the cache to use in the [[ApplicationCacheCheckFilterRelay]].
    */
   private def init(): Unit = {
-    ApplicationCacheCheckFilter.setApplicationCache(this)
+    ApplicationCacheCheckFilterRelay.setApplicationCache(this)
+  }
+
+  /** stop the cache */
+  def stop(): Unit = {
+    ApplicationCacheCheckFilterRelay.resetApplicationCache()
   }
 
   /**
@@ -184,11 +190,21 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
    * @return true if an update has been triggered
    */
   def checkForUpdates(appId: String, attemptId: Option[String]): Boolean = {
-    val (_, updated) = lookupCacheEntry(appId, attemptId)
+    val (entry, updated) = lookupAndUpdate(appId, attemptId)
     updated
   }
 
+  /**
+   * Size probe, primarily for testing
+   * @return size
+   */
   def size(): Long = appCache.size()
+
+  /**
+   * Emptiness predicate, primarily for testing
+   * @return true if the cache is empty
+   */
+  def isEmpty: Boolean = appCache.size() == 0
 
   /**
    * Time a closure, returning its output.
@@ -228,11 +244,11 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
           val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
           // attach the spark UI
           if (completed) {
-            operations.attachSparkUI(appId, attemptId, ui, completed, Seq())
+            operations.attachSparkUI(appId, attemptId, ui, completed)
           } else {
-            JettyUtils.addFilters(ui.getHandlers, conf)
-            operations.attachSparkUI(appId, attemptId, ui, completed, Seq())
-
+            //  register the filters
+            ApplicationCacheCheckFilterRelay.registerFilter(ui, appId, attemptId)
+            operations.attachSparkUI(appId, attemptId, ui, completed)
           }
           // build the cache entry
           new CacheEntry(ui, completed, clock.getTimeMillis())
@@ -399,13 +415,11 @@ private[history] trait ApplicationCacheOperations {
    * @param attemptId attempt ID
    * @param ui UI
    * @param completed flag to indicate that the UI has completed
-   * @param filters sequence of filters to bind to the UI
    */
   def attachSparkUI(appId: String,
       attemptId: Option[String],
       ui: SparkUI,
-      completed: Boolean,
-      filters: Seq[(String, FilterConfig)]): Unit
+      completed: Boolean): Unit
 
   /**
    * Detach a Spark UI.
@@ -428,10 +442,10 @@ private[history] trait ApplicationCacheOperations {
  * The filter. There's some abuse of a shared global entry here because otherwise
  * All config data is just a string:string map
  */
-private[history] class ApplicationCacheCheckFilter(applicationCache: ApplicationCache)
+private[history] class ApplicationCacheCheckFilter()
     extends Filter with Logging {
 
-  import ApplicationCacheCheckFilter._
+  import ApplicationCacheCheckFilterRelay._
   var appId: String = _
   var attemptId: Option[String] = _
 
@@ -443,6 +457,7 @@ private[history] class ApplicationCacheCheckFilter(applicationCache: Application
     appId = Option(filterConfig.getInitParameter(APP_ID))
       .getOrElse(throw new ServletException(s"Missing Parameter $APP_ID"))
     attemptId = Option(filterConfig.getInitParameter(ATTEMPT_ID))
+    logDebug(s"initializing filter $this")
   }
 
   override def doFilter(request: ServletRequest, response: ServletResponse,
@@ -456,14 +471,14 @@ private[history] class ApplicationCacheCheckFilter(applicationCache: Application
     val httpResp = response.asInstanceOf[HttpServletResponse]
     val requestURI = httpReq.getRequestURI
 
-    val outOfDate = checkForUpdates(requestURI, appId, attemptId)
-
-    if (outOfDate) {
+    if (checkForUpdates(requestURI, appId, attemptId)) {
       // send a redirect back to the same location. This triggers a bounce by
       // which point the new UI should have been picked up
       logInfo(s"Application Attempt $appId/$attemptId updated; refreshing")
       val redirectUrl = httpResp.encodeRedirectURL(requestURI)
       httpResp.sendRedirect(redirectUrl)
+    } else {
+      chain.doFilter(request, response)
     }
   }
 
@@ -471,9 +486,7 @@ private[history] class ApplicationCacheCheckFilter(applicationCache: Application
 
   }
 
-  def attach(ui: SparkUI): Unit = {
-
-  }
+  override def toString: String = s"ApplicationCacheCheckFilter for $appId/$attemptId"
 }
 
 /**
@@ -485,9 +498,12 @@ private[history] class ApplicationCacheCheckFilter(applicationCache: Application
  * *Important* In test runs, if there is more than one filter, this does not hold.
  *
  */
-private[history] object ApplicationCacheCheckFilter extends Logging {
+private[history] object ApplicationCacheCheckFilterRelay extends Logging {
   val APP_ID = "appId"
   val ATTEMPT_ID = "attemptId"
+  val FILTER_NAME = "org.apache.spark.deploy.history.ApplicationCacheCheckFilter"
+
+  @volatile
   private var applicationCache: Option[ApplicationCache] = None
 
   /**
@@ -495,7 +511,7 @@ private[history] object ApplicationCacheCheckFilter extends Logging {
    * @param cache new cache
    */
   def setApplicationCache(cache: ApplicationCache): Unit = {
-    applicationCache.foreach( c => logWarning("Overwriting application cache $c"))
+    applicationCache.foreach( c => logDebug(s"Overwriting application cache $c"))
     applicationCache = Some(cache)
   }
 
@@ -530,4 +546,24 @@ private[history] object ApplicationCacheCheckFilter extends Logging {
     }
   }
 
+
+  /**
+   * Register a filter for the web UI which checks for updates to the given app/attempt
+   * @param ui Spark UI to attach filters to
+   * @param appId application ID
+   * @param attemptId attempt ID
+   */
+  def registerFilter(ui: SparkUI,
+      appId: String, attemptId: Option[String] ) = {
+    require(ui != null)
+    val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.REQUEST)
+    val holder = new FilterHolder()
+    holder.setClassName(FILTER_NAME)
+    holder.setInitParameter(APP_ID, appId)
+    attemptId.foreach( id => holder.setInitParameter(ATTEMPT_ID, id))
+    require(ui.getHandlers != null, "null handlers")
+    ui.getHandlers.foreach { handler =>
+      handler.addFilter(holder, "/*", enumDispatcher)
+    }
+  }
 }

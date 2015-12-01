@@ -140,6 +140,7 @@ class HistoryServer(
   override def stop() {
     super.stop()
     provider.stop()
+    appCache.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
@@ -212,6 +213,13 @@ class HistoryServer(
     }
   }
 
+  override def toString: String = {
+    s"""
+      | History Server;
+      | provider = $provider
+      | cache = $appCache
+    """.stripMargin
+  }
 }
 
 /**

@@ -276,31 +276,40 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val testDir = Utils.createTempDir()
     testDir.deleteOnExit()
 
+    // a new conf is used with the background thread set and running at its fastest
+    // alllowed refresh rate (1Hz)
     val myConf = new SparkConf()
       .set("spark.history.fs.logDirectory", testDir.getAbsolutePath)
       .set("spark.eventLog.dir", testDir.getAbsolutePath)
-      .set("spark.history.fs.update.interval", "1")
+      .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
-      .set("spark.history.cache.window", "1")
+      .set("spark.history.cache.window", "50ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = new SecurityManager(myConf)
 
-    val server = new HistoryServer(myConf, provider, securityManager, 18080)
+    // stop the server with the old config, and start the new one
+    server.stop()
+    server = new HistoryServer(myConf, provider, securityManager, 18080)
     val sc = new SparkContext("local", "test", myConf)
     server.initialize()
     server.bind()
-    val port = server.boundPort
-    val metrics = server.cacheMetrics
-    def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
-      val actual = counter.getCount
-      if (actual != expected) {
-        // this is here because Scalatest loses stack depth
-        throw new Exception(s"Wrong $name value - expected $expected but got $actual" +
-            s" in metrics\n$metrics")
-      }
-    }
     try {
+      val port = server.boundPort
+      val metrics = server.cacheMetrics
+
+      def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
+        val actual = counter.getCount
+        if (actual != expected) {
+          // this is here because Scalatest loses stack depth
+          throw new Exception(s"Wrong $name value - expected $expected but got $actual" +
+              s" in metrics\n$metrics")
+        }
+      }
+
+      def buildURL(appId: String, suffix: String): String = {
+        s"http://localhost:$port/history/$appId$suffix"
+      }
       val d = sc.parallelize(1 to 10)
       d.count()
       val stdInterval = interval(100 milliseconds)
@@ -310,13 +319,31 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         apps should have size 1
         (apps.head \ "id").extract[String]
       }
+
+      val appIdRoot = new URL(buildURL(appId, ""))
+      val rootUiPage = HistoryServerSuite.getUrl(appIdRoot)
+      logInfo(s"$appIdRoot ->[${rootUiPage.length}] \n$rootUiPage")
+      // sanity check
+      rootUiPage should not be empty
+
+
       def getAppUI: SparkUI = {
         provider.getAppUI(appId, None).get
       }
 
+      // selenium isn't that useful on failures...add our own reporting
       def getNumJobs(suffix: String): Int = {
-        go to (s"http://localhost:$port/history/$appId$suffix")
-        findAll(cssSelector("tbody tr")).toIndexedSeq.size
+        val target = buildURL(appId, suffix)
+        val targetBody = HistoryServerSuite.getUrl(new URL(target))
+        try {
+          go to target
+          findAll(cssSelector("tbody tr")).toIndexedSeq.size
+        }
+        catch {
+          case ex: Exception =>
+            logError(s"Against $target\n$targetBody", ex)
+            throw ex
+        }
       }
       def completedJobs(): Seq[JobUIData] = {
         getAppUI.jobProgressListener.completedJobs
@@ -328,12 +355,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       activeJobs() should have size 0
       completedJobs() should have size 1
       getNumJobs("") should be(1)
-      assertMetric("lookupCount", metrics.lookupCount, 1)
+      assert(metrics.lookupCount.getCount > 1,
+        s"lookup count too low in $metrics")
 
       // second job
       val d2 = sc.parallelize(1 to 10)
       d2.count()
-      val stdTimeout = timeout(10 seconds)
+      val stdTimeout = timeout(20 seconds)
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2
@@ -341,9 +369,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       eventually(stdTimeout, stdInterval) {
         // this fails with patch https://github.com/apache/spark/pull/6935 as well, I'm not sure why
         val numJobs = getNumJobs("")
-        assertMetric("lookupCount", metrics.lookupCount, 2)
-        numJobs should be (2)
-      }
+        assert(numJobs == 2,
+          s"jobs not updated, server=$server, page = ${HistoryServerSuite.getUrl(appIdRoot)}")
+        }
 
       getNumJobs("/jobs") should be (2)
       // Here is where we still have an error.  /jobs is handled by another servlet,
@@ -355,7 +383,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     } finally {
       sc.stop()
-      server.stop()
     }
 
   }

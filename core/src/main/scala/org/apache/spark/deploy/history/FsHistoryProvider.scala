@@ -566,6 +566,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     dfs.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_GET)
   }
 
+
 /*
   def isCompleted(appId: String, attemptId: Option[String]): Boolean = {
 
@@ -580,19 +581,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 */
 
-  /**
-   * Has an application attempt completed?
-   *
-   * The default returns the completed state of the history info
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @param applicationHistoryInfo the application being probed.
-   * @return true if the application is considered to have completed
-   */
-  override def isCompleted(appId: String,
-    attemptId: Option[String],
-    applicationHistoryInfo: ApplicationHistoryInfo): Boolean = {
-    super.isCompleted(appId, attemptId, applicationHistoryInfo)
+  override def toString: String = {
+    s"""
+      | FsHistoryProvider: logdir=$logDir,
+      | last scan time =$lastScanTime,
+      | applications=$applications,
+      | polling thread=$initThread,
+    """.stripMargin
   }
 
   /**
