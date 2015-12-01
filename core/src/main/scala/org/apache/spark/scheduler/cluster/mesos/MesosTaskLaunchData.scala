@@ -31,7 +31,7 @@ private[spark] case class MesosTaskLaunchData(
   attemptNumber: Int) extends Logging {
 
   def toByteString: ByteString = {
-    val dataBuffer = ByteBuffer.allocate(4 + serializedTask.limit)
+    val dataBuffer = ByteBuffer.allocate(4 + serializedTask.remaining())
     dataBuffer.putInt(attemptNumber)
     dataBuffer.put(serializedTask)
     dataBuffer.rewind

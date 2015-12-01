@@ -110,7 +110,7 @@ private[spark] class ExternalBlockStore(blockManager: BlockManager, executorId: 
         val byteBuffer = bytes.duplicate()
         byteBuffer.rewind()
         externalBlockManager.get.putBytes(blockId, byteBuffer)
-        val size = bytes.limit()
+        val size = bytes.remaining()
         val data = if (returnValues) {
           Right(bytes)
         } else {

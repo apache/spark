@@ -88,7 +88,7 @@ private[columnar] trait CompressibleColumnBuilder[T <: AtomicType]
     }
 
     // Header = null count + null positions
-    val headerSize = 4 + nulls.limit()
+    val headerSize = 4 + nulls.remaining()
     val compressedSize = if (encoder.compressedSize == 0) {
       nonNullBuffer.remaining()
     } else {

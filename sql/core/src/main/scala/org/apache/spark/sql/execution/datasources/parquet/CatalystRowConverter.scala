@@ -328,7 +328,7 @@ private[parquet] class CatalystRowConverter(
       // it.
       val buffer = value.toByteBuffer
       val offset = buffer.position()
-      val numBytes = buffer.limit() - buffer.position()
+      val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
   }
