@@ -223,8 +223,10 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
+        val nonNullBitmask = x.bitmasks.reduce(_ & _)
+
         val attributeMap = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          if (x.bitmasks.exists(bitmask => (bitmask & 1 << idx) == 0)) {
+          if ((nonNullBitmask & 1 << idx) == 0) {
             (a -> a.toAttribute.withNullability(true))
           } else {
             (a -> a.toAttribute)
