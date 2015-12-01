@@ -290,7 +290,6 @@ abstract class HiveComparisonTest
             normalizedQuery.endsWith(table) || normalizedQuery.contains(s"from $table")
           }
           if (hasShowTableCommand || hasMatchingQuery) {
-            println(s"Loading $table")
             TestHive.loadTestTable(table)
           }
         }
