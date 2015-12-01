@@ -120,6 +120,11 @@ class StageData private[spark](
     val numFailedTasks: Int,
 
     val executorRunTime: Long,
+    var submissionTime: Option[Long] = None,
+    val completionTime: Option[Long] = None,
+    val firstTaskLaunchedTime: Long,
+    val processingTime: Long,
+    val maximumDuration: Long,
 
     val inputBytes: Long,
     val inputRecords: Long,
