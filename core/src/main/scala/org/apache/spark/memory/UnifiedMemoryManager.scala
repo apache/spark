@@ -48,7 +48,7 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
-    maxMemory: Long,
+    val maxMemory: Long,
     private val storageRegionSize: Long,
     numCores: Int)
   extends MemoryManager(
@@ -130,6 +130,8 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
 object UnifiedMemoryManager {
 
+  private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
+
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf)
     new UnifiedMemoryManager(
@@ -144,8 +146,16 @@ object UnifiedMemoryManager {
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
   private def getMaxMemory(conf: SparkConf): Long = {
-    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val reservedMemory = conf.getLong("spark.testing.reservedMemory",
+      if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
+    val minSystemMemory = reservedMemory * 1.5
+    if (systemMemory < minSystemMemory) {
+      throw new IllegalArgumentException(s"System memory $systemMemory must " +
+        s"be at least $minSystemMemory. Please use a larger heap size.")
+    }
+    val usableMemory = systemMemory - reservedMemory
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)
-    (systemMaxMemory * memoryFraction).toLong
+    (usableMemory * memoryFraction).toLong
   }
 }
