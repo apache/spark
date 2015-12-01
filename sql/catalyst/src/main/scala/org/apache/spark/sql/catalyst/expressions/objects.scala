@@ -346,7 +346,8 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
  * as an ArrayType.  This is similar to a typical map operation, but where the lambda function
  * is expressed using catalyst expressions.
  *
- * The following collection ObjectTypes are currently supported: Seq, Array, ArrayData
+ * The following collection ObjectTypes are currently supported:
+ *   Seq, Array, ArrayData, java.util.List
  *
  * @param function A function that returns an expression, given an attribute that can be used
  *                 to access the current value.  This is does as a lambda function so that
@@ -386,6 +387,8 @@ case class MapObjects(
       (".size()", (i: String) => s".apply($i)", false)
     case ObjectType(cls) if cls.isArray =>
       (".length", (i: String) => s"[$i]", false)
+    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      (".size()", (i: String) => s".get($i)", false)
     case ArrayType(t, _) =>
       val (sqlType, primitiveElement) = t match {
         case m: MapType => (m, false)
@@ -595,4 +598,41 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
   }
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
+}
+
+/**
+ * Initialize a Java Bean instance by setting its field values via setters.
+ */
+case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
+  extends Expression {
+
+  override def nullable: Boolean = beanInstance.nullable
+  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
+  override def dataType: DataType = beanInstance.dataType
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+    val instanceGen = beanInstance.gen(ctx)
+
+    val initialize = setters.map {
+      case (setterMethod, fieldValue) =>
+        val fieldGen = fieldValue.gen(ctx)
+        s"""
+           ${fieldGen.code}
+           ${instanceGen.value}.$setterMethod(${fieldGen.value});
+         """
+    }
+
+    ev.isNull = instanceGen.isNull
+    ev.value = instanceGen.value
+
+    s"""
+      ${instanceGen.code}
+      if (!${instanceGen.isNull}) {
+        ${initialize.mkString("\n")}
+      }
+     """
+  }
 }
