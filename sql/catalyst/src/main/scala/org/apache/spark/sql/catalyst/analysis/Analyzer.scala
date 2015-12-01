@@ -223,6 +223,8 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
+        val attributeMap = groupByAliases.map(a => (a -> a.toAttribute.withNullability(true))).toMap
+
         val aggregations: Seq[NamedExpression] = x.aggregations.map {
           // If an expression is an aggregate (contains a AggregateExpression) then we dont change
           // it so that the aggregation is computed on the unmodified value of its argument
@@ -231,12 +233,13 @@ class Analyzer(
           // If not then its a grouping expression and we need to use the modified (with nulls from
           // Expand) value of the expression.
           case expr => expr.transformDown {
-            case e => groupByAliases.find(_.child.semanticEquals(e)).map(_.toAttribute).getOrElse(e)
+            case e =>
+              groupByAliases.find(_.child.semanticEquals(e)).map(attributeMap(_)).getOrElse(e)
           }.asInstanceOf[NamedExpression]
         }
 
         val child = Project(x.child.output ++ groupByAliases, x.child)
-        val groupByAttributes = groupByAliases.map(_.toAttribute)
+        val groupByAttributes = groupByAliases.map(attributeMap(_))
 
         Aggregate(
           groupByAttributes :+ VirtualColumn.groupingIdAttribute,
