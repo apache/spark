@@ -135,7 +135,6 @@ class BanditValidator(override val uid: String)
       case None =>
         val error = "No summary recorded!"
         resultBuilder.append(error)
-        println(error)
       case Some(x) =>
         var i = 0
         while (i < $(numFolds)) {

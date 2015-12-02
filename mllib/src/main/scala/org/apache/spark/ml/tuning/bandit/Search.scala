@@ -62,8 +62,6 @@ class StaticSearch extends Search {
   }
 }
 
-
-
 /**
  * Exponential weight search first gives us a uniform distribution. Then it samples from the
  * distribution, and accumulates the estimated loss for the selected arm. As a consequence, the arm
@@ -83,9 +81,7 @@ class ExponentialWeightsSearch extends Search {
       isLargerBetter: Boolean = true,
       needRecord: Boolean = false): Arm = {
 
-    if (!isLargerBetter) {
-      throw new UnsupportedOperationException("Unsupported OP fow now.")
-    }
+    assert(arms.length != 0, "ERROR: No arms!")
 
     val numArms = arms.length
     val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
@@ -99,10 +95,14 @@ class ExponentialWeightsSearch extends Search {
       val arm = arms(it)
       arm.pull(trainingData, t, Some(validationData), record = needRecord)
       lt.values(it) += arm.getValidationResult(validationData)
-      // We use `1.0 / lt(it)` instead of `lt(it)` in the original paper, for the reason that the
-      // paper uses loss, which the `isLargerBetter` is false. Here our `isLargeBetter` is true.
-      // Note: Be careful with potential NaN here.
-      wt.values(it) = math.exp(- eta * 1.0 / lt(it))
+
+      if (isLargerBetter) {
+        // We use `1.0 / lt(it)` instead of `lt(it)` in the original paper, for the reason that the
+        // paper uses loss, which the `isLargerBetter` is false. Here our `isLargeBetter` is true.
+        wt.values(it) = math.exp(-eta * 1.0 / lt(it))
+      } else {
+        wt.values(it) = math.exp(-eta * lt(it))
+      }
     }
     val bestArm = arms.maxBy(arm => arm.getValidationResult(validationData))
     bestArm

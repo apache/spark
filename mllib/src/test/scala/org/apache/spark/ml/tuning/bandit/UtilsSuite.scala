@@ -19,12 +19,11 @@ package org.apache.spark.ml.tuning.bandit
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{BLAS, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class UtilsSuite extends FunSuite with MLlibTestSparkContext {
+class UtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("Randomly choose one") {
     val dist = (0 until 100).toArray.map(_ => Random.nextDouble())
     val selected = sc.parallelize(0 until 1000000).map(_ => Utils.chooseOne(Vectors.dense(dist)))

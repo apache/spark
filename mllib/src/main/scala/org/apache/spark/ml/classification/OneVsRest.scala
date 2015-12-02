@@ -25,7 +25,6 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{Param, ParamMap}
-import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Row}
