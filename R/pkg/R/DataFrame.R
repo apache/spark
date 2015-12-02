@@ -1749,8 +1749,8 @@ setMethod("arrange",
 #' @export
 setMethod("orderBy",
           signature(x = "SparkDataFrame", col = "characterOrColumn"),
-          function(x, col) {
-            arrange(x, col)
+          function(x, col, ...) {
+            arrange(x, col, ...)
           })
 
 #' Filter
