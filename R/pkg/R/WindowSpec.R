@@ -36,6 +36,7 @@ setMethod("initialize", "WindowSpec", function(.Object, sws) {
 })
 
 windowSpec <- function(sws) {
+  stopifnot(class(sws) == "jobj")
   new("WindowSpec", sws)
 }
 
@@ -173,5 +174,5 @@ setMethod("rangeBetween",
 setMethod("over",
           signature(x = "Column", window = "WindowSpec"),
           function(x, window) {
-            windowSpec(callJMethod(x@jc, "over", window@sws))
+            column(callJMethod(x@jc, "over", window@sws))
           })

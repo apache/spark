@@ -319,7 +319,8 @@ export("structField",
 
 exportClasses("WindowSpec")
 
-export("rowsBetween",
+export("partitionBy",
+       "rowsBetween",
        "rangeBetween")
 
 export("Window.partitionBy",

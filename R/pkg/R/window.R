@@ -31,7 +31,6 @@
 setMethod("Window.partitionBy",
           signature(col = "character"),
           function(col, ...) {
-            cols <- list(col, ...)
             windowSpec(
               callJStatic("org.apache.spark.sql.expressions.Window",
                           "partitionBy",
@@ -67,7 +66,6 @@ setMethod("Window.partitionBy",
 setMethod("Window.orderBy",
           signature(col = "character"),
           function(col, ...) {
-            cols <- list(col, ...)
             windowSpec(
               callJStatic("org.apache.spark.sql.expressions.Window",
                           "orderBy",
