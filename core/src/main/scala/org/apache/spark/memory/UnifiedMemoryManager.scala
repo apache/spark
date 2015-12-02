@@ -26,7 +26,7 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
  * either side can borrow memory from the other.
  *
- * The region shared between execution and storage is a fraction of the total heap space
+ * The region shared between execution and storage is a fraction of (the total heap space - 300MB)
  * configurable through `spark.memory.fraction` (default 0.75). The position of the boundary
  * within this space is further determined by `spark.memory.storageFraction` (default 0.5).
  * This means the size of the storage region is 0.75 * 0.5 = 0.375 of the heap space by default.
@@ -130,6 +130,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
 object UnifiedMemoryManager {
 
+  // Set aside a fixed amount of memory for non-storage, non-execution purposes.
+  // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
+  // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
+  // the memory used for execution and storage will be (1024 - 300) * 0.75 = 543MB by default.
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
