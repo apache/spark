@@ -1972,7 +1972,6 @@ class TaskInstanceModelView(ModelViewOnly):
                 "{count} task instances were set to '{target_state}'".format(**locals()))
         except Exception as ex:
             if not self.handle_view_exception(ex):
-                print ex
                 raise Exception("Ooops")
             flash('Failed to set state', 'error')
 
