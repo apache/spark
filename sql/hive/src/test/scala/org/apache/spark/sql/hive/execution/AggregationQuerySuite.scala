@@ -527,7 +527,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   test("single distinct column set") {
     Seq(true, false).foreach { specializeSingleDistinctAgg =>
       val conf =
-        (SQLConf.AGG_PLANNING_15.key,
+        (SQLConf.SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING.key,
           specializeSingleDistinctAgg.toString)
       withSQLConf(conf) {
         // DISTINCT is not meaningful with Max and Min, so we just ignore the DISTINCT keyword.
