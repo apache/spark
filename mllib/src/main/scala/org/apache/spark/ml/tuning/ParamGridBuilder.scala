@@ -29,7 +29,7 @@ import org.apache.spark.ml.param._
  */
 @Since("1.2.0")
 @Experimental
-class ParamGridBuilder {
+class ParamGridBuilder @Since("1.2.0") {
 
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
