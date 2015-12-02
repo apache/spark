@@ -59,7 +59,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]],
       numBatchesBeforeRestart: Int,
-      batchDuration: Duration = Seconds(1),
+      batchDuration: Duration = Milliseconds(500),
       stopSparkContextAfterTest: Boolean = true
     ) {
     require(numBatchesBeforeRestart < expectedOutput.size,
@@ -91,7 +91,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     ssc.checkpoint(checkpointDir)
 
     // Do the computation for initial number of batches, create checkpoint file and quit
-    generateAndAssertOutput[V](ssc, batchDuration, checkpointDir,
+    generateAndAssertOutput[V](ssc, batchDuration, checkpointDir, numBatchesBeforeRestart,
       expectedOutput.take(numBatchesBeforeRestart), stopSparkContextAfterTest)
 
     // Restart and complete the computation from checkpoint file
@@ -101,24 +101,26 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
         "\n-------------------------------------------\n"
     )
     val restartedSsc = new StreamingContext(checkpointDir)
-    generateAndAssertOutput[V](restartedSsc, batchDuration, checkpointDir,
+    generateAndAssertOutput[V](restartedSsc, batchDuration, checkpointDir, nextNumBatches,
       expectedOutput.takeRight(nextNumExpectedOutputs), stopSparkContextAfterTest)
   }
 
   protected def createContextForCheckpointOperation(batchDuration: Duration): StreamingContext = {
     val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
-    new StreamingContext(SparkContext.getOrCreate(conf), Seconds(1))
+    new StreamingContext(SparkContext.getOrCreate(conf), batchDuration)
   }
 
   private def generateAndAssertOutput[V: ClassTag](
       ssc: StreamingContext,
       batchDuration: Duration,
       checkpointDir: String,
+      numBatchesToRun: Int,
       expectedOutput: Seq[Seq[V]],
       stopSparkContext: Boolean
     ) {
     try {
+      val batchCounter = new BatchCounter(ssc)
       ssc.start()
       val numBatches = expectedOutput.size
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
@@ -132,7 +134,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
       eventually(timeout(10 seconds)) {
         ssc.awaitTerminationOrTimeout(10)
-        assert(outputStream.output.size === expectedOutput.size)
+        assert(batchCounter.getNumCompletedBatches === numBatchesToRun)
       }
 
       eventually(timeout(10 seconds)) {

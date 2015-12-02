@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.mapred.JobConf
 
 private[spark]
