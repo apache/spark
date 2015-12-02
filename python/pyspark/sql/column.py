@@ -316,6 +316,10 @@ class Column(object):
 
     isNull = _unary_op("isNull", "True if the current expression is null.")
     isNotNull = _unary_op("isNotNull", "True if the current expression is not null.")
+    isNaN = _unary_op("isNaN", "True if the current expression is NaN.")
+    isnull = _unary_op("isNull", "True if the current expression is null.")
+    notnull = _unary_op("isNotNull", "True if the current expression is not null.")
+    isnan = _unary_op("isNaN", "True if the current expression is NaN.")
 
     @since(1.3)
     def alias(self, *alias):
