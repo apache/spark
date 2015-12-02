@@ -37,7 +37,7 @@ class BanditValidatorSuite
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
   }
 
-  test("cross validation with logistic regression") {
+  test("bandit validation with logistic regression") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(0.001, 1000.0))
