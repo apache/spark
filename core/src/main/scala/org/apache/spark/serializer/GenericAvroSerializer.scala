@@ -17,7 +17,7 @@
 
 package org.apache.spark.serializer
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
@@ -31,7 +31,6 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, SparkEnv}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.ByteBufferInputStream
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -82,7 +81,10 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    * seen values so to limit the number of times that decompression has to be done.
    */
   def decompress(schemaBytes: ByteBuffer): Schema = decompressCache.getOrElseUpdate(schemaBytes, {
-    val bis = new ByteBufferInputStream(schemaBytes)
+    val bis = new ByteArrayInputStream(
+      schemaBytes.array(),
+      schemaBytes.arrayOffset() + schemaBytes.position(),
+      schemaBytes.remaining())
     val bytes = IOUtils.toByteArray(codec.compressedInputStream(bis))
     new Schema.Parser().parse(new String(bytes, "UTF-8"))
   })
