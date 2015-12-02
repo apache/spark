@@ -70,7 +70,7 @@ setMethod("partitionBy",
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              windowSpec(callJMethod(x@sws, "partitionBy", jcols))           
+              windowSpec(callJMethod(x@sws, "partitionBy", jcols))     
             }
           })
 
