@@ -62,10 +62,10 @@ private[kinesis] class KinesisProducerLibraryProducer(regionName: String) extend
     }
 
     Futures.addCallback(future, kinesisCallBack)
+    producer.flushSync()
   }
 
   override def flush(): Map[String, Seq[(Int, String)]] = {
-    producer.flushSync()
     shardIdToSeqNumbers.toMap
   }
 
