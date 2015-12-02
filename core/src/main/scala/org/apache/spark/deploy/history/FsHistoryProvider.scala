@@ -249,6 +249,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
+
+      // scan for logs which have changed filesystem size. These have their
+      // size and updated flags set, but are not replayed.
+      // TODO
+
+      // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
@@ -267,7 +273,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
 
       logDebug(s"New attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
-
       logInfos.grouped(20)
         .map { batch =>
           replayExecutor.submit(new Runnable {
@@ -287,6 +292,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logError("Exception while merging application listings", e)
           }
         }
+      // now scan for updated file sizes
+      updateAttemptFileSizes()
 
       lastScanTime = newLastScanTime
     } catch {
@@ -364,7 +371,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
           case None => logWarning(s"Failed to load application log ${fileStatus.getPath}. " +
-            "The application may have not started.")
+              "The application may have not started.")
         }
         res
       } catch {
@@ -376,17 +383,27 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    if (newAttempts.isEmpty) {
-      return
+    if (newAttempts.nonEmpty) {
+      applications = mergeAttempts(newAttempts, applications)
     }
+  }
 
-    // Build a map containing all apps that contain new attempts. The app information in this map
-    // contains both the new app attempt, and those that were already loaded in the existing apps
-    // map. If an attempt has been updated, it replaces the old attempt in the list.
+  /**
+   * Build a map containing all apps that contain new attempts. The app information in this map
+   * contains both the new app attempt, and those that were already loaded in the existing apps
+   * map. If an attempt has been updated, it replaces the old attempt in the list.
+   * The ordering is maintained
+   * @param newAttempts new attempt list
+   * @param current the current attempt list
+   *       * @return the updated list
+   */
+  private def mergeAttempts(newAttempts: Iterable[FsApplicationAttemptInfo],
+      current: mutable.LinkedHashMap[String, FsApplicationHistoryInfo])
+      : mutable.LinkedHashMap[String, FsApplicationHistoryInfo] = {
     val newAppMap = new mutable.HashMap[String, FsApplicationHistoryInfo]()
     newAttempts.foreach { attempt =>
       val appInfo = newAppMap.get(attempt.appId)
-        .orElse(applications.get(attempt.appId))
+        .orElse(current.get(attempt.appId))
         .map { app =>
           val attempts =
             app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
@@ -411,7 +428,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val newIterator = newApps.iterator.buffered
-    val oldIterator = applications.values.iterator.buffered
+    val oldIterator = current.values.iterator.buffered
     while (newIterator.hasNext && oldIterator.hasNext) {
       if (newAppMap.contains(oldIterator.head.id)) {
         oldIterator.next()
@@ -423,8 +440,49 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
     newIterator.foreach(addIfAbsent)
     oldIterator.foreach(addIfAbsent)
+    mergedApps
+  }
 
-    applications = mergedApps
+
+  /**
+   * Scan through all the application attempts, if any have changed those attempts
+   * will be updated with the new file sizes. No attempt to replay the application
+   * is made; this is a low cost operation.
+   */
+  private[history] def updateAttemptFileSizes(): Unit = {
+    val now = System.currentTimeMillis();
+    val newAttempts: Iterable[FsApplicationAttemptInfo] = applications
+        .filter( e => !e._2.completed)
+        .flatMap { e =>
+          // build list of (false, attempt) or (true, attempt') values
+          e._2.attempts.flatMap { attempt: FsApplicationAttemptInfo =>
+            val path = new Path(logDir, attempt.logPath)
+            try {
+              val status = fs.getFileStatus(path)
+              val size: Long = getLogSize(status).getOrElse(-1)
+              val aS: Long = attempt.fileSize
+              if (size > aS) {
+                logDebug(s"Attempt ${attempt.name}/${attempt.appId} size => $size")
+                Some(new FsApplicationAttemptInfo(attempt.logPath, attempt.name, attempt.appId,
+                  attempt.attemptId, attempt.startTime, attempt.endTime, attempt.lastUpdated,
+                  attempt.sparkUser, attempt.completed, size, now))
+              } else {
+                None
+              }
+            } catch {
+              case ex: FileNotFoundException =>
+                // the file no longer exists
+                // catching an FNFE is faster than doing exists() + getFileStatus(),
+                // as exists() is usually getFileStatus() plus the catch.
+                logInfo(s"missing file: $path")
+                None
+            }
+          }
+        }
+
+    if (newAttempts.nonEmpty) {
+      applications = mergeAttempts(newAttempts, applications)
+    }
   }
 
   /**
@@ -538,13 +596,24 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           appListener.endTime.getOrElse(-1L),
           eventLog.getModificationTime(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
-          appCompleted))
+          appCompleted,
+          getLogSize(eventLog).get))
       } else {
         None
       }
     } finally {
       logInput.close()
     }
+  }
+
+  /**
+   * Get the size of the log, or `None` if there isn't one in the child
+   * directory of a legacy log entry
+   * @param fsEntry file status of a path
+   * @return the log size
+   */
+  private def getLogSize(fsEntry: FileStatus): Option[Long] = {
+    Some(fsEntry.getLen())
   }
 
   /**
@@ -609,7 +678,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     applications.get(appId).exists {
       _.attempts.find(_.attemptId == attemptId)
-        .exists(_.lastUpdated > updateTimeMillis)
+        .exists(_.fileSizeUpdateTime > updateTimeMillis)
     }
   }
 }
@@ -627,7 +696,9 @@ private class FsApplicationAttemptInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = true)
+    completed: Boolean = true,
+    val fileSize: Long = -1,
+    val fileSizeUpdateTime: Long = -1)
   extends ApplicationAttemptInfo(
       attemptId, startTime, endTime, lastUpdated, sparkUser, completed)
 

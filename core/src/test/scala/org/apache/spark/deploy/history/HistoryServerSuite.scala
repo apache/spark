@@ -285,7 +285,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.eventLog.dir", logDir.getAbsolutePath)
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
-      .set("spark.history.cache.window", "200ms")
+      .set("spark.history.cache.window", "250ms")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = new SecurityManager(myConf)
@@ -301,10 +301,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
     }
 
-    def dumpLogDir(): Unit = {
-      listDir(logDirPath).foreach { status =>
-        val s = status.toString
-        logInfo(s)
+    def dumpLogDir(msg: String = ""): Unit = {
+      if (log.isDebugEnabled) {
+        logDebug(msg)
+        listDir(logDirPath).foreach { status =>
+          val s = status.toString
+          logDebug(s)
+        }
       }
     }
 
@@ -345,7 +348,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // sanity check
       rootUiPage should not be empty
 
-
       def getAppUI: SparkUI = {
         provider.getAppUI(appId, None).get
       }
@@ -375,21 +377,25 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       completedJobs() should have size 1
       getNumJobs("") should be(1)
       assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
-      logInfo("Before executing job")
-      dumpLogDir()
+      dumpLogDir("Before executing job")
 
-      // second job needs a delay to ensure file timestamps are different
+      // second job needs a delay to ensure timestamps are different
       Thread.sleep(10)
 
+      logDebug("Starting second job")
       val d2 = sc.parallelize(1 to 10)
       d2.count()
-      dumpLogDir()
+      dumpLogDir("After second job")
+
 
       val stdTimeout = timeout(20 seconds)
+      logDebug(s"Explicitly reloading app UI for updated job information")
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2
       }
+      // TODO: fix
+      logDebug("waiting for UI to update")
       eventually(stdTimeout, stdInterval) {
         // this fails with patch https://github.com/apache/spark/pull/6935 as well, I'm not sure why
         val finalFileStatus = fs.getFileStatus(logDirPath)
@@ -405,11 +411,14 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // one can get re-attached
       d.count()
       getNumJobs("/jobs") should be (3)
-      // no need to retain the test dir now the tests complete
-      logDir.deleteOnExit();
+
     } finally {
       sc.stop()
     }
+    // now verify that the app moves from incomplete to complete
+    // TODO
+    // no need to retain the test dir now the tests complete
+    logDir.deleteOnExit();
 
   }
 

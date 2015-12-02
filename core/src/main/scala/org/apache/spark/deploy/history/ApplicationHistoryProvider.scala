@@ -33,7 +33,12 @@ private[spark] case class ApplicationAttemptInfo(
 private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
-    attempts: List[ApplicationAttemptInfo])
+    attempts: List[ApplicationAttemptInfo]) {
+
+  def completed: Boolean = {
+    attempts.nonEmpty && attempts.head.completed
+  }
+}
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -87,7 +92,7 @@ private[history] abstract class ApplicationHistoryProvider {
   def isCompleted(appId: String,
     attemptId: Option[String],
     applicationHistoryInfo: ApplicationHistoryInfo): Boolean = {
-    applicationHistoryInfo.attempts.nonEmpty && applicationHistoryInfo.attempts.head.completed
+    applicationHistoryInfo.completed
   }
 
   /**
