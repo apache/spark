@@ -38,11 +38,57 @@ from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
 
-__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixture',
-           'PowerIterationClusteringModel', 'PowerIterationClustering',
-           'StreamingKMeans', 'StreamingKMeansModel',
+__all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
+           'GaussianMixtureModel', 'GaussianMixture', 'PowerIterationClusteringModel',
+           'PowerIterationClustering', 'StreamingKMeans', 'StreamingKMeansModel',
            'LDA', 'LDAModel']
 
+@inherit_doc
+class BisectingKMeansModel():
+
+    """A clustering model derived from the bisecting k-means method.
+
+    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
+    >>> model = BisectingKMeans.train(
+    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...                    seed=50, initializationSteps=5, epsilon=1e-4)
+    >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
+    True
+    >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
+    True
+    >>> model.k
+    2
+
+    .. versionadded:: 1.6.0
+    """
+
+    def __init__(self, java_model):
+        self.java_model = java_model
+
+    @property
+    @since('1.0.0')
+    def clusterCenters(self):
+        """Get the cluster centers, represented as a list of NumPy arrays."""
+        return [c.toArray() for c in self.java_model.clusterCenters()]
+
+    @since('1.6.0')
+    def predict(self, x):
+        """Find the cluster to which x belongs in this model."""
+        best = 0
+        model = self.java_model
+        if isinstance(x, RDD):
+            return x.map(lambda x: model.predict(_convert_to_vector(x)))
+
+        x = _convert_to_vector(x)
+        return model.predict(x)
+
+    @since('1.6.0')
+    def computeCost(self, point):
+        """
+        Return the Bisecting K-means cost (sum of squared distances of points to
+        their nearest center) for this model on the given data.
+        """
+        return self.java_model.computeCost(_convert_to_vector(point))
 
 @inherit_doc
 class KMeansModel(Saveable, Loader):
