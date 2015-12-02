@@ -60,11 +60,11 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
  */
 @Since("1.2.0")
 @Experimental
-class CrossValidator @Since("1.2.0") (@Since("1.2.0") override val uid: String)
+class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   extends Estimator[CrossValidatorModel]
   with CrossValidatorParams with MLWritable with Logging {
 
-  @Since("1.4.0")
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("cv"))
 
   private val f2jBLAS = new F2jBLAS
@@ -124,7 +124,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.2.0") override val uid: String)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
-  @Since("1.2.0")
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     $(estimator).transformSchema(schema)
   }
