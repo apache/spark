@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.api.v1.ExecutorSummary
+import org.apache.spark.storage.StorageStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -41,6 +42,7 @@ private[ui] case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
+    isAlive: Boolean,
     maxMemory: Long,
     executorLogs: Map[String, String])
 
@@ -49,10 +51,12 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
+
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = listener.storageStatusList
+    val storageStatusList =
+      listener.storageStatusList ++ listener.removedExecutorStorageStatusList
     val maxMem = storageStatusList.map(_.maxMem).sum
     val memUsed = storageStatusList.map(_.memUsed).sum
     val diskUsed = storageStatusList.map(_.diskUsed).sum
@@ -84,6 +88,7 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
+          <th>Executor Status</th>
           {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
@@ -144,6 +149,9 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
+      <td sorttable_customkey={info.isAlive.toString}>
+      {if (info.isAlive) "Alive" else "Killed"}
+      </td>
       {
         if (logsExist) {
           <td>
@@ -184,6 +192,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val isAlive = listener.storageStatusList.contains(status)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -208,6 +217,7 @@ private[spark] object ExecutorsPage {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
+      isAlive,
       maxMem,
       executorLogs
     )

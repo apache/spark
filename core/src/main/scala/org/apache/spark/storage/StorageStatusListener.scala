@@ -17,8 +17,15 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.TimeUnit
+
+import scala.collection.JavaConverters.collectionAsScalaIterableConverter
 import scala.collection.mutable
 
+import com.google.common.base.Ticker
+import com.google.common.cache.CacheBuilder
+
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
@@ -28,13 +35,37 @@ import org.apache.spark.scheduler._
  *
  * This class is thread-safe (unlike JobProgressListener)
  */
+
 @DeveloperApi
-class StorageStatusListener extends SparkListener {
+object StorageStatusListener {
+  val TIME_TO_EXPIRE_KILLED_EXECUTOR = "spark.ui.timeToExpireKilledExecutor"
+}
+
+@DeveloperApi
+class StorageStatusListener private[storage](
+    conf: SparkConf,
+    ticker: Ticker
+    ) extends SparkListener {
+
+  import StorageStatusListener._
+
+  def this(conf: SparkConf) = {
+    this(conf, Ticker.systemTicker())
+  }
+
   // This maintains only blocks that are cached (i.e. storage level is not StorageLevel.NONE)
   private[storage] val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+  private[storage] val removedExecutorIdToStorageStatus = CacheBuilder.newBuilder()
+    .expireAfterWrite(conf.getTimeAsSeconds(TIME_TO_EXPIRE_KILLED_EXECUTOR, "0"), TimeUnit.SECONDS)
+    .ticker(ticker)
+    .build[String, StorageStatus]()
 
   def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
+  }
+
+  def removedExecutorStorageStatusList: Seq[StorageStatus] = synchronized {
+    removedExecutorIdToStorageStatus.asMap().values().asScala.toSeq
   }
 
   /** Update storage status list to reflect updated block statuses */
@@ -87,6 +118,8 @@ class StorageStatusListener extends SparkListener {
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
+      removedExecutorIdToStorageStatus.put(executorId,
+          executorIdToStorageStatus.get(executorId).get)
       executorIdToStorageStatus.remove(executorId)
     }
   }
