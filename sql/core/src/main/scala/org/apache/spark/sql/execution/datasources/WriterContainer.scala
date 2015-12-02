@@ -212,7 +212,7 @@ private[sql] abstract class BaseWriterContainer(
     serializableConf.value.set("mapred.task.id", taskAttemptId.toString)
     serializableConf.value.setBoolean("mapred.task.is.map", true)
     serializableConf.value.setInt("mapred.task.partition", 0)
-    for (c <- codec) {
+    codec.foreach { c =>
       serializableConf.value.set("mapred.output.compress", "true")
       serializableConf.value.set("mapred.output.compression.codec", c.getCanonicalName)
       serializableConf.value.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
