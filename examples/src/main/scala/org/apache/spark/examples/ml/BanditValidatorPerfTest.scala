@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object BanditValidatorPerfTest {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setMaster("local[4]").setAppName("Cooking")
+    val conf = new SparkConf().setMaster("local[8]").setAppName("BanditPerfTest")
 
     val sc = new SparkContext(conf)
     val sqlCtx = new SQLContext(sc)
@@ -62,6 +62,8 @@ object BanditValidatorPerfTest {
       .setNumFolds(3)
       .setEvaluator(eval)
 
+    val pathPrefix = "/Users/panda/data/small_datasets/a1a-results"
+
     Array(
       new StaticSearch,
       new SimpleBanditSearch,
@@ -77,10 +79,19 @@ object BanditValidatorPerfTest {
       val auc = eval.evaluate(model.transform(test))
 
       val part1 = s"${search.getClass.getSimpleName} -> ${auc}"
-      val part2 = banditVal.printSummary()
+      val part2 = banditVal.readableSummary()
+      val part3 = banditVal.paintableSummary()
 
       sc.parallelize(Array(part1) ++ part2).repartition(1)
-        .saveAsTextFile(s"/Users/panda/data/small_datasets/result-${search.getClass.getSimpleName}")
+        .saveAsTextFile(s"${pathPrefix}/result-${search.getClass.getSimpleName}")
+
+      part3.foreach { case (fold, result) =>
+        val strResult = result.map { case (iter, arm, training, validation) =>
+          s"$iter,$arm,$training,$validation"
+        }
+        sc.parallelize(strResult).repartition(1)
+          .saveAsTextFile(s"${pathPrefix}/result-${search.getClass.getSimpleName}/fold-${fold}")
+      }
     }
     sc.stop()
   }

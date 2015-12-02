@@ -154,7 +154,10 @@ class BanditValidator[M <: Model[M]](override val uid: String)
    */
   private var trainingSummary: Option[Array[Array[(Int, Double, Double)]]] = None
 
-  def printSummary(): Array[String] = {
+  /**
+   * Re-organize the training summary into a readable format, for output to read by humans.
+   */
+  def readableSummary(): Array[String] = {
     val resultBuilder = new ArrayBuffer[String]()
     val sepStr = Array.fill(100)("=").mkString("")
     trainingSummary match {
@@ -168,10 +171,8 @@ class BanditValidator[M <: Model[M]](override val uid: String)
           var j = 0
           while (j < $(estimatorParamMaps).length) {
             val hint = s"For #${i}-fold training, #${j}-arm, we get"
-            println(hint)
             resultBuilder.append(hint)
             val history = s"\t${x(i * $(estimatorParamMaps).length + j).mkString(", ")}"
-            println(history)
             resultBuilder.append(history)
             j += 1
           }
@@ -180,6 +181,29 @@ class BanditValidator[M <: Model[M]](override val uid: String)
         }
     }
     resultBuilder.toArray
+  }
+
+  /**
+   * Re-organize the training summary into a paintable format, for drawing pictures to compare
+   * between each search strategy.
+   * @return [ #fold, [ #iteration, #arm, trainingResult, validationResult ] ]
+   */
+  def paintableSummary(): Array[(Int, Array[(Int, Int, Double, Double)])] = {
+    val numArms = $(estimatorParamMaps).length
+    trainingSummary match {
+      case None =>
+        throw new NullPointerException("The value trainingSummary is None.")
+      case Some(x) =>
+        (0 until $(numFolds)).toArray.map { i =>
+          val retVal = x.slice(i * numArms, (i + 1) * numArms).zipWithIndex.flatMap {
+            case (armResult, armIdx) =>
+              armResult.map { case (iter, trainingResult, validationResult) =>
+                (iter, armIdx, trainingResult, validationResult)
+              }
+          }.sortBy(_._1)
+          (i, retVal)
+        }
+    }
   }
 
   override def fit(dataset: DataFrame): BanditValidatorModel[M] = {
