@@ -175,7 +175,7 @@ private[ui] class ExecutorsPage(
         }
       }
       {
-        if (isShowThreadDump) {
+        if (shouldShowThreadDump) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")
           <td>
             <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
