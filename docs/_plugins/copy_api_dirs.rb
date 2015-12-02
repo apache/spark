@@ -117,7 +117,7 @@ if not (ENV['SKIP_API'] == '1')
 
   puts "Moving to python/docs directory and building sphinx."
   cd("../python/docs")
-  system(make html) || raise("Python doc generation failed")
+  system("make html") || raise("Python doc generation failed")
 
   puts "Moving back into home dir."
   cd("../../")

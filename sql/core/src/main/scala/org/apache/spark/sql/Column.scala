@@ -154,11 +154,12 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   * - Given an Array, an integer ordinal can be used to retrieve a single value.
-   * - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   * - Given a Struct, a string fieldName can be used to extract that field.
-   * - Given an Array of Structs, a string fieldName can be used to extract filed
-   *   of every struct in that array, and return an Array of fields
+   *
+   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
+   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   *  - Given a Struct, a string fieldName can be used to extract that field.
+   *  - Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields
    *
    * @group expr_ops
    * @since 1.4.0
