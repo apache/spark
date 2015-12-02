@@ -305,12 +305,12 @@ class DenseVector(Vector):
 
         >>> v = Vectors.dense([1, 2, 9, 0])
         >>> v.toJson()
-        '{"values": [1.0, 2.0, 9.0, 0.0], "type": 1}'
+        '{"type": 1, "values": [1.0, 2.0, 9.0, 0.0]}'
         >>> Vectors.fromJson(v.toJson())
         DenseVector([1.0, 2.0, 9.0, 0.0])
         """
         data = {"type": 1, "values": self.values.tolist()}
-        return json.dumps(data)
+        return json.dumps(data, sort_keys=True)
 
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
@@ -573,13 +573,13 @@ class SparseVector(Vector):
 
         >>> v = Vectors.sparse(2, [1], [2.0])
         >>> v.toJson()
-        '{"indices": [1], "values": [2.0], "type": 0, "size": 2}'
+        '{"indices": [1], "size": 2, "type": 0, "values": [2.0]}'
         >>> Vectors.fromJson(v.toJson())
         SparseVector(2, {1: 2.0})
         """
         data = {"type": 0, "size": self.size, "indices": self.indices.tolist(),
                 "values": self.values.tolist()}
-        return json.dumps(data)
+        return json.dumps(data, sort_keys=True)
 
     @staticmethod
     def parse(s):
