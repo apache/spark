@@ -987,11 +987,14 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> qds = QuantileDiscretizer(numBuckets=2,
     ...     inputCol="values", outputCol="buckets")
     >>> bucketizer = qds.fit(df)
-    >>> bucketizer.getSplits()
-    [-inf, 0.4, 1.5, inf]
+    >>> splits = bucketizer.getSplits()
+    >>> splits[0]
+    -inf
+    >>> splits[1]*10
+    4
     >>> bucketed = bucketizer.transform(df).collect()
-    >>> bucketed[0]
-    Row(values=0.1, buckets=0.0)
+    >>> bucketed[0].buckets
+    0.0
 
     .. versionadded:: 1.6.0
     """
