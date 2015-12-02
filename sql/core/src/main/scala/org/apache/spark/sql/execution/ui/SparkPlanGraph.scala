@@ -94,30 +94,7 @@ private[ui] case class SparkPlanGraphNode(
     metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val builder = mutable.StringBuilder.newBuilder
-
-    builder ++= name
-
-    def truncateLongText(text: String): String = {
-      if (text.length > 50) {
-        text.take(50) + "..."
-      } else {
-        text
-      }
-    }
-
-    if (metadata.nonEmpty) {
-      // If there are metadata, display each entry in a separate line. We should use an escaped
-      // "\n" here to follow the dot syntax.
-      //
-      // Note: whitespace between two "\n"s is to create an empty line between the name of
-      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      val metadataEntries = for {
-        (key, value) <- metadata.toSeq.sorted
-      } yield s"$key: ${truncateLongText(value)}"
-      builder ++= "\\n \\n"
-      builder ++= metadataEntries.mkString("\\n")
-    }
+    val builder = new mutable.StringBuilder(name)
 
     val values = for {
       metric <- metrics
@@ -127,6 +104,11 @@ private[ui] case class SparkPlanGraphNode(
     }
 
     if (values.nonEmpty) {
+      // If there are metrics, display each entry in a separate line. We should use an escaped
+      // "\n" here to follow the dot syntax.
+      //
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "\\n \\n"
       builder ++= values.mkString("\\n")
     }
