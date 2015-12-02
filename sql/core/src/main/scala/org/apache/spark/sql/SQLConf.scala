@@ -451,7 +451,7 @@ private[spark] object SQLConf {
 
   val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
     booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
-      defaultValue = Some(true),
+      defaultValue = Some(false),
       isPublic = false,
       doc = "When true, if a query only has a single distinct column and it has " +
         "grouping expressions, we will use our planner rule to handle this distinct " +
