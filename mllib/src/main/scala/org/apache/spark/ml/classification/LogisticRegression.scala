@@ -23,12 +23,12 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg._
@@ -206,6 +206,13 @@ class LogisticRegression(override val uid: String)
   setDefault(fitIntercept -> true)
 
   /**
+   * Set initial Logistic Regression model.
+   * Default is None.
+   * @group setParam
+   */
+  def setInitialModel(model: LogisticRegressionModel): this.type = set(initialModel, Some(model))
+
+  /**
    * Whether to standardize the training features before fitting the model.
    * The coefficients of models will be always returned on the original scale,
    * so it will be transparent for users. Note that with/without standardization,
@@ -233,8 +240,6 @@ class LogisticRegression(override val uid: String)
   override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
   override def getThresholds: Array[Double] = super.getThresholds
-
-  def setInitialModel(model: LogisticRegressionModel): this.type = set(initialModel, Some(model))
 
   override protected def train(dataset: DataFrame): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
