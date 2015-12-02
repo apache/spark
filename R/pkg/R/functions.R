@@ -488,15 +488,27 @@ setMethod("initcap",
             column(jc)
           })
 
-#' isnan
+#' is.nan
 #'
-#' Return true if the column is NaN.
+#' Return true if the column is NaN, alias for \link{isnan}
 #'
-#' @rdname isnan
-#' @name isnan
+#' @rdname is.nan
+#' @name is.nan
 #' @family normal_funcs
 #' @export
-#' @examples \dontrun{isnan(df$c)}
+#' @examples
+#' \dontrun{
+#' is.nan(df$c)
+#' isnan(df$c)
+#' }
+setMethod("is.nan",
+          signature(x = "Column"),
+          function(x) {
+            isnan(x)
+          })
+
+#' @rdname is.nan
+#' @name isnan
 setMethod("isnan",
           signature(x = "Column"),
           function(x) {

@@ -800,7 +800,11 @@ setGeneric("initcap", function(x) { standardGeneric("initcap") })
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname isnan
+#' @rdname is.nan
+#' @export
+setGeneric("is.nan")
+
+#' @rdname is.nan
 #' @export
 setGeneric("isnan", function(x) { standardGeneric("isnan") })
 
