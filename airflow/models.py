@@ -313,7 +313,6 @@ class DagBag(object):
                                 filepath, only_if_updated=only_if_updated)
                     except Exception as e:
                         logging.warning(e)
-                        pass
 
     def deactivate_inactive_dags(self):
         active_dag_ids = [dag.dag_id for dag in list(self.dags.values())]
