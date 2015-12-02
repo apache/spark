@@ -53,19 +53,17 @@ private[ui] class ExecutorsPage(
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.synchronized {
-      val activeStorageStatusList = listener.activeStorageStatusList
-      val activeExecutorsTable = listingExecTable(activeStorageStatusList, true)
-      val deadStorageStatusList = listener.deadStorageStatusList
-      val deadExecutorsTable = listingExecTable(deadStorageStatusList, false)
-      val content =
-        <span>
-          <h4>ActiveExecutors({activeStorageStatusList.size})</h4> {activeExecutorsTable}
-          <h4>DeadExecutors({deadStorageStatusList.size})</h4> {deadExecutorsTable}
-        </span>
+    val activeStorageStatusList = listener.activeStorageStatusList
+    val activeExecutorsTable = listingExecTable(activeStorageStatusList, true)
+    val deadStorageStatusList = listener.deadStorageStatusList
+    val deadExecutorsTable = listingExecTable(deadStorageStatusList, false)
+    val content =
+      <span>
+        <h4>ActiveExecutors({activeStorageStatusList.size})</h4> {activeExecutorsTable}
+        <h4>DeadExecutors({deadStorageStatusList.size})</h4> {deadExecutorsTable}
+      </span>
 
-      UIUtils.headerSparkPage("Executors", content, parent)
-    }
+    UIUtils.headerSparkPage("Executors", content, parent)
   }
 
   private def listingExecTable(storageStatusList: Seq[StorageStatus], isActive: Boolean)
