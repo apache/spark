@@ -306,10 +306,10 @@ class Word2Vec extends Serializable with Logging {
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
 
-    if (vocabSize.toLong * vectorSize * 8 >= Int.MaxValue) {
+    if (vocabSize.toLong * vectorSize >= Int.MaxValue) {
       throw new RuntimeException("Please increase minCount or decrease vectorSize in Word2Vec" +
         " to avoid an OOM. You are highly recommended to make your vocabSize*vectorSize, " +
-        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue/8`.")
+        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue`.")
     }
 
     val syn0Global =
