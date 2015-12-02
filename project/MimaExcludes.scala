@@ -132,7 +132,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ApplicationInfo.this")
+          "org.apache.spark.status.api.v1.ApplicationInfo.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.StageData.this")
       ) ++ Seq(
