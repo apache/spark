@@ -2119,6 +2119,7 @@ test_that("repartition by columns on DataFrame", {
 })
 
 test_that("Window functions on a DataFrame", {
+  ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
   },
