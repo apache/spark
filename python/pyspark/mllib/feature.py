@@ -547,6 +547,9 @@ class Word2Vec(object):
     >>> sameModel = Word2VecModel.load(sc, path)
     >>> model.transform("a") == sameModel.transform("a")
     True
+    >>> syms = sameModel.findSynonyms("a", 2)
+    >>> [s[0] for s in syms]
+    [u'b', u'c']
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
