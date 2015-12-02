@@ -1844,23 +1844,6 @@ class JobModelView(ModelViewOnly):
         latest_heartbeat=datetime_f)
 
 
-@utils.provide_session
-def set_dagrun_state(ids, target_state, session=None):
-    try:
-        DR = models.DagRun
-        count = 0
-        for dr in session.query(DR).filter(DR.id.in_(ids)).all():
-            count += 1
-            dr.state = target_state
-        session.commit()
-        flash(
-            "{count} dag runs were set to '{target_state}'".format(**locals()))
-    except Exception as ex:
-        if not self.handle_view_exception(ex):
-            raise Exception("Ooops")
-        flash('Failed to set state', 'error')
-
-
 class DagRunModelView(ModelViewOnly):
     verbose_name_plural = "DAG Runs"
     can_delete = True
@@ -1888,15 +1871,31 @@ class DagRunModelView(ModelViewOnly):
 
     @action('set_running', "Set state to 'running'", None)
     def action_set_running(self, ids):
-        set_dagrun_state(ids, State.RUNNING)
+        self.set_dagrun_state(ids, State.RUNNING)
 
     @action('set_failed', "Set state to 'failed'", None)
     def action_set_failed(self, ids):
-        set_dagrun_state(ids, State.FAILED)
+        self.set_dagrun_state(ids, State.FAILED)
 
     @action('set_success', "Set state to 'success'", None)
     def action_set_success(self, ids):
-        set_dagrun_state(ids, State.SUCCESS)
+        self.set_dagrun_state(ids, State.SUCCESS)
+
+    @utils.provide_session
+    def set_dagrun_state(self, ids, target_state, session=None):
+        try:
+            DR = models.DagRun
+            count = 0
+            for dr in session.query(DR).filter(DR.id.in_(ids)).all():
+                count += 1
+                dr.state = target_state
+            session.commit()
+            flash(
+                "{count} dag runs were set to '{target_state}'".format(**locals()))
+        except Exception as ex:
+            if not self.handle_view_exception(ex):
+                raise Exception("Ooops")
+            flash('Failed to set state', 'error')
 
 
 class LogModelView(ModelViewOnly):
@@ -1926,12 +1925,55 @@ class TaskInstanceModelView(ModelViewOnly):
         dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_default_sort = ('start_date', True)
+    form_choices = {
+        'state': [
+            ('success', 'success'),
+            ('running', 'running'),
+            ('failed', 'failed'),
+        ],
+    }
     column_list = (
         'state', 'dag_id', 'task_id', 'execution_date', 'operator',
         'start_date', 'end_date', 'duration', 'job_id', 'hostname',
         'unixname', 'priority_weight', 'queue', 'queued_dttm', 'pool', 'log')
     can_delete = True
     page_size = 500
+
+    @action('set_running', "Set state to 'running'", None)
+    def action_set_running(self, ids):
+        self.set_task_instance_state(ids, State.RUNNING)
+
+    @action('set_failed', "Set state to 'failed'", None)
+    def action_set_failed(self, ids):
+        self.set_task_instance_state(ids, State.FAILED)
+
+    @action('set_success', "Set state to 'success'", None)
+    def action_set_success(self, ids):
+        self.set_task_instance_state(ids, State.SUCCESS)
+
+    @action('set_retry', "Set state to 'up_for_retry'", None)
+    def action_set_retry(self, ids):
+        self.set_task_instance_state(ids, State.UP_FOR_RETRY)
+
+    @utils.provide_session
+    def set_task_instance_state(self, ids, target_state, session=None):
+        try:
+            TI = models.TaskInstance
+            for count, id in enumerate(ids):
+                task_id, dag_id, execution_date = id.split(',')
+                execution_date = datetime.strptime(execution_date, '%Y-%m-%d %H:%M:%S')
+                ti = session.query(TI).filter(TI.task_id == task_id,
+                                              TI.dag_id == dag_id,
+                                              TI.execution_date == execution_date).one()
+                ti.state = target_state
+            count += 1
+            session.commit()
+            flash(
+                "{count} task instances were set to '{target_state}'".format(**locals()))
+        except Exception as ex:
+            if not self.handle_view_exception(ex):
+                raise Exception("Ooops")
+            flash('Failed to set state', 'error')
 
 
 class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
