@@ -211,7 +211,7 @@ private[streaming] class ReceivedBlockTracker(
     writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
-        logTrace("Recovering record " + byteBuffer)
+        logInfo("Recovering record " + byteBuffer)
         Utils.deserialize[ReceivedBlockTrackerLogEvent](
           JavaUtils.bufferToArray(byteBuffer), Thread.currentThread().getContextClassLoader) match {
           case BlockAdditionEvent(receivedBlockInfo) =>
