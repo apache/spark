@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
-// $example off$
+// $example on$
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;

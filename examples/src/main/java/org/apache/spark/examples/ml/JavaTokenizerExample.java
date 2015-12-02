@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 
-// $example off$
+// $example on$
 import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
@@ -69,7 +69,7 @@ public class JavaTokenizerExample {
       .setInputCol("sentence")
       .setOutputCol("words")
       .setPattern("\\W");  // alternatively .setPattern("\\w+").setGaps(false);
-    // example off
+    // $example off$
     jsc.stop();
   }
 }

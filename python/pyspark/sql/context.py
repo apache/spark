@@ -195,14 +195,15 @@ class SQLContext(object):
     @ignore_unicode_prefix
     @since(1.2)
     def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a lambda function as a UDF so it can be used in SQL statements.
+        """Registers a python function (including lambda function) as a UDF
+        so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not given it default to a string and conversion will automatically
         be done.  For any other return type, the produced object must match the specified type.
 
         :param name: name of the UDF
-        :param samplingRatio: lambda function
+        :param f: python function
         :param returnType: a :class:`DataType` object
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
@@ -318,13 +319,7 @@ class SQLContext(object):
                     struct.names[i] = name
             schema = struct
 
-        elif isinstance(schema, StructType):
-            # take the first few rows to verify schema
-            rows = rdd.take(10)
-            for row in rows:
-                _verify_type(row, schema)
-
-        else:
+        elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
@@ -421,7 +416,7 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
-        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):
@@ -449,6 +444,15 @@ class SQLContext(object):
             self._ssql_ctx.registerDataFrameAsTable(df._jdf, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
+
+    @since(1.6)
+    def dropTempTable(self, tableName):
+        """ Remove the temp table from catalog.
+
+        >>> sqlContext.registerDataFrameAsTable(df, "table1")
+        >>> sqlContext.dropTempTable("table1")
+        """
+        self._ssql_ctx.dropTempTable(tableName)
 
     def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.

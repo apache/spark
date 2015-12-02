@@ -132,7 +132,7 @@ public class JavaUtils {
     return !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile());
   }
 
-  private static final ImmutableMap<String, TimeUnit> timeSuffixes = 
+  private static final ImmutableMap<String, TimeUnit> timeSuffixes =
     ImmutableMap.<String, TimeUnit>builder()
       .put("us", TimeUnit.MICROSECONDS)
       .put("ms", TimeUnit.MILLISECONDS)
@@ -164,32 +164,32 @@ public class JavaUtils {
    */
   private static long parseTimeString(String str, TimeUnit unit) {
     String lower = str.toLowerCase().trim();
-    
+
     try {
       Matcher m = Pattern.compile("(-?[0-9]+)([a-z]+)?").matcher(lower);
       if (!m.matches()) {
         throw new NumberFormatException("Failed to parse time string: " + str);
       }
-      
+
       long val = Long.parseLong(m.group(1));
       String suffix = m.group(2);
-      
+
       // Check for invalid suffixes
       if (suffix != null && !timeSuffixes.containsKey(suffix)) {
         throw new NumberFormatException("Invalid suffix: \"" + suffix + "\"");
       }
-      
+
       // If suffix is valid use that, otherwise none was provided and use the default passed
       return unit.convert(val, suffix != null ? timeSuffixes.get(suffix) : unit);
     } catch (NumberFormatException e) {
       String timeError = "Time must be specified as seconds (s), " +
               "milliseconds (ms), microseconds (us), minutes (m or min), hour (h), or day (d). " +
               "E.g. 50s, 100ms, or 250us.";
-      
+
       throw new NumberFormatException(timeError + "\n" + e.getMessage());
     }
   }
-  
+
   /**
    * Convert a time parameter such as (50s, 100ms, or 250us) to milliseconds for internal use. If
    * no suffix is provided, the passed number is assumed to be in ms.
@@ -205,10 +205,10 @@ public class JavaUtils {
   public static long timeStringAsSec(String str) {
     return parseTimeString(str, TimeUnit.SECONDS);
   }
-  
+
   /**
    * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to a ByteUnit for
-   * internal use. If no suffix is provided a direct conversion of the provided default is 
+   * internal use. If no suffix is provided a direct conversion of the provided default is
    * attempted.
    */
   private static long parseByteString(String str, ByteUnit unit) {
@@ -217,7 +217,7 @@ public class JavaUtils {
     try {
       Matcher m = Pattern.compile("([0-9]+)([a-z]+)?").matcher(lower);
       Matcher fractionMatcher = Pattern.compile("([0-9]+\\.[0-9]+)([a-z]+)?").matcher(lower);
-      
+
       if (m.matches()) {
         long val = Long.parseLong(m.group(1));
         String suffix = m.group(2);
@@ -228,14 +228,14 @@ public class JavaUtils {
         }
 
         // If suffix is valid use that, otherwise none was provided and use the default passed
-        return unit.convertFrom(val, suffix != null ? byteSuffixes.get(suffix) : unit);  
+        return unit.convertFrom(val, suffix != null ? byteSuffixes.get(suffix) : unit);
       } else if (fractionMatcher.matches()) {
-        throw new NumberFormatException("Fractional values are not supported. Input was: " 
+        throw new NumberFormatException("Fractional values are not supported. Input was: "
           + fractionMatcher.group(1));
       } else {
-        throw new NumberFormatException("Failed to parse byte string: " + str);  
+        throw new NumberFormatException("Failed to parse byte string: " + str);
       }
-      
+
     } catch (NumberFormatException e) {
       String timeError = "Size must be specified as bytes (b), " +
         "kibibytes (k), mebibytes (m), gibibytes (g), tebibytes (t), or pebibytes(p). " +
@@ -248,7 +248,7 @@ public class JavaUtils {
   /**
    * Convert a passed byte string (e.g. 50b, 100k, or 250m) to bytes for
    * internal use.
-   * 
+   *
    * If no suffix is provided, the passed number is assumed to be in bytes.
    */
   public static long byteStringAsBytes(String str) {
@@ -264,7 +264,7 @@ public class JavaUtils {
   public static long byteStringAsKb(String str) {
     return parseByteString(str, ByteUnit.KiB);
   }
-  
+
   /**
    * Convert a passed byte string (e.g. 50b, 100k, or 250m) to mebibytes for
    * internal use.
@@ -284,4 +284,20 @@ public class JavaUtils {
   public static long byteStringAsGb(String str) {
     return parseByteString(str, ByteUnit.GiB);
   }
+
+  /**
+   * Returns a byte array with the buffer's contents, trying to avoid copying the data if
+   * possible.
+   */
+  public static byte[] bufferToArray(ByteBuffer buffer) {
+    if (buffer.hasArray() && buffer.arrayOffset() == 0 &&
+        buffer.array().length == buffer.remaining()) {
+      return buffer.array();
+    } else {
+      byte[] bytes = new byte[buffer.remaining()];
+      buffer.get(bytes);
+      return bytes;
+    }
+  }
+
 }
