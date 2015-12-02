@@ -380,7 +380,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if containsChild(tn) => Nil
-    case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case tn: TreeNode[_] => s"(${tn.simpleString})" :: Nil
     case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
