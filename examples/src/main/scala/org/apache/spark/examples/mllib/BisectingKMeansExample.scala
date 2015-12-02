@@ -36,6 +36,7 @@ object BisectingKMeansExample {
     val sparkConf = new SparkConf().setAppName("mllib.BisectingKMeansExample")
     val sc = new SparkContext(sparkConf)
 
+    // $example on$
     // Loads and parses data
     def parse(line: String): Vector = Vectors.dense(line.split(" ").map(_.toDouble))
     val data = sc.textFile("data/mllib/kmeans_data.txt").map(parse).cache()
@@ -49,6 +50,7 @@ object BisectingKMeansExample {
     model.clusterCenters.zipWithIndex.foreach { case (center, idx) =>
       println(s"Cluster Center ${idx}: ${center}")
     }
+    // $example off$
 
     sc.stop()
   }
