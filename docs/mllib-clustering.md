@@ -718,6 +718,53 @@ sameModel = LDAModel.load(sc, "myModelPath")
 
 </div>
 
+## Bisecting k-means
+
+Bisecting k-means is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering).
+Hierarchical clustering is one of the most commonly used  method of cluster analysis which seeks to build a hierarchy of clusters.
+Strategies for hierarchical clustering generally fall into two types:
+
+- Agglomerative: This is a "bottom up" approach: each observation starts in its own cluster, and pairs of clusters are merged as one moves up the hierarchy.
+- Divisive: This is a "top down" approach: all observations start in one cluster, and splits are performed recursively as one moves down the hierarchy.
+
+Bisecting k-means algorithm is a kind of divisive algorithms.
+Because it is too difficult to implement a agglomerative algorithm as a distributed algorithm on Spark.
+The implementation in MLlib has the following parameters:
+
+* *k* the desired number of leaf clusters (default: 4). The actual number could be smaller if there are no divisible leaf clusters.
+* *maxIterations* the max number of k-means iterations to split clusters (default: 20)
+* *minDivisibleClusterSize* the minimum number of points (if >= 1.0) or the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
+* *seed* a random seed (default: hash value of the class name)
+
+**Examples**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+The following code snippets can be executed in `spark-shell`.
+
+Refer to the [`BisectingKMeans` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.clustering.BisectingKMeansModel) for details on the API.
+
+{% highlight scala %}
+import org.apache.spark.mllib.clustering.{BisectingKMeans, BisectingKMeansModel}
+import org.apache.spark.mllib.linalg.Vectors
+
+// Load and parse the data
+val data = sc.textFile("data/mllib/sample_bisecting_kmeans_data.txt")
+val parsedData = data.map(s => Vectors.dense(s.trim.split(',').map(_.toDouble)))
+
+// Cluster the data into the tree clusters using BisectingKMeans
+val model = new BisectingKMeans().setK(3).run(parsedData)
+
+// Output the compute cost and the cluster centers
+println(s"Compute Cost: ${model.computeCost(parsedData)}")
+model.clusterCenters.zipWithIndex.foreach { case (center, idx) =>
+  println(s"Cluster Center ${idx}: ${center}")
+}
+{% endhighlight %}
+</div>
+
+</div>
+
 ## Streaming k-means
 
 When data arrive in a stream, we may want to estimate clusters dynamically,
