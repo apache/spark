@@ -133,6 +133,8 @@ object MimaExcludes {
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationInfo.this")
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.StageData.this")
       ) ++ Seq(
         // SPARK-11766 add toJson to Vector
         ProblemFilters.exclude[MissingMethodProblem](
