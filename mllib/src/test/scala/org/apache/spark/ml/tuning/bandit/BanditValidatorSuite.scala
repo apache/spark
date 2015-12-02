@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tuning.bandit
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
@@ -44,7 +44,7 @@ class BanditValidatorSuite
       .addGrid(lr.maxIter, Array(0, 10))
       .build()
     val eval = new BinaryClassificationEvaluator
-    val bv = new BanditValidator[LogisticRegressionModel]()
+    val bv = new BanditValidator()
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)

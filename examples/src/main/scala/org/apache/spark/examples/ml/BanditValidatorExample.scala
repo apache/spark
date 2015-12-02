@@ -17,15 +17,15 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.ml.tuning.bandit.{NaiveSearch, BanditValidator}
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.ml.{PipelineModel, Pipeline}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.ml.tuning.ParamGridBuilder
+import org.apache.spark.ml.tuning.bandit.{BanditValidator, StaticSearch}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.{SparkConf, SparkContext}
 
 
 object BanditValidatorExample {
@@ -66,7 +66,7 @@ object BanditValidatorExample {
     // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
     // This will allow us to jointly choose parameters for all Pipeline stages.
     // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-    val banditval = new BanditValidator[PipelineModel]("test")
+    val banditval = new BanditValidator("test")
       .setEstimator(pipeline)
       .setEvaluator(new BinaryClassificationEvaluator)
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
@@ -79,7 +79,7 @@ object BanditValidatorExample {
     banditval.setEstimatorParamMaps(paramGrid)
     banditval.setNumFolds(2) // Use 3+ in practice
 
-    val search = new NaiveSearch
+    val search = new StaticSearch
     banditval.setSearchStrategy(search)
     banditval.setMaxIter(50)
     banditval.setStepsPerPulling(1)

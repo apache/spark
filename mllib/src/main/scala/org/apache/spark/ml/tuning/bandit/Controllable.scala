@@ -24,17 +24,17 @@ import org.apache.spark.ml.param.{Param, _}
 /**
  * Params for Controllable Estimators.
  */
-trait Controllable[M <: Model[M]] extends Params with HasMaxIter {
+trait Controllable extends Params with HasMaxIter {
 
   /**
    * Param for the initial model of a given estimator. Default None.
    * @group param
    */
-  val initialModel: Param[Option[M]] =
+  val initialModel: Param[Option[Model[_]]] =
     new Param(this, "initialModel", "initial model for warm-start")
 
   /** @group getParam */
-  def getInitialModel: Option[M] = $(initialModel)
+  def getInitialModel: Option[Model[_]] = $(initialModel)
 
   setDefault(initialModel -> None, maxIter -> 1)
 }

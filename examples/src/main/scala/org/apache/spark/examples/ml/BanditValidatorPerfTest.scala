@@ -59,7 +59,7 @@ object BanditValidatorPerfTest {
 
     val eval = new BinaryClassificationEvaluator().setMetricName("areaUnderROC")
 
-    val banditVal = new BanditValidator[LogisticRegressionModel]()
+    val banditVal = new BanditValidator()
       .setEstimator(singleClassifier)
       .setEstimatorParamMaps(params)
       .setNumFolds(3)
@@ -69,7 +69,7 @@ object BanditValidatorPerfTest {
 
     Array(
       new StaticSearch,
-      new NaiveSearch,
+      //new NaiveSearch,
       //new SuccessiveEliminationSearch,
       new ExponentialWeightsSearch
       //new LILUCBSearch,

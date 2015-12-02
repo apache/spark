@@ -158,8 +158,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Experimental
 class LogisticRegression(override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
-  with LogisticRegressionParams with DefaultParamsWritable with Logging
-  with Controllable[LogisticRegressionModel] {
+  with LogisticRegressionParams with DefaultParamsWritable with Logging with Controllable {
 
   def this() = this(Identifiable.randomUID("logreg"))
 
@@ -315,9 +314,10 @@ class LogisticRegression(override val uid: String)
     val initialCoefficientsWithIntercept = if ($(initialModel).isDefined) {
       if ($(fitIntercept)) {
         Vectors.dense(
-          $(initialModel).get.coefficients.toArray ++ Array($(initialModel).get.intercept))
+          $(initialModel).get.asInstanceOf[LogisticRegressionModel].coefficients.toArray ++
+            Array($(initialModel).get.asInstanceOf[LogisticRegressionModel].intercept))
       } else {
-        $(initialModel).get.coefficients
+        $(initialModel).get.asInstanceOf[LogisticRegressionModel].coefficients
       }
     } else {
       val coefficientsWithIntercept =

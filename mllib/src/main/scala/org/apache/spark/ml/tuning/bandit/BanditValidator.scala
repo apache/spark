@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.shared.HasMaxIter
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, _}
+import org.apache.spark.ml.tuning.ValidatorParams
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.mllib.util.MLUtils
@@ -33,38 +34,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[BanditValidator]] and [[BanditValidatorModel]].
  */
-trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
-
-  /**
-   * param for the estimator to be validated
-   * @group param
-   */
-  val estimator: Param[Estimator[M] with Controllable[M]] =
-    new Param(this, "estimator", "estimator for selection")
-
-  /** @group getParam */
-  def getEstimator: Estimator[M] with Controllable[M] = $(estimator)
-
-  /**
-   * param for estimator param maps
-   * @group param
-   */
-  val estimatorParamMaps: Param[Array[ParamMap]] =
-    new Param(this, "estimatorParamMaps", "param maps for the estimator")
-
-  /** @group getParam */
-  def getEstimatorParamMaps: Array[ParamMap] = $(estimatorParamMaps)
-
-  /**
-   * param for the evaluator used to select hyper-parameters that maximize the validated metric
-   * @group param
-   */
-  val evaluator: Param[Evaluator] = new Param(this, "evaluator",
-    "evaluator used to select hyper-parameters that maximize the validated metric")
-
-  /** @group getParam */
-  def getEvaluator: Evaluator = $(evaluator)
-
+trait BanditValidatorParams extends ValidatorParams with HasMaxIter {
   /**
    * Step control for one pulling of an arm.
    * @group param
@@ -105,8 +75,8 @@ trait BanditValidatorParams[M <: Model[M]] extends HasMaxIter {
  * Multi-arm bandit hyper-parameters selection.
  */
 @Experimental
-class BanditValidator[M <: Model[M]](override val uid: String)
-  extends Estimator[BanditValidatorModel[M]] with BanditValidatorParams[M] with Logging {
+class BanditValidator(override val uid: String)
+  extends Estimator[BanditValidatorModel] with BanditValidatorParams with Logging {
 
   def this() = this(Identifiable.randomUID("BanditValidator"))
 
@@ -114,10 +84,11 @@ class BanditValidator[M <: Model[M]](override val uid: String)
     $(estimator).transformSchema(schema)
   }
 
-  def copy(extra: ParamMap): BanditValidator[M] = {
-    val copied = defaultCopy(extra).asInstanceOf[BanditValidator[M]]
+  def copy(extra: ParamMap): BanditValidator = {
+    val copied = defaultCopy(extra).asInstanceOf[BanditValidator]
     if (copied.isDefined(estimator)) {
-      // copied.setEstimator(copied.getEstimator.copy(extra))
+      copied.setEstimator(
+        copied.getEstimator.copy(extra).asInstanceOf[Estimator[_] with Controllable])
     }
     if (copied.isDefined(evaluator)) {
       copied.setEvaluator(copied.getEvaluator.copy(extra))
@@ -126,7 +97,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
   }
 
   /** @group setParam */
-  def setEstimator(value: Estimator[M] with Controllable[M]): this.type = set(estimator, value)
+  def setEstimator(value: Estimator[_] with Controllable): this.type = set(estimator, value)
 
   /** @group setParam */
   def setEstimatorParamMaps(value: Array[ParamMap]): this.type = set(estimatorParamMaps, value)
@@ -206,7 +177,10 @@ class BanditValidator[M <: Model[M]](override val uid: String)
     }
   }
 
-  override def fit(dataset: DataFrame): BanditValidatorModel[M] = {
+  override def fit(dataset: DataFrame): BanditValidatorModel = {
+    assert($(estimator).isInstanceOf[Controllable],
+      s"Estimator ${$(estimator).getClass.getSimpleName} is not controllable.")
+
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -232,7 +206,11 @@ class BanditValidator[M <: Model[M]](override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // For each parameter map, create a corresponding arm
-      val arms = epm.map(new Arm[M](est, None, _, eval, $(stepsPerPulling)))
+      val arms = epm.map(
+        new Arm(
+          est.asInstanceOf[Estimator[_] with Controllable], None, _, eval, $(stepsPerPulling)
+        )
+      )
 
       // Find the best arm with pre-defined search strategies
       val bestArm = $(searchStrategy).search(totalBudget, arms, trainingDataset, validationDataset,
@@ -251,7 +229,7 @@ class BanditValidator[M <: Model[M]](override val uid: String)
     val bestArm = bestArms.minBy(_._2)._1
     val bestModel = bestArm.getModel
 
-    copyValues(new BanditValidatorModel[M](uid, bestModel).setParent(this))
+    copyValues(new BanditValidatorModel(uid, bestModel).setParent(this))
   }
 }
 
@@ -261,10 +239,10 @@ class BanditValidator[M <: Model[M]](override val uid: String)
  *
  * @param bestModel The best model selected from multi-arm bandit validation.
  */
-class BanditValidatorModel[M <: Model[M]] private[ml] (
+class BanditValidatorModel private[ml] (
     override val uid: String,
-    val bestModel: Model[M])
-  extends Model[BanditValidatorModel[M]] with BanditValidatorParams[M] {
+    val bestModel: Model[_])
+  extends Model[BanditValidatorModel] with BanditValidatorParams {
 
   override def validateParams(): Unit = {
     bestModel.validateParams()
@@ -279,8 +257,8 @@ class BanditValidatorModel[M <: Model[M]] private[ml] (
     bestModel.transformSchema(schema)
   }
 
-  override def copy(extra: ParamMap): BanditValidatorModel[M] = {
-    val copied = new BanditValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[M]])
+  override def copy(extra: ParamMap): BanditValidatorModel = {
+    val copied = new BanditValidatorModel(uid, bestModel.copy(extra).asInstanceOf[Model[_]])
     copyValues(copied, extra)
   }
 }
@@ -291,9 +269,9 @@ class BanditValidatorModel[M <: Model[M]] private[ml] (
  * consumes a current model and produce a new one. The evaluator computes the error given a target
  * column and a predicted column.
  */
-class Arm[M <: Model[M]](
-    val estimator: Estimator[M] with Controllable[M],
-    val initialModel: Option[M],
+class Arm(
+    val estimator: Estimator[_] with Controllable,
+    val initialModel: Option[Model[_]],
     val estimatorParamMap: ParamMap,
     val evaluator: Evaluator,
     val stepsPerPulling: Int) {
@@ -317,9 +295,9 @@ class Arm[M <: Model[M]](
   /**
    * Inner model to record intermediate training result.
    */
-  private var model: Option[M] = None
+  private var model: Option[Model[_]] = None
 
-  def getModel: M = model.get
+  def getModel: Model[_] = model.get
 
   /**
    * Keep record of the number of pulls for computations in some search strategies.
@@ -343,7 +321,7 @@ class Arm[M <: Model[M]](
     }
     estimator.set(estimator.initialModel, model)
     estimator.set(estimator.maxIter, stepsPerPulling)
-    this.model = Some(estimator.fit(dataset, estimatorParamMap))
+    this.model = Some(estimator.fit(dataset, estimatorParamMap)).asInstanceOf[Option[Model[_]]]
     if (record) {
       val validationResult = validationSet match {
         case Some(data) => evaluator.evaluate(model.get.transform(data))

@@ -153,7 +153,7 @@ final class OneVsRestModel private[ml] (
  */
 @Experimental
 final class OneVsRest(override val uid: String)
-  extends Estimator[OneVsRestModel] with OneVsRestParams with Controllable[OneVsRestModel] {
+  extends Estimator[OneVsRestModel] with OneVsRestParams with Controllable {
 
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
@@ -209,10 +209,10 @@ final class OneVsRest(override val uid: String)
       paramMap.put(classifier.labelCol -> labelColName)
       paramMap.put(classifier.featuresCol -> getFeaturesCol)
       paramMap.put(classifier.predictionCol -> getPredictionCol)
-      paramMap.put(classifier.asInstanceOf[Controllable[LogisticRegressionModel]].maxIter -> $(maxIter))
+      paramMap.put(classifier.asInstanceOf[Controllable].maxIter -> $(maxIter))
       if ($(initialModel).isDefined) {
-        paramMap.put(classifier.asInstanceOf[Controllable[LogisticRegressionModel]].initialModel ->
-          Some($(initialModel).get.models(index).asInstanceOf[LogisticRegressionModel]))
+        paramMap.put(classifier.asInstanceOf[Controllable].initialModel ->
+          Some($(initialModel).get.asInstanceOf[OneVsRestModel].models(index)))
       }
       classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]

@@ -25,13 +25,13 @@ import org.apache.spark.mllib.linalg.{DenseVector, Vectors}
 import org.apache.spark.sql.DataFrame
 
 abstract class Search {
-  def search[M <: Model[M]](
+  def search(
       totalBudgets: Int,
-      arms: Array[Arm[M]],
+      arms: Array[Arm],
       trainingData: DataFrame,
       validationData: DataFrame,
       isLargerBetter: Boolean = true,
-      needRecord: Boolean = false): Arm[M]
+      needRecord: Boolean = false): Arm
 }
 
 /**
@@ -40,13 +40,13 @@ abstract class Search {
  */
 class StaticSearch extends Search {
 
-  override def search[M <: Model[M]](
+  override def search(
       totalBudgets: Int,
-      arms: Array[Arm[M]],
+      arms: Array[Arm],
       trainingData: DataFrame,
       validationData: DataFrame,
       isLargerBetter: Boolean = true,
-      needRecord: Boolean = false): Arm[M] = {
+      needRecord: Boolean = false): Arm = {
 
     assert(arms.length != 0, "ERROR: No arms!")
     val numArms = arms.length
@@ -65,6 +65,54 @@ class StaticSearch extends Search {
   }
 }
 
+
+
+/**
+ * Exponential weight search first gives us a uniform distribution. Then it samples from the
+ * distribution, and accumulates the estimated loss for the selected arm. As a consequence, the arm
+ * with less accumulated estimated loss will have more chance to be selected to run in the next
+ * iteration. However, if an arm is much more lucky than others, i.e. be selected more times, then
+ * it tends to reduce the weight to be selected in the next iteration, for the accumulating behavior
+ * in the strategy. So it gives us the chance to try other arms.
+ * Please refer to the *Regret Analysis of Stochastic and Nonstochastic Multi-armed Bandit Problems*
+ * Chapter 3, written by Sebastien Bubeck and Nicolo Cesa-Bianchi.
+ */
+class ExponentialWeightsSearch extends Search {
+  override def search(
+      totalBudgets: Int,
+      arms: Array[Arm],
+      trainingData: DataFrame,
+      validationData: DataFrame,
+      isLargerBetter: Boolean = true,
+      needRecord: Boolean = false): Arm = {
+
+    if (!isLargerBetter) {
+      throw new UnsupportedOperationException("Unsupported OP fow now.")
+    }
+
+    val numArms = arms.length
+    val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
+
+    val lt = Vectors.zeros(numArms).asInstanceOf[DenseVector]
+    val wt = Vectors.dense(Array.fill(numArms)(1.0)).asInstanceOf[DenseVector]
+    for (t <- 0 until totalBudgets) {
+      val pt = Vectors.zeros(numArms)
+      axpy(Utils.sum(wt), wt, pt)
+      val it = if (t < numArms) t else Utils.chooseOne(pt)
+      val arm = arms(it)
+      arm.pull(trainingData, t, Some(validationData), record = needRecord)
+      lt.values(it) += arm.getValidationResult(validationData)
+      // We use `1.0 / lt(it)` instead of `lt(it)` in the original paper, for the reason that the
+      // paper uses loss, which the `isLargerBetter` is false. Here our `isLargeBetter` is true.
+      // Note: Be careful with potential NaN here.
+      wt.values(it) = math.exp(- eta * 1.0 / lt(it))
+    }
+    val bestArm = arms.maxBy(arm => arm.getValidationResult(validationData))
+    bestArm
+  }
+}
+
+/*
 /**
  * Naive search strategy runs several rounds as initial rounds. In initial rounds, the naive
  * search is the same with static search. After the initial rounds, the naive search selects
@@ -104,51 +152,6 @@ class NaiveSearch extends Search {
     }
 
     val bestArm = preSelectedArms.maxBy(arm => arm.getValidationResult(validationData))
-    bestArm
-  }
-}
-
-/**
- * Exponential weight search first gives us a uniform distribution. Then it samples from the
- * distribution, and accumulates the estimated loss for the selected arm. As a consequence, the arm
- * with less accumulated estimated loss will have more chance to be selected to run in the next
- * iteration. However, if an arm is much more lucky than others, i.e. be selected more times, then
- * it tends to reduce the weight to be selected in the next iteration, for the accumulating behavior
- * in the strategy. So it gives us the chance to try other arms.
- * Please refer to the *Regret Analysis of Stochastic and Nonstochastic Multi-armed Bandit Problems*
- * Chapter 3, written by Sebastien Bubeck and Nicolo Cesa-Bianchi.
- */
-class ExponentialWeightsSearch extends Search {
-  override def search[M <: Model[M]](
-      totalBudgets: Int,
-      arms: Array[Arm[M]],
-      trainingData: DataFrame,
-      validationData: DataFrame,
-      isLargerBetter: Boolean = true,
-      needRecord: Boolean = false): Arm[M] = {
-
-    if (!isLargerBetter) {
-      throw new UnsupportedOperationException("Unsupported OP fow now.")
-    }
-
-    val numArms = arms.length
-    val eta = math.sqrt(2 * math.log(numArms) / (numArms * totalBudgets))
-
-    val lt = Vectors.zeros(numArms).asInstanceOf[DenseVector]
-    val wt = Vectors.dense(Array.fill(numArms)(1.0)).asInstanceOf[DenseVector]
-    for (t <- 0 until totalBudgets) {
-      val pt = Vectors.zeros(numArms)
-      axpy(Utils.sum(wt), wt, pt)
-      val it = if (t < numArms) t else Utils.chooseOne(pt)
-      val arm = arms(it)
-      arm.pull(trainingData, t, Some(validationData), record = needRecord)
-      lt.values(it) += arm.getValidationResult(validationData)
-      // We use `1.0 / lt(it)` instead of `lt(it)` in the original paper, for the reason that the
-      // paper uses loss, which the `isLargerBetter` is false. Here our `isLargeBetter` is true.
-      // Note: Be careful with potential NaN here.
-      wt.values(it) = math.exp(- eta * 1.0 / lt(it))
-    }
-    val bestArm = arms.maxBy(arm => arm.getValidationResult(validationData))
     bestArm
   }
 }
@@ -471,4 +474,5 @@ class SuccessiveEliminationSearch extends Search {
     bestArm
   }
 }
+*/
 
