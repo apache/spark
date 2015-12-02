@@ -1212,6 +1212,12 @@ setMethod("subset", signature(x = "DataFrame"),
             x[subset, select, ...]
           })
 
+setMethod("select", signature(x = "DataFrame"),
+          function(x, ...) {
+            newEnv <- columnIntoNewEnv(x, FALSE)
+            attach(newEnv)
+            tryCatch(selectInternal(x, ...), finally = detach())
+          })
 #' Select
 #'
 #' Selects a set of columns with names or Column expressions.
@@ -1233,14 +1239,14 @@ setMethod("subset", signature(x = "DataFrame"),
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df[,df$age]
 #' }
-setMethod("select", signature(x = "DataFrame", col = "character"),
+setMethod("selectInternal", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             if (length(col) > 1) {
               if (length(list(...)) > 0) {
                 stop("To select multiple columns, use a character vector or list for col")
               }
 
-              select(x, as.list(col))
+              selectInternal(x, as.list(col))
             } else {
               sdf <- callJMethod(x@sdf, "select", col, list(...))
               dataFrame(sdf)
@@ -1250,7 +1256,7 @@ setMethod("select", signature(x = "DataFrame", col = "character"),
 #' @family DataFrame functions
 #' @rdname select
 #' @export
-setMethod("select", signature(x = "DataFrame", col = "Column"),
+setMethod("selectInternal", signature(x = "DataFrame", col = "Column"),
           function(x, col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
               c@jc
@@ -1262,7 +1268,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
 #' @family DataFrame functions
 #' @rdname select
 #' @export
-setMethod("select",
+setMethod("selectInternal",
           signature(x = "DataFrame", col = "list"),
           function(x, col) {
             cols <- lapply(col, function(c) {
@@ -1547,13 +1553,17 @@ setMethod("orderBy",
 #' filter(df, df$col2 != "abcdefg")
 #' }
 setMethod("filter",
-          signature(x = "DataFrame", condition = "characterOrColumn"),
+          signature(x = "DataFrame"),
           function(x, condition) {
-            if (class(condition) == "Column") {
-              condition <- condition@jc
-            }
-            sdf <- callJMethod(x@sdf, "filter", condition)
-            dataFrame(sdf)
+            newEnv <- columnIntoNewEnv(x, FALSE)
+            attach(newEnv)
+            tryCatch({
+              if (class(condition) == "Column") {
+                condition <- condition@jc
+              }
+              sdf <- callJMethod(x@sdf, "filter", condition)
+              dataFrame(sdf)
+            },  finally = detach())
           })
 
 #' @family DataFrame functions
@@ -2197,7 +2207,7 @@ setMethod("as.data.frame",
 setMethod("attach",
           signature(what = "DataFrame"),
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            newEnv <- assignNewEnv(what)
+            newEnv <- columnIntoNewEnv(what)
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
 
@@ -2220,6 +2230,6 @@ setMethod("attach",
 setMethod("with",
           signature(data = "DataFrame"),
           function(data, expr, ...) {
-            newEnv <- assignNewEnv(data)
+            newEnv <- columnIntoNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })

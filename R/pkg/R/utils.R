@@ -624,15 +624,22 @@ convertNamedListToEnv <- function(namedList) {
   env
 }
 
-# Assign a new environment for attach() and with() methods
-assignNewEnv <- function(data) {
-  stopifnot(class(data) == "DataFrame")
-  cols <- columns(data)
-  stopifnot(length(cols) > 0)
-
+# Put each column of a DataFrame into a new environment
+# putAsDataFrame:
+#   TRUE - Put each column as a DataFrame into the new environment
+#   FALSE - Put each column as a Column into the new environment
+columnIntoNewEnv <- function(df, putAsDataFrame = TRUE) {
+  stopifnot(class(df) == "DataFrame")
+  cols <- columns(df)
+  
   env <- new.env()
-  for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
-  }
+  lapply(seq_along(cols), function(i) {
+    if (putAsDataFrame) {
+      value <- df[, cols[i]]
+    } else {
+      value <- df[[cols[i]]]
+    }
+    assign(x = cols[i], value = value, envir = env)
+  })
   env
 }
