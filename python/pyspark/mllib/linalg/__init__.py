@@ -299,6 +299,19 @@ class DenseVector(Vector):
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
 
+    def toJson(self):
+        """
+        Converts the vector to a JSON string.
+
+        >>> v = Vectors.dense([1, 2, 9, 0])
+        >>> v.toJson()
+        '{"values": [1.0, 2.0, 9.0, 0.0], "type": 1}'
+        >>> Vectors.fromJson(v.toJson())
+        DenseVector([1.0, 2.0, 9.0, 0.0])
+        """
+        data = {"type": 1, "values": self.values.tolist()}
+        return json.dumps(data)
+
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
 
@@ -553,6 +566,20 @@ class SparseVector(Vector):
         return (
             SparseVector,
             (self.size, self.indices.tostring(), self.values.tostring()))
+
+    def toJson(self):
+        """
+        Converts the vector to a JSON string.
+
+        >>> v = Vectors.sparse(2, [1], [2.0])
+        >>> v.toJson()
+        '{"indices": [1], "values": [2.0], "type": 0, "size": 2}'
+        >>> Vectors.fromJson(v.toJson())
+        SparseVector(2, {1: 2.0})
+        """
+        data = {"type": 0, "size": self.size, "indices": self.indices.tolist(),
+                "values": self.values.tolist()}
+        return json.dumps(data)
 
     @staticmethod
     def parse(s):
