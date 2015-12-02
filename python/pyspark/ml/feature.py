@@ -971,6 +971,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.degree)
 
+
 @inherit_doc
 class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     """
@@ -997,8 +998,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     # a placeholder to make it appear in the generated doc
     numBuckets = Param(Params._dummy(), "numBuckets",
-                            "Maximum number of buckets (quantiles, or " +
-                            "categories) into which data points are grouped. Must be >= 2.")
+                       "Maximum number of buckets (quantiles, or " +
+                       "categories) into which data points are grouped. Must be >= 2.")
 
     @keyword_only
     def __init__(self, numBuckets=2, inputCol=None, outputCol=None):
