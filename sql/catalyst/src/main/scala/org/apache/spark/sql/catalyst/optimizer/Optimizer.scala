@@ -728,8 +728,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     if (input.size == 2) {
       Join(input(0), input(1), Inner, conditions.reduceLeftOption(And))
     } else {
-      val left = input.head
-      val rest = input.drop(1)
+      val left :: rest = input.toList
       // find out the first join that have at least one join condition
       val conditionalJoin = rest.find { plan =>
         val refs = left.outputSet ++ plan.outputSet
@@ -743,6 +742,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val (joinConditions, others) = conditions.partition(_.references.subsetOf(joinedRefs))
       val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
 
+      // should not have reference to same logical plan
       createOrderedJoin(Seq(joined) ++ rest.filterNot(_ eq right), others)
     }
   }

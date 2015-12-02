@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -48,7 +50,31 @@ class JoinOrderSuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation1 = LocalRelation('d.int)
 
-  test("joins: reorder inner joins") {
+  test("extract filters and joins") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+    val z = testRelation.subquery('z)
+
+    def testExtract(plan: LogicalPlan, expected: Option[(Seq[LogicalPlan], Seq[Expression])]) {
+      assert(ExtractFiltersAndInnerJoins.unapply(plan) === expected)
+    }
+
+    testExtract(x, None)
+    testExtract(x.where("x.b".attr === 1), None)
+    testExtract(x.join(y), Some(Seq(x, y), Seq()))
+    testExtract(x.join(y, condition = Some("x.b".attr === "y.d".attr)),
+      Some(Seq(x, y), Seq("x.b".attr === "y.d".attr)))
+    testExtract(x.join(y).where("x.b".attr === "y.d".attr),
+      Some(Seq(x, y), Seq("x.b".attr === "y.d".attr)))
+    testExtract(x.join(y).join(z), Some(Seq(x, y, z), Seq()))
+    testExtract(x.join(y).where("x.b".attr === "y.d".attr).join(z),
+      Some(Seq(x, y, z), Seq("x.b".attr === "y.d".attr)))
+    testExtract(x.join(y).join(x.join(z)), Some(Seq(x, y, x.join(z)), Seq()))
+    testExtract(x.join(y).join(x.join(z)).where("x.b".attr === "y.d".attr),
+      Some(Seq(x, y, x.join(z)), Seq("x.b".attr === "y.d".attr)))
+  }
+
+  test("reorder inner joins") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
     val z = testRelation.subquery('z)
