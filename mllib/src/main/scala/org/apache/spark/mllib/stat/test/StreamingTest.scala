@@ -17,11 +17,29 @@
 
 package org.apache.spark.mllib.stat.test
 
+import scala.beans.BeanInfo
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.api.java.JavaDStream
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter
+
+/**
+ * Class that represents the group and value of a sample.
+ *
+ * @param isExperiment if the sample is of the experiment group.
+ * @param value numeric value of the observation.
+ */
+@Since("1.6.0")
+@BeanInfo
+case class BinarySample @Since("1.6.0") (
+    @Since("1.6.0") isExperiment: Boolean,
+    @Since("1.6.0") value: Double) {
+  override def toString: String = {
+    s"($isExperiment, $value)"
+  }
+}
 
 /**
  * :: Experimental ::
@@ -95,6 +113,20 @@ class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
     val pairedSummaries = pairSummaries(summarizedData)
 
     testMethod.doTest(pairedSummaries)
+  }
+
+  /**
+   * Register a [[JavaDStream]] of values for significance testing.
+   *
+   * @param data stream of BinarySample(isExperiment,value) pairs where the isExperiment denotes
+   *             group (true = experiment, false = control) and the value is the numerical metric
+   *             to test for significance
+   * @return stream of significance testing results
+   */
+  @Since("1.6.0")
+  def registerStream(data: JavaDStream[BinarySample]): JavaDStream[StreamingTestResult] = {
+    JavaDStream.fromDStream(registerStream(data.dstream.map(sample =>
+      (sample.isExperiment, sample.value))))
   }
 
   /** Drop all batches inside the peace period. */
