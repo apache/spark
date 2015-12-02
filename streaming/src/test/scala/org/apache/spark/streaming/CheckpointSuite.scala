@@ -85,6 +85,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
     val operatedStream = operation(inputStream)
+    operatedStream.print()
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
       new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
     outputStream.register()
@@ -138,17 +139,19 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       }
 
       eventually(timeout(10 seconds)) {
-        Checkpoint.getCheckpointFiles(checkpointDir).exists {
+        val checkpointFilesOfLatestTime = Checkpoint.getCheckpointFiles(checkpointDir).filter {
           _.toString.contains(clock.getTimeMillis.toString)
         }
+        // Checkpoint files are written twice for every batch interval. So assert that both
+        // are written to make sure that both of them have been written.
+        assert(checkpointFilesOfLatestTime.size === 2)
       }
 
       val output = outputStream.output.map(_.flatten)
-      assert(
-        output.zip(expectedOutput).forall { case (o, e) => o.toSet === e.toSet },
-        s"Set comparison failed\n" +
-          s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
-          s"Generated output (${output.size} items): ${output.mkString("\n")}"
+      val setComparison = output.zip(expectedOutput).forall { case (o, e) => o.toSet === e.toSet }
+      assert(setComparison, s"set comparison failed\n" +
+        s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
+        s"Generated output (${output.size} items): ${output.mkString("\n")}"
       )
     } finally {
       ssc.stop(stopSparkContext = stopSparkContext)
@@ -369,7 +372,9 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester {
         Seq(("", 2)),
         Seq(),
         Seq(("a", 2), ("b", 1)),
-        Seq(("", 2)), Seq() ),
+        Seq(("", 2)),
+        Seq()
+      ),
       3
     )
   }
