@@ -155,6 +155,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
                   "provided to cover all Double values; otherwise, values outside the splits " +
                   "specified will be treated as errors.")
         kwargs = self.__init__._input_kwargs
+        kwargs.pop("_java_model", None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -984,14 +985,15 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
     ...     inputCol="values", outputCol="buckets")
-    >>> bucketizer = qds.fit(df).buckets
-    magic
+    >>> bucketizer = qds.fit(df)
+    >>> bucketizer.getSplits()
+    [-inf, 0.4, 1.5, inf]
 
     .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
-    self.numBuckets = Param(Params._dummy(), "numBuckets",
+    numBuckets = Param(Params._dummy(), "numBuckets",
                             "Maximum number of buckets (quantiles, or " +
                             "categories) into which data points are grouped. Must be >= 2.")
 
@@ -1001,7 +1003,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         __init__(self, numBuckets=2, inputCol=None, outputCol=None)
         """
         super(QuantileDiscretizer, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
+                                            self.uid)
         self.numBuckets = Param(self, "numBuckets",
                                 "Maximum number of buckets (quantiles, or " +
                                 "categories) into which data points are grouped. Must be >= 2.")
@@ -1038,7 +1041,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
         """
         Private method to convert the java_model to a Python model.
         """
-        return Bucketizer(splits=java_model.getSplits(),
+        return Bucketizer(splits=list(java_model.getSplits()),
                           inputCol=self.getInputCol(),
                           outputCol=self.getOutputCol(),
                           _java_model=java_model)
