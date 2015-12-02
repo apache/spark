@@ -680,6 +680,10 @@ private[python] class PythonMLLibAPI extends Serializable {
     }
   }
 
+  def wrapWord2VecModel(model: Word2VecModel): Word2VecModelWrapper = {
+    new Word2VecModelWrapper(model)
+  }
+
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
     def transform(word: String): Vector = {
       model.transform(word)
