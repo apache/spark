@@ -40,6 +40,8 @@ object DefaultOptimizer extends Optimizer {
     Batch("Aggregate", FixedPoint(100),
       ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) ::
+    Batch("CNF factorization", FixedPoint(100),
+      ExtractEqualJoinCondition) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -911,3 +913,51 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
       a.copy(groupingExpressions = newGrouping)
   }
 }
+
+/**
+ * Extracts the equal-join condition if any, so that query planner avoids generating cartsian
+ * product which cause out of memory exception, and performance issues
+ */
+object ExtractEqualJoinCondition extends Rule[LogicalPlan] with PredicateHelper{
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Join(left, right, joinType, joinCondition) =>
+      joinCondition match {
+        case Some(e) if isDNF(e) => {
+          val disjConditions = splitDisjunctivePredicates(e)
+          val exprMatrix = disjConditions.map(splitConjunctivePredicates)
+          if(exprMatrix.length <= 1) f
+          else {
+            val pattern = exprMatrix(0)
+            val comExprs: Seq[Expression] = pattern.filter(p => isCommonExpr(p, exprMatrix, 1))
+            val newExprMatrix = exprMatrix.map(_.diff(comExprs))
+            val newJoinCond = (comExprs :+ newExprMatrix.map(_.reduceLeft(And)).reduceLeft(Or))
+              .reduceLeftOption(And)
+            Join(left, right, joinType, newJoinCond)
+          }
+        }
+        case _ => f
+      }
+  }
+
+  def isCommonExpr(pattern: Expression, matrix: Seq[Seq[Expression]], startIndex: Int) : Boolean = {
+    val duplicatedCount = matrix.drop(startIndex).count(arr => arr.contains(pattern))
+    return duplicatedCount == matrix.length - startIndex
+  }
+
+  def isDNF(condition: Expression) : Boolean = {
+    condition match {
+      case Or(left, right) => isDNF(left) && isDNF(right)
+      case And(left, right) => isCNF(left) && isCNF(right)
+      case _ => true
+    }
+  }
+
+  def isCNF(condition: Expression): Boolean = {
+    condition match {
+      case And(left, right) => isCNF(left) && isCNF(right)
+      case Or(left, right) => false
+      case _ => true
+    }
+  }
+}
+
