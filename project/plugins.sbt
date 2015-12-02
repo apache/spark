@@ -12,13 +12,7 @@ addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.6.0")
 
 addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.7.4")
 
-// This explicit scalariform dependency is necessary in order to work around
-// a SBT 0.13.9 / Scala 2.10.5 incompatibility. It would be awesome if
-// Scalastyle published a new version rather than forcing users to apply this
-// hacky workaround. See https://github.com/scalastyle/scalastyle/issues/157
-addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.7.0" excludeAll(
-  ExclusionRule(organization = "com.danieltrinh")))
-libraryDependencies += "org.scalariform" %% "scalariform" % "0.1.7"
+addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.8.0")
 
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 
