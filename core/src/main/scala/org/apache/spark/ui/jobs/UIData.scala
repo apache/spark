@@ -76,8 +76,6 @@ private[spark] object UIData {
     var numFailedTasks: Int = _
 
     var executorRunTime: Long = _
-    var firstTaskLaunchedTime: Option[Long] = None
-    var maximumDurationOfAllTasks: Option[Long] = None
 
     var inputBytes: Long = _
     var inputRecords: Long = _

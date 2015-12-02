@@ -59,6 +59,8 @@ private[v1] object AllStagesResource {
       stageUiData: StageUIData,
       includeDetails: Boolean): StageData = {
 
+    val firstTaskLaunchedTime = stageUiData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0).min
+
     val taskData = if (includeDetails) {
       Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )
     } else {
@@ -93,9 +95,8 @@ private[v1] object AllStagesResource {
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
       submissionTime = stageInfo.submissionTime,
-      firstTaskLaunchedTime = stageUiData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0).min,
+      firstTaskLaunchedTime,
       completionTime = stageInfo.completionTime,
-      maximumDurationOfAllTasks = stageUiData.maximumDurationOfAllTasks,
       inputBytes = stageUiData.inputBytes,
       inputRecords = stageUiData.inputRecords,
       outputBytes = stageUiData.outputBytes,
