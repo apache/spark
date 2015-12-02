@@ -63,7 +63,6 @@ class TextSuite extends QueryTest with SharedSQLContext {
   test("compression") {
     val tempDirPath = Files.createTempDir().getAbsolutePath;
     val df = sqlContext.read.text(testFile)
-    df.show()
     df.write.compress(classOf[GzipCodec]).mode(SaveMode.Overwrite).text(tempDirPath)
     verifyFrame(sqlContext.read.text(tempDirPath))
   }
