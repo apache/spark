@@ -322,5 +322,5 @@ exportClasses("WindowSpec")
 export("rowsBetween",
        "rangeBetween")
 
-export("window.partitionBy",
-       "window.orderBy")
+export("Window.partitionBy",
+       "Window.orderBy")

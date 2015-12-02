@@ -17,18 +17,18 @@
 
 # window.R - Utility functions for defining window in DataFrames
 
-#' window.partitionBy
+#' Window.partitionBy
 #'
 #' Creates a WindowSpec with the partitioning defined.
 #'
-#' @rdname window.partitionBy
+#' @rdname Window.partitionBy
 #' @export
 #' @examples
 #' \dontrun{
-#'   window.partitionBy("col1", "col2")
-#'   window.partitionBy(df$col1, df$col2)
+#'   Window.partitionBy("col1", "col2")
+#'   Window.partitionBy(df$col1, df$col2)
 #' }
-setMethod("window.partitionBy",
+setMethod("Window.partitionBy",
           signature(col = "character"),
           function(col, ...) {
             cols <- list(col, ...)
@@ -39,9 +39,9 @@ setMethod("window.partitionBy",
                           list(...)))
           })
 
-#' @rdname window.partitionBy
+#' @rdname Window.partitionBy
 #' @export
-setMethod("window.partitionBy",
+setMethod("Window.partitionBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
@@ -53,18 +53,18 @@ setMethod("window.partitionBy",
                           jcols))
           })
 
-#' window.orderBy
+#' Window.orderBy
 #'
 #' Creates a WindowSpec with the ordering defined.
 #'
-#' @rdname window.orderBy
+#' @rdname Window.orderBy
 #' @export
 #' @examples
 #' \dontrun{
-#'   window.orderBy("col1", "col2")
-#'   window.orderBy(df$col1, df$col2)
+#'   Window.orderBy("col1", "col2")
+#'   Window.orderBy(df$col1, df$col2)
 #' }
-setMethod("window.orderBy",
+setMethod("Window.orderBy",
           signature(col = "character"),
           function(col, ...) {
             cols <- list(col, ...)
@@ -75,9 +75,9 @@ setMethod("window.orderBy",
                           list(...)))
           })
 
-#' @rdname window.orderBy
+#' @rdname Window.orderBy
 #' @export
-setMethod("window.orderBy",
+setMethod("Window.orderBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {

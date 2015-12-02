@@ -20,8 +20,8 @@
 #' @include generics.R jobj.R column.R
 
 #' @title S4 class that represents a WindowSpec
-#' @description WindowSpec can be created by using window.partitionBy()
-#'              or window.orderBy()
+#' @description WindowSpec can be created by using Window.partitionBy()
+#'              or Window.orderBy()
 #' @rdname WindowSpec
 #' @seealso window
 #'
@@ -69,7 +69,7 @@ setMethod("partitionBy",
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              windowSpec(callJMethod(x@sws, "partitionBy", jcols))              
+              windowSpec(callJMethod(x@sws, "partitionBy", jcols))           
             }
           })
 
@@ -159,7 +159,7 @@ setMethod("rangeBetween",
             windowSpec(callJMethod(x@sws, "rangeBetween", as.integer(start), as.integer(end)))
           })
 
-# Note that over is a method of Column class, but it is place here is to
+# Note that over is a method of Column class, but it is placed here to
 # avoid Roxygen circular-dependency between class Column and WindowSpec.
 
 #' over
