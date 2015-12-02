@@ -44,6 +44,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
  */
 @DeveloperApi
 class ExecutorsListener(storageStatusListener: StorageStatusListener) extends SparkListener {
+  val executorToTotalCores = HashMap[String, Int]()
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -62,6 +63,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
+    executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
     executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
 

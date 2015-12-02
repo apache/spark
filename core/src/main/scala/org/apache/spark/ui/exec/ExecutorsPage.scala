@@ -33,6 +33,7 @@ private[ui] case class ExecutorSummaryInfo(
     rddBlocks: Int,
     memoryUsed: Long,
     diskUsed: Long,
+    totalCores: Int,
     activeTasks: Int,
     failedTasks: Int,
     completedTasks: Int,
@@ -117,6 +118,18 @@ private[ui] class ExecutorsPage(
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
+    var activeTasksAlpha = 1.0
+    var failedTasksAlpha = 1.0
+    var completedTasksAlpha = 1.0
+    if (info.totalCores > 0) {
+      activeTasksAlpha = 0.5 + 0.5 * info.activeTasks / info.totalCores
+    }
+    if (info.totalTasks > 0) {
+      failedTasksAlpha = math.min(0.1 * info.failedTasks / info.totalTasks, 1) * 0.5 + 0.5
+      completedTasksAlpha
+        = math.max(10.0 * info.completedTasks / info.totalTasks - 9, 0) * 0.5 + 0.5
+    }
+
     <tr>
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
@@ -128,9 +141,27 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
-      <td>{info.activeTasks}</td>
-      <td>{info.failedTasks}</td>
-      <td>{info.completedTasks}</td>
+      <td class="activeTasks" style={
+        if (info.activeTasks > 0) {
+          "background:hsla(120, 100%, 25%, " + activeTasksAlpha + ");color:white"
+        } else {
+          ""
+        }
+      }>{info.activeTasks}</td>
+      <td class="failedTasks" style={
+        if (info.failedTasks > 0) {
+          "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
+        } else {
+          ""
+        }
+      }>{info.failedTasks}</td>
+      <td class="completedTasks" style={
+        if (info.completedTasks > 0) {
+          "background:hsla(240, 100%, 50%, " + completedTasksAlpha + ");color:white"
+        } else {
+          ""
+        }
+      }>{info.completedTasks}</td>
       <td>{info.totalTasks}</td>
       <td sorttable_customkey={info.totalDuration.toString}>
         {Utils.msDurationToString(info.totalDuration)}
@@ -184,6 +215,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
@@ -200,6 +232,7 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
+      totalCores,
       activeTasks,
       failedTasks,
       completedTasks,
