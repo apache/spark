@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -241,6 +241,12 @@ abstract class RDD[T: ClassTag](
       partitions_
     }
   }
+
+  /**
+    * Returns the number of partitions of this RDD.
+    */
+  @Since("1.6.0")
+  final def getNumPartitions: Int = partitions.length
 
   /**
    * Get the preferred locations of a partition, taking into account whether the
