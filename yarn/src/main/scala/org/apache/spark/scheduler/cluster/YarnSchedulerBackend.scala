@@ -51,21 +51,21 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
-  /** Application ID. Must be set by a subclass before starting the service */
+  /** Application ID. */
   protected var appId: Option[ApplicationId] = None
 
   /** Attempt ID. This is unset for client-mode schedulers */
   private var attemptId: Option[ApplicationAttemptId] = None
 
-  /** Scheduler extension services */
+  /** Scheduler extension services. */
   private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
 
   /**
-    * Bind to YARN. This *must* be done before calling [[start()]].
-    *
-    * @param appId YARN application ID
-    * @param attemptId Optional YARN attempt ID
-    */
+   * Bind to YARN. This *must* be done before calling [[start()]].
+   *
+   * @param appId YARN application ID
+   * @param attemptId Optional YARN attempt ID
+   */
   protected def bindToYarn(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
     this.appId = Some(appId)
     this.attemptId = attemptId

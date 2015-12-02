@@ -19,18 +19,17 @@ package org.apache.spark.scheduler.cluster
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, Logging, SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Test the integration with [[SchedulerExtensionServices]]
  */
 class ExtensionServiceIntegrationSuite extends SparkFunSuite
-  with BeforeAndAfter
+  with LocalSparkContext with BeforeAndAfter
   with Logging {
 
   val applicationId = new StubApplicationId(0, 1111L)
   val attemptId = new StubApplicationAttemptId(applicationId, 1)
-  var sparkCtx: SparkContext = _
 
   /*
    * Setup phase creates the spark context
@@ -40,22 +39,7 @@ class ExtensionServiceIntegrationSuite extends SparkFunSuite
     sparkConf.set(SchedulerExtensionServices.SPARK_YARN_SERVICES,
       classOf[SimpleExtensionService].getName())
     sparkConf.setMaster("local").setAppName("ExtensionServiceIntegrationSuite")
-    sparkCtx = new SparkContext(sparkConf)
-  }
-
-  /*
-   * Teardown stops all services and the VM-wide spark context
-   */
-  after {
-    stopSparkContext()
-  }
-
-  protected def stopSparkContext(): Unit = {
-    if (sparkCtx != null) {
-      logDebug("Stopping spark context")
-      sparkCtx.stop()
-      sparkCtx = null
-    }
+    sc = new SparkContext(sparkConf)
   }
 
   test("Instantiate") {
@@ -63,14 +47,14 @@ class ExtensionServiceIntegrationSuite extends SparkFunSuite
     assertResult(Nil, "non-nil service list") {
       services.getServices
     }
-    services.start(SchedulerExtensionServiceBinding(sparkCtx, applicationId))
+    services.start(SchedulerExtensionServiceBinding(sc, applicationId))
     services.stop()
   }
 
   test("Contains SimpleExtensionService Service") {
     val services = new SchedulerExtensionServices()
     try {
-      services.start(SchedulerExtensionServiceBinding(sparkCtx, applicationId))
+      services.start(SchedulerExtensionServiceBinding(sc, applicationId))
       val serviceList = services.getServices
       assert(serviceList.nonEmpty, "empty service list")
       val (service :: Nil) = serviceList

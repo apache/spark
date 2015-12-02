@@ -134,11 +134,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     if (started.getAndSet(false)) {
       logInfo(s"Stopping $this")
       services.foreach { s =>
-        try {
-          s.stop()
-        } catch {
-          case e: Exception => logWarning(s"Exception when stopping service $s", e)
-        }
+        Utils.tryLogNonFatalError(s.stop())
       }
     }
   }
