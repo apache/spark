@@ -190,9 +190,7 @@ private[spark] object Task {
 
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task).array()
-    out.write(taskBytes)
-    out.toByteBuffer
+    serializer.serialize(task).clone()
   }
 
   /**
