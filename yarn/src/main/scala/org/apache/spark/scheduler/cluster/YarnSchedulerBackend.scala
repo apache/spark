@@ -83,6 +83,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def stop(): Unit = {
     try {
+      // SPARK-12009: To prevent Yarn allocator from requesting backup for the executors which
+      // was Stopped by SchedulerBackend.
+      requestTotalExecutors(0, 0, Map.empty)
       super.stop()
     } finally {
       services.stop()
@@ -156,11 +159,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
     new YarnDriverEndpoint(rpcEnv, properties)
-  }
-
-  override def stop(): Unit = {
-    requestTotalExecutors(0, 0, Map.empty)
-    super.stop()
   }
 
   /**
