@@ -182,4 +182,24 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEnsureFreeSpaceCalled(ms, 850L)
   }
 
+  test("small heap") {
+    val systemMemory = 1024 * 1024
+    val reservedMemory = 300 * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set("spark.memory.fraction", memoryFraction.toString)
+      .set("spark.testing.memory", systemMemory.toString)
+      .set("spark.testing.reservedMemory", reservedMemory.toString)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+    val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
+    assert(mm.maxMemory === expectedMaxMemory)
+
+    // Try using a system memory that's too small
+    val conf2 = conf.clone().set("spark.testing.memory", (reservedMemory / 2).toString)
+    val exception = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager(conf2, numCores = 1)
+    }
+    assert(exception.getMessage.contains("larger heap size"))
+  }
+
 }
