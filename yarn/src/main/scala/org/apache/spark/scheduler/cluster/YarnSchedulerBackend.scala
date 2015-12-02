@@ -51,6 +51,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
+  // Flag to specify whether AM is registered or not.
+  @volatile private var isAmRegistered = false
+
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
 
@@ -157,7 +160,8 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /**
    * Reset the state of SchedulerBackend to the initial state. This is happened when AM is failed
-   * and re-registered itself to driver. The stale state in driver should be cleaned.
+   * and re-registered itself to driver after a failure. The stale state in driver should be
+   * cleaned.
    */
   override protected def reset(): Unit = {
     super.reset()
@@ -227,7 +231,8 @@ private[spark] abstract class YarnSchedulerBackend(
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
-          driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
+          driverEndpoint.askWithRetry[Boolean](
+            RemoveExecutor(executorId, SlaveLost("AM is not registered yet")))
       }
     }
 
@@ -235,13 +240,14 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
-
-      case ReregisterClusterManager(am) =>
-        logInfo(s"ApplicationMaster re-registered as $am")
-        // re-register am endpoint and reset the state of schedulerBackend
-        // This will only happened in yarn-client mode with AM restarted.
-        amEndpoint = Option(am)
-        reset()
+        if (!isAmRegistered) {
+          // First time when AM is registered
+          isAmRegistered = true
+        } else {
+          // AM is already registered before, this potentially means that AM is failed and
+          // re-registered after the failure. This will only be happened in yarn-client mode.
+          reset()
+        }
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)

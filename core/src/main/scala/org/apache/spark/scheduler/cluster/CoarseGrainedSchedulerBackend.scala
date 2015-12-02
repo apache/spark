@@ -343,7 +343,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   /**
    * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
-   * be called in the yarn-client mode where AM is registered again, also when dynamic
+   * be called in the yarn-client mode when AM re-registers after a failure, also dynamic
    * allocation is enabled.
    * */
   protected def reset(): Unit = synchronized {
@@ -353,8 +353,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       // Remove all the lingering executors that should be removed but not yet. The reason might be
       // because (1) disconnected event is not yet received; (2) executors die silently.
-      executorDataMap.foreach { case (eid, _) =>
-        driverEndpoint.askWithRetry[Boolean](RemoveExecutor(eid, SlaveLost()))
+      executorDataMap.toMap.foreach { case (eid, _) =>
+        driverEndpoint.askWithRetry[Boolean](
+          RemoveExecutor(eid, SlaveLost("Executor stale after cluster manager re-registration")))
       }
     }
   }

@@ -243,7 +243,7 @@ private[spark] class ExecutorAllocationManager(
 
   /**
    * Reset the allocation manager to the initial state. Currently this will only be called in
-   * yarn-client mode where registered again.
+   * yarn-client mode when AM re-registers after a failure.
    */
   def reset(): Unit = synchronized {
     initializing = true
