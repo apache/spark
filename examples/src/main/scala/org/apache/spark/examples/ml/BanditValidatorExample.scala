@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.ml.tuning.bandit.{SimpleBanditSearch, BanditValidator}
+import org.apache.spark.ml.tuning.bandit.{NaiveSearch, BanditValidator}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.{PipelineModel, Pipeline}
 import org.apache.spark.ml.classification.LogisticRegression
@@ -79,7 +79,7 @@ object BanditValidatorExample {
     banditval.setEstimatorParamMaps(paramGrid)
     banditval.setNumFolds(2) // Use 3+ in practice
 
-    val search = new SimpleBanditSearch
+    val search = new NaiveSearch
     banditval.setSearchStrategy(search)
     banditval.setMaxIter(50)
     banditval.setStepsPerPulling(1)

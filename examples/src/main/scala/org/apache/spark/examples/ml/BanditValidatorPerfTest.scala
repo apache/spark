@@ -21,10 +21,12 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.ml.tuning.bandit._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{SparkConf, SparkContext}
 
 object BanditValidatorPerfTest {
@@ -35,7 +37,8 @@ object BanditValidatorPerfTest {
     val sqlCtx = new SQLContext(sc)
     import sqlCtx.implicits._
 
-    val data = MLUtils.loadLibSVMFile(sc, "/Users/panda/data/small_datasets/a1a").map {
+    //val data = MLUtils.loadLibSVMFile(sc, "/Users/panda/data/small_datasets/adult.tst").map {
+    val data = MLUtils.loadLibSVMFile(sc, "/Users/panda/data/small_datasets/australian", -1, 2).map {
       case LabeledPoint(label: Double, features: Vector) =>
         LabeledPoint(if (label < 0) 0 else label, features)
     }
@@ -62,17 +65,17 @@ object BanditValidatorPerfTest {
       .setNumFolds(3)
       .setEvaluator(eval)
 
-    val pathPrefix = "/Users/panda/data/small_datasets/a1a-results"
+    val pathPrefix = "/Users/panda/data/small_datasets/australian-results-fixed"
 
     Array(
       new StaticSearch,
-      new SimpleBanditSearch,
-      new SuccessiveEliminationSearch,
-      new ExponentialWeightsSearch,
-      new LILUCBSearch,
-      new LUCBSearch,
-      new SuccessiveHalvingSearch,
-      new SuccessiveRejectSearch
+      new NaiveSearch,
+      //new SuccessiveEliminationSearch,
+      new ExponentialWeightsSearch
+      //new LILUCBSearch,
+      //new LUCBSearch,
+      //new SuccessiveHalvingSearch,
+      //new SuccessiveRejectSearch
     ).foreach { search =>
       banditVal.setSearchStrategy(search)
       val model = banditVal.fit(training)
@@ -94,5 +97,54 @@ object BanditValidatorPerfTest {
       }
     }
     sc.stop()
+  }
+}
+
+object Utils {
+  def loadLibSVMFile(
+      sc: SparkContext,
+      path: String,
+      numFeatures: Int,
+      minPartitions: Int): RDD[LabeledPoint] = {
+    val parsed = sc.textFile(path, minPartitions)
+      .map(_.trim)
+      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .map { line =>
+        val items = line.split(' ')
+        val label = items.head.toDouble
+        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
+          val indexAndValue = item.split(':')
+          val index = indexAndValue(0).toInt
+          val value = indexAndValue(1).toDouble
+          (index, value)
+        }.unzip
+
+        // check if indices are one-based and in ascending order
+        var previous = -1
+        var i = 0
+        val indicesLength = indices.length
+        while (i < indicesLength) {
+          val current = indices(i)
+          require(current > previous, "indices should be one-based and in ascending order" )
+          previous = current
+          i += 1
+        }
+
+        (label, indices.toArray, values.toArray)
+      }
+
+    // Determine number of features.
+    val d = if (numFeatures > 0) {
+      numFeatures
+    } else {
+      parsed.persist(StorageLevel.MEMORY_ONLY)
+      parsed.map { case (label, indices, values) =>
+        indices.lastOption.getOrElse(0)
+      }.reduce(math.max) + 1
+    }
+
+    parsed.map { case (label, indices, values) =>
+      LabeledPoint(label, Vectors.sparse(d, indices, values))
+    }
   }
 }
