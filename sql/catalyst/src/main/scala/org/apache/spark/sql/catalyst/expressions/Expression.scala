@@ -97,7 +97,7 @@ abstract class Expression extends TreeNode[Expression] {
     val ve = GeneratedExpressionCode("", isNull, primitive)
     ve.code = genCode(ctx, ve)
     // Add `this` in the comment.
-    ve.copy(s"/* $this */\n" + ve.code)
+    ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code)
   }
 
   /**
@@ -175,6 +175,12 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def toString: String = prettyName + children.mkString("(", ",", ")")
+
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  protected def toCommentSafeString: String = this.toString.replace("*/", "\\*\\/")
 }
 
 
