@@ -394,19 +394,27 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  /** Appends the string represent of this node and its children to the given StringBuilder. */
+  /**
+   * Appends the string represent of this node and its children to the given StringBuilder.
+   *
+   * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
+   * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
+   * `lastChildren` for the root node should be empty.
+   */
   protected def generateTreeString(
       depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
-    val prefix = if (depth == 0) {
-      ""
-    } else {
-      (lastChildren.init.map { isLast =>
-        if (isLast) "   " else ":  "
-      } :+ (if (lastChildren.last) s"+- " else ":- ")).mkString
+    if (depth > 0) {
+      lastChildren.init.foreach { isLast =>
+        val prefixFragment = if (isLast) "   " else ":  "
+        builder.append(prefixFragment)
+      }
+
+      val branch = if (lastChildren.last) "+- " else ":- "
+      builder.append(branch)
     }
 
-    val head = prefix + simpleString
-    builder.append(head + "\n")
+    builder.append(simpleString)
+    builder.append("\n")
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
