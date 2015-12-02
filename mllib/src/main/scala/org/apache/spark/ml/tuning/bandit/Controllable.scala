@@ -38,6 +38,3 @@ trait Controllable extends Params with HasMaxIter {
 
   setDefault(initialModel -> None, maxIter -> 1)
 }
-
-
-

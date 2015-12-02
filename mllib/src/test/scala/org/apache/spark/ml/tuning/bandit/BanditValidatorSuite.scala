@@ -25,8 +25,7 @@ import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLog
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
-class BanditValidatorSuite
-  extends SparkFunSuite with MLlibTestSparkContext {
+class BanditValidatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
 
@@ -49,11 +48,9 @@ class BanditValidatorSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setNumFolds(3)
+      .setMaxIter(20)
+      .setSearchStrategy(new StaticSearch)
     val bvModel = bv.fit(dataset)
-
-    // copied model must have the same paren.
-    // Stop copy model first because the limitation of Controllable.
-    // MLTestingUtils.checkCopy(bvModel)
 
     val parent = bvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(parent.getRegParam === 0.001)

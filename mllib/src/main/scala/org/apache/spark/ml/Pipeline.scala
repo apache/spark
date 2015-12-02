@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.ml.tuning.bandit.Controllable
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
@@ -89,8 +88,7 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @Experimental
-class Pipeline(override val uid: String)
-  extends Estimator[PipelineModel] with MLWritable with Controllable {
+class Pipeline(override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
   def this() = this(Identifiable.randomUID("pipeline"))
 

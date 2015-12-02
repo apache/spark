@@ -29,8 +29,6 @@ class UtilsSuite extends FunSuite with MLlibTestSparkContext {
     val dist = (0 until 100).toArray.map(_ => Random.nextDouble())
     val selected = sc.parallelize(0 until 1000000).map(_ => Utils.chooseOne(Vectors.dense(dist)))
 
-
-
     val selectedHistogram = selected.map(x => (x, 1)).reduceByKey(_ + _).collect()
       .sortBy(_._2).reverse
     val distWithIndex = dist.zipWithIndex.map(x => (x._2, x._1)).sortBy(_._2).reverse
@@ -53,6 +51,5 @@ class UtilsSuite extends FunSuite with MLlibTestSparkContext {
 
     assert(currentMissMatch / totalMissMatch < 0.5,
       "Selected elements miss match with original array.")
-
   }
 }

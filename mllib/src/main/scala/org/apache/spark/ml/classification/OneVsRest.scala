@@ -153,7 +153,7 @@ final class OneVsRestModel private[ml] (
  */
 @Experimental
 final class OneVsRest(override val uid: String)
-  extends Estimator[OneVsRestModel] with OneVsRestParams with Controllable {
+  extends Estimator[OneVsRestModel] with OneVsRestParams {
 
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
@@ -174,10 +174,6 @@ final class OneVsRest(override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
-
-  def setMaxIter(value: Int): this.type = set(maxIter, value)
-
-  def setInitialModel(value: OneVsRestModel): this.type = set(initialModel, Some(value))
 
   override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
@@ -209,11 +205,6 @@ final class OneVsRest(override val uid: String)
       paramMap.put(classifier.labelCol -> labelColName)
       paramMap.put(classifier.featuresCol -> getFeaturesCol)
       paramMap.put(classifier.predictionCol -> getPredictionCol)
-      paramMap.put(classifier.asInstanceOf[Controllable].maxIter -> $(maxIter))
-      if ($(initialModel).isDefined) {
-        paramMap.put(classifier.asInstanceOf[Controllable].initialModel ->
-          Some($(initialModel).get.asInstanceOf[OneVsRestModel].models(index)))
-      }
       classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
 
