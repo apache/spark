@@ -57,31 +57,30 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
     assert(lassoModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
   }
 
-  test("PMMLModelExportFactory create BinaryClassificationPMMLModelExport "
-    + "when passing a LogisticRegressionModel or SVMModel") {
+  test("PMMLModelExportFactory create ClassificationPMMLModelExport "
+    + "when passing a Binary LogisticRegressionModel or SVMModel") {
     val linearInput = LinearDataGenerator.generateLinearInput(3.0, Array(10.0, 10.0), 1, 17)
 
     val logisticRegressionModel =
       new LogisticRegressionModel(linearInput(0).features, linearInput(0).label)
     val logisticRegressionModelExport =
       PMMLModelExportFactory.createPMMLModelExport(logisticRegressionModel)
-    assert(logisticRegressionModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
+    assert(logisticRegressionModelExport.isInstanceOf[ClassificationPMMLModelExport])
 
     val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label)
     val svmModelExport = PMMLModelExportFactory.createPMMLModelExport(svmModel)
-    assert(svmModelExport.isInstanceOf[BinaryClassificationPMMLModelExport])
+    assert(svmModelExport.isInstanceOf[ClassificationPMMLModelExport])
   }
 
-  test("PMMLModelExportFactory throw IllegalArgumentException "
-    + "when passing a Multinomial Logistic Regression") {
+  test("PMMLModelExportFactory create ClassificationPMMLModelExport "
+    + "when passing a Multiclass Logistic Regression") {
     /** 3 classes, 2 features */
     val multiclassLogisticRegressionModel = new LogisticRegressionModel(
-      weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0,
-      numFeatures = 2, numClasses = 3)
-
-    intercept[IllegalArgumentException] {
-      PMMLModelExportFactory.createPMMLModelExport(multiclassLogisticRegressionModel)
-    }
+        weights = Vectors.dense(0.1, 0.2, 0.3, 0.4), intercept = 1.0,
+        numFeatures = 2, numClasses = 3)
+    val multiclassLogisticRegressionModelExport = PMMLModelExportFactory
+        .createPMMLModelExport(multiclassLogisticRegressionModel)
+    assert(multiclassLogisticRegressionModelExport.isInstanceOf[ClassificationPMMLModelExport])
   }
 
   test("PMMLModelExportFactory throw IllegalArgumentException when passing an unsupported model") {
