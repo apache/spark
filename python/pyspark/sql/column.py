@@ -291,7 +291,7 @@ class Column(object):
         if length is not None and type(startPos) != type(length):
             raise TypeError("Can not mix the type")
         if isinstance(startPos, (int, long)):
-            javaMaxInt = 2147483647
+            javaMaxInt = SparkContext._active_spark_context._jvm.java.lang.Integer.MAX_VALUE
             if startPos > javaMaxInt:
                 raise ValueError("startPos is larger than the java max int value "
                                  "which is not supported by pyspark, startPos=" + str(startPos))
