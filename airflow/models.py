@@ -311,7 +311,8 @@ class DagBag(object):
                                 [re.findall(p, filepath) for p in patterns]):
                             self.process_file(
                                 filepath, only_if_updated=only_if_updated)
-                    except:
+                    except Exception as e:
+                        logging.warning(e)
                         pass
 
     def deactivate_inactive_dags(self):
