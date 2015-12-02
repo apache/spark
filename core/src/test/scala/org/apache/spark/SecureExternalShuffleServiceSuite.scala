@@ -32,7 +32,7 @@ class SecureExternalShuffleServiceSuite extends ExternalShuffleServiceSuite {
   override def beforeAll() {
     SSLSampleConfigs.setSparkSSLConfig(conf)
     val transportConf = SparkTransportConf.fromSparkConf(
-      conf, numUsableCores = 2, Some(SSLSampleConfigs.sparkSSLOptions()))
+      conf, "shuffle", numUsableCores = 2, Some(SSLSampleConfigs.sparkSSLOptions()))
     rpcHandler = new ExternalShuffleBlockHandler(transportConf, null)
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()

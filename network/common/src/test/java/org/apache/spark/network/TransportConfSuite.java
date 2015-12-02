@@ -33,7 +33,7 @@ import static org.junit.Assert.assertFalse;
 public class TransportConfSuite {
 
   private TransportConf transportConf =
-    new TransportConf(SslSampleConfigs.createDefaultConfigProvider());
+    new TransportConf("shuffle", SslSampleConfigs.createDefaultConfigProvider());
 
   /**
    *

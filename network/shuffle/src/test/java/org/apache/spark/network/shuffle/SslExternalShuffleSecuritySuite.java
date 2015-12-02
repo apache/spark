@@ -25,6 +25,6 @@ public class SslExternalShuffleSecuritySuite extends ExternalShuffleSecuritySuit
 
   @Override
   protected TransportConf createTransportConf() {
-    return new TransportConf(SslSampleConfigs.createDefaultConfigProvider());
+    return new TransportConf("shuffle", SslSampleConfigs.createDefaultConfigProvider());
   }
 }

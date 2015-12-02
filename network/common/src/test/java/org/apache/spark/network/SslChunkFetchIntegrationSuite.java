@@ -57,7 +57,7 @@ public class SslChunkFetchIntegrationSuite extends ChunkFetchIntegrationSuite {
     fp.write(fileContent);
     fp.close();
 
-    final TransportConf conf = new TransportConf(SslSampleConfigs.createDefaultConfigProvider());
+    final TransportConf conf = new TransportConf("shuffle", SslSampleConfigs.createDefaultConfigProvider());
 
     fileChunk = new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
 
@@ -76,7 +76,10 @@ public class SslChunkFetchIntegrationSuite extends ChunkFetchIntegrationSuite {
     };
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+      public void receive(
+        TransportClient client,
+        ByteBuffer message,
+        RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
 

@@ -39,6 +39,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MAXRETRIES_KEY;
   private final String SPARK_NETWORK_IO_RETRYWAIT_KEY;
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
+  private final String SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY;
 
   private final ConfigProvider conf;
 
@@ -60,6 +61,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_MAXRETRIES_KEY = getConfKey("io.maxRetries");
     SPARK_NETWORK_IO_RETRYWAIT_KEY = getConfKey("io.retryWait");
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
+    SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY = getConfKey("io.ssl.chunkSize");
   }
 
   private String getConfKey(String suffix) {
@@ -151,7 +153,7 @@ public class TransportConf {
    * @return
    */
   public int sslShuffleChunkSize() {
-    return conf.getInt("spark.shuffle.io.ssl.chunkSize", 60 * 1024);
+    return conf.getInt(SPARK_NETWORK_IO_SSL_CHUNK_SIZE_KEY, 60 * 1024);
   }
 
   /**

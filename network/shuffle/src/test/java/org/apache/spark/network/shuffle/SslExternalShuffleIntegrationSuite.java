@@ -47,7 +47,7 @@ public class SslExternalShuffleIntegrationSuite extends ExternalShuffleIntegrati
     dataContext1.create();
     dataContext1.insertHashShuffleData(1, 0, exec1Blocks);
 
-    conf = new TransportConf(SslSampleConfigs.createDefaultConfigProvider());
+    conf = new TransportConf("shuffle", SslSampleConfigs.createDefaultConfigProvider());
 
     handler = new ExternalShuffleBlockHandler(conf, null);
     TransportContext transportContext = new TransportContext(conf, handler);

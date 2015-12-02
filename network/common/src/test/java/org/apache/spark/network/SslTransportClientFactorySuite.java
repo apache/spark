@@ -28,7 +28,7 @@ public class SslTransportClientFactorySuite extends TransportClientFactorySuite 
 
   @Before
   public void setUp() {
-    conf = new TransportConf(SslSampleConfigs.createDefaultConfigProvider());
+    conf = new TransportConf("shuffle", SslSampleConfigs.createDefaultConfigProvider());
     RpcHandler rpcHandler = new NoOpRpcHandler();
     context = new TransportContext(conf, rpcHandler);
     server1 = context.createServer();

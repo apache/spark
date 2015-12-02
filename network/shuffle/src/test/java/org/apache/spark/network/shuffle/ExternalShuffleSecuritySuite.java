@@ -39,8 +39,12 @@ import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleSecuritySuite {
 
-  TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  TransportConf conf = createTransportConf();
   TransportServer server;
+
+  protected TransportConf createTransportConf() {
+    return new TransportConf("shuffle", new SystemPropertyConfigProvider());
+  }
 
   @Before
   public void beforeEach() throws IOException {
