@@ -499,8 +499,20 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     }
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 1)
+    }
     writeAsync(batchedWal, event3, 8L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 2)
+    }
     writeAsync(batchedWal, event4, 12L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 3)
+    }
     writeAsync(batchedWal, event5, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
@@ -509,7 +521,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     blockingWal.allowWrite()
 
     val buffer = wrapArrayArrayByte(Array(event1))
-    val queuedEvents = Set(event2, event3, event4, event5)
+    val queuedEvents = Seq(event2, event3, event4, event5)
 
     eventually(timeout(1 second)) {
       assert(batchedWal.invokePrivate(queueLength()) === 0)
@@ -519,7 +531,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       val bufferCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
       verify(wal, times(1)).write(bufferCaptor.capture(), meq(10L))
       val records = BatchedWriteAheadLog.deaggregate(bufferCaptor.getValue).map(byteBufferToString)
-      assert(records.toSet === queuedEvents)
+      assert(records === queuedEvents)
     }
   }
 
