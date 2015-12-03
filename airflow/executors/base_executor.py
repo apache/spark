@@ -1,14 +1,13 @@
 from builtins import range
-from builtins import object
-import logging
 
-from airflow.utils import State
 from airflow import configuration
+from airflow.settings import WithLogger
+from airflow.utils import State
 
 PARALLELISM = configuration.getint('core', 'PARALLELISM')
 
 
-class BaseExecutor(object):
+class BaseExecutor(WithLogger):
 
     def __init__(self, parallelism=PARALLELISM):
         """
@@ -33,7 +32,7 @@ class BaseExecutor(object):
 
     def queue_command(self, key, command, priority=1, queue=None):
         if key not in self.queued_tasks and key not in self.running:
-            logging.info("Adding to queue: " + command)
+            self.log_info("Adding to queue: {}".format(command))
             self.queued_tasks[key] = (command, priority, queue)
 
     def queue_task_instance(
@@ -64,7 +63,7 @@ class BaseExecutor(object):
 
     def heartbeat(self):
         # Calling child class sync method
-        logging.debug("Calling the {} sync method".format(self.__class__))
+        self.log_debug("Calling the {} sync method".format(self.__class__))
         self.sync()
 
         # Triggering new jobs
@@ -73,9 +72,9 @@ class BaseExecutor(object):
         else:
             open_slots = self.parallelism - len(self.running)
 
-        logging.debug("{} running task instances".format(len(self.running)))
-        logging.debug("{} in queue".format(len(self.queued_tasks)))
-        logging.debug("{} open slots".format(open_slots))
+        self.log_debug("{} running task instances".format(len(self.running)))
+        self.log_debug("{} in queue".format(len(self.queued_tasks)))
+        self.log_debug("{} open slots".format(open_slots))
 
         sorted_queue = sorted(
             [(k, v) for k, v in self.queued_tasks.items()],
