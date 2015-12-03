@@ -40,7 +40,7 @@ import org.mockito.Matchers.anyString
 import org.mockito.Mockito._
 
 import org.apache.spark._
-import org.apache.spark.rpc.{RpcEnv, RpcEnvFileServer}
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
 class ExecutorClassLoaderSuite
