@@ -58,7 +58,7 @@ StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, False, 2)
 StorageLevel.OFF_HEAP = StorageLevel(False, False, True, False, 1)
 
 """
-.. note:: The following four storage level constants are deprecated in 1.6, since the records
+.. note:: The following four storage level constants are deprecated in 1.6, since the records \
 will always be serialized in Python.
 """
 StorageLevel.MEMORY_ONLY_SER = StorageLevel.MEMORY_ONLY
