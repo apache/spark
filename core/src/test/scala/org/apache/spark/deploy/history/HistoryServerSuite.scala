@@ -376,9 +376,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       activeJobs() should have size 0
       completedJobs() should have size 1
       getNumJobs("") should be(1)
+      getNumJobs("/jobs") should be(1)
       assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
       dumpLogDir("filesystem before executing second job")
-      logDebug(s"History provider: $provider")
+      logDebug(s"History Server: $server")
 
       // second job needs a delay to ensure timestamps are different
       Thread.sleep(10)
@@ -390,8 +391,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
 
       val stdTimeout = timeout(20 seconds)
-      logDebug(s"Explicitly reloading app UI for updated job information")
 /*
+      logDebug(s"Explicitly reloading app UI for updated job information")
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2

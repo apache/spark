@@ -164,7 +164,7 @@ class HistoryServer(
    * @return If found, the Spark UI and any history information to be used in the cache
    */
   override def getAppUI(appId: String, attemptId: Option[String])
-      : Option[(SparkUI, Option[Any])] = {
+      : Option[(SparkUI, Long, Option[Any])] = {
     provider.getAppUI(appId, attemptId)
   }
 

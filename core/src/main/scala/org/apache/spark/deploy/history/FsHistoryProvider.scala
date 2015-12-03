@@ -203,7 +203,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def getAppUI(appId: String, attemptId: Option[String])
-      : Option[(SparkUI, Option[Any])] = {
+      : Option[(SparkUI, Long, Option[Any])] = {
     try {
       applications.get(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
@@ -217,7 +217,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
-          val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
+          val status = fs.getFileStatus(new Path(logDir, attempt.logPath))
+          val appAttemptInfo = replay(status,
             replayBus)
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
@@ -226,7 +227,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
-            (ui, None)
+            (ui, Math.max(attempt.fileSizeUpdateTime, status.getModificationTime),
+                Some(status.getLen))
           }
         }
       }
@@ -285,7 +287,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           entry1.getModificationTime() >= entry2.getModificationTime()
       }
 
-      logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
+      if (log.isDebugEnabled && logInfos.nonEmpty) {
+        logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
+      }
       logInfos.grouped(20)
         .map { batch =>
           replayExecutor.submit(new Runnable {
@@ -472,8 +476,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val path = new Path(logDir, attempt.logPath)
             try {
               val status = fs.getFileStatus(path)
-              val size: Long = getLogSize(status).getOrElse(-1)
-              val aS: Long = attempt.fileSize
+              val size = getLogSize(status).getOrElse(-1L)
+              val aS = attempt.fileSize
               if (size > aS) {
                 logDebug(s"Attempt ${attempt.name}/${attempt.appId} size => $size")
                 Some(new FsApplicationAttemptInfo(attempt.logPath, attempt.name, attempt.appId,
@@ -494,6 +498,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
 
     if (newAttempts.nonEmpty) {
+      logDebug(s"Updating ${newAttempts.size} attempts from size changes")
       applications = mergeAttempts(newAttempts, applications)
     }
   }
@@ -610,7 +615,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           eventLog.getModificationTime(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          getLogSize(eventLog).get))
+          getLogSize(eventLog).getOrElse(0),
+          eventLog.getModificationTime()))
       } else {
         None
       }
@@ -696,9 +702,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   override def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
       data: Option[Any]): Boolean = {
-    lookup(appId, attemptId).exists { attempt =>
+    val oldSize = data.getOrElse(-1L).asInstanceOf[Long]
+    lookup(appId, attemptId) match {
+      case None =>
+        logDebug(s"Application Attempt $appId/$attemptId not found")
+        false
+      case Some(attempt) =>
         attempt.lastUpdated > updateTimeMillis ||
-      attempt.fileSizeUpdateTime > updateTimeMillis
+            (oldSize >= 0 && attempt.fileSize > oldSize)
+      //      attempt.fileSizeUpdateTime > updateTimeMillis
     }
   }
 }

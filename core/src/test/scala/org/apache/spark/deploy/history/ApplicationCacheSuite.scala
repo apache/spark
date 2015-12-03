@@ -78,10 +78,10 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
      * @return If found, the Spark UI and any history information to be used in the cache
      */
     override def getAppUI(appId: String, attemptId: Option[String])
-        : Option[(SparkUI, Option[Any])] = {
+        : Option[(SparkUI, Long, Option[Any])] = {
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
-      instances.get(CacheKey(appId, attemptId)).map( e => (e.ui, None))
+      instances.get(CacheKey(appId, attemptId)).map( e => (e.ui, 0L, None))
     }
 
     override def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI,

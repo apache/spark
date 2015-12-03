@@ -241,7 +241,7 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
     metrics.loadCount.inc()
     time(metrics.loadTimer) {
       operations.getAppUI(appId, attemptId) match {
-        case Some((ui, data)) =>
+        case Some((ui, loadTime, data)) =>
           val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
           // attach the spark UI
           if (completed) {
@@ -253,9 +253,13 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
           }
           // build the cache entry
           val now = clock.getTimeMillis()
-          new CacheEntry(ui, completed, data, now, now)
+          val entry = new CacheEntry(ui, completed, data, if (loadTime> 0) loadTime else now , now)
+          logDebug(s"Loaded application $appId/$attemptId -> $entry")
+          entry
         case None =>
           metrics.lookupFailureCount.inc()
+          // guava's cache logs via java.util log, so is of limited use. Hence: our own message
+          logInfo(s"Failed to load application attempt $appId/$attemptId")
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -411,7 +415,7 @@ private[history] trait ApplicationCacheOperations {
    * @param attemptId attempt ID
    * @return If found, the Spark UI and any history information to be used in the cache
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Option[Any])]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Long, Option[Any])]
 
   /**
    * Attach a reconstructed UI.

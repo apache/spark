@@ -56,7 +56,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
    * @return The application's UI, or None if application is not found.
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Option[Any])]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Long, Option[Any])]
 
   /**
    * Called when the server is shutting down.
