@@ -206,6 +206,16 @@
       <groupId>org.json4s</groupId>
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
       <version>3.2.10</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.scala-lang</groupId>
+          <artifactId>scala-compiler</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.scala-lang</groupId>
+          <artifactId>scalap</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
