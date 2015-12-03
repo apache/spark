@@ -370,7 +370,7 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
 
 # Utility function to split by ',' and whitespace, remove empty tokens
 splitString <- function(input) {
-  Filter(nzchar, strsplit(inputs, ",|\\s")[[1]])
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
 }
 
 # Utility function that handles sparkJars argument, and normalize paths

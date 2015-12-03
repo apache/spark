@@ -101,7 +101,10 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
   jars <- suppressWarnings(processSparkJars(" abc ,, def "))
   expect_equal(jars, c("abc", "def"))
 
-  p <- suppressWarnings(processSparkPackages(c("ghi", "lmn"))
+  jars <- suppressWarnings(processSparkJars(c(" abc ,, def ", "", "xyz", " ", "a,b")))
+  expect_equal(jars, c("abc", "def", "xyz", "a", "b"))
+
+  p <- processSparkPackages(c("ghi", "lmn"))
   expect_equal(p, c("ghi", "lmn"))
 
   # check normalizePath
