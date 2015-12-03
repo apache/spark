@@ -35,7 +35,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may
-actually require one to prevent any sort of starvation issues.
+actually require more than 1 thread to prevent any sort of starvation issues.
 
 Properties that specify some time duration should be configured with a unit of time.
 The following format is accepted:
@@ -719,8 +719,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.fraction</code></td>
   <td>0.75</td>
   <td>
-    Fraction of the heap space used for execution and storage. The lower this is, the more
-    frequently spills and cached data eviction occur. The purpose of this config is to set
+    Fraction of (heap space - 300MB) used for execution and storage. The lower this is, the
+    more frequently spills and cached data eviction occur. The purpose of this config is to set
     aside memory for internal metadata, user data structures, and imprecise size estimation
     in the case of sparse, unusually large records. Leaving this at the default value is
     recommended. For more detail, see <a href="tuning.html#memory-management-overview">
@@ -1020,6 +1020,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the executor to listen on. This is used for communicating with the driver.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>
@@ -1027,6 +1028,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver's HTTP file server to listen on.
+    This is only relevant when using the Akka RPC backend.
   </td>
 </tr>
 <tr>

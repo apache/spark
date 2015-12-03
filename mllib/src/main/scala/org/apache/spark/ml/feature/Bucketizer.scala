@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  */
 @Experimental
 final class Bucketizer(override val uid: String)
-  extends Model[Bucketizer] with HasInputCol with HasOutputCol with Writable {
+  extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("bucketizer"))
 
@@ -93,12 +93,9 @@ final class Bucketizer(override val uid: String)
   override def copy(extra: ParamMap): Bucketizer = {
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
-object Bucketizer extends Readable[Bucketizer] {
+object Bucketizer extends DefaultParamsReadable[Bucketizer] {
 
   /** We require splits to be of length >= 3 and to be in strictly increasing order. */
   private[feature] def checkSplits(splits: Array[Double]): Boolean = {
@@ -140,8 +137,5 @@ object Bucketizer extends Readable[Bucketizer] {
   }
 
   @Since("1.6.0")
-  override def read: Reader[Bucketizer] = new DefaultParamsReader[Bucketizer]
-
-  @Since("1.6.0")
-  override def load(path: String): Bucketizer = read.load(path)
+  override def load(path: String): Bucketizer = super.load(path)
 }

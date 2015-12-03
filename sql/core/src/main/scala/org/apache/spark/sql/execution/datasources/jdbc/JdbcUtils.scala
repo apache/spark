@@ -21,6 +21,7 @@ import java.sql.{Connection, PreparedStatement}
 import java.util.Properties
 
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcType, JdbcDialects}
@@ -55,7 +56,7 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String): Unit = {
-    conn.prepareStatement(s"DROP TABLE $table").executeUpdate()
+    conn.createStatement.executeUpdate(s"DROP TABLE $table")
   }
 
   /**
@@ -125,8 +126,19 @@ object JdbcUtils extends Logging {
       dialect: JdbcDialect): Iterator[Byte] = {
     val conn = getConnection()
     var committed = false
+    val supportsTransactions = try {
+      conn.getMetaData().supportsDataManipulationTransactionsOnly() ||
+      conn.getMetaData().supportsDataDefinitionAndDataManipulationTransactions()
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Exception while detecting transaction support", e)
+        true
+    }
+
     try {
-      conn.setAutoCommit(false) // Everything in the same db transaction.
+      if (supportsTransactions) {
+        conn.setAutoCommit(false) // Everything in the same db transaction.
+      }
       val stmt = insertStatement(conn, table, rddSchema)
       try {
         var rowCount = 0
@@ -175,14 +187,18 @@ object JdbcUtils extends Logging {
       } finally {
         stmt.close()
       }
-      conn.commit()
+      if (supportsTransactions) {
+        conn.commit()
+      }
       committed = true
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
-        conn.rollback()
+        if (supportsTransactions) {
+          conn.rollback()
+        }
         conn.close()
       } else {
         // The stage must succeed.  We cannot propagate any exception close() might throw.

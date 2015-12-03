@@ -86,7 +86,7 @@ private[spark] object StopWords {
  */
 @Experimental
 class StopWordsRemover(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with Writable {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stopWords"))
 
@@ -154,17 +154,11 @@ class StopWordsRemover(override val uid: String)
   }
 
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
-
-  @Since("1.6.0")
-  override def write: Writer = new DefaultParamsWriter(this)
 }
 
 @Since("1.6.0")
-object StopWordsRemover extends Readable[StopWordsRemover] {
+object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
   @Since("1.6.0")
-  override def read: Reader[StopWordsRemover] = new DefaultParamsReader[StopWordsRemover]
-
-  @Since("1.6.0")
-  override def load(path: String): StopWordsRemover = read.load(path)
+  override def load(path: String): StopWordsRemover = super.load(path)
 }

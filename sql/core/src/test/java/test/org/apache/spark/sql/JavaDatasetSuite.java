@@ -24,20 +24,22 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
+
 import org.junit.*;
 
 import org.apache.spark.Accumulator;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.GroupedDataset;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Aggregator;
 import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.catalyst.encoders.OuterScopes;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
   private transient JavaSparkContext jsc;
@@ -169,7 +171,7 @@ public class JavaDatasetSuite implements Serializable {
       }
     }, Encoders.INT());
 
-    Dataset<String> mapped = grouped.map(new MapGroupFunction<Integer, String, String>() {
+    Dataset<String> mapped = grouped.mapGroups(new MapGroupsFunction<Integer, String, String>() {
       @Override
       public String call(Integer key, Iterator<String> values) throws Exception {
         StringBuilder sb = new StringBuilder(key.toString());
@@ -182,8 +184,8 @@ public class JavaDatasetSuite implements Serializable {
 
     Assert.assertEquals(Arrays.asList("1a", "3foobar"), mapped.collectAsList());
 
-    Dataset<String> flatMapped = grouped.flatMap(
-      new FlatMapGroupFunction<Integer, String, String>() {
+    Dataset<String> flatMapped = grouped.flatMapGroups(
+      new FlatMapGroupsFunction<Integer, String, String>() {
         @Override
         public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
@@ -246,10 +248,10 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     GroupedDataset<Integer, String> grouped =
-      ds.groupBy(length(col("value"))).asKey(Encoders.INT());
+      ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
 
-    Dataset<String> mapped = grouped.map(
-      new MapGroupFunction<Integer, String, String>() {
+    Dataset<String> mapped = grouped.mapGroups(
+      new MapGroupsFunction<Integer, String, String>() {
         @Override
         public String call(Integer key, Iterator<String> data) throws Exception {
           StringBuilder sb = new StringBuilder(key.toString());
@@ -403,15 +405,13 @@ public class JavaDatasetSuite implements Serializable {
       grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
 
-    Dataset<Tuple4<String, Integer, Long, Long>> agged2 = grouped.agg(
-      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()),
-      expr("sum(_2)"),
-      count("*"))
-      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT(), Encoders.LONG(), Encoders.LONG()));
+    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(
+      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()))
+      .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
     Assert.assertEquals(
       Arrays.asList(
-        new Tuple4<String, Integer, Long, Long>("a", 3, 3L, 2L),
-        new Tuple4<String, Integer, Long, Long>("b", 3, 3L, 1L)),
+        new Tuple2<>("a", 3),
+        new Tuple2<>("b", 3)),
       agged2.collectAsList());
   }
 
@@ -436,5 +436,240 @@ public class JavaDatasetSuite implements Serializable {
     public Integer finish(Integer reduction) {
       return reduction;
     }
+  }
+
+  public static class KryoSerializable {
+    String value;
+
+    KryoSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((KryoSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  public static class JavaSerializable implements Serializable {
+    String value;
+
+    JavaSerializable(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return this.value.equals(((JavaSerializable) other).value);
+    }
+
+    @Override
+    public int hashCode() {
+      return this.value.hashCode();
+    }
+  }
+
+  @Test
+  public void testKryoEncoder() {
+    Encoder<KryoSerializable> encoder = Encoders.kryo(KryoSerializable.class);
+    List<KryoSerializable> data = Arrays.asList(
+      new KryoSerializable("hello"), new KryoSerializable("world"));
+    Dataset<KryoSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testJavaEncoder() {
+    Encoder<JavaSerializable> encoder = Encoders.javaSerialization(JavaSerializable.class);
+    List<JavaSerializable> data = Arrays.asList(
+      new JavaSerializable("hello"), new JavaSerializable("world"));
+    Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  /**
+   * For testing error messages when creating an encoder on a private class. This is done
+   * here since we cannot create truly private classes in Scala.
+   */
+  private static class PrivateClassTest { }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testJavaEncoderErrorMessageForPrivateClass() {
+    Encoders.javaSerialization(PrivateClassTest.class);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void testKryoEncoderErrorMessageForPrivateClass() {
+    Encoders.kryo(PrivateClassTest.class);
+  }
+
+  public class SimpleJavaBean implements Serializable {
+    private boolean a;
+    private int b;
+    private byte[] c;
+    private String[] d;
+    private List<String> e;
+    private List<Long> f;
+
+    public boolean isA() {
+      return a;
+    }
+
+    public void setA(boolean a) {
+      this.a = a;
+    }
+
+    public int getB() {
+      return b;
+    }
+
+    public void setB(int b) {
+      this.b = b;
+    }
+
+    public byte[] getC() {
+      return c;
+    }
+
+    public void setC(byte[] c) {
+      this.c = c;
+    }
+
+    public String[] getD() {
+      return d;
+    }
+
+    public void setD(String[] d) {
+      this.d = d;
+    }
+
+    public List<String> getE() {
+      return e;
+    }
+
+    public void setE(List<String> e) {
+      this.e = e;
+    }
+
+    public List<Long> getF() {
+      return f;
+    }
+
+    public void setF(List<Long> f) {
+      this.f = f;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      SimpleJavaBean that = (SimpleJavaBean) o;
+
+      if (a != that.a) return false;
+      if (b != that.b) return false;
+      if (!Arrays.equals(c, that.c)) return false;
+      if (!Arrays.equals(d, that.d)) return false;
+      if (!e.equals(that.e)) return false;
+      return f.equals(that.f);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = (a ? 1 : 0);
+      result = 31 * result + b;
+      result = 31 * result + Arrays.hashCode(c);
+      result = 31 * result + Arrays.hashCode(d);
+      result = 31 * result + e.hashCode();
+      result = 31 * result + f.hashCode();
+      return result;
+    }
+  }
+
+  public class NestedJavaBean implements Serializable {
+    private SimpleJavaBean a;
+
+    public SimpleJavaBean getA() {
+      return a;
+    }
+
+    public void setA(SimpleJavaBean a) {
+      this.a = a;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+
+      NestedJavaBean that = (NestedJavaBean) o;
+
+      return a.equals(that.a);
+    }
+
+    @Override
+    public int hashCode() {
+      return a.hashCode();
+    }
+  }
+
+  @Test
+  public void testJavaBeanEncoder() {
+    OuterScopes.addOuterScope(this);
+    SimpleJavaBean obj1 = new SimpleJavaBean();
+    obj1.setA(true);
+    obj1.setB(3);
+    obj1.setC(new byte[]{1, 2});
+    obj1.setD(new String[]{"hello", null});
+    obj1.setE(Arrays.asList("a", "b"));
+    obj1.setF(Arrays.asList(100L, null, 200L));
+    SimpleJavaBean obj2 = new SimpleJavaBean();
+    obj2.setA(false);
+    obj2.setB(30);
+    obj2.setC(new byte[]{3, 4});
+    obj2.setD(new String[]{null, "world"});
+    obj2.setE(Arrays.asList("x", "y"));
+    obj2.setF(Arrays.asList(300L, null, 400L));
+
+    List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
+    Dataset<SimpleJavaBean> ds = context.createDataset(data, Encoders.bean(SimpleJavaBean.class));
+    Assert.assertEquals(data, ds.collectAsList());
+
+    NestedJavaBean obj3 = new NestedJavaBean();
+    obj3.setA(obj1);
+
+    List<NestedJavaBean> data2 = Arrays.asList(obj3);
+    Dataset<NestedJavaBean> ds2 = context.createDataset(data2, Encoders.bean(NestedJavaBean.class));
+    Assert.assertEquals(data2, ds2.collectAsList());
+
+    Row row1 = new GenericRow(new Object[]{
+      true,
+      3,
+      new byte[]{1, 2},
+      new String[]{"hello", null},
+      Arrays.asList("a", "b"),
+      Arrays.asList(100L, null, 200L)});
+    Row row2 = new GenericRow(new Object[]{
+      false,
+      30,
+      new byte[]{3, 4},
+      new String[]{null, "world"},
+      Arrays.asList("x", "y"),
+      Arrays.asList(300L, null, 400L)});
+    StructType schema = new StructType()
+      .add("a", BooleanType, false)
+      .add("b", IntegerType, false)
+      .add("c", BinaryType)
+      .add("d", createArrayType(StringType))
+      .add("e", createArrayType(StringType))
+      .add("f", createArrayType(LongType));
+    Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
+      .as(Encoders.bean(SimpleJavaBean.class));
+    Assert.assertEquals(data, ds3.collectAsList());
   }
 }

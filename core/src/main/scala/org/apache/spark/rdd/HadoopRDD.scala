@@ -215,8 +215,8 @@ class HadoopRDD[K, V](
 
       // Sets the thread local variable for the file's name
       split.inputSplit.value match {
-        case fs: FileSplit => SqlNewHadoopRDD.setInputFileName(fs.getPath.toString)
-        case _ => SqlNewHadoopRDD.unsetInputFileName()
+        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
+        case _ => SqlNewHadoopRDDState.unsetInputFileName()
       }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
@@ -256,7 +256,7 @@ class HadoopRDD[K, V](
 
       override def close() {
         if (reader != null) {
-          SqlNewHadoopRDD.unsetInputFileName()
+          SqlNewHadoopRDDState.unsetInputFileName()
           // Close the reader and release it. Note: it's very important that we don't close the
           // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
           // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic

@@ -27,14 +27,13 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
-import org.apache.spark.ml.util.Reader
-import org.apache.spark.ml.util.Writer
+import org.apache.spark.ml.util.MLReader
+import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -89,7 +88,7 @@ abstract class PipelineStage extends Params with Logging {
  * an identity transformer.
  */
 @Experimental
-class Pipeline(override val uid: String) extends Estimator[PipelineModel] with Writable {
+class Pipeline(override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
   def this() = this(Identifiable.randomUID("pipeline"))
 
@@ -174,16 +173,20 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with W
     theStages.foldLeft(schema)((cur, stage) => stage.transformSchema(cur))
   }
 
-  override def write: Writer = new Pipeline.PipelineWriter(this)
+  @Since("1.6.0")
+  override def write: MLWriter = new Pipeline.PipelineWriter(this)
 }
 
-object Pipeline extends Readable[Pipeline] {
+@Since("1.6.0")
+object Pipeline extends MLReadable[Pipeline] {
 
-  override def read: Reader[Pipeline] = new PipelineReader
+  @Since("1.6.0")
+  override def read: MLReader[Pipeline] = new PipelineReader
 
-  override def load(path: String): Pipeline = read.load(path)
+  @Since("1.6.0")
+  override def load(path: String): Pipeline = super.load(path)
 
-  private[ml] class PipelineWriter(instance: Pipeline) extends Writer {
+  private[Pipeline] class PipelineWriter(instance: Pipeline) extends MLWriter {
 
     SharedReadWrite.validateStages(instance.getStages)
 
@@ -191,10 +194,10 @@ object Pipeline extends Readable[Pipeline] {
       SharedReadWrite.saveImpl(instance, instance.getStages, sc, path)
   }
 
-  private[ml] class PipelineReader extends Reader[Pipeline] {
+  private class PipelineReader extends MLReader[Pipeline] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.Pipeline"
+    private val className = classOf[Pipeline].getName
 
     override def load(path: String): Pipeline = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
@@ -202,7 +205,7 @@ object Pipeline extends Readable[Pipeline] {
     }
   }
 
-  /** Methods for [[Reader]] and [[Writer]] shared between [[Pipeline]] and [[PipelineModel]] */
+  /** Methods for [[MLReader]] and [[MLWriter]] shared between [[Pipeline]] and [[PipelineModel]] */
   private[ml] object SharedReadWrite {
 
     import org.json4s.JsonDSL._
@@ -210,7 +213,7 @@ object Pipeline extends Readable[Pipeline] {
     /** Check that all stages are Writable */
     def validateStages(stages: Array[PipelineStage]): Unit = {
       stages.foreach {
-        case stage: Writable => // good
+        case stage: MLWritable => // good
         case other =>
           throw new UnsupportedOperationException("Pipeline write will fail on this Pipeline" +
             s" because it contains a stage which does not implement Writable. Non-Writable stage:" +
@@ -228,24 +231,13 @@ object Pipeline extends Readable[Pipeline] {
         stages: Array[PipelineStage],
         sc: SparkContext,
         path: String): Unit = {
-      // Copied and edited from DefaultParamsWriter.saveMetadata
-      // TODO: modify DefaultParamsWriter.saveMetadata to avoid duplication
-      val uid = instance.uid
-      val cls = instance.getClass.getName
       val stageUids = stages.map(_.uid)
       val jsonParams = List("stageUids" -> parse(compact(render(stageUids.toSeq))))
-      val metadata = ("class" -> cls) ~
-        ("timestamp" -> System.currentTimeMillis()) ~
-        ("sparkVersion" -> sc.version) ~
-        ("uid" -> uid) ~
-        ("paramMap" -> jsonParams)
-      val metadataPath = new Path(path, "metadata").toString
-      val metadataJson = compact(render(metadata))
-      sc.parallelize(Seq(metadataJson), 1).saveAsTextFile(metadataPath)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = Some(jsonParams))
 
       // Save stages
       val stagesDir = new Path(path, "stages").toString
-      stages.zipWithIndex.foreach { case (stage: Writable, idx: Int) =>
+      stages.zipWithIndex.foreach { case (stage: MLWritable, idx: Int) =>
         stage.write.save(getStagePath(stage.uid, idx, stages.length, stagesDir))
       }
     }
@@ -262,30 +254,10 @@ object Pipeline extends Readable[Pipeline] {
 
       implicit val format = DefaultFormats
       val stagesDir = new Path(path, "stages").toString
-      val stageUids: Array[String] = metadata.params match {
-        case JObject(pairs) =>
-          if (pairs.length != 1) {
-            // Should not happen unless file is corrupted or we have a bug.
-            throw new RuntimeException(
-              s"Pipeline read expected 1 Param (stageUids), but found ${pairs.length}.")
-          }
-          pairs.head match {
-            case ("stageUids", jsonValue) =>
-              jsonValue.extract[Seq[String]].toArray
-            case (paramName, jsonValue) =>
-              // Should not happen unless file is corrupted or we have a bug.
-              throw new RuntimeException(s"Pipeline read encountered unexpected Param $paramName" +
-                s" in metadata: ${metadata.metadataStr}")
-          }
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot recognize JSON metadata: ${metadata.metadataStr}.")
-      }
+      val stageUids: Array[String] = (metadata.params \ "stageUids").extract[Seq[String]].toArray
       val stages: Array[PipelineStage] = stageUids.zipWithIndex.map { case (stageUid, idx) =>
         val stagePath = SharedReadWrite.getStagePath(stageUid, idx, stageUids.length, stagesDir)
-        val stageMetadata = DefaultParamsReader.loadMetadata(stagePath, sc)
-        val cls = Utils.classForName(stageMetadata.className)
-        cls.getMethod("read").invoke(null).asInstanceOf[Reader[PipelineStage]].load(stagePath)
+        DefaultParamsReader.loadParamsInstance[PipelineStage](stagePath, sc)
       }
       (metadata.uid, stages)
     }
@@ -308,7 +280,7 @@ object Pipeline extends Readable[Pipeline] {
 class PipelineModel private[ml] (
     override val uid: String,
     val stages: Array[Transformer])
-  extends Model[PipelineModel] with Writable with Logging {
+  extends Model[PipelineModel] with MLWritable with Logging {
 
   /** A Java/Python-friendly auxiliary constructor. */
   private[ml] def this(uid: String, stages: ju.List[Transformer]) = {
@@ -333,18 +305,22 @@ class PipelineModel private[ml] (
     new PipelineModel(uid, stages.map(_.copy(extra))).setParent(parent)
   }
 
-  override def write: Writer = new PipelineModel.PipelineModelWriter(this)
+  @Since("1.6.0")
+  override def write: MLWriter = new PipelineModel.PipelineModelWriter(this)
 }
 
-object PipelineModel extends Readable[PipelineModel] {
+@Since("1.6.0")
+object PipelineModel extends MLReadable[PipelineModel] {
 
   import Pipeline.SharedReadWrite
 
-  override def read: Reader[PipelineModel] = new PipelineModelReader
+  @Since("1.6.0")
+  override def read: MLReader[PipelineModel] = new PipelineModelReader
 
-  override def load(path: String): PipelineModel = read.load(path)
+  @Since("1.6.0")
+  override def load(path: String): PipelineModel = super.load(path)
 
-  private[ml] class PipelineModelWriter(instance: PipelineModel) extends Writer {
+  private[PipelineModel] class PipelineModelWriter(instance: PipelineModel) extends MLWriter {
 
     SharedReadWrite.validateStages(instance.stages.asInstanceOf[Array[PipelineStage]])
 
@@ -352,10 +328,10 @@ object PipelineModel extends Readable[PipelineModel] {
       instance.stages.asInstanceOf[Array[PipelineStage]], sc, path)
   }
 
-  private[ml] class PipelineModelReader extends Reader[PipelineModel] {
+  private class PipelineModelReader extends MLReader[PipelineModel] {
 
     /** Checked against metadata when loading model */
-    private val className = "org.apache.spark.ml.PipelineModel"
+    private val className = classOf[PipelineModel].getName
 
     override def load(path: String): PipelineModel = {
       val (uid: String, stages: Array[PipelineStage]) = SharedReadWrite.load(className, sc, path)
