@@ -182,7 +182,7 @@ private[ui] object RDDOperationGraph extends Logging {
     s"""${node.id} [label="$label"]"""
   }
 
-  /** Update the dot representation of the RDDOperationGraph in cluster to subgrJsonProtocolSuiteaph. */
+  /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
   private def makeDotSubgraph(
       subgraph: StringBuilder,
       cluster: RDDOperationCluster,
