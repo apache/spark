@@ -636,3 +636,8 @@ assignNewEnv <- function(data) {
   }
   env
 }
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
+}
