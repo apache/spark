@@ -530,6 +530,11 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 0)
   expect_equal(ncol(rdf), 2)
+
+  # collect() correctly handles multiple columns with same name
+  df <- createDataFrame(sqlContext, list(list(1, 2)), schema = c("name", "name"))
+  ldf <- collect(df)
+  expect_equal(names(ldf), c("name", "name"))
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
