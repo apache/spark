@@ -418,8 +418,6 @@ class CoreTest(unittest.TestCase):
         regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
         with self.assertRaisesRegexp(AirflowException, regexp):
             self.run_this_last.set_downstream(self.runme_0)
->>>>>>> 17aed4c... fixed Variable json deserialization
-
 
 class CliTests(unittest.TestCase):
 
