@@ -373,9 +373,34 @@ private[sql] class DynamicPartitionWriterContainer(
       // If the sorter is not null that means that we reached the maxFiles above and need to finish
       // using external sort.
       if (sorter != null) {
+        val toSafeRow = FromUnsafeProjection.apply(inputSchema.map(_.dataType))
         while (iterator.hasNext) {
           val currentRow = iterator.next()
-          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
+          val partitionKey = try {
+            getPartitionKey(currentRow)
+          } catch {
+            case e: NegativeArraySizeException =>
+              val errorMessage =
+                s"Failed to get partitionKey of data types ${partitionColumns.map(_.dataType)} " +
+                  s"from row ${currentRow.toSeq(inputSchema.map(_.dataType))} (" +
+                  s"safe row ${toSafeRow(currentRow)}) because " +
+                  e.getMessage
+              logError(errorMessage, e)
+              throw new RuntimeException(errorMessage, e)
+          }
+          val outputRow = try {
+            getOutputRow(currentRow)
+          } catch {
+            case e: NegativeArraySizeException =>
+              val errorMessage =
+                s"Failed to get outputRow of data types ${dataColumns.map(_.dataType)} from " +
+                  s"row ${currentRow.toSeq(inputSchema.map(_.dataType))} (" +
+                  s"safe row ${toSafeRow(currentRow)}) because " +
+                  e.getMessage
+              logError(errorMessage, e)
+              throw new RuntimeException(errorMessage, e)
+          }
+          sorter.insertKV(partitionKey, outputRow)
         }
 
         logInfo(s"Sorting complete. Writing out partition files one at a time.")

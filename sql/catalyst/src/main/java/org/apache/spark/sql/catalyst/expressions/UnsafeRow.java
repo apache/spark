@@ -30,6 +30,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.BinaryType;
 import org.apache.spark.sql.types.BooleanType;
@@ -159,6 +162,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < numFields : "index (" + index + ") should < " + numFields;
   }
+
+  private Logger logger = LoggerFactory.getLogger(UnsafeRow.class);
 
   //////////////////////////////////////////////////////////////////////////////
   // Public methods
@@ -445,7 +450,21 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    return UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    final UTF8String str = UTF8String.fromAddress(baseObject, baseOffset + offset, size);
+    if (str.numBytes() > this.sizeInBytes && this.sizeInBytes > 0) {
+      logger.error(
+        "The size of a UTF8String (" + str.numBytes() + ") is larger than " +
+        "the size of the UnsafeRow (" + this.sizeInBytes + ")");
+    }
+    if (str.numBytes() > 100 * 1000 * 1000) {
+      logger.error(
+        "The size of a UTF8String (" + str.numBytes() + ") is larger than 100000000 bytes");
+    }
+    if (size < 0) {
+      logger.error(
+        "The size of a UTF8String (" + size + ") is less than 0.");
+    }
+    return str;
   }
 
   @Override
