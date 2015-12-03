@@ -1597,9 +1597,9 @@ transformer.transform(df).show()
 Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
 where `"__THIS__"` represents the underlying table of the input dataset.
 The select clause specifies the fields, constants, and expressions to display in
-the output, it can be any select clause that Spark SQL supported. Users can also
-use Spark SQL build-in function and UDFs to operate on these selected columns.
-For example, `SQLTransformer` support statements like:
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
 
 * `SELECT a, a + b AS a_b FROM __THIS__`
 * `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
