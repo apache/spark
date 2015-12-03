@@ -137,6 +137,10 @@ setGeneric("name", function(x) { standardGeneric("name") })
 # @export
 setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
 
+# @rdname getNumPartitions
+# @export
+setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
+
 # @rdname persist
 # @export
 setGeneric("persist", function(x, newLevel) { standardGeneric("persist") })
