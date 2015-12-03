@@ -133,9 +133,9 @@ setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 # @export
 setGeneric("name", function(x) { standardGeneric("name") })
 
-# @rdname numPartitions
+# @rdname getNumPartitions
 # @export
-setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
+setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
 
 # @rdname persist
 # @export
