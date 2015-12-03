@@ -1732,7 +1732,7 @@ Assume that we have a DataFrame with the columns `id`, `hour`:
 ----|------
  3  | 5.0
 ----|------
- 4  | 22.0
+ 4  | 2.2
 ~~~
 
 `hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
@@ -1749,7 +1749,7 @@ categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
 ----|------|------
  3  | 5.0  | 1.0
 ----|------|------
- 4  | 22.0 | 0.0
+ 4  | 2.2  | 0.0
 ~~~
 
 <div class="codetabs">

@@ -47,7 +47,7 @@ public class JavaQuantileDiscretizerExample {
         RowFactory.create(1, 19.0),
         RowFactory.create(2, 8.0),
         RowFactory.create(3, 5.0),
-        RowFactory.create(4, 22.0)
+        RowFactory.create(4, 2.2)
       )
     );
 
