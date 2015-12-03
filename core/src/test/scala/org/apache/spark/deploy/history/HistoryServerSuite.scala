@@ -324,14 +324,25 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val actual = counter.getCount
         if (actual != expected) {
           // this is here because Scalatest loses stack depth
-          throw new Exception(s"Wrong $name value - expected $expected but got $actual" +
+          throw new scala.Exception(s"Wrong $name value - expected $expected but got $actual" +
               s" in metrics\n$metrics")
         }
       }
 
-      def buildURL(appId: String, suffix: String): String = {
-        s"http://localhost:$port/history/$appId$suffix"
+      def buildURL(appId: String, suffix: String): URL = {
+        new URL(s"http://localhost:$port/history/$appId$suffix")
       }
+      val historyServerRoot = new URL(s"http://localhost:$port/")
+      val historyServerIncompleted = new URL(historyServerRoot, "?page=1&showIncomplete=true")
+
+      // assert the body of a URL contains a string; return that body
+      def assertUrlContains(url: URL, str: String): String = {
+        val body = HistoryServerSuite.getUrl(url)
+        assert(body.contains(str), s"did not find $str at $url : $body")
+        body
+      }
+
+      // start initial job
       val d = sc.parallelize(1 to 10)
       d.count()
       val stdInterval = interval(100 milliseconds)
@@ -342,11 +353,14 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         (apps.head \ "id").extract[String]
       }
 
-      val appIdRoot = new URL(buildURL(appId, ""))
-      val rootUiPage = HistoryServerSuite.getUrl(appIdRoot)
-      logDebug(s"$appIdRoot ->[${rootUiPage.length}] \n$rootUiPage")
+      // which lists as incomplete
+      assertUrlContains(historyServerIncompleted, appId)
+
+      val appIdRoot = buildURL(appId, "")
+      val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
+      logDebug(s"$appIdRoot ->[${rootAppPage.length}] \n$rootAppPage")
       // sanity check to make sure filter is chaining calls
-      rootUiPage should not be empty
+      rootAppPage should not be empty
 
       def getAppUI: SparkUI = {
         provider.getAppUI(appId, None).get._1
@@ -355,9 +369,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // selenium isn't that useful on failures...add our own reporting
       def getNumJobs(suffix: String): Int = {
         val target = buildURL(appId, suffix)
-        val targetBody = HistoryServerSuite.getUrl(new URL(target))
+        val targetBody = HistoryServerSuite.getUrl(target)
         try {
-          go to target
+          go to target.toExternalForm
           findAll(cssSelector("tbody tr")).toIndexedSeq.size
         }
         catch {
@@ -391,13 +405,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
 
       val stdTimeout = timeout(20 seconds)
-/*
-      logDebug(s"Explicitly reloading app UI for updated job information")
-      eventually(stdTimeout, stdInterval) {
-        // verifies that a reload picks up the change
-        completedJobs() should have size 2
-      }
-*/
+
       logDebug("waiting for UI to update")
       eventually(stdTimeout, stdInterval) {
         val finalFileStatus = fs.getFileStatus(logDirPath)
@@ -414,9 +422,37 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         assert(4 === getNumJobs("/jobs"),
           s"two jobs back-to-back not updated, server=$server\n")
       }
-      sc.stop()
+      val startcount = getNumJobs("/jobs")
+      // do a series with different sleep times to see if that can create trouble
+      val limit = 10
+      for (i <- 1 to limit) {
+        d.count()
+        Thread.sleep(i * 100)
+        eventually(stdTimeout, stdInterval) {
+          assert(startcount + i === getNumJobs("/jobs"),
+            s"jobs iteration $i not updated, server=$server\n")
+        }
+      }
+      val endcount = startcount + limit
+      assert(!provider.getListing().head.completed)
 
+      // stop the server
+      sc.stop()
       // TODO: check the app is now found as completed
+      eventually(stdTimeout, stdInterval) {
+        assert(provider.getListing().head.completed,
+          s"application never completed, server=$server\n")
+      }
+      assert(endcount === getNumJobs("/jobs"))
+
+      // which lists as incomplete
+      eventually(stdTimeout, stdInterval) {
+        assertUrlContains(historyServerRoot, appId)
+      }
+      assert(!HistoryServerSuite.getUrl(historyServerIncompleted).contains(appId))
+
+
+      // the root UI must pick this up too
     } finally {
       sc.stop()
     }
