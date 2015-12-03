@@ -151,7 +151,7 @@ private[kafka] class KafkaTestUtils extends Logging {
     }
   }
 
-  /** Create a Kafka topic and wait until it propagated to the whole cluster */
+  /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated
