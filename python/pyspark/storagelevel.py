@@ -56,3 +56,16 @@ StorageLevel.MEMORY_ONLY_2 = StorageLevel(False, True, False, False, 2)
 StorageLevel.MEMORY_AND_DISK = StorageLevel(True, True, False, False)
 StorageLevel.MEMORY_AND_DISK_2 = StorageLevel(True, True, False, False, 2)
 StorageLevel.OFF_HEAP = StorageLevel(False, False, True, False, 1)
+
+"""
+.. note:: The following four storage level constants are deprecated in 1.6, since the records
+will always be serialized in Python.
+"""
+StorageLevel.MEMORY_ONLY_SER = StorageLevel.MEMORY_ONLY
+""".. note:: Deprecated in 1.6, use ``StorageLevel.MEMORY_ONLY`` instead."""
+StorageLevel.MEMORY_ONLY_SER_2 = StorageLevel.MEMORY_ONLY_2
+""".. note:: Deprecated in 1.6, use ``StorageLevel.MEMORY_ONLY_2`` instead."""
+StorageLevel.MEMORY_AND_DISK_SER = StorageLevel.MEMORY_AND_DISK
+""".. note:: Deprecated in 1.6, use ``StorageLevel.MEMORY_AND_DISK`` instead."""
+StorageLevel.MEMORY_AND_DISK_SER_2 = StorageLevel.MEMORY_AND_DISK_2
+""".. note:: Deprecated in 1.6, use ``StorageLevel.MEMORY_AND_DISK_2`` instead."""
