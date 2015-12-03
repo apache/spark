@@ -1,6 +1,6 @@
 ---
 layout: global
-displayTitle: Spark SQL and DataFrame Guide
+displayTitle: Spark SQL, DataFrames and Datasets Guide
 title: Spark SQL and DataFrames
 ---
 
@@ -9,18 +9,51 @@ title: Spark SQL and DataFrames
 
 # Overview
 
-Spark SQL is a Spark module for structured data processing. It provides a programming abstraction called DataFrames and can also act as distributed SQL query engine.
+Spark SQL is a Spark module for structured data processing.  Unlike the basic Spark RDD API, the interfaces provided
+by Spark SQL provide Spark with more about the structure of both the data and the computation being performed.  Internally,
+Spark SQL uses this extra information to perform extra optimizations.  There are several ways to
+interact with Spark SQL including SQL, the DataFrames API and the Datasets API.  When computing a result
+the same execution engine is used, independent of which API/language you are using to express the
+computation.  This unification means that developers can easily switch back and forth between the
+various APIs based on which provides the most natural way to express a given transformation.
 
-Spark SQL can also be used to read data from an existing Hive installation.  For more on how to configure this feature, please refer to the [Hive Tables](#hive-tables) section.
+All of the examples on this page use sample data included in the Spark distribution and can be run in
+the `spark-shell`, `pyspark` shell, or `sparkR` shell.
 
-# DataFrames
+## SQL
 
-A DataFrame is a distributed collection of data organized into named columns. It is conceptually equivalent to a table in a relational database or a data frame in R/Python, but with richer optimizations under the hood. DataFrames can be constructed from a wide array of sources such as: structured data files, tables in Hive, external databases, or existing RDDs.
+One use of Spark SQL is to execute SQL queries written using either a basic SQL syntax or HiveQL.
+Spark SQL can also be used to read data from an existing Hive installation.  For more on how to
+configure this feature, please refer to the [Hive Tables](#hive-tables) section.  When running
+SQL from within another programming language the results will be returned as a [DataFrame](#DataFrames).
+You can also interact with the SQL interface using the [command-line](#running-the-spark-sql-cli)
+or over [JDBC/ODBC](#running-the-thrift-jdbcodbc-server).
 
-The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
+## DataFrames
 
-All of the examples on this page use sample data included in the Spark distribution and can be run in the `spark-shell`, `pyspark` shell, or `sparkR` shell.
+A DataFrame is a distributed collection of data organized into named columns. It is conceptually
+equivalent to a table in a relational database or a data frame in R/Python, but with richer
+optimizations under the hood. DataFrames can be constructed from a wide array of [sources](#data-sources) such
+as: structured data files, tables in Hive, external databases, or existing RDDs.
 
+The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame),
+[Java](api/java/index.html?org/apache/spark/sql/DataFrame.html),
+[Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
+
+## Datasets
+
+A Dataset is a new experimental interface added in Spark 1.6 that tries to provide the benefits of
+RDDs (strong typing, ability to use powerful lambda functions) with the benifits of Spark SQL's
+optimized execution engine.  A Dataset can be [constructed](#creating-datasets) from JVM objects and then manipulated
+using functional transformations (map, flatMap, filter, etc.).
+
+The unified Dataset API can be used both in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset) and
+[Java](api/java/index.html?org/apache/spark/sql/Dataset.html).  Python does not yet have support for
+the Dataset API, but due to its dynamic nature many of the benifits are already available (i.e. you can
+access the field of a row by name naturally `row.columnName`).  Full python support will be added
+in a future release.
+
+# Getting Started
 
 ## Starting Point: SQLContext
 
@@ -427,6 +460,45 @@ df <- sql(sqlContext, "SELECT * FROM table")
 
 </div>
 
+
+## Creating Datasets
+
+Datasets are similar to RDDs, however, instead of using Java Serialization or Kryo they use
+a specialized [Encoder](api/scala/index.html#org.apache.spark.sql.Encoder) to serialize the objects
+for processing or transmitting over the network. While both encoders and standard serialization are
+responsible for during an object into bytes, encoders are code generated dynamically and use a format
+that allows Spark to perform many operations like filtering, sorting and hashing without deserialzing
+the back into an object.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// Encoders for most common types are automatically provided by importing sqlContext.implicits._
+val ds = Seq(1, 2, 3).toDS()
+ds.map(_ + 1).collect() // Returns: Array(2, 3, 4)
+
+// Encoders are also created for case classes.
+case class Person(name: String, age: Long)
+val ds = Seq(Person("Andy", 32)).toDS()
+
+// DataFrames can be converted to a Dataset by providing a class.  Mapping will be done by name.
+val path = "examples/src/main/resources/people.json"
+val people = sqlContext.read.json(path).as[Person]
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+{% highlight java %}
+JavaSparkContext sc = ...; // An existing JavaSparkContext.
+SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
+{% endhighlight %}
+
+</div>
+</div>
 
 ## Interoperating with RDDs
 
