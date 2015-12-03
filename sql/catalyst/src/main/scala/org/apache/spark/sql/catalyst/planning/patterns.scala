@@ -143,13 +143,14 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   *  inner join
   *      /    \
   *   plan0    plan1
+  *
+  * Note: This pattern currently only works for left-deep trees.
   */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   // flatten all inner joins, which are next to each other
   def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
     case Join(left, right, Inner, cond) =>
-      // only find the nested join on left, because we can only generate the plan like that
       val (plans, conditions) = flattenJoin(left)
       (plans ++ Seq(right), conditions ++ cond.toSeq)
 

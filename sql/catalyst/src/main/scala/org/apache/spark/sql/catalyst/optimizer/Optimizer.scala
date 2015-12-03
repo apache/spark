@@ -711,7 +711,10 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
-  * Reorder the joins so that the bottom ones have at least one condition.
+  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
+  * one condition.
+  *
+  * The order of joins will not be changed if all of them already have at least one condition.
   */
 object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
