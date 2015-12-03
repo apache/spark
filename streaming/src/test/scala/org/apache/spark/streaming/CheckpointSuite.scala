@@ -96,11 +96,13 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       expectedOutput.take(numBatchesBeforeRestart), stopSparkContextAfterTest)
 
     // Restart and complete the computation from checkpoint file
-    logInfo(
+    // scalastyle:off println
+    print(
       "\n-------------------------------------------\n" +
         "        Restarting stream computation          " +
         "\n-------------------------------------------\n"
     )
+    // scalastyle:on println
     val restartedSsc = new StreamingContext(checkpointDir)
     generateAndAssertOutput[V](restartedSsc, batchDuration, checkpointDir, nextNumBatches,
       expectedOutput.takeRight(nextNumExpectedOutputs), stopSparkContextAfterTest)
@@ -125,9 +127,11 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       ssc.start()
       val numBatches = expectedOutput.size
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      logDebug("Manual clock before advancing = " + clock.getTimeMillis())
+      // scalastyle:off println
+      logInfo("Manual clock before advancing = " + clock.getTimeMillis())
       clock.advance((batchDuration * numBatches).milliseconds)
-      logDebug("Manual clock after advancing = " + clock.getTimeMillis())
+      logInfo("Manual clock after advancing = " + clock.getTimeMillis())
+      // scalastyle:on println
 
       val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
         dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
