@@ -892,7 +892,7 @@ test_that("column functions", {
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
 
   # Test if base::is.nan() is exposed
-  expect_equal(is.nan(c(0/0, 1/0 - 1/0)), c(TRUE, TRUE))
+  expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
