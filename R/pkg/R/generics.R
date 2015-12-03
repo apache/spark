@@ -802,15 +802,7 @@ setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
 #' @rdname is.nan
 #' @export
-setGeneric("is.nan")
-
-#' @rdname is.nan
-#' @export
 setGeneric("isnan", function(x) { standardGeneric("isnan") })
-
-#' @rdname isnull
-#' @export
-setGeneric("isnull", function(x) { standardGeneric("isnull") })
 
 #' @rdname kurtosis
 #' @export

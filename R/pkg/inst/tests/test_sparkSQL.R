@@ -889,7 +889,10 @@ test_that("column functions", {
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c14 <- cume_dist() + ntile(1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
-  c16 <- is.nan(c) + isnan(c) + isnull(c) + isNaN(c) + isNull(c) + isNotNull(c)
+  c16 <- is.nan(c) + isnan(c) + isNaN(c)
+
+  # Test if base::is.nan() is exposed
+  expect_equal(is.nan(c(0/0, 1/0 - 1/0)), c(TRUE, TRUE))
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
