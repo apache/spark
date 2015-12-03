@@ -19,7 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, TimeUnit}
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
@@ -81,6 +82,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
   private var lastScanTime = -1L
+
+  // a counter for attempts, to ensure that whenever an attempt is created or updated,
+  // it can have a time
+  private val attemptCounter = new AtomicLong(0)
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -227,8 +232,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setAdminAcls(appListener.adminAcls.getOrElse(""))
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
-            (ui, Math.max(attempt.fileSizeUpdateTime, status.getModificationTime),
-                Some(status.getLen))
+            (ui, Math.max(attempt.instance, status.getModificationTime), Some(attempt.instance))
           }
         }
       }
@@ -482,7 +486,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 logDebug(s"Attempt ${attempt.name}/${attempt.appId} size => $size")
                 Some(new FsApplicationAttemptInfo(attempt.logPath, attempt.name, attempt.appId,
                   attempt.attemptId, attempt.startTime, attempt.endTime, attempt.lastUpdated,
-                  attempt.sparkUser, attempt.completed, size, now))
+                  attempt.sparkUser, attempt.completed, size, attemptCounter.incrementAndGet()))
               } else {
                 None
               }
@@ -702,15 +706,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   override def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
       data: Option[Any]): Boolean = {
-    val oldSize = data.getOrElse(-1L).asInstanceOf[Long]
+    val instance = data.getOrElse(-1L).asInstanceOf[Long]
     lookup(appId, attemptId) match {
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")
         false
       case Some(attempt) =>
-        attempt.lastUpdated > updateTimeMillis ||
-            (oldSize >= 0 && attempt.fileSize > oldSize)
-      //      attempt.fileSizeUpdateTime > updateTimeMillis
+        instance < attempt.instance
     }
   }
 }
@@ -730,12 +732,12 @@ private class FsApplicationAttemptInfo(
     sparkUser: String,
     completed: Boolean = true,
     val fileSize: Long = -1,
-    val fileSizeUpdateTime: Long = -1)
+    val instance: Long = -1)
   extends ApplicationAttemptInfo(attemptId, startTime, endTime,
     lastUpdated, sparkUser, completed) {
   override def toString: String = {
     s"FsApplicationAttemptInfo($logPath, $name, $appId," +
-      s" ${super.toString}, $fileSize, $fileSizeUpdateTime"
+      s" ${super.toString}, $fileSize, $instance"
   }
 }
 
