@@ -1,6 +1,8 @@
 
 from builtins import bytes
+from builtins import str
 import logging
+import sys
 from subprocess import Popen, STDOUT, PIPE
 from tempfile import gettempdir, NamedTemporaryFile
 
@@ -78,7 +80,7 @@ class BashOperator(BaseOperator):
                     raise AirflowException("Bash command failed")
 
         if self.xcom_push:
-            return str(line.strip())
+            return str(line.strip(), sys.getdefaultencoding())
 
     def on_kill(self):
         logging.info('Sending SIGTERM signal to bash subprocess')
