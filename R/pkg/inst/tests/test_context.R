@@ -92,3 +92,23 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
                       " --driver-memory 4g sparkr-shell2"))
   # nolint end
 })
+
+test_that("sparkJars sparkPackages as comma-separated strings", {
+  expect_warning(processSparkJars(" a, b "))
+  jars <- suppressWarnings(processSparkJars(" a, b "))
+  expect_equal(jars, c("a", "b"))
+
+  jars <- suppressWarnings(processSparkJars(" abc ,, def "))
+  expect_equal(jars, c("abc", "def"))
+
+  jars <- suppressWarnings(processSparkJars(c(" abc ,, def ", "", "xyz", " ", "a,b")))
+  expect_equal(jars, c("abc", "def", "xyz", "a", "b"))
+
+  p <- processSparkPackages(c("ghi", "lmn"))
+  expect_equal(p, c("ghi", "lmn"))
+
+  # check normalizePath
+  f <- dir()[[1]]
+  expect_that(processSparkJars(f), not(gives_warning()))
+  expect_match(processSparkJars(f), f)
+})
