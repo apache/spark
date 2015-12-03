@@ -199,6 +199,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - Aggregate
  *   - Generate
  *   - Project <- Join
+ *   - Project <- Filter <- Join
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
@@ -247,6 +248,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
       def pruneJoinChild(c: LogicalPlan): LogicalPlan = prunedChild(c, allReferences)
 
       Project(projectList, Join(pruneJoinChild(left), pruneJoinChild(right), joinType, condition))
+
+    // Eliminate unneeded attributes from either side of a Join.
+    case Project(projectList, Filter(predicates, Join(left, right, joinType, condition)))  =>
+      val allReferences: AttributeSet = 
+        AttributeSet(
+          projectList.flatMap(_.references.iterator)) ++
+          predicates.references ++
+          condition.map(_.references).getOrElse(AttributeSet(Seq.empty))
+      Project(projectList, Filter(predicates, Join(
+        prunedChild(left, allReferences), prunedChild(right, allReferences), joinType, condition)))
 
     // Eliminate unneeded attributes from right side of a LeftSemiJoin.
     case Join(left, right, LeftSemi, condition) =>
