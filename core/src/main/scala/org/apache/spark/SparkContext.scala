@@ -2708,15 +2708,14 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case mesosUrl @ MESOS_REGEX(_) =>
+      case MESOS_REGEX(mesosUrl) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
-        val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)
+          new CoarseMesosSchedulerBackend(scheduler, sc, mesosUrl, sc.env.securityManager)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, url)
+          new MesosSchedulerBackend(scheduler, sc, mesosUrl)
         }
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2726,6 +2725,11 @@ object SparkContext extends Logging {
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
         (backend, scheduler)
+
+      case zkUrl if zkUrl.startsWith("zk://") =>
+        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
+          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
+        createTaskScheduler(sc, "mesos://" + zkUrl)
 
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
@@ -2745,8 +2749,8 @@ private object SparkMasterRegex {
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters
   val SPARK_REGEX = """spark://(.*)""".r
-  // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
-  val MESOS_REGEX = """(mesos|zk)://.*""".r
+  // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
+  val MESOS_REGEX = """mesos://(.*)""".r
   // Regular expression for connection to Simr cluster
   val SIMR_REGEX = """simr://(.*)""".r
 }
