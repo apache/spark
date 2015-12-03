@@ -24,14 +24,18 @@ import scala.collection.mutable.ArrayBuffer
 import com.amazonaws.services.kinesis.producer.{KinesisProducer => KPLProducer, KinesisProducerConfiguration, UserRecordResult}
 import com.google.common.util.concurrent.{FutureCallback, Futures}
 
-private[kinesis] class ExtendedKinesisTestUtils extends KinesisTestUtils {
-  override protected val kplProducer: KinesisProducer = {
-    new KinesisProducerLibraryProducer(regionName)
+private[kinesis] class KPLBasedKinesisTestUtils extends KinesisTestUtils {
+  override protected def getProducer(aggregate: Boolean): KinesisDataGenerator = {
+    if (!aggregate) {
+      new SimpleDataGenerator(kinesisClient)
+    } else {
+      new KPLDataGenerator(regionName)
+    }
   }
 }
 
 /** A wrapper for the KinesisProducer provided in the KPL. */
-private[kinesis] class KinesisProducerLibraryProducer(regionName: String) extends KinesisProducer {
+private[kinesis] class KPLDataGenerator(regionName: String) extends KinesisDataGenerator {
 
   private lazy val producer: KPLProducer = {
     val conf = new KinesisProducerConfiguration()
@@ -43,30 +47,26 @@ private[kinesis] class KinesisProducerLibraryProducer(regionName: String) extend
     new KPLProducer(conf)
   }
 
-  private val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
+  override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
+    val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
+    data.foreach { num =>
+      val str = num.toString
+      val data = ByteBuffer.wrap(str.getBytes())
+      val future = producer.addUserRecord(streamName, str, data)
+      val kinesisCallBack = new FutureCallback[UserRecordResult]() {
+        override def onFailure(t: Throwable): Unit = {} // do nothing
 
-  override def putRecord(streamName: String, num: Int): Unit = {
-    val str = num.toString
-    val data = ByteBuffer.wrap(str.getBytes())
-    val future = producer.addUserRecord(streamName, str, data)
-    val kinesisCallBack = new FutureCallback[UserRecordResult]() {
-      override def onFailure(t: Throwable): Unit = {} // do nothing
-
-      override def onSuccess(result: UserRecordResult): Unit = {
-        val shardId = result.getShardId
-        val seqNumber = result.getSequenceNumber()
-        val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
-          new ArrayBuffer[(Int, String)]())
-        sentSeqNumbers += ((num, seqNumber))
+        override def onSuccess(result: UserRecordResult): Unit = {
+          val shardId = result.getShardId
+          val seqNumber = result.getSequenceNumber()
+          val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
+            new ArrayBuffer[(Int, String)]())
+          sentSeqNumbers += ((num, seqNumber))
+        }
       }
+      Futures.addCallback(future, kinesisCallBack)
     }
-
-    Futures.addCallback(future, kinesisCallBack)
     producer.flushSync()
-  }
-
-  override def flush(): Map[String, Seq[(Int, String)]] = {
     shardIdToSeqNumbers.toMap
   }
-
 }

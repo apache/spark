@@ -63,7 +63,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     sc = new SparkContext(conf)
 
     runIfTestsEnabled("Prepare KinesisTestUtils") {
-      testUtils = new ExtendedKinesisTestUtils()
+      testUtils = new KPLBasedKinesisTestUtils()
       testUtils.createStream()
     }
   }

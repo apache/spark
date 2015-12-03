@@ -54,7 +54,7 @@ private[kinesis] class KinesisTestUtils extends Logging {
   @volatile
   private var _streamName: String = _
 
-  private lazy val kinesisClient = {
+  protected lazy val kinesisClient = {
     val client = new AmazonKinesisClient(KinesisTestUtils.getAWSCredentials())
     client.setEndpoint(endpointUrl)
     client
@@ -66,14 +66,11 @@ private[kinesis] class KinesisTestUtils extends Logging {
     new DynamoDB(dynamoDBClient)
   }
 
-  /** Left as a protected val so that we don't need to depend on KPL outside of tests. */
-  protected val kplProducer: KinesisProducer = null
-
-  private def getProducer(aggregate: Boolean): KinesisProducer = {
-    if (aggregate) {
-      kplProducer
+  protected def getProducer(aggregate: Boolean): KinesisDataGenerator = {
+    if (!aggregate) {
+      new SimpleDataGenerator(kinesisClient)
     } else {
-      new KinesisClientProducer(kinesisClient)
+      throw new UnsupportedOperationException("Aggregation is not supported through this code path")
     }
   }
 
@@ -106,12 +103,7 @@ private[kinesis] class KinesisTestUtils extends Logging {
   def pushData(testData: Seq[Int], aggregate: Boolean): Map[String, Seq[(Int, String)]] = {
     require(streamCreated, "Stream not yet created, call createStream() to create one")
     val producer = getProducer(aggregate)
-
-    testData.foreach { num =>
-      producer.putRecord(streamName, num)
-    }
-
-    val shardIdToSeqNumbers = producer.flush()
+    val shardIdToSeqNumbers = producer.sendData(streamName, testData)
     logInfo(s"Pushed $testData:\n\t ${shardIdToSeqNumbers.mkString("\n\t")}")
     shardIdToSeqNumbers.toMap
   }
@@ -239,31 +231,30 @@ private[kinesis] object KinesisTestUtils {
 }
 
 /** A wrapper interface that will allow us to consolidate the code for synthetic data generation. */
-private[kinesis] trait KinesisProducer {
-  /** Sends the data to Kinesis possibly with aggregation if KPL is used. */
-  def putRecord(streamName: String, num: Int): Unit
-
-  /** Flush all data in the buffer and return the metadata for everything that has been sent. */
-  def flush(): Map[String, Seq[(Int, String)]]
+private[kinesis] trait KinesisDataGenerator {
+  /** Sends the data to Kinesis and returns the metadata for everything that has been sent. */
+  def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]]
 }
 
-private[kinesis] class KinesisClientProducer(client: AmazonKinesisClient) extends KinesisProducer {
-  private val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
+private[kinesis] class SimpleDataGenerator(
+    client: AmazonKinesisClient) extends KinesisDataGenerator {
+  override def sendData(streamName: String, data: Seq[Int]): Map[String, Seq[(Int, String)]] = {
+    val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
+    data.foreach { num =>
+      val str = num.toString
+      val data = ByteBuffer.wrap(str.getBytes())
+      val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
+        .withData(data)
+        .withPartitionKey(str)
 
-  override def putRecord(streamName: String, num: Int): Unit = {
-    val str = num.toString
-    val data = ByteBuffer.wrap(str.getBytes())
-    val putRecordRequest = new PutRecordRequest().withStreamName(streamName)
-      .withData(data)
-      .withPartitionKey(str)
+      val putRecordResult = client.putRecord(putRecordRequest)
+      val shardId = putRecordResult.getShardId
+      val seqNumber = putRecordResult.getSequenceNumber()
+      val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
+        new ArrayBuffer[(Int, String)]())
+      sentSeqNumbers += ((num, seqNumber))
+    }
 
-    val putRecordResult = client.putRecord(putRecordRequest)
-    val shardId = putRecordResult.getShardId
-    val seqNumber = putRecordResult.getSequenceNumber()
-    val sentSeqNumbers = shardIdToSeqNumbers.getOrElseUpdate(shardId,
-      new ArrayBuffer[(Int, String)]())
-    sentSeqNumbers += ((num, seqNumber))
+    shardIdToSeqNumbers.toMap
   }
-
-  override def flush(): Map[String, Seq[(Int, String)]] = shardIdToSeqNumbers.toMap
 }
