@@ -93,12 +93,19 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
   # nolint end
 })
 
-test_that("sparkR.init parameter checks", {
-  sparkR.stop()
-  expect_error(sc <- sparkR.init(sparkJars = c("one.jar", "two.jar", "three.jar")),
-              "sparkJars parameter should be a comma-separated list in one string")
+test_that("sparkJars sparkPackages as comma-separated strings", {
+  expect_warning(processSparkJars(" a, b "))
+  jars <- suppressWarnings(processSparkJars(" a, b "))
+  expect_equal(jars, c("a", "b"))
 
-  expect_error(sc <- sparkR.init(sparkPackages = c("com.databricks:spark-avro_2.10:2.0.1",
-                                                   "com.databricks:spark-csv_2.10:1.3.0")),
-              "sparkPackages parameter should be a comma-separated list in one string")
+  jars <- suppressWarnings(processSparkJars(" abc ,, def "))
+  expect_equal(jars, c("abc", "def"))
+
+  p <- suppressWarnings(processSparkPackages(c("ghi", "lmn"))
+  expect_equal(p, c("ghi", "lmn"))
+
+  # check normalizePath
+  f <- dir()[[1]]
+  expect_that(processSparkJars(f), not(gives_warning()))
+  expect_match(processSparkJars(f), f)
 })

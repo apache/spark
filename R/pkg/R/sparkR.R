@@ -91,8 +91,8 @@ sparkR.stop <- function() {
 #' @param sparkHome Spark Home directory
 #' @param sparkEnvir Named list of environment variables to set on worker nodes
 #' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
-#' @param sparkJars Character string comma-separated list of jar files to pass to the worker nodes
-#' @param sparkPackages Character string comma-separated list of packages from spark-packages.org
+#' @param sparkJars Character vector of jar files to pass to the worker nodes
+#' @param sparkPackages Character vector of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -102,8 +102,9 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
-#'                  "one.jar,two.jar,three.jar",
-#'                  "com.databricks:spark-avro_2.10:2.0.1,com.databricks:spark-csv_2.10:1.3.0")
+#'                  c("one.jar", "two.jar", "three.jar"),
+#'                  c("com.databricks:spark-avro_2.10:2.0.1",
+#'                    "com.databricks:spark-csv_2.10:1.3.0"))
 #'}
 
 sparkR.init <- function(
@@ -121,22 +122,8 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  if (length(sparkJars) > 1) {
-    stop("sparkJars parameter should be a comma-separated list in one string")
-  }
-  if (length(sparkPackages) > 1) {
-    stop("sparkPackages parameter should be a comma-separated list in one string")
-  }
-
-  jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
-
-  # Classpath separator is ";" on Windows
-  # URI needs four /// as from http://stackoverflow.com/a/18522792
-  if (.Platform$OS.type == "unix") {
-    uriSep <- "//"
-  } else {
-    uriSep <- "////"
-  }
+  jars <- processSparkJars(sparkJars)
+  packages <- processSparkPackages(sparkPackages)
 
   sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
@@ -153,7 +140,7 @@ sparkR.init <- function(
         sparkHome = sparkHome,
         jars = jars,
         sparkSubmitOpts = submitOps,
-        packages = sparkPackages)
+        packages = packages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
@@ -203,8 +190,14 @@ sparkR.init <- function(
       paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
 
-  nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- lapply(nonEmptyJars,
+  # Classpath separator is ";" on Windows
+  # URI needs four /// as from http://stackoverflow.com/a/18522792
+  if (.Platform$OS.type == "unix") {
+    uriSep <- "//"
+  } else {
+    uriSep <- "////"
+  }
+  localJarPaths <- lapply(jars,
                           function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
@@ -373,4 +366,28 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
   })
   # --option must be before the application class "sparkr-shell" in submitOps
   paste0(paste0(envirToOps, collapse = ""), submitOps)
+}
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, strsplit(inputs, ",|\\s")[[1]])
+}
+
+# Utility function that handles sparkJars argument, and normalize paths
+processSparkJars <- function(jars) {
+  splittedJars <- splitString(jars)
+  if (length(splittedJars) > length(jars)) {
+    warning("sparkJars as a comma-separated string is deprecated, use character vector instead")
+  }
+  normalized <- suppressWarnings(normalizePath(splittedJars))
+  normalized
+}
+
+# Utility function that handles sparkPackages argument
+processSparkPackages <- function(packages) {
+  splittedPackages <- splitString(packages)
+  if (length(splittedPackages) > length(packages)) {
+    warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
+  }
+  splittedPackages
 }

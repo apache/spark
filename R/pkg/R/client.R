@@ -44,12 +44,14 @@ determineSparkSubmitBin <- function() {
 }
 
 generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
+  jars <- paste0(jars, collapse = ",")
   if (jars != "") {
-    jars <- paste("--jars", jars)
+    jars <- paste0("--jars ", jars)
   }
 
-  if (!identical(packages, "")) {
-    packages <- paste("--packages", packages)
+  packages <- paste0(packages, collapse = ",")
+  if (packages != "") {
+    packages <- paste0("--packages ", packages)
   }
 
   combinedArgs <- paste(jars, packages, sparkSubmitOpts, args, sep = " ")
