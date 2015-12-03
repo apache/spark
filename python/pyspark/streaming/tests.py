@@ -1451,11 +1451,11 @@ class KinesisStreamTests(PySparkStreamingTestCase):
         kinesisStream1 = KinesisUtils.createStream(
             self.ssc, "myAppNam", "mySparkStream",
             "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2)
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_SER_2)
         kinesisStream2 = KinesisUtils.createStream(
             self.ssc, "myAppNam", "mySparkStream",
             "https://kinesis.us-west-2.amazonaws.com", "us-west-2",
-            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_2,
+            InitialPositionInStream.LATEST, 2, StorageLevel.MEMORY_AND_DISK_SER_2,
             "awsAccessKey", "awsSecretKey")
 
     @unittest.skip("Enable it when we fix SPAKR-12058")
@@ -1478,7 +1478,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
             stream = KinesisUtils.createStream(
                 self.ssc, kinesisAppName, kinesisTestUtils.streamName(),
                 kinesisTestUtils.endpointUrl(), kinesisTestUtils.regionName(),
-                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY,
+                InitialPositionInStream.LATEST, 10, StorageLevel.MEMORY_ONLY_SER,
                 aWSCredentials.getAWSAccessKeyId(), aWSCredentials.getAWSSecretKey())
 
             outputBuffer = []

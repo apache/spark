@@ -36,7 +36,7 @@ class KinesisUtils(object):
     @staticmethod
     def createStream(ssc, kinesisAppName, streamName, endpointUrl, regionName,
                      initialPositionInStream, checkpointInterval,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
                      awsAccessKeyId=None, awsSecretKey=None, decoder=utf8_decoder):
         """
         Create an input stream that pulls messages from a Kinesis stream. This uses the
@@ -61,7 +61,7 @@ class KinesisUtils(object):
                                     Spark Streaming documentation for more details on the different
                                     types of checkpoints.
         :param storageLevel:  Storage level to use for storing the received objects (default is
-                              StorageLevel.MEMORY_AND_DISK_2)
+                              StorageLevel.MEMORY_AND_DISK_SER_2)
         :param awsAccessKeyId:  AWS AccessKeyId (default is None. If None, will use
                                 DefaultAWSCredentialsProviderChain)
         :param awsSecretKey:  AWS SecretKey (default is None. If None, will use
