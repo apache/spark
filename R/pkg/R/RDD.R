@@ -317,6 +317,17 @@ setMethod("getNumPartitions",
             callJMethod(getJRDD(x), "getNumPartitions")
           })
 
+#' numPartitions is the same as getNumPartitions
+#'
+#' @rdname getNumPartitions
+#' @aliases numPartitions,RDD-method
+#' @noRd
+setMethod("numPartitions",
+          signature(x = "RDD"),
+          function(x) {
+            getNumPartitions(x)
+          })
+
 #' Collect elements of an RDD
 #'
 #' @description
