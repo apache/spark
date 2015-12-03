@@ -40,7 +40,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
-    The specific squared error loss function used is: L = 1/2n ||A weights - y||^2^
+    The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
 
     This support multiple types of regularization:
      - none (a.k.a. ordinary least squares)

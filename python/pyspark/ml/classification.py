@@ -49,7 +49,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
     >>> model = lr.fit(df)
-    >>> model.weights
+    >>> model.coefficients
     DenseVector([5.5...])
     >>> model.intercept
     -2.68...
