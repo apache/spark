@@ -43,7 +43,6 @@ private[mllib] class Tagger extends Serializable {
 
   /**
    * Get the feature index
-   * @param featureIndex
    */
   def open(featureIndex: FeatureIndex): Unit = {
     feature_idx = featureIndex
@@ -54,8 +53,6 @@ private[mllib] class Tagger extends Serializable {
    * Read feature files, one RDD contains many features files.
    * Each feature is a string in the RDD. The feature should be correspondent
    * with template file. User needs prepare the relationship beforehand.
-   * @param feature
-   * @return
    */
   def read(feature: String): Tagger = {
     var i: Int = 0
@@ -222,10 +219,6 @@ private[mllib] class Tagger extends Serializable {
     cost = -node(x.length - 1)(result(x.length - 1)).bestCost
   }
 
-  /**
-   * @param expected
-   * @return
-   */
   def gradient(expected: ArrayBuffer[Double]): Double = {
     var s: Double = 0.0
     var lNode: Node = null
@@ -299,11 +292,7 @@ private[mllib] class Tagger extends Serializable {
   }
 
   /**
-   * It is to simplify the log likelihood.
-   * @param x
-   * @param y
-   * @param flg
-   * @return
+   * simplify the log likelihood.
    */
   def logsumexp(x: Double, y: Double, flg: Boolean): Double = {
     if (flg) return y

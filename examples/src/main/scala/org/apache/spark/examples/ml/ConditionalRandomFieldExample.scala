@@ -55,8 +55,7 @@ object ConditionalRandomFieldExample {
     rowRDD = sc.textFile(feature).filter(_.nonEmpty).map(Row(_))
     schema = StructType(Array(StructField("", new VectorUDT, false)))
     val featureDF = sqlContext.createDataFrame(rowRDD, schema)
-    
-    // Trains a CRF model
+
     val crf = new ConditionalRandomField()
     val model = crf.train(templateDF, featureDF)
 

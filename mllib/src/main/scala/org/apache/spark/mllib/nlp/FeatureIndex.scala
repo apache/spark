@@ -70,7 +70,7 @@ private[mllib] class FeatureIndex extends Serializable {
 
   /**
    * Read one template file
-   * @param template
+   * @param template the unit template file
    */
   def openTemplate(template: String): Unit = {
     val lines = template.split("\n")
@@ -90,7 +90,7 @@ private[mllib] class FeatureIndex extends Serializable {
    * Parse the feature file. If Sentences or paragraphs are defined as a unit
    * for processing, they should be saved in a string. Multiple units are saved
    * in the RDD.
-   * @param train
+   * @param train the unit source file
    * @return
    */
   def openTagSet(train: String): FeatureIndex = {
@@ -141,10 +141,6 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  /**
-   * Expand the feature size based on template.
-   * @param freq
-   */
   def shrink(freq: Integer): Unit = {
     var newMaxId: Int = 0
     val key: String = null
@@ -171,7 +167,6 @@ private[mllib] class FeatureIndex extends Serializable {
   /**
    * Set node relationship and its feature index.
    * Node represents a word.
-   * @param tagger
    */
   def rebuildFeatures(tagger: Tagger): Unit = {
     var cur: Int = 0
@@ -217,7 +212,6 @@ private[mllib] class FeatureIndex extends Serializable {
 
   /**
    * Build feature index
-   * @param tagger
    */
   def buildFeatures(tagger: Tagger): Unit = {
     var os: String = null
@@ -253,10 +247,6 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  /**
-   * @param src
-   * @return
-   */
   def getId(src: String): Integer = {
     var n: Int = maxid
     var idx: Int = 0
@@ -283,13 +273,6 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 
-  /**
-   * Apply template to source files
-   * @param src
-   * @param idx
-   * @param tagger
-   * @return
-   */
   def applyRule(src: String, idx: Integer, tagger: Tagger): String = {
     var dest: String = ""
     var r: String = ""
@@ -311,12 +294,6 @@ private[mllib] class FeatureIndex extends Serializable {
     dest
   }
 
-  /**
-   * @param src
-   * @param pos
-   * @param tagger
-   * @return
-   */
   def getIndex(src: String, pos: Integer, tagger: Tagger): String = {
     var neg: Integer = 1
     var col: Integer = 0
@@ -422,12 +399,7 @@ private[mllib] class FeatureIndex extends Serializable {
     p
   }
 
-  /**
-   * Return the model in text format
-   * @param sc
-   * @return
-   */
-  def saveModelTxt(sc: SparkContext): RDD[String] = {
+  def saveModelTxt(sc: SparkContext): ArrayBuffer[String] = {
     var y_str: String = ""
     var i: Int = 0
     var templ_str: String = ""
@@ -472,12 +444,9 @@ private[mllib] class FeatureIndex extends Serializable {
       contents.append(alpha(i) + "\n")
       i += 1
     }
-    sc.parallelize(contents)
+    contents
   }
 
-  /**
-   * @return
-   */
   def saveModel(): String = {
     var contents: String = ""
     var i: Int = 0
@@ -549,4 +518,3 @@ private[mllib] class FeatureIndex extends Serializable {
     }
   }
 }
-

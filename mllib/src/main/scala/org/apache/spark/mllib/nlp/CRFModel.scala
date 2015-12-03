@@ -28,7 +28,6 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.apache.spark.sql.{Row, SQLContext}
 
-@Since("1.6.0")
 class CRFModel(val CRFSeries: RDD[String])
   extends Saveable with Serializable with PMMLExportable {
   override def save(sc: SparkContext, path: String): Unit = {

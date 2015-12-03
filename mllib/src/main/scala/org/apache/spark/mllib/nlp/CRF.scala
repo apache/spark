@@ -22,7 +22,7 @@ import org.apache.spark.rdd.RDD
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.annotation.DeveloperApi
 
-private[mllib] class CRF {
+private[mllib] class CRF extends Serializable{
   private val freq: Integer = 1
   private val maxiter: Integer = 100000
   private val cost: Double = 1.0
@@ -31,13 +31,13 @@ private[mllib] class CRF {
   private val threadNum: Integer = Runtime.getRuntime.availableProcessors()
   private val threadPool: Array[CRFThread] = new Array[CRFThread](threadNum)
   private var featureIdx: FeatureIndex = new FeatureIndex()
-  private var modelTxt: RDD[String] = null
+  private var modelTxt: ArrayBuffer[String] = null
 
   /**
-   * Verify the CRF model
-   * @param test
-   * @param model
-   * @return
+   * Internal method to verify the CRF model
+   * @param test the same source in the CRFLearn
+   * @param model the output from CRFLearn
+   * @return the source with predictive labels
    */
   def verify(test: String,
              model: String): String = {
@@ -51,10 +51,10 @@ private[mllib] class CRF {
   }
 
   /**
-   * Train the CRF model
-   * @param template
-   * @param train
-   * @return
+   * Internal method to train the CRF model
+   * @param template the template to train the model
+   * @param train the source for the training
+   * @return the model of the source
    */
   def learn(template: String,
             train: String): String = {
@@ -78,17 +78,18 @@ private[mllib] class CRF {
 
   /**
    * Get model details in text format
-   * @return
+   * @return the model and parameters in the training
+   *         for debugging and trouble solving
    */
-  def getModelTxt(): RDD[String] = {
+  def getModelTxt(): ArrayBuffer[String] = {
     modelTxt
   }
 
   /**
-   * Parse segments in the sentences or paragraph
-   * @param tagger
-   * @param featureIndex
-   * @param alpha
+   * Parse segments in the unit sentences or paragraphs
+   * @param tagger the tagger in the template
+   * @param featureIndex the index of the feature
+   * @param alpha the model
    */
 
   def runCRF(tagger: ArrayBuffer[Tagger], featureIndex: FeatureIndex,
@@ -161,6 +162,7 @@ private[mllib] class CRF {
 
   /**
    * Use multiple threads to parse the segments
+   * in a unit sentence or paragraph.
    */
   class CRFThread extends Thread {
     var x: ArrayBuffer[Tagger] = null
@@ -195,72 +197,95 @@ private[mllib] class CRF {
       }
     }
   }
+
 }
 
 
 @DeveloperApi
 object CRF {
   @transient var sc: SparkContext = _
+
   /**
-   * Get part of templates and paragraphs from RDD
    * Train CRF Model
-   * @param template
-   * @param train
-   * @return
+   * A word's context is its sentence or its nearby
+   * paragraph and the sentence or nearby paragraph will
+   * not be very long. So A sentence or paragraph will be
+   * processed in a node to reduce partition and networking
+   * costs. Multiple sentences or paragraphs are
+   * collected from multiple nodes to create the overall result.
+   * A unit template is a string in the RDD.
+   * A unit sentence or paragraph is a string in the RDD.
+   *
+   * Feature file format
+   * word|word characteristic|designated label
+   * Examples are in CRFTests.scala
+   *
+   * @param templates Source templates for training the model
+   * @param features Source files for training the model
+   * @return Model of a unit
    */
-  def runCRF(template: RDD[String],
-             train: RDD[String]): RDD[String] = {
+  def runCRF(templates: RDD[String],
+             features: RDD[String]): RDD[String] = {
     val crf = new CRF()
-    val templates: Array[String] = template.toLocalIterator.toArray
-    val features: Array[String] = train.toLocalIterator.toArray
-    val model: ArrayBuffer[String] = new ArrayBuffer[String]()
-    var i: Int = 0
-    var j: Int = 0
-    sc = template.sparkContext
-    while (i < templates.length) {
-      while (j < features.length) {
-        model.append(crf.learn(templates(i), features(j)))
-        j += 1
+    val template: Array[String] = templates.toLocalIterator.toArray
+    sc = features.sparkContext
+    val finalArray = features.flatMap { iter =>
+      var i: Int = 0
+      var str: String = ""
+      val output: ArrayBuffer[String] = new ArrayBuffer[String]()
+      while (i < template.length) {
+        str = crf.learn(template(i), iter)
+        val model: Array[String] = str.split("\n")
+        output.appendAll(model)
+        i += 1
       }
-      i += 1
-    }
-    sc.parallelize(model)
+      output
+    }.collect()
+    sc.parallelize(finalArray)
   }
 
   /**
-   * Verify CRF model after call runCRF and get the model.
-   * @param test
-   * @param model
-   * @return
+   * Verify CRF model.
+   * The model is the result from CRF train. If the predicted
+   * labels match the designated labels in the test file, the
+   * model is valid.
+   *
+   * Test result format:
+   * word|word characteristic|designated label|predicted label
+   * Examples are in CRFTests.scala
+   *
+   * @param tests  Source files to be verified
+   * @param models Model files after call the CRF learn
+   * @return Source files with the predictive labels
    */
-  def verifyCRF(test: RDD[String],
-                model: RDD[String]): RDD[String] = {
+  def verifyCRF(tests: RDD[String],
+                models: RDD[String]): RDD[String] = {
     val crf = new CRF()
-    val tests: Array[String] = test.toLocalIterator.toArray
-    val models: Array[String] = model.toLocalIterator.toArray
-    val result: ArrayBuffer[String] = new ArrayBuffer[String]()
-    var i: Int = 0
-    var j: Int = 0
-    sc = test.sparkContext
-    while (i < tests.length) {
-      while (j < models.length) {
-        result.append(crf.verify(tests(i), models(j)))
-        j += 1
-      }
-      i += 1
-    }
-    sc.parallelize(result)
+    val test: Array[String] = tests.toLocalIterator.toArray
+    val model: Array[String] = models.toLocalIterator.toArray
+    sc = tests.sparkContext
+    val finalArray = test.indices.map(idx => {
+      var str: String = ""
+      str = crf.verify(test(idx), model(idx))
+      str
+    })
+    sc.parallelize(finalArray)
   }
 
   /**
-   * Get CRF model detail in texts.
-   * @return
+   * Get CRF model detail in texts. It is for debugging.
+   * @return The parameters and output in the training.
    */
   def getModelTxt(): CRFModel = {
     val crf = new CRF()
-    new CRFModel(crf.getModelTxt())
+    val modelRDD = sc.parallelize(crf.getModelTxt())
+    new CRFModel(modelRDD)
   }
 
+  /**
+   * Get spark context
+   * @return the current spark context
+   */
   def getSparkContext: SparkContext = {
     if (sc != null) {
       sc
