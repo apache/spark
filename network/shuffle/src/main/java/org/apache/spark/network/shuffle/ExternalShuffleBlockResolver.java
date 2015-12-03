@@ -183,14 +183,13 @@ public class ExternalShuffleBlockResolver {
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
 
-    if ("org.apache.spark.shuffle.hash.HashShuffleManager".equals(executor.shuffleManager)) {
-      return getHashBasedShuffleBlockData(executor, blockId);
-    } else if ("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executor.shuffleManager)
-      || "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(executor.shuffleManager)) {
+    if ("sort".equals(executor.shuffleManager) || "tungsten-sort".equals(executor.shuffleManager)) {
       return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+    } else if ("hash".equals(executor.shuffleManager)) {
+      return getHashBasedShuffleBlockData(executor, blockId);
     } else {
       throw new UnsupportedOperationException(
-        "Unsupported shuffle manager: " + executor.shuffleManager);
+          "Unsupported shuffle manager: " + executor.shuffleManager);
     }
   }
 
