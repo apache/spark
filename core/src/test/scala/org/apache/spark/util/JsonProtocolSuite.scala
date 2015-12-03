@@ -111,7 +111,6 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
-    testCallsite(CallSite("happy", "birthday"))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
@@ -343,13 +342,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
     // "Callsite" was introduced in Spark 1.6.0
     val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8),
-      CallSite("short", "long"), Some(new RDDOperationScope("fable")))
+      "callsite", Some(new RDDOperationScope("fable")))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Parent IDs"})
       .removeField({ _._1 == "Scope"})
       .removeField({ _._1 == "Callsite"})
     val expectedRddInfo = new RDDInfo(
-      1, "one", 100, StorageLevel.NONE, Seq.empty, CallSite.empty, scope = None)
+      1, "one", 100, StorageLevel.NONE, Seq.empty, "", scope = None)
     assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
   }
 
@@ -395,11 +394,6 @@ class JsonProtocolSuite extends SparkFunSuite {
   private def testRDDInfo(info: RDDInfo) {
     val newInfo = JsonProtocol.rddInfoFromJson(JsonProtocol.rddInfoToJson(info))
     assertEquals(info, newInfo)
-  }
-
-  private def testCallsite(callsite: CallSite): Unit = {
-    val newCallsite = JsonProtocol.callsiteFromJson(JsonProtocol.callsiteToJson(callsite))
-    assert(callsite === newCallsite)
   }
 
   private def testStageInfo(info: StageInfo) {
@@ -726,8 +720,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK,
-      Seq(1, 4, 7), CallSite(a.toString, b.toString))
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7), a.toString)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
@@ -870,7 +863,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |      {
       |        "RDD ID": 101,
       |        "Name": "mayor",
-      |        "Callsite": {"Short Form": "101", "Long Form": "201"},
+      |        "Callsite": "101",
       |        "Parent IDs": [1, 4, 7],
       |        "Storage Level": {
       |          "Use Disk": true,
@@ -1273,7 +1266,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 1,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "1", "Long Form": "200"},
+      |          "Callsite": "1",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1317,7 +1310,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 2,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "2", "Long Form": "400"},
+      |          "Callsite": "2",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1335,7 +1328,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "3", "Long Form": "401"},
+      |          "Callsite": "3",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1379,7 +1372,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 3,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "3", "Long Form": "600"},
+      |          "Callsite": "3",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1397,7 +1390,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "4", "Long Form": "601"},
+      |          "Callsite": "4",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1415,7 +1408,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "5", "Long Form": "602"},
+      |          "Callsite": "5",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1459,7 +1452,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 4,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "4", "Long Form": "800"},
+      |          "Callsite": "4",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1477,7 +1470,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 5,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "5", "Long Form": "801"},
+      |          "Callsite": "5",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1495,7 +1488,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 6,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "6", "Long Form": "802"},
+      |          "Callsite": "6",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
@@ -1513,7 +1506,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |        {
       |          "RDD ID": 7,
       |          "Name": "mayor",
-      |          "Callsite": {"Short Form": "7", "Long Form": "803"},
+      |          "Callsite": "7",
       |          "Parent IDs": [1, 4, 7],
       |          "Storage Level": {
       |            "Use Disk": true,
