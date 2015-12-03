@@ -83,3 +83,5 @@ gen-java.*
 .*avpr
 org.apache.spark.sql.sources.DataSourceRegister
 .*parquet
+spark-deps-hadoop1
+spark-deps-hadoop24
