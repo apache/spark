@@ -68,13 +68,9 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     require(StreamingContext.getActive().isEmpty,
       "Cannot run test with already active streaming context")
 
-    // Current code assumes that:
-    // number of inputs = number of outputs = number of batches to be run
+    // Current code assumes that number of batches to be run = number of inputs
     val totalNumBatches = input.size
-    val nextNumBatches = totalNumBatches - numBatchesBeforeRestart
-    val initialNumExpectedOutputs = numBatchesBeforeRestart
-    val nextNumExpectedOutputs = expectedOutput.size - initialNumExpectedOutputs + 1
-    // because the last batch will be processed again
+    val batchDurationMillis = batchDuration.milliseconds
 
     // Setup the stream computation
     val checkpointDir = Utils.createTempDir(this.getClass.getSimpleName()).toString
@@ -92,20 +88,20 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     ssc.checkpoint(checkpointDir)
 
     // Do the computation for initial number of batches, create checkpoint file and quit
-    generateAndAssertOutput[V](ssc, batchDuration, checkpointDir, numBatchesBeforeRestart,
-      expectedOutput.take(numBatchesBeforeRestart), stopSparkContextAfterTest)
-
+    val beforeRestartOutput = generateOutput[V](ssc,
+      Time(batchDurationMillis * numBatchesBeforeRestart), checkpointDir, stopSparkContextAfterTest)
+    assertOutput(beforeRestartOutput, expectedOutput, beforeRestart = true)
     // Restart and complete the computation from checkpoint file
-    // scalastyle:off println
-    print(
+    logInfo(
       "\n-------------------------------------------\n" +
         "        Restarting stream computation          " +
         "\n-------------------------------------------\n"
     )
-    // scalastyle:on println
+
     val restartedSsc = new StreamingContext(checkpointDir)
-    generateAndAssertOutput[V](restartedSsc, batchDuration, checkpointDir, nextNumBatches,
-      expectedOutput.takeRight(nextNumExpectedOutputs), stopSparkContextAfterTest)
+    val afterRestartOutput = generateOutput[V](restartedSsc,
+      Time(batchDurationMillis * totalNumBatches), checkpointDir, stopSparkContextAfterTest)
+    assertOutput(afterRestartOutput, expectedOutput, beforeRestart = false)
   }
 
   protected def createContextForCheckpointOperation(batchDuration: Duration): StreamingContext = {
@@ -114,24 +110,22 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     new StreamingContext(SparkContext.getOrCreate(conf), batchDuration)
   }
 
-  private def generateAndAssertOutput[V: ClassTag](
+  private def generateOutput[V: ClassTag](
       ssc: StreamingContext,
-      batchDuration: Duration,
+      targetBatchTime: Time,
       checkpointDir: String,
-      numBatchesToRun: Int,
-      expectedOutput: Seq[Seq[V]],
       stopSparkContext: Boolean
-    ) {
+    ): Seq[Seq[V]] = {
     try {
+      val batchDuration = ssc.graph.batchDuration
       val batchCounter = new BatchCounter(ssc)
       ssc.start()
-      val numBatches = expectedOutput.size
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      // scalastyle:off println
+      val currentTime = clock.getTimeMillis()
+
       logInfo("Manual clock before advancing = " + clock.getTimeMillis())
-      clock.advance((batchDuration * numBatches).milliseconds)
+      clock.setTime(targetBatchTime.milliseconds)
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
-      // scalastyle:on println
 
       val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
         dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
@@ -139,7 +133,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
 
       eventually(timeout(10 seconds)) {
         ssc.awaitTerminationOrTimeout(10)
-        assert(batchCounter.getNumCompletedBatches === numBatchesToRun)
+        assert(batchCounter.getLastCompletedBatchTime === targetBatchTime)
       }
 
       eventually(timeout(10 seconds)) {
@@ -150,16 +144,29 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
         // are written to make sure that both of them have been written.
         assert(checkpointFilesOfLatestTime.size === 2)
       }
+      outputStream.output.map(_.flatten)
 
-      val output = outputStream.output.map(_.flatten)
-      val setComparison = output.zip(expectedOutput).forall { case (o, e) => o.toSet === e.toSet }
-      assert(setComparison, s"set comparison failed\n" +
-        s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
-        s"Generated output (${output.size} items): ${output.mkString("\n")}"
-      )
     } finally {
       ssc.stop(stopSparkContext = stopSparkContext)
     }
+  }
+
+  private def assertOutput[V: ClassTag](
+      output: Seq[Seq[V]],
+      expectedOutput: Seq[Seq[V]],
+      beforeRestart: Boolean): Unit = {
+    val expectedPartialOutput = if (beforeRestart) {
+      expectedOutput.take(output.size)
+    } else {
+      expectedOutput.takeRight(output.size)
+    }
+    val setComparison = output.zip(expectedPartialOutput).forall {
+      case (o, e) => o.toSet === e.toSet
+    }
+    assert(setComparison, s"set comparison failed\n" +
+      s"Expected output items:\n${expectedPartialOutput.mkString("\n")}\n" +
+      s"Generated output items: ${output.mkString("\n")}"
+    )
   }
 }
 
