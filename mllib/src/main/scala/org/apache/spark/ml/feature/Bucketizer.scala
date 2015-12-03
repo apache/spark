@@ -19,8 +19,10 @@ package org.apache.spark.ml.feature
 
 import java.{util => ju}
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Since, Experimental}
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
@@ -55,6 +57,11 @@ final class Bucketizer(override val uid: String)
       "Values at -inf, inf must be explicitly provided to cover all Double values; " +
       "otherwise, values outside the splits specified will be treated as errors.",
     Bucketizer.checkSplits)
+
+  /**
+   * Method for calling from Python code (PySpark).
+   */
+  def getJavaSplits: java.util.List[Double] = $(splits).toSeq.asJava
 
   /** @group getParam */
   def getSplits: Array[Double] = $(splits)
