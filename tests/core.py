@@ -358,20 +358,6 @@ class CoreTest(unittest.TestCase):
             if failed:
                 raise Exception("Failed a doctest")
 
-    def test_default_config_gen(self):
-
-        cfg = configuration.default_config()
-
-        # making sure some basic building blocks are present:
-        assert "[core]" in cfg
-        assert "dags_folder" in cfg
-        assert "sql_alchemy_conn" in cfg
-        assert "fernet_key" in cfg
-
-        # making sure replacement actually happened
-        assert "{AIRFLOW_HOME}" not in cfg
-        assert "{FERNET_KEY}" not in cfg
-
     def test_variable_set_get_round_trip(self):
         Variable.set("tested_var_set_id", "Monday morning breakfast")
         assert "Monday morning breakfast" == Variable.get("tested_var_set_id")
@@ -392,32 +378,6 @@ class CoreTest(unittest.TestCase):
                                              default_var=default_value,
                                              deserialize_json=True)
 
-    def test_duplicate_dependencies(self):
-
-        regexp = "Dependency (.*)runme_0(.*)run_after_loop(.*) " \
-                 "already registered"
-
-        with self.assertRaisesRegexp(AirflowException, regexp):
-            self.runme_0.set_downstream(self.run_after_loop)
-
-        with self.assertRaisesRegexp(AirflowException, regexp):
-            self.run_after_loop.set_upstream(self.runme_0)
-
-    def test_cyclic_dependencies_1(self):
-
-        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
-        with self.assertRaisesRegexp(AirflowException, regexp):
-            self.runme_0.set_upstream(self.run_after_loop)
-
-    def test_cyclic_dependencies_2(self):
-        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
-        with self.assertRaisesRegexp(AirflowException, regexp):
-            self.run_after_loop.set_downstream(self.runme_0)
-
-    def test_cyclic_dependencies_3(self):
-        regexp = "Cycle detected in DAG. (.*)runme_0(.*)"
-        with self.assertRaisesRegexp(AirflowException, regexp):
-            self.run_this_last.set_downstream(self.runme_0)
 
 class CliTests(unittest.TestCase):
 
