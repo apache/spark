@@ -223,6 +223,33 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
 }
 
 /**
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT `(id)?+.+` FROM ...".
+ *
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
+ */
+case class UnresolvedRegex(expr: String, table: Option[String]) extends Star with Unevaluable {
+
+  override def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = {
+    val expandedAttributes: Seq[Attribute] = table match {
+      // If there is no table specified, use all input attributes that match expr
+      case None => input.filter(_.name.matches(expr))
+      // If there is a table, pick out attributes that are part of this table that match expr
+      case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
+        .filter(_.name.matches(expr))
+    }
+    expandedAttributes.zip(input).map {
+      case (n: NamedExpression, _) => n
+      case (e, originalAttribute) =>
+        Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
+    }
+  }
+
+  override def toString: String = table.map(_ + ".").getOrElse("") + expr
+}
+
+/**
  * Used to assign new names to Generator's output, such as hive udtf.
  * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
  * as follows:
