@@ -344,12 +344,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
       val appIdRoot = new URL(buildURL(appId, ""))
       val rootUiPage = HistoryServerSuite.getUrl(appIdRoot)
-      logInfo(s"$appIdRoot ->[${rootUiPage.length}] \n$rootUiPage")
-      // sanity check
+      logDebug(s"$appIdRoot ->[${rootUiPage.length}] \n$rootUiPage")
+      // sanity check to make sure filter is chaining calls
       rootUiPage should not be empty
 
       def getAppUI: SparkUI = {
-        provider.getAppUI(appId, None).get
+        provider.getAppUI(appId, None).get._1
       }
 
       // selenium isn't that useful on failures...add our own reporting
@@ -377,7 +377,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       completedJobs() should have size 1
       getNumJobs("") should be(1)
       assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
-      dumpLogDir("Before executing job")
+      dumpLogDir("filesystem before executing second job")
+      logDebug(s"History provider: $provider")
 
       // second job needs a delay to ensure timestamps are different
       Thread.sleep(10)
@@ -390,33 +391,35 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
       val stdTimeout = timeout(20 seconds)
       logDebug(s"Explicitly reloading app UI for updated job information")
+/*
       eventually(stdTimeout, stdInterval) {
         // verifies that a reload picks up the change
         completedJobs() should have size 2
       }
-      // TODO: fix
+*/
       logDebug("waiting for UI to update")
       eventually(stdTimeout, stdInterval) {
-        // this fails with patch https://github.com/apache/spark/pull/6935 as well, I'm not sure why
         val finalFileStatus = fs.getFileStatus(logDirPath)
-        val numJobs = getNumJobs("")
-        assert(numJobs == 2,
+        assert(2 === getNumJobs(""),
           s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
+        assert(2 === getNumJobs("/jobs"),
+          s"job count under /jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
         }
 
-      getNumJobs("/jobs") should be (2)
-      // Here is where we still have an error.  /jobs is handled by another servlet,
-      // not controlled by the app cache.  We need some way for each of those servlets
-      // to know that they can get expired, so they can be detached and then the reloaded
-      // one can get re-attached
+      // and again, without any intermediate sleep, so relying on size changes rather than modtime
       d.count()
-      getNumJobs("/jobs") should be (3)
+      d.count()
+      eventually(stdTimeout, stdInterval) {
+        assert(4 === getNumJobs("/jobs"),
+          s"two jobs back-to-back not updated, server=$server\n")
+      }
+      sc.stop()
 
+      // TODO: check the app is now found as completed
     } finally {
       sc.stop()
     }
-    // now verify that the app moves from incomplete to complete
-    // TODO
+
     // no need to retain the test dir now the tests complete
     logDir.deleteOnExit();
 

@@ -138,7 +138,8 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
    * Look up the entry; update it if needed.
    * @param appId application ID
    * @param attemptId optional attempt ID
-   * @return the underlying cache entry -which can have its timestamp changed.
+   * @return the underlying cache entry -which can have its timestamp changed, and a flag to
+   *         indicate that the entry has changed
    */
   private def lookupAndUpdate(appId: String, attemptId: Option[String]): (CacheEntry, Boolean) = {
     metrics.lookupCount.inc()
@@ -150,21 +151,21 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
       entry = appCache.get(cacheKey)
     } else if (!entry.completed) {
       val now = clock.getTimeMillis()
-      if (now - entry.timestamp > refreshInterval) {
-        log.debug(s"Probing for updated application $cacheKey")
+      if (now - entry.probeTime > refreshInterval) {
+        log.debug(s"Probing @time $now for updated application $cacheKey -> $entry")
         metrics.updateProbeCount.inc()
         updated = time(metrics.updateProbeTimer) {
-          operations.isUpdated(appId, attemptId, entry.timestamp)
+          operations.isUpdated(appId, attemptId, entry.loadTime)
         }
         if (updated) {
           logDebug(s"refreshing $cacheKey")
           metrics.updateTriggeredCount.inc()
           appCache.refresh(cacheKey)
-          // and re-attempt the lookup
+          // and repeat the lookup
           entry = appCache.get(cacheKey)
         } else {
-          // update the timestamp to the time of this probe
-          entry.timestamp = now
+          // update the probe timestamp to the current time
+          entry.probeTime = now
         }
       }
     }
@@ -180,7 +181,7 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
    */
   def lookupCacheEntry(appId: String, attemptId: Option[String]): CacheEntry = {
     val entry = lookupAndUpdate(appId, attemptId)._1
-    new CacheEntry(entry.ui, entry.completed, entry.timestamp)
+    new CacheEntry(entry.ui, entry.completed, entry.data, entry.loadTime, entry.probeTime)
   }
 
   /**
@@ -240,7 +241,7 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
     metrics.loadCount.inc()
     time(metrics.loadTimer) {
       operations.getAppUI(appId, attemptId) match {
-        case Some(ui) =>
+        case Some((ui, data)) =>
           val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
           // attach the spark UI
           if (completed) {
@@ -251,7 +252,8 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
             operations.attachSparkUI(appId, attemptId, ui, completed)
           }
           // build the cache entry
-          new CacheEntry(ui, completed, clock.getTimeMillis())
+          val now = clock.getTimeMillis()
+          new CacheEntry(ui, completed, data, now, now)
         case None =>
           metrics.lookupFailureCount.inc()
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
@@ -296,7 +298,7 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
     sb.append(s"; entry count= ${appCache.size()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
-      case(key, entry) => sb.append(s"    $key -> $entry\n")
+      case(key, entry) => sb.append(s"  $key -> $entry\n")
     }
     sb.append("----\n")
     sb.append(metrics)
@@ -311,14 +313,16 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
  * @param ui Spark UI
  * @param completed: flag to indicated that the application has completed (and so
  *                 does not need refreshing)
- * @param timestamp timestamp in milliseconds. This may be updated during probes
+ * @param probeTime timestamp in milliseconds. This may be updated during probes
  */
 private[history] final class CacheEntry(val ui: SparkUI, val completed: Boolean,
-    var timestamp: Long) {
+    val data: Option[Any],
+    val loadTime: Long,
+    var probeTime: Long) {
 
   /** string value is for test assertions */
   override def toString: String = {
-    s"UI $ui, completed=$completed, timestamp=$timestamp"
+    s"UI $ui, data=$data, completed=$completed, loadTime=$loadTime probeTime=$probeTime"
   }
 }
 
@@ -405,9 +409,9 @@ private[history] trait ApplicationCacheOperations {
    * Get the application UI.
    * @param appId application ID
    * @param attemptId attempt ID
-   * @return The Spark UI
+   * @return If found, the Spark UI and any history information to be used in the cache
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Option[Any])]
 
   /**
    * Attach a reconstructed UI.
@@ -433,9 +437,11 @@ private[history] trait ApplicationCacheOperations {
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @param data any other data the operations implementation can use to determine age
    * @return true if the application was updated since `updateTimeMillis`
    */
-  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long): Boolean
+  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
+      data: Option[Any] = None): Boolean
 }
 
 /**

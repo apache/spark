@@ -56,7 +56,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
    * @return The application's UI, or None if application is not found.
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Option[Any])]
 
   /**
    * Called when the server is shutting down.
@@ -100,11 +100,12 @@ private[history] abstract class ApplicationHistoryProvider {
    * @param appId application ID
    * @param attemptId optional attempt ID
    * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @param data any other data the operations implementation can use to determine age
    * @return true if the application was updated since `updateTimeMillis`
    */
-  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long): Boolean = {
+  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
+      data: Option[Any]): Boolean = {
     false
   }
-
 
 }

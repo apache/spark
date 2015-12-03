@@ -161,15 +161,16 @@ class HistoryServer(
    * Get the application UI and whether or not it is completed
    * @param appId application ID
    * @param attemptId attempt ID
-   * @return (the Spark UI, completed flag)
+   * @return If found, the Spark UI and any history information to be used in the cache
    */
-  override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
+  override def getAppUI(appId: String, attemptId: Option[String])
+      : Option[(SparkUI, Option[Any])] = {
     provider.getAppUI(appId, attemptId)
   }
 
   override def isUpdated(appId: String, attemptId: Option[String],
-      updateTimeMillis: Long): Boolean = {
-    provider.isUpdated(appId, attemptId, updateTimeMillis)
+      updateTimeMillis: Long, data: Option[Any]): Boolean = {
+    provider.isUpdated(appId, attemptId, updateTimeMillis, data)
   }
 
   /**
