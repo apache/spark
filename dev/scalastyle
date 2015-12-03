@@ -17,16 +17,15 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver scalastyle > scalastyle.txt
-echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver test:scalastyle >> scalastyle.txt
-# Check style with YARN built too
-echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 scalastyle >> scalastyle.txt
-echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 test:scalastyle >> scalastyle.txt
-
-ERRORS=$(cat scalastyle.txt | awk '{if($1~/error/)print}')
 mkdir -p target
-rm -f target/scalastyle.txt
-mv scalastyle.txt target/
+OUTPUT="target/scalastyle.txt"
+echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver scalastyle > "$OUTPUT"
+echo -e "q\n" | build/sbt -Pkinesis-asl -Phive -Phive-thriftserver test:scalastyle >> "$OUTPUT"
+# Check style with YARN built too
+echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 scalastyle >> "$OUTPUT"
+echo -e "q\n" | build/sbt -Pkinesis-asl -Pyarn -Phadoop-2.2 test:scalastyle >> "$OUTPUT"
+
+ERRORS=$(cat "$OUTPUT" | awk '{if($1~/error/)print}')
 
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
