@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.CharArrayWriter
+import java.io.{OutputStreamWriter, Writer, OutputStream, CharArrayWriter}
 import java.util.Properties
 
 import scala.language.implicitConversions
@@ -165,7 +165,7 @@ class DataFrame private[sql](
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
    */
-  private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
+  def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val sb = new StringBuilder
     val takeResult = take(numRows + 1)
@@ -393,6 +393,15 @@ class DataFrame private[sql](
   // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
   // scalastyle:on println
+
+  def show(numRows: Int, truncate: Boolean, outputStream: OutputStream): Unit = {
+    val writer = new OutputStreamWriter(outputStream, "UTF-8")
+    writer.write(showString(numRows, truncate))
+  }
+
+  def show(numRows: Int, truncate: Boolean, writer: Writer): Unit = {
+    writer.write(showString(numRows, truncate))
+  }
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
