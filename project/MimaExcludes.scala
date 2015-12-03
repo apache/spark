@@ -155,6 +155,10 @@ object MimaExcludes {
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
+      ) ++ Seq(
+        // SPARK-3580 Add getNumPartitions method to JavaRDD
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
       )
     case v if v.startsWith("1.5") =>
       Seq(
