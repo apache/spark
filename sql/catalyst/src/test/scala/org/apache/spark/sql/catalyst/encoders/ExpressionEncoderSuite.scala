@@ -138,6 +138,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(new JavaSerializable(15), "java object")(
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
+  encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
   // test product encoders
   private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
     encodeDecodeTest(input, input.getClass.getSimpleName)
@@ -286,16 +288,19 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val boundEncoder = encoder.resolve(schema, outers).bind(schema)
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
+          // Using '>' as margin character here because schema tree string contains '|' as the first
+          // non-whitespace space and would be unexpectedly stripped by `stripMargin`, which uses
+          // '|' as the default margin character.
           fail(
            s"""Exception thrown while decoding
-              |Converted: $row
-              |Schema: ${schema.mkString(",")}
-              |${encoder.schema.treeString}
-              |
-              |Encoder:
-              |$boundEncoder
-              |
-            """.stripMargin, e)
+              >Converted: $row
+              >Schema: ${schema.mkString(",")}
+              >${encoder.schema.treeString}
+              >
+              >Encoder:
+              >$boundEncoder
+              >
+            """.stripMargin('>'), e)
       }
 
       val isCorrect = (input, convertedBack) match {
@@ -329,7 +334,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
         fail(
           s"""Encoded/Decoded data does not match input data
              |
-             |in:  $input
+             |in: $input
              |out: $convertedBack
              |types: $types
              |

@@ -253,22 +253,27 @@ case class ExpressionEncoder[T](
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     val optimizedPlan = SimplifyCasts(analyzedPlan)
 
-    // In order to construct instances of inner classes (for example those declared in a REPL cell),
-    // we need an instance of the outer scope.  This rule substitues those outer objects into
-    // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
-    // registry.
-    copy(fromRowExpression = optimizedPlan.expressions.head.children.head transform {
+    val fillInOuterPointer: PartialFunction[Expression, Expression] = {
       case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
         val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
         if (outer == null) {
           throw new AnalysisException(
             s"Unable to generate an encoder for inner class `${n.cls.getName}` without access " +
-            s"to the scope that this class was defined in. " + "" +
-             "Try moving this class out of its parent class.")
+              "to the scope that this class was defined in. " +
+              "Try moving this class out of its parent class.")
         }
 
         n.copy(outerPointer = Some(Literal.fromObject(outer)))
-    })
+    }
+
+    val fromRowExpressionWithOuterPointer =
+      optimizedPlan.expressions.head.children.head.transform(fillInOuterPointer.orElse {
+        case m: MapObjects =>
+          val f = m.completeFunction transform fillInOuterPointer
+          MapObjects(m.function, m.inputData, m.elementType)(Some(f))
+      })
+
+    copy(fromRowExpression = fromRowExpressionWithOuterPointer)
   }
 
   /**

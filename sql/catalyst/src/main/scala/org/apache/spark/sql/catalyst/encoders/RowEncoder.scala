@@ -93,7 +93,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
+      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))()
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -193,7 +193,7 @@ object RowEncoder {
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
-          MapObjects(constructorFor, input, et),
+          MapObjects(constructorFor, input, et)(),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(

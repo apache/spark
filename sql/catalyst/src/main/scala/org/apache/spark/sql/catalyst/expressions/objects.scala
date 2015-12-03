@@ -115,7 +115,7 @@ case class Invoke(
     arguments: Seq[Expression] = Nil) extends Expression {
 
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = arguments.+:(targetObject)
+  override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -359,10 +359,27 @@ case class LambdaVariable(value: String, isNull: String, dataType: DataType) ext
 case class MapObjects(
     function: AttributeReference => Expression,
     inputData: Expression,
-    elementType: DataType) extends Expression {
+    elementType: DataType)(
+    completeFunctionCopy: Option[Expression] = None) extends Expression {
 
-  private lazy val loopAttribute = AttributeReference("loopVar", elementType)()
-  private lazy val completeFunction = function(loopAttribute)
+  lazy val completeFunction = completeFunctionCopy.getOrElse {
+    function(AttributeReference("loopVar", elementType)())
+  }
+
+  lazy val loopAttribute = completeFunction.collectFirst {
+    case a: AttributeReference if a.name == "loopVar" => a
+  }.get
+
+  override protected def otherCopyArgs: Seq[AnyRef] = completeFunctionCopy :: Nil
+
+  override def equals(obj: Any): Boolean = obj match {
+    case that: MapObjects =>
+      this.completeFunction == that.completeFunction &&
+      this.inputData == that.inputData &&
+      this.elementType == that.elementType
+
+    case _ => false
+  }
 
   private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
     case NullType =>
