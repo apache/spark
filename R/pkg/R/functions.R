@@ -516,22 +516,6 @@ setMethod("isnan",
             column(jc)
           })
 
-#' isnull
-#'
-#' Return true if the column is NULL.
-#'
-#' @rdname isnull
-#' @name isnull
-#' @family normal_funcs
-#' @export
-#' @examples \dontrun{isnull(df$c)}
-setMethod("isnull",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "isnull", x@jc)
-            column(jc)
-          })
-
 #' kurtosis
 #'
 #' Aggregate function: returns the kurtosis of the values in a group.
