@@ -2028,4 +2028,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
+  test("SPARK-12063: Group by Column Number identifier") {
+    checkAnswer(
+      sql("SELECT a, SUM(b) FROM testData2 GROUP BY 1"),
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
+  }
+
 }

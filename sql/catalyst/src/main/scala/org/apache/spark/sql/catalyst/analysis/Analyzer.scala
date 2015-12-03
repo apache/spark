@@ -70,6 +70,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
+      ResolveGroupByReferences ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveSortReferences ::
@@ -175,6 +176,31 @@ class Analyzer(
 
       case Project(projectList, child) if child.resolved && hasUnresolvedAlias(projectList) =>
         Project(assignAliases(projectList), child)
+    }
+  }
+
+  /**
+   * Replaces queries of the form "SELECT expr FROM A GROUP BY 1"
+   * with a query of the form "SELECT expr FROM A GROUP BY expr"
+   */
+  object ResolveGroupByReferences extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case Aggregate(groups, aggs, child) =>
+        var newGroups = Seq[Expression]()
+        groups.foreach(group =>
+          newGroups = newGroups :+ (group match {
+            case clauseName if clauseName.prettyString forall Character.isDigit =>
+                aggs(group.prettyString.toInt - 1) match {
+                case u : UnresolvedAlias =>
+                  u.child
+                case a : Alias =>
+                  a.child
+              }
+            case _ => group
+          }))
+        Aggregate(newGroups, aggs, child)
+
     }
   }
 

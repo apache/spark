@@ -1103,16 +1103,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>
                 // Not a transformation so must be either project or aggregation.
-                var newChildren = Seq[ASTNode]()
-                children.foreach(child =>
-                  newChildren = newChildren :+ (child.getText match {
-                    case clauseName if clauseName forall Character.isDigit =>
-                      val Token("TOK_SELEXPR", columns) = selectClause.get.getChildren
-                        .get(clauseName.toInt - 1)
-                      columns(0)
-                    case _ => child
-                  }))
-                Aggregate(newChildren.map(nodeToExpr), selectExpressions, withLateralView)
+                Aggregate(children.map(nodeToExpr), selectExpressions, withLateralView)
               case _ => sys.error("Expect GROUP BY")
             }),
             groupingSetsClause.map(e => e match {
