@@ -496,7 +496,7 @@ private[sql] class JDBCRDD(
       }
       try {
         if (null != conn) {
-          if (!conn.getAutoCommit && !conn.isClosed) {
+          if (!conn.isClosed && !conn.getAutoCommit) {
             try {
               conn.commit()
             } catch {
