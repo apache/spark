@@ -203,6 +203,18 @@ This file is divided into 3 sections:
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
   <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
 
+  <!-- Import ordering. Currently warning only since there are lots of violations. -->
+  <check level="warning" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
+    <parameters>
+      <parameter name="groups">java,scala,3rdParty,spark</parameter>
+      <parameter name="group.java">javax?\..+</parameter>
+      <parameter name="group.scala">scala\..+</parameter>
+      <parameter name="group.3rdParty">(?!org\.apache\.spark\.).*</parameter>
+      <parameter name="group.spark">org\.apache\.spark\..*</parameter>
+    </parameters>
+  </check>
+
+
   <!-- ================================================================================ -->
   <!--                               rules we don't want                                -->
   <!-- ================================================================================ -->
