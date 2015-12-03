@@ -44,9 +44,12 @@ __all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
            'LDA', 'LDAModel']
 
 @inherit_doc
-class BisectingKMeansModel():
+class BisectingKMeansModel(JavaModelWrapper):
 
-    """A clustering model derived from the bisecting k-means method.
+    """
+    .. note:: Experimental
+
+    A clustering model derived from the bisecting k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = BisectingKMeans.train(
@@ -62,25 +65,21 @@ class BisectingKMeansModel():
     .. versionadded:: 1.6.0
     """
 
-    def __init__(self, java_model):
-        self.java_model = java_model
-
     @property
     @since('1.0.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
-        return [c.toArray() for c in self.java_model.clusterCenters()]
+        return [c.toArray() for c in self.call("clusterCenters")]
 
     @since('1.6.0')
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         best = 0
-        model = self.java_model
         if isinstance(x, RDD):
-            return x.map(lambda x: model.predict(_convert_to_vector(x)))
+            return x.map(self.predict)
 
         x = _convert_to_vector(x)
-        return model.predict(x)
+        return self._java_model.predict(x)
 
     @since('1.6.0')
     def computeCost(self, point):
@@ -88,7 +87,52 @@ class BisectingKMeansModel():
         Return the Bisecting K-means cost (sum of squared distances of points to
         their nearest center) for this model on the given data.
         """
-        return self.java_model.computeCost(_convert_to_vector(point))
+        return self._java_model.computeCost(_convert_to_vector(point))
+
+    
+@inherit_doc
+class BisectingKMeans:
+    """
+    A bisecting k-means algorithm based on the paper "A comparison of document clustering techniques"
+    by Steinbach, Karypis, and Kumar, with modification to fit Spark.
+    The algorithm starts from a single cluster that contains all points.
+    Iteratively it finds divisible clusters on the bottom level and bisects each of them using
+    k-means, until there are `k` leaf clusters in total or no leaf clusters are divisible.
+    The bisecting steps of clusters on the same level are grouped together to increase parallelism.
+    If bisecting all divisible clusters on the bottom level would result more than `k` leaf clusters,
+    larger clusters get higher priority.
+
+    Based on [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
+    Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
+    KDD Workshop on Text Mining, 2000.]]
+
+    .. versionadded:: 1.6.0
+    """
+
+    @since('1.6.0')
+    def __init__(self, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=42):
+        """
+        :param k: the desired number of leaf clusters (default: 4). The actual number could be smaller if
+        there are no divisible leaf clusters.
+        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
+        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum proportion
+        of points (if < 1.0) of a divisible cluster (default: 1)
+        :param seed: a random seed (default: 42)
+        """
+        self.k = k
+        self.maxIterations = maxIterations
+        self.minDivisibleClusterSize = minDivisibleClusterSize
+        self.seed = seed
+
+    @since('1.6.0')
+    def run(rdd):
+        """
+        Runs the bisecting k-means algorithm return the model
+        :param rdd: input RDD of vectors
+        """
+        java_model = sc._jvm.org.apache.spark.mllib.clustering.BisectingKMeans(
+            self.k, self.maxIterations, self.minDivisibleClusterSize, self.seed)
+        return java_model.run(input)
 
 @inherit_doc
 class KMeansModel(Saveable, Loader):
