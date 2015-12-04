@@ -57,6 +57,8 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // A tracker to track all the input stream information as well as processed record number
   var inputInfoTracker: InputInfoTracker = null
 
+  var executorAllocationManager: ExecutorAllocationManager = null
+
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
 
   def start(): Unit = synchronized {
@@ -79,8 +81,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
+    executorAllocationManager = new ExecutorAllocationManager(ssc.sparkContext, receiverTracker,
+      ssc.conf, ssc.graph.batchDuration.milliseconds, clock)
+    ssc.addStreamingListener(executorAllocationManager)
     receiverTracker.start()
     jobGenerator.start()
+    executorAllocationManager.start()
     logInfo("Started JobScheduler")
   }
 
@@ -91,6 +97,10 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     if (receiverTracker != null) {
       // First, stop receiving
       receiverTracker.stop(processAllReceivedData)
+    }
+
+    if (executorAllocationManager != null) {
+      executorAllocationManager.stop()
     }
 
     // Second, stop generating jobs. If it has to process all received data,
