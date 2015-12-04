@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,22 +17,14 @@
 # limitations under the License.
 #
 
-import os
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+SPARK_ROOT_DIR="$(dirname $SCRIPT_DIR)"
 
-SPARK_HOME = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../"))
-USER_HOME = os.environ.get("HOME")
-ERROR_CODES = {
-    "BLOCK_GENERAL": 10,
-    "BLOCK_RAT": 11,
-    "BLOCK_SCALA_STYLE": 12,
-    "BLOCK_PYTHON_STYLE": 13,
-    "BLOCK_R_STYLE": 14,
-    "BLOCK_DOCUMENTATION": 15,
-    "BLOCK_BUILD": 16,
-    "BLOCK_MIMA": 17,
-    "BLOCK_SPARK_UNIT_TESTS": 18,
-    "BLOCK_PYSPARK_UNIT_TESTS": 19,
-    "BLOCK_SPARKR_UNIT_TESTS": 20,
-    "BLOCK_JAVA_STYLE": 21,
-    "BLOCK_TIMEOUT": 124
-}
+ERRORS=$($SCRIPT_DIR/../build/mvn -Pkinesis-asl -Pyarn -Phive -Phive-thriftserver checkstyle:check | grep ERROR)
+
+if test ! -z "$ERRORS"; then
+    echo -e "Checkstyle checks failed at following occurrences:\n$ERRORS"
+    exit 1
+else
+    echo -e "Checkstyle checks passed."
+fi
