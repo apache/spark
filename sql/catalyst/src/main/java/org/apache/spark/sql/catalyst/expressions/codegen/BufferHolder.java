@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 
@@ -26,6 +29,8 @@ import org.apache.spark.unsafe.Platform;
 public class BufferHolder {
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
+
+  private final Logger logger = LoggerFactory.getLogger(BufferHolder.class);
 
   public BufferHolder() {
     this(64);
@@ -42,7 +47,18 @@ public class BufferHolder {
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
-      final byte[] tmp = new byte[length * 2];
+      final byte[] tmp;
+      try {
+        tmp = new byte[length * 2];
+      } catch (NegativeArraySizeException e) {
+        String errorMessage =
+          "NegativeArraySizeException is triggered. The current length is " + buffer.length +
+          ". The new length is " + length + " * 2. totalSize is " + totalSize() +
+          ". neededSize is " + neededSize + ". The cursor is " + cursor;
+        logger.error(errorMessage);
+        throw new NegativeArraySizeException(errorMessage);
+      }
+
       Platform.copyMemory(
         buffer,
         Platform.BYTE_ARRAY_OFFSET,

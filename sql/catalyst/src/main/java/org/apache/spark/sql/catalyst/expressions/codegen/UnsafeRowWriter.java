@@ -24,6 +24,8 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A helper class to write data into global row buffer using `UnsafeRow` format,
@@ -36,6 +38,8 @@ public class UnsafeRowWriter {
   private int startingOffset;
   private int nullBitsSize;
   private UnsafeRow row;
+
+  private final Logger logger = LoggerFactory.getLogger(UnsafeRowWriter.class);
 
   public void initialize(BufferHolder holder, int numFields) {
     this.holder = holder;
@@ -193,7 +197,17 @@ public class UnsafeRowWriter {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
-    holder.grow(roundedSize, row);
+    try {
+      holder.grow(roundedSize, row);
+    } catch (NegativeArraySizeException e) {
+      String errorMessage =
+        "NegativeArraySizeException is triggered by " +
+        "holder.grow(roundedSize, row). ordinal is " + ordinal +
+        ". UTF8String size is " + numBytes +
+        ". roundedSize is " + roundedSize + ". UnsafeRow is " + row.toString();
+      logger.error(errorMessage, e);
+      throw e;
+    }
 
     zeroOutPaddingBytes(numBytes);
 
