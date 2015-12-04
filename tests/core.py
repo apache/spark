@@ -378,6 +378,20 @@ class CoreTest(unittest.TestCase):
                                              default_var=default_value,
                                              deserialize_json=True)
 
+    def test_parameterized_config_gen(self):
+
+        cfg = configuration.parameterized_config(configuration.DEFAULT_CONFIG)
+
+        # making sure some basic building blocks are present:
+        assert "[core]" in cfg
+        assert "dags_folder" in cfg
+        assert "sql_alchemy_conn" in cfg
+        assert "fernet_key" in cfg
+
+        # making sure replacement actually happened
+        assert "{AIRFLOW_HOME}" not in cfg
+        assert "{FERNET_KEY}" not in cfg
+
 
 class CliTests(unittest.TestCase):
 
