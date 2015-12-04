@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
 import org.apache.spark.sql.types._
 
+object BoundReference {
+  def apply(
+    ordinal: Int,
+    dataType: DataType,
+    nullable: Boolean,
+    originalName: String): BoundReference =
+      BoundReference(ordinal, dataType, nullable).setOriginalName(originalName)
+}
+
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value
  * to be retrieved more efficiently.  However, since operations like column pruning can change
@@ -58,7 +67,14 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     }
   }
 
-  override def name: String = s"i[$ordinal]"
+  override def name: String = originalName.getOrElse(s"i[$ordinal]")
+
+  private var originalName: Option[String] = None
+
+  def setOriginalName(name: String): BoundReference = {
+    originalName = Some(name)
+    this
+  }
 
   override def toAttribute: Attribute = throw new UnsupportedOperationException
 
@@ -92,7 +108,7 @@ object BindReferences extends Logging {
             sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
           }
         } else {
-          BoundReference(ordinal, a.dataType, a.nullable)
+          BoundReference(ordinal, a.dataType, a.nullable, a.name)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

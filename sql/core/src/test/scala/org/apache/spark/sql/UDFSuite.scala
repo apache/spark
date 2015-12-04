@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -246,5 +247,22 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
       testData2)
+  }
+
+  test("Column aliases are ignored in callUDF while using struct()") {
+    sqlContext.udf.register("mydef", (r: Row) => { r.getAs("Text").asInstanceOf[String] })
+
+    val testDoc1 = sqlContext.createDataFrame(Seq(("test1", "1"), ("test2", "2")))
+      .toDF("myText", "id")
+    val df1 = testDoc1
+      .select(callUDF("mydef", struct($"myText".as("Text"), $"id".as("label"))).as("col1"))
+
+    val json = sparkContext.parallelize(
+      """{"myText": "test1", "id": "1"}""" ::
+      """{"myText": "test2", "id": "2"}""" :: Nil)
+
+    val testDoc2 = sqlContext.read.json(json)
+    val df2 = testDoc2
+      .select(callUDF("mydef", struct($"myText".as("Text"), $"id".as("label"))).as("col1"))
   }
 }
