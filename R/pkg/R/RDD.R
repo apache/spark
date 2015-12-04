@@ -317,7 +317,8 @@ setMethod("getNumPartitions",
             callJMethod(getJRDD(x), "getNumPartitions")
           })
 
-#' numPartitions is the same as getNumPartitions
+#' Gets the number of partitions of an RDD, the same as getNumPartitions.
+#' But this function has been deprecated, please use getNumPartitions.
 #'
 #' @rdname getNumPartitions
 #' @aliases numPartitions,RDD-method
@@ -325,6 +326,7 @@ setMethod("getNumPartitions",
 setMethod("numPartitions",
           signature(x = "RDD"),
           function(x) {
+            .Deprecated("getNumPartitions")
             getNumPartitions(x)
           })
 
