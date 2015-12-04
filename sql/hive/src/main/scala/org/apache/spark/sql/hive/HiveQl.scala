@@ -1098,7 +1098,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         // (if there is a group by) or a script transformation.
         val withProject: LogicalPlan = transformation.getOrElse {
           val selectExpressions =
-            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias)
+            select.getChildren.asScala.flatMap(selExprNodeToExpr).map(UnresolvedAlias(_))
           Seq(
             groupByClause.map(e => e match {
               case Token("TOK_GROUPBY", children) =>

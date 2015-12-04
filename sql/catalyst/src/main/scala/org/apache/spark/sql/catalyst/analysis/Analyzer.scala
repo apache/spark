@@ -149,12 +149,12 @@ class Analyzer(
       exprs.zipWithIndex.map {
         case (expr, i) =>
           expr transform {
-            case u @ UnresolvedAlias(child) => child match {
+            case u @ UnresolvedAlias(child, _) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case other => Alias(other, s"_c$i")()
+              case other => Alias(other, u.aliasName.getOrElse(s"_c$i"))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -287,7 +287,7 @@ class Analyzer(
           }
         }
         val newGroupByExprs = groupByExprs.map {
-          case UnresolvedAlias(e) => e
+          case UnresolvedAlias(e, _) => e
           case e => e
         }
         Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
@@ -352,19 +352,19 @@ class Analyzer(
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child, resolver)
-            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _)) if containsStar(args) =>
+            case UnresolvedAlias(f @ UnresolvedFunction(_, args, _), _) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               UnresolvedAlias(child = f.copy(children = newChildren)) :: Nil
             case Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               Alias(child = f.copy(children = newChildren), name)() :: Nil
-            case UnresolvedAlias(c @ CreateArray(args)) if containsStar(args) =>
+            case UnresolvedAlias(c @ CreateArray(args), _) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child, resolver)
                 case o => o :: Nil
               }
               UnresolvedAlias(c.copy(children = expandedArgs)) :: Nil
-            case UnresolvedAlias(c @ CreateStruct(args)) if containsStar(args) =>
+            case UnresolvedAlias(c @ CreateStruct(args), _) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child, resolver)
                 case o => o :: Nil

@@ -113,7 +113,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func)
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.prettyString))
 
     case expr: Expression => Alias(expr, expr.prettyString)()
   }
