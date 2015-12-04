@@ -206,6 +206,37 @@ setMethod("toDF", signature(x = "RDD"),
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param sqlContext SQLContext to use
+#' @param ... Path(s) of parquet file(s) to read.
+#' @return DataFrame
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' }
+
+read.json <- function(sqlContext, ...) {
+  # Allow the user to have a more flexible definiton of the text file path
+  paths <- if (length(list(...)) > 1) {
+    lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
+  } else {
+    as.list(suppressWarnings(normalizePath(splitString(...))))
+  }
+  # Convert a string vector of paths to a string containing comma separated paths
+  read <- callJMethod(sqlContext, "read")
+  sdf <- callJMethod(read, "json", paths)
+  dataFrame(sdf)
+}
+
+#' Create a DataFrame from a JSON file.
+#'
+#' Loads a JSON file (one object per line), returning the result as a DataFrame
+#' It goes through the entire dataset once to determine the schema. This function
+#' is deprecated, please use read.json.
+#'
+#' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return DataFrame
 #' @export
@@ -218,12 +249,8 @@ setMethod("toDF", signature(x = "RDD"),
 #' }
 
 jsonFile <- function(sqlContext, path) {
-  # Allow the user to have a more flexible definiton of the text file path
-  path <- suppressWarnings(normalizePath(path))
-  # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse = ",")
-  sdf <- callJMethod(sqlContext, "jsonFile", path)
-  dataFrame(sdf)
+  .Deprecated("read.json")
+  read.json(sqlContext, path)
 }
 
 

@@ -371,10 +371,21 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(bob$height, 176.5)
 })
 
-test_that("jsonFile() on a local file returns a DataFrame", {
-  df <- jsonFile(sqlContext, jsonPath)
+test_that("read.json() on a local file returns a DataFrame", {
+  df <- read.json(sqlContext, jsonPath)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
+  # read.json works with multiple input paths
+  jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
+  write.df(df, jsonPath2, "json", mode="overwrite")
+  jsonDF1 <- read.json(sqlContext, jsonPath, jsonPath2)
+  expect_is(jsonDF1, "DataFrame")
+  expect_equal(count(jsonDF1), 6)
+  jsonDF2 <- read.json(sqlContext, c(jsonPath, jsonPath2))
+  expect_is(jsonDF2, "DataFrame")
+  expect_equal(count(jsonDF2), 6)
+
+  unlink(jsonPath2)
 })
 
 test_that("jsonRDD() on a RDD with json string", {
