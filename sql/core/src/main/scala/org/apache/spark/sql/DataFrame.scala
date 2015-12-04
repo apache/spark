@@ -1252,21 +1252,12 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
-    val iter = colNames.iterator
-    var df = this
-    while (iter.hasNext) {
-      val colName = iter.next()
-      val shouldDrop = df.schema.exists(f => resolver(f.name, colName))
-      if (shouldDrop) {
-        val colsAfterDrop = df.schema.filter { field =>
-          val name = field.name
-          !resolver(name, colName)
-        }.map(f => Column(f.name))
-        df = df.select(colsAfterDrop : _*)
-      }
+    val remainingColumns = df.schema.filter(f => colNames.contains(f.name)).map(f=>Column(f.name))
+		if (remainingColumns.size == df.schema.size) {
+      this
+    } else {
+      df.select(remainingColumns: _*)
     }
-    df
   }
 
   /**
