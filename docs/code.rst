@@ -110,6 +110,8 @@ Variable                            Description
 ``{{ yesterday_ds }}``              yesterday's date as  ``YYYY-MM-DD``
 ``{{ tomorrow_ds }}``               tomorrow's date as  ``YYYY-MM-DD``
 ``{{ ds }}``                        the execution date as ``YYYY-MM-DD``
+``{{ ts }}``                        same as ``execution_date.isoformat()``
+``{{ ts_nodash }}``                 same as ``ts`` without ``-`` and ``:``
 ``{{ execution_date }}``            the execution_date, (datetime.datetime)
 ``{{ dag }}``                       the DAG object
 ``{{ task }}``                      the Task object
@@ -145,19 +147,18 @@ Macros are a way to expose objects to your templates and live under the
 
 A few commonly used libraries and methods are made available.
 
+
 =================================   ====================================
 Variable                            Description
 =================================   ====================================
-``macros.datetime``                 The standard lib's 
-                                    ``datetime.datetime``
-``macros.timedelta``                 The standard lib's 
-                                    ``datetime.timedelta``
-``macros.dateutil``                 A reference to the ``dateutil``
-                                    package
+``macros.datetime``                 The standard lib's ``datetime.datetime``
+``macros.timedelta``                 The standard lib's ``datetime.timedelta``
+``macros.dateutil``                 A reference to the ``dateutil`` package
 ``macros.time``                     The standard lib's ``time``
 ``macros.uuid``                     The standard lib's ``uuid``
 ``macros.random``                   The standard lib's ``random``
 =================================   ====================================
+
 
 Some airflow specific macros are also defined:
 

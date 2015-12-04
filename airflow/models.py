@@ -135,6 +135,12 @@ class DagBag(object):
         if sync_to_db:
             self.deactivate_inactive_dags()
 
+    def size(self):
+        """
+        :return: the amount of dags contained in this dagbag
+        """
+        return len(self.dags)
+
     def get_dag(self, dag_id):
         """
         Gets the DAG out of the dictionary, and refreshes it if expired
@@ -1070,6 +1076,7 @@ class TaskInstance(Base):
         yesterday_ds = (self.execution_date - timedelta(1)).isoformat()[:10]
         tomorrow_ds = (self.execution_date + timedelta(1)).isoformat()[:10]
         ds_nodash = ds.replace('-', '')
+        iso = self.execution_date.isoformat()
         ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
         ti_key_str = ti_key_str.format(**locals())
 
@@ -1096,6 +1103,8 @@ class TaskInstance(Base):
         return {
             'dag': task.dag,
             'ds': ds,
+            'ts': iso,
+            'ts_nodash': iso.replace('-', '').replace(':', ''),
             'yesterday_ds': yesterday_ds,
             'tomorrow_ds': tomorrow_ds,
             'END_DATE': ds,
@@ -2520,14 +2529,28 @@ class Variable(Base):
         obj = session.query(cls).filter(cls.key == key).first()
         if obj is None:
             if default_var is not None:
-                v = default_var
+                return default_var
             else:
                 raise ValueError('Variable {} does not exist'.format(key))
         else:
-            v = obj.val
-        if deserialize_json and v:
-            v = json.loads(v)
-        return v
+            if deserialize_json:
+                return json.loads(obj.val)
+            else:
+                return obj.val
+
+    @classmethod
+    @provide_session
+    def set(cls, key, value, serialize_json=False, session=None):
+
+        if serialize_json:
+            stored_value = json.dumps(value)
+        else:
+            stored_value = value
+
+        session.query(cls).filter(cls.key == key).delete()
+        session.add(Variable(key=key, val=stored_value))
+        session.flush()
+
 
 
 class XCom(Base):
@@ -2688,6 +2711,7 @@ class DagRun(Base):
     __table_args__ = (
         Index('dr_run_id', dag_id, run_id, unique=True),
     )
+    
 
     def __repr__(self):
         return (

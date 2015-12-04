@@ -16,13 +16,13 @@ if [ -a $nose_args ]; then
 --logging-level=DEBUG "
 fi
 
-#--with-doctest 
+#--with-doctest
 
 # Generate the `airflow` executable if needed
 which airflow > /dev/null || python setup.py develop
 
 echo "Initializing the DB"
-airflow resetdb -y
+airflow initdb
 
 echo "Starting the unit tests with the following nose arguments: "$nose_args
 nosetests $nose_args
