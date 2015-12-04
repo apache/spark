@@ -49,6 +49,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
+  val executorToJvmGCTime = HashMap[String, Long]()
   val executorToInputBytes = HashMap[String, Long]()
   val executorToInputRecords = HashMap[String, Long]()
   val executorToOutputBytes = HashMap[String, Long]()
@@ -133,6 +134,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
           executorToShuffleWrite(eid) =
             executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
         }
+        executorToJvmGCTime(eid) = executorToJvmGCTime.getOrElse(eid, 0L) + metrics.jvmGCTime
       }
     }
   }

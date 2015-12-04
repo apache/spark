@@ -61,6 +61,7 @@ class ExecutorSummary private[spark](
     val completedTasks: Int,
     val totalTasks: Int,
     val totalDuration: Long,
+    val totalGCTime: Long,
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
