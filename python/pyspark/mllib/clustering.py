@@ -43,40 +43,45 @@ __all__ = ['BisectingKMeansModel', 'BisectingKMeans', 'KMeansModel', 'KMeans',
            'PowerIterationClustering', 'StreamingKMeans', 'StreamingKMeansModel',
            'LDA', 'LDAModel']
 
+
 @inherit_doc
 class BisectingKMeansModel(JavaModelWrapper):
-
     """
     .. note:: Experimental
 
     A clustering model derived from the bisecting k-means method.
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
-    >>> model = BisectingKMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
-    ...                    seed=50, initializationSteps=5, epsilon=1e-4)
+    >>> bskm = BisectingKMeans()
+    >>> model = bskm.run(
+    ...     sc.parallelize(data))
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
     >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
     True
     >>> model.k
-    2
+    4
 
     .. versionadded:: 1.6.0
     """
 
     @property
-    @since('1.0.0')
+    @since('1.6.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self.call("clusterCenters")]
 
+    @property
+    @since('1.6.0')
+    def k(self):
+        """Get the number of clusters"""
+        return self.call("k")
+
     @since('1.6.0')
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
-        best = 0
         if isinstance(x, RDD):
-            return x.map(self.predict)
+            return self._java_model.predict(x.map(_convert_to_vector))
 
         x = _convert_to_vector(x)
         return self._java_model.predict(x)
@@ -89,18 +94,18 @@ class BisectingKMeansModel(JavaModelWrapper):
         """
         return self._java_model.computeCost(_convert_to_vector(point))
 
-    
+
 @inherit_doc
 class BisectingKMeans:
     """
-    A bisecting k-means algorithm based on the paper "A comparison of document clustering techniques"
-    by Steinbach, Karypis, and Kumar, with modification to fit Spark.
+    A bisecting k-means algorithm based on the paper "A comparison of document clustering
+    techniques" by Steinbach, Karypis, and Kumar, with modification to fit Spark.
     The algorithm starts from a single cluster that contains all points.
     Iteratively it finds divisible clusters on the bottom level and bisects each of them using
     k-means, until there are `k` leaf clusters in total or no leaf clusters are divisible.
     The bisecting steps of clusters on the same level are grouped together to increase parallelism.
-    If bisecting all divisible clusters on the bottom level would result more than `k` leaf clusters,
-    larger clusters get higher priority.
+    If bisecting all divisible clusters on the bottom level would result more than `k` leaf
+    clusters, larger clusters get higher priority.
 
     Based on [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
@@ -108,31 +113,77 @@ class BisectingKMeans:
 
     .. versionadded:: 1.6.0
     """
+    def __init__(self):
+        self.k = 4
+        self.maxIterations = 20
+        self.minDivisibleClusterSize = 1.0
+        self.seed = 42
 
     @since('1.6.0')
-    def __init__(self, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=42):
+    def setK(self, k):
         """
-        :param k: the desired number of leaf clusters (default: 4). The actual number could be smaller if
-        there are no divisible leaf clusters.
-        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
-        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum proportion
-        of points (if < 1.0) of a divisible cluster (default: 1)
-        :param seed: a random seed (default: 42)
+        :param k: the desired number of leaf clusters (default: 4). The actual number could be
+        smaller if there are no divisible leaf clusters.
         """
         self.k = k
-        self.maxIterations = maxIterations
-        self.minDivisibleClusterSize = minDivisibleClusterSize
-        self.seed = seed
+        return self
 
     @since('1.6.0')
-    def run(rdd):
+    def getK(self):
+        """Return the desired number of leaf clusters."""
+        return self.k
+
+    @since('1.6.0')
+    def setMaxIterations(self, maxIterations):
+        """
+        :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
+        """
+        self.maxIterations = maxIterations
+        return self
+
+    @since('1.6.0')
+    def getMaxIterations(self):
+        """Return the maximum number of iterations."""
+        return self.maxIterations
+
+    @since('1.6.0')
+    def setMinDivisibleClusterSize(self, minDivisibleClusterSize):
+        """
+        :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
+        proportion of points (if < 1.0) of a divisible cluster (default: 1)
+        """
+        self.minDivisibleClusterSize = minDivisibleClusterSize
+        return self
+
+    @since('1.6.0')
+    def getMinDivisibleClusterSize(self):
+        """Return the min divisible cluster size."""
+        return minDivisibleClusterSize
+
+    @since('1.6.0')
+    def setSeed(self, seed):
+        """
+        :param seed: a random seed (default: 42)
+        """
+        self.seed = seed
+        return self
+
+    @since('1.6.0')
+    def getSeed(self):
+        """Return the random seed used."""
+        return self.seed
+
+    @since('1.6.0')
+    def run(self, rdd):
         """
         Runs the bisecting k-means algorithm return the model
-        :param rdd: input RDD of vectors
+        :param rdd: input RDD to be trained on
         """
-        java_model = sc._jvm.org.apache.spark.mllib.clustering.BisectingKMeans(
+        java_model = callMLlibFunc(
+            "trainBisectingKMeans", rdd.map(_convert_to_vector),
             self.k, self.maxIterations, self.minDivisibleClusterSize, self.seed)
-        return java_model.run(input)
+        return BisectingKMeansModel(java_model)
+
 
 @inherit_doc
 class KMeansModel(Saveable, Loader):
