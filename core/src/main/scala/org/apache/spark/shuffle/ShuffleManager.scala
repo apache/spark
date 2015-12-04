@@ -60,7 +60,7 @@ private[spark] trait ShuffleManager {
    */
   def shuffleBlockResolver: ShuffleBlockResolver
 
-  /** Return short name for the ShuffleManager*/
+  /** Return short name for the ShuffleManager */
   def shortShuffleMgrName: String
 
   /** Shut down this ShuffleManager. */
