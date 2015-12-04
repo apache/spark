@@ -144,8 +144,10 @@ class HistoryServer(
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  override def attachSparkUI(appId: String, attemptId: Option[String],
-      ui: SparkUI, completed: Boolean) {
+  override def attachSparkUI(appId: String,
+      attemptId: Option[String],
+      ui: SparkUI,
+      completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
@@ -163,13 +165,22 @@ class HistoryServer(
    * @param attemptId attempt ID
    * @return If found, the Spark UI and any history information to be used in the cache
    */
-  override def getAppUI(appId: String, attemptId: Option[String])
-      : Option[(SparkUI, Long, Option[Any])] = {
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     provider.getAppUI(appId, attemptId)
   }
 
-  override def isUpdated(appId: String, attemptId: Option[String],
-      updateTimeMillis: Long, data: Option[Any]): Boolean = {
+  /**
+   * Relay checks for the update to the history provider.
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
+   * @param data any other data the operations implementation can use to determine age
+   * @return true if the application was updated since `updateTimeMillis`
+   */
+  override def isUpdated(appId: String,
+      attemptId: Option[String],
+      updateTimeMillis: Long,
+      data: Option[HistoryProviderUpdateState]): Boolean = {
     provider.isUpdated(appId, attemptId, updateTimeMillis, data)
   }
 
@@ -200,6 +211,12 @@ class HistoryServer(
    */
   def getProviderConfig(): Map[String, String] = provider.getConfig()
 
+  /**
+   * Load an application UI and attach it to the web server.
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return true if the application was found and loaded.
+   */
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
       appCache.get(appId, attemptId)
@@ -214,6 +231,10 @@ class HistoryServer(
     }
   }
 
+  /**
+   * String value for diagnostics.
+   * @return a multi-line description of the server state.
+   */
   override def toString: String = {
     s"""
       | History Server;

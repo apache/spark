@@ -69,7 +69,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   def init(): Unit = {
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
-      .set("spark.history.fs.updateInterval", "0")
+      .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -320,6 +320,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       val port = server.boundPort
       val metrics = server.cacheMetrics
 
+      // assert that a metric has a value; if not dump the whole metrics instance
       def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
         val actual = counter.getCount
         if (actual != expected) {
@@ -329,6 +330,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         }
       }
 
+      // build a URL for an app or app/attempt plus a page underneath
       def buildURL(appId: String, suffix: String): URL = {
         new URL(s"http://localhost:$port/history/$appId$suffix")
       }
@@ -363,7 +365,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       rootAppPage should not be empty
 
       def getAppUI: SparkUI = {
-        provider.getAppUI(appId, None).get._1
+        provider.getAppUI(appId, None).get.ui
       }
 
       // selenium isn't that useful on failures...add our own reporting
@@ -373,11 +375,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         try {
           go to target.toExternalForm
           findAll(cssSelector("tbody tr")).toIndexedSeq.size
-        }
-        catch {
+        } catch {
           case ex: Exception =>
-            logError(s"Against $target\n$targetBody", ex)
-            throw ex
+            throw new Exception(s"Against $target\n$targetBody", ex)
         }
       }
       def completedJobs(): Seq[JobUIData] = {
@@ -392,6 +392,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       getNumJobs("") should be(1)
       getNumJobs("/jobs") should be(1)
       assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+
+      // dump state before the next bit of test, which is where update
+      // checking really gets stressed
       dumpLogDir("filesystem before executing second job")
       logDebug(s"History Server: $server")
 
@@ -404,11 +407,10 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       dumpLogDir("After second job")
 
 
-      val stdTimeout = timeout(20 seconds)
+      val stdTimeout = timeout(10 seconds)
 
       logDebug("waiting for UI to update")
       eventually(stdTimeout, stdInterval) {
-        val finalFileStatus = fs.getFileStatus(logDirPath)
         assert(2 === getNumJobs(""),
           s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
         assert(2 === getNumJobs("/jobs"),
@@ -443,16 +445,17 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         assert(provider.getListing().head.completed,
           s"application never completed, server=$server\n")
       }
-      assert(endcount === getNumJobs("/jobs"))
 
-      // which lists as incomplete
+      // verify the root page picks up the application, even without any GETs to the loaded
+      // incomplete UI
       eventually(stdTimeout, stdInterval) {
         assertUrlContains(historyServerRoot, appId)
       }
-      assert(!HistoryServerSuite.getUrl(historyServerIncompleted).contains(appId))
-
-
       // the root UI must pick this up too
+      HistoryServerSuite.getUrl(historyServerIncompleted) should not contain (appId)
+
+      assert(endcount === getNumJobs("/jobs"))
+
     } finally {
       sc.stop()
     }

@@ -35,10 +35,33 @@ private[spark] case class ApplicationHistoryInfo(
     name: String,
     attempts: List[ApplicationAttemptInfo]) {
 
+  /**
+   * Has this application completed?
+   * @return true if the most recent attempt has completed
+   */
   def completed: Boolean = {
     attempts.nonEmpty && attempts.head.completed
   }
 }
+
+/**
+ * Case class which can be subclasses by any provider to store information which
+ * can then be used to determine whether an application attempt has been updated
+ * since the last time it was retrieved.
+ *
+ * Examples include: a timestamp, a counter or a checksum.
+ */
+private[history] case class HistoryProviderUpdateState()
+
+/**
+ * All the information returned from a call to getAppUI
+ * @param ui Spark UI
+ * @param timestamp timestamp of the loaded data
+ * @param updateState any provider-specific update state
+ */
+private[history] case class LoadedAppUI(ui: SparkUI,
+    timestamp: Long,
+    updateState: Option[HistoryProviderUpdateState])
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -56,7 +79,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
    * @return The application's UI, or None if application is not found.
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[(SparkUI, Long, Option[Any])]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI]
 
   /**
    * Called when the server is shutting down.
@@ -79,23 +102,6 @@ private[history] abstract class ApplicationHistoryProvider {
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
   /**
-   * Has an application attempt completed?
-   *
-   * The default returns the completed state of the history info
-   * @param appId application ID
-   * @param attemptId optional attempt ID
-   * @param applicationHistoryInfo the application being probed.
-   * @throws java.util.NoSuchElementException if there is no current record of the application
-   * @return true if the application is considered to have completed
-   */
-  @throws(classOf[NoSuchElementException])
-  def isCompleted(appId: String,
-    attemptId: Option[String],
-    applicationHistoryInfo: ApplicationHistoryInfo): Boolean = {
-    applicationHistoryInfo.completed
-  }
-
-  /**
    * Probe for an update to an (incompleted) application
    * @param appId application ID
    * @param attemptId optional attempt ID
@@ -104,7 +110,7 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return true if the application was updated since `updateTimeMillis`
    */
   def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
-      data: Option[Any]): Boolean = {
+      data: Option[HistoryProviderUpdateState]): Boolean = {
     false
   }
 

@@ -77,11 +77,10 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
      * @param attemptId attempt ID
      * @return If found, the Spark UI and any history information to be used in the cache
      */
-    override def getAppUI(appId: String, attemptId: Option[String])
-        : Option[(SparkUI, Long, Option[Any])] = {
+    override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
-      instances.get(CacheKey(appId, attemptId)).map( e => (e.ui, 0L, None))
+      instances.get(CacheKey(appId, attemptId)).map( e => LoadedAppUI(e.ui, 0L, None))
     }
 
     override def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI,
@@ -121,7 +120,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       detachCount += 1
       var name = ui.getAppName
       val key = CacheKey(appId, attemptId)
-      attached.getOrElse(key, {throw new scala.NoSuchElementException()})
+      attached.getOrElse(key, { throw new java.util.NoSuchElementException() })
       attached -= key
     }
 
@@ -129,7 +128,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
      * @return true if the timestamp on a cached instance is greater than `updateTimeMillis`.
      */
     override def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
-        data: Option[Any]): Boolean = {
+        data: Option[HistoryProviderUpdateState]): Boolean = {
       updateProbeCount += 1
       logDebug(s"isUpdated($appId, $attemptId, $updateTimeMillis)")
       val entry = instances.get(CacheKey(appId, attemptId)).get
