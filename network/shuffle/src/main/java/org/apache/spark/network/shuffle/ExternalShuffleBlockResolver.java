@@ -189,7 +189,7 @@ public class ExternalShuffleBlockResolver {
       return getHashBasedShuffleBlockData(executor, blockId);
     } else {
       throw new UnsupportedOperationException(
-          "Unsupported shuffle manager: " + executor.shuffleManager);
+        "Unsupported shuffle manager: " + executor.shuffleManager);
     }
   }
 

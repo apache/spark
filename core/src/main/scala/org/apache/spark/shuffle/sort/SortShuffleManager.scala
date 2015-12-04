@@ -160,6 +160,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
     true
   }
 
+  override def shortShuffleMgrName: String = "sort"
+
   /** Shut down this ShuffleManager. */
   override def stop(): Unit = {
     shuffleBlockResolver.stop()

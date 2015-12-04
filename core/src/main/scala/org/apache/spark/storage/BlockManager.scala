@@ -200,7 +200,7 @@ private[spark] class BlockManager(
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirs.map(_.toString),
       diskBlockManager.subDirsPerLocalDir,
-      conf.get("spark.shuffle.manager", "sort").toLowerCase)
+      shuffleManager.shortShuffleMgrName)
 
     val MAX_ATTEMPTS = 3
     val SLEEP_TIME_SECS = 5
