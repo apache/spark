@@ -15,23 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.hadoop.yarn.api.records.ApplicationId
 
-private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+/**
+ * Simple Testing Application Id; ID and cluster timestamp are set in constructor
+ * and cannot be updated.
+ * @param id app id
+ * @param clusterTimestamp timestamp
+ */
+private[spark] class StubApplicationId(id: Int, clusterTimestamp: Long) extends ApplicationId {
+  override def getId: Int = {
+    id
+  }
 
-  val parent = sparkUI
+  override def getClusterTimestamp: Long = {
+    clusterTimestamp
+  }
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
+  override def setId(id: Int): Unit = {}
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
+  override def setClusterTimestamp(clusterTimestamp: Long): Unit = {}
 
-private[sql] object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  override def build(): Unit = {}
 }

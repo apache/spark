@@ -15,23 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import java.util.concurrent.atomic.AtomicBoolean
 
-private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+private[spark] class SimpleExtensionService extends SchedulerExtensionService {
 
-  val parent = sparkUI
+  /** started flag; set in the `start()` call, stopped in `stop()`. */
+  val started = new AtomicBoolean(false)
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
+  override def start(binding: SchedulerExtensionServiceBinding): Unit = {
+    started.set(true)
+  }
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-private[sql] object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  override def stop(): Unit = {
+    started.set(false)
+  }
 }

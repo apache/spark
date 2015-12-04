@@ -15,23 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-private[sql] class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+/**
+ * A stub application ID; can be set in constructor and/or updated later.
+ * @param applicationId application ID
+ * @param attempt an attempt counter
+ */
+class StubApplicationAttemptId(var applicationId: ApplicationId, var attempt: Int)
+    extends ApplicationAttemptId {
 
-  val parent = sparkUI
+  override def setApplicationId(appID: ApplicationId): Unit = {
+    applicationId = appID
+  }
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
+  override def getAttemptId: Int = {
+    attempt
+  }
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
+  override def setAttemptId(attemptId: Int): Unit = {
+    attempt = attemptId
+  }
 
-private[sql] object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  override def getApplicationId: ApplicationId = {
+    applicationId
+  }
+
+  override def build(): Unit = {
+  }
 }
