@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.DataTypeParser
  * {{{
  * import org.apache.spark.sql._
  * import org.apache.spark.sql.types._
+ * 
  * val struct =
  *   StructType(
  *     StructField("a", IntegerType, true) ::
