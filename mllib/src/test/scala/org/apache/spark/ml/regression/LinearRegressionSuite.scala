@@ -190,10 +190,10 @@ class LinearRegressionSuite
        */
       val coefficientsR = Vectors.dense(6.973403, 5.284370)
 
-      assert(model1.intercept ~== 0 absTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR relTol 1E-3)
-      assert(model2.intercept ~== 0 absTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+      assert(model1.intercept ~== 0 absTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR relTol 1E-2)
+      assert(model2.intercept ~== 0 absTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR relTol 1E-2)
 
       /*
          Then again with the data with no intercept:
@@ -242,8 +242,8 @@ class LinearRegressionSuite
          */
         val interceptR1 = 6.242284
         val coefficientsR1 = Vectors.dense(4.019605, 6.679538)
-        assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 relTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -303,8 +303,8 @@ class LinearRegressionSuite
         val interceptR1 = 0.0
         val coefficientsR1 = Vectors.dense(6.272927, 4.782604)
 
-        assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 absTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -319,8 +319,8 @@ class LinearRegressionSuite
         val interceptR2 = 0.0
         val coefficientsR2 = Vectors.dense(6.207817, 4.775780)
 
-        assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 absTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -355,8 +355,8 @@ class LinearRegressionSuite
       val interceptR1 = 5.260103
       val coefficientsR1 = Vectors.dense(3.725522, 5.711203)
 
-      assert(model1.intercept ~== interceptR1 relTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+      assert(model1.intercept ~== interceptR1 relTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -371,8 +371,8 @@ class LinearRegressionSuite
       val interceptR2 = 5.790885
       val coefficientsR2 = Vectors.dense(3.432373, 5.919196)
 
-      assert(model2.intercept ~== interceptR2 relTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+      assert(model2.intercept ~== interceptR2 relTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -406,8 +406,8 @@ class LinearRegressionSuite
       val interceptR1 = 0.0
       val coefficientsR1 = Vectors.dense(5.493430, 4.223082)
 
-      assert(model1.intercept ~== interceptR1 absTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+      assert(model1.intercept ~== interceptR1 absTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -422,8 +422,8 @@ class LinearRegressionSuite
       val interceptR2 = 0.0
       val coefficientsR2 = Vectors.dense(5.244324, 4.203106)
 
-      assert(model2.intercept ~== interceptR2 absTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+      assert(model2.intercept ~== interceptR2 absTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -465,8 +465,8 @@ class LinearRegressionSuite
         val interceptR1 = 5.689855
         val coefficientsR1 = Vectors.dense(3.661181, 6.000274)
 
-        assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 relTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
@@ -481,8 +481,8 @@ class LinearRegressionSuite
         val interceptR2 = 6.113890
         val coefficientsR2 = Vectors.dense(3.407021, 6.152512)
 
-        assert(model2.intercept ~== interceptR2 relTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 relTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -526,8 +526,8 @@ class LinearRegressionSuite
         val interceptR1 = 0.0
         val coefficientsR1 = Vectors.dense(5.643748, 4.331519)
 
-        assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 absTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3,
@@ -543,8 +543,8 @@ class LinearRegressionSuite
         val interceptR2 = 0.0
         val coefficientsR2 = Vectors.dense(5.455902, 4.312266)
 
-        assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 absTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -632,9 +632,9 @@ class LinearRegressionSuite
 
           ....
        */
-      assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-5)
-      assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-5)
-      assert(model.summary.r2 ~== 0.9998737 relTol 1E-5)
+      assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-4)
+      assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
+      assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
 
       // Normal solver uses "WeightedLeastSquares". This algorithm does not generate
       // objective history because it does not run through iterations.
@@ -654,9 +654,9 @@ class LinearRegressionSuite
         val tValsR = Array(3980, 7961, 3388)
         val pValsR = Array(0, 0, 0)
         model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-          assert(x._1 ~== x._2 absTol 1E-5) }
+          assert(x._1 ~== x._2 absTol 1E-4) }
         model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
-          assert(x._1 ~== x._2 absTol 1E-5) }
+          assert(x._1 ~== x._2 absTol 1E-4) }
         model.summary.tValues.map(_.round).zip(tValsR).foreach{ x => assert(x._1 === x._2) }
         model.summary.pValues.map(_.round).zip(pValsR).foreach{ x => assert(x._1 === x._2) }
       }
