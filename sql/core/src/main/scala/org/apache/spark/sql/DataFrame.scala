@@ -1252,11 +1252,11 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val remainingColumns = df.schema.filter(f => colNames.contains(f.name)).map(f=>Column(f.name))
-		if (remainingColumns.size == df.schema.size) {
+    val remainingCols = df.schema.filter(f => colNames.contains(f.name)).map(f=>Column(f.name))
+  	if (remainingCols.size == df.schema.size) {
       this
     } else {
-      df.select(remainingColumns: _*)
+      df.select(remainingCols: _*)
     }
   }
 
