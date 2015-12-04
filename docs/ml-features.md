@@ -1711,10 +1711,10 @@ print(output.select("features", "clicked").first())
 categorical features.
 The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
 The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
-This attempts to find numBuckets partitions based on a sample of the given input data, but it may
+This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
 find fewer depending on the data sample values.
 
-Note that the result may different every time you run it, since the sample strategy behind it is
+Note that the result may be different every time you run it, since the sample strategy behind it is
 non-deterministic.
 
 **Examples**
