@@ -1524,6 +1524,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>1000</td>
+  <td>
+    Initial rate for backpressure mechanism (since 1.5). This provides maximum receiving rate of
+    receivers in the first batch when enables the backpressure mechanism, then the maximum receiving
+    rate will compute dynamically based on the current batch scheduling delays and processing times.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
