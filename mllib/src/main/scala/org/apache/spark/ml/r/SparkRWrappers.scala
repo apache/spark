@@ -23,6 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
 
 private[r] object SparkRWrappers {
   def fitRModelFormula(
@@ -78,7 +79,10 @@ private[r] object SparkRWrappers {
   def getModelDevianceResiduals(model: PipelineModel): Array[Double] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
-        m.summary.devianceResiduals
+        val devianceResiduals = m.summary.residualsByType("deviance")
+          .select(min(col("devianceResiduals")).as("min"), max(col("devianceResiduals")).as("max"))
+          .first()
+        Array(devianceResiduals.getDouble(0), devianceResiduals.getDouble(1))
       case m: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
           "No deviance residuals available for LogisticRegressionModel")

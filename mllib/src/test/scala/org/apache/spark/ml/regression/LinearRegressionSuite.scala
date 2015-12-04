@@ -28,6 +28,7 @@ import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
 
 class LinearRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -625,8 +626,11 @@ class LinearRegressionSuite
         val seCoefR = Array(0.0011756, 0.0009032, 0.0018489)
         val tValsR = Array(3998, 7971, 3407)
         val pValsR = Array(0, 0, 0)
-        model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-          assert(x._1 ~== x._2 absTol 1E-5) }
+        val devianceResiduals = model.summary.residualsByType("deviance")
+          .select(min(col("devianceResiduals")).as("min"), max(col("devianceResiduals")).as("max"))
+          .first()
+        Array(devianceResiduals.getDouble(0), devianceResiduals.getDouble(1))
+          .zip(devianceResidualsR).foreach { x => assert(x._1 ~== x._2 absTol 1E-3) }
         model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
           assert(x._1 ~== x._2 absTol 1E-5) }
         model.summary.tValues.map(_.round).zip(tValsR).foreach{ x => assert(x._1 === x._2) }
@@ -796,8 +800,11 @@ class LinearRegressionSuite
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
-    model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-      assert(x._1 ~== x._2 absTol 1E-3) }
+    val devianceResiduals = model.summary.residualsByType("deviance")
+      .select(min(col("devianceResiduals")).as("min"), max(col("devianceResiduals")).as("max"))
+      .first()
+    Array(devianceResiduals.getDouble(0), devianceResiduals.getDouble(1)).zip(devianceResidualsR)
+      .foreach { x => assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }
@@ -848,8 +855,11 @@ class LinearRegressionSuite
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept === interceptR)
-    model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-      assert(x._1 ~== x._2 absTol 1E-3) }
+    val devianceResiduals = model.summary.residualsByType("deviance")
+      .select(min(col("devianceResiduals")).as("min"), max(col("devianceResiduals")).as("max"))
+      .first()
+    Array(devianceResiduals.getDouble(0), devianceResiduals.getDouble(1)).zip(devianceResidualsR)
+      .foreach { x => assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     model.summary.tValues.zip(tValsR).foreach{ x => assert(x._1 ~== x._2 absTol 1E-3) }

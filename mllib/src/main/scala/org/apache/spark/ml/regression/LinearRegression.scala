@@ -605,17 +605,39 @@ class LinearRegressionSummary private[regression] (
   }
 
   /**
+   * Return the residuals by type.
+   * Supported options: "deviance", "pearson", "working" and "response".
+   * Default is "deviance".
+   */
+  def residualsByType(residualsType: String = "deviance"): DataFrame = {
+    residualsType match {
+      case "deviance" => devianceResiduals
+      case "pearson" => pearsonResiduals
+      case "working" => workingResiduals
+      case "response" => responseResiduals
+      case other => throw new UnsupportedOperationException(
+        s"The residuals type ${other} is not supported by Linear Regression.")
+    }
+  }
+
+  /**
    * The weighted residuals, the usual residuals rescaled by
    * the square root of the instance weights.
    */
-  lazy val devianceResiduals: Array[Double] = {
+  private lazy val devianceResiduals: DataFrame = {
     val weighted = if (model.getWeightCol.isEmpty) lit(1.0) else sqrt(col(model.getWeightCol))
-    val dr = predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
-      .multiply(weighted).as("weightedResiduals"))
-      .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
-      .first()
-    Array(dr.getDouble(0), dr.getDouble(1))
+    predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
+      .multiply(weighted).as("devianceResiduals"))
   }
+
+  private lazy val pearsonResiduals: DataFrame =
+    devianceResiduals.withColumnRenamed("devianceResiduals", "pearsonResiduals")
+
+  private lazy val workingResiduals: DataFrame =
+    residuals.withColumnRenamed("residuals", "workingResiduals")
+
+  private lazy val responseResiduals: DataFrame =
+    residuals.withColumnRenamed("residuals", "responseResiduals")
 
   /**
    * Standard error of estimated coefficients and intercept.
