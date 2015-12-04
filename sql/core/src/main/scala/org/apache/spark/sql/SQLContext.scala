@@ -791,6 +791,21 @@ class SQLContext private[sql](
   }
 
   /**
+    * :: Experimental ::
+    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+    * in an range from `start` to `end` (exclusive) with an step value.
+    *
+    * @since 2.0.0
+    * @group dataframe
+    */
+  @Experimental
+  def range(start: Long, end: Long, step: Long): DataFrame = {
+    createDataFrame(
+      sparkContext.range(start, end, step).map(Row(_)),
+      StructType(StructField("id", LongType, nullable = false) :: Nil))
+  }
+
+  /**
    * :: Experimental ::
    * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
