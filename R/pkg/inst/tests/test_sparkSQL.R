@@ -1202,6 +1202,7 @@ test_that("join() and merge() on a DataFrame", {
   joined <- join(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
+  expect_equal(names(collect(joined)), c("age", "name", "name", "test"))
 
   joined2 <- join(df, df2, df$name == df2$name)
   expect_equal(names(joined2), c("age", "name", "name", "test"))
