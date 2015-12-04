@@ -812,7 +812,8 @@ class TaskInstance(Base):
             )
             successes, skipped, failed, upstream_failed, done = qry.first()
             if flag_upstream_failed:
-                if skipped >= len(task._upstream_list):
+                if (skipped >= len(task._upstream_list) or
+                      (task.trigger_rule == TR.ALL_SUCCESS and skipped > 0)):
                     self.state = State.SKIPPED
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
