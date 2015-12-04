@@ -900,9 +900,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       m = swap;
     }
 
-    int p[] = new int[n + 1];
-    int d[] = new int[n + 1];
-    int swap[];
+    int[] p = new int[n + 1];
+    int[] d = new int[n + 1];
+    int[] swap;
 
     int i, i_bytes, j, j_bytes, num_bytes_j, cost;
 
@@ -965,7 +965,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // first character must be a letter
       return this;
     }
-    byte sx[] = {'0', '0', '0', '0'};
+    byte[] sx = {'0', '0', '0', '0'};
     sx[0] = b;
     int sxi = 1;
     int idx = b - 'A';

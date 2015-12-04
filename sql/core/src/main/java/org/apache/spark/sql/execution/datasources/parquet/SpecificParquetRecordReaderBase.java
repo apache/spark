@@ -195,7 +195,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * Creates a reader for definition and repetition levels, returning an optimized one if
    * the levels are not needed.
    */
-  static protected IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
+  protected static IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
                                               ColumnDescriptor descriptor) throws IOException {
     try {
       if (maxLevel == 0) return new NullIntIterator();

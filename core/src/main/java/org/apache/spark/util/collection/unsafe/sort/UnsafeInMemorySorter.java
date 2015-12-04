@@ -175,7 +175,7 @@ public final class UnsafeInMemorySorter {
       this.position = 0;
     }
 
-    public SortedIterator clone () {
+    public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(numRecords);
       iter.position = position;
       iter.baseObject = baseObject;
