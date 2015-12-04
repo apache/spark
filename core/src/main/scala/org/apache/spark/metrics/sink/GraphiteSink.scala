@@ -22,7 +22,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.graphite.{GraphiteUDP, Graphite, GraphiteReporter}
+import com.codahale.metrics.graphite.{PickledGraphite, GraphiteUDP, Graphite, GraphiteReporter}
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
@@ -39,6 +39,7 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
   val GRAPHITE_KEY_UNIT = "unit"
   val GRAPHITE_KEY_PREFIX = "prefix"
   val GRAPHITE_KEY_PROTOCOL = "protocol"
+  val GRAPHITE_KEY_BATCH = "batchSize"
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
@@ -69,6 +70,9 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
 
   val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase) match {
     case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
+    case Some("pickle") =>
+      new PickledGraphite(new InetSocketAddress(host, port),
+        propertyToOption(GRAPHITE_KEY_BATCH).map(_.toInt).getOrElse(100))
     case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
   }
