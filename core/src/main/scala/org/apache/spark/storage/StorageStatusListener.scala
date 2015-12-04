@@ -94,12 +94,11 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
   override def onBlockManagerRemoved(blockManagerRemoved: SparkListenerBlockManagerRemoved) {
     synchronized {
       val executorId = blockManagerRemoved.blockManagerId.executorId
-      val removedStorageStatus = executorIdToStorageStatus.remove(executorId)
-      if (removedStorageStatus.isDefined) {
-        deadExecutorStorageStatus += removedStorageStatus.get
-        if (deadExecutorStorageStatus.size > retainedDeadExecutors) {
-          deadExecutorStorageStatus.trimStart(1)
-        }
+      executorIdToStorageStatus.remove(executorId).foreach { status =>
+        deadExecutorStorageStatus += status
+      }
+      if (deadExecutorStorageStatus.size > retainedDeadExecutors) {
+        deadExecutorStorageStatus.trimStart(1)
       }
     }
   }
