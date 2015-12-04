@@ -257,8 +257,9 @@ private[deploy] class Master(
           exec.state = state
 
           if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            if (oldState != ExecutorState.LAUNCHING) {
+              logWarning(s"Executor $execId state transfer from $oldState to RUNNING is unexpected")
+            }
             appInfo.resetRetryCount()
           }
 
@@ -934,7 +935,7 @@ private[deploy] class Master(
         }
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+          eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
