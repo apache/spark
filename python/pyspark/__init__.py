@@ -59,6 +59,8 @@ def since(version):
     indent_p = re.compile(r'\n( +)')
 
     def deco(f):
+        if not f.__doc__:
+            raise Exception("Please add doc for function %s" % (f.__name__))
         indents = indent_p.findall(f.__doc__)
         indent = ' ' * (min(len(m) for m in indents) if indents else 0)
         f.__doc__ = f.__doc__.rstrip() + "\n\n%s.. versionadded:: %s" % (indent, version)
