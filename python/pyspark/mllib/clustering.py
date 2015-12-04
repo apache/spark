@@ -53,14 +53,16 @@ class BisectingKMeansModel(JavaModelWrapper):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> bskm = BisectingKMeans()
-    >>> model = bskm.run(
-    ...     sc.parallelize(data))
-    >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
-    True
-    >>> model.predict(array([8.0, 9.0])) == model.predict(array([9.0, 8.0]))
+    >>> model = bskm.run(sc.parallelize(data))
+    >>> model.predict(array([0.0, 0.0])) == model.predict(array([0.0, 0.0]))
     True
     >>> model.k
     4
+    >>> model = bskm.setK(2).run(sc.parallelize(data))
+    >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
+    True
+    >>> model.k
+    2
 
     .. versionadded:: 1.6.0
     """
@@ -81,10 +83,10 @@ class BisectingKMeansModel(JavaModelWrapper):
     def predict(self, x):
         """Find the cluster to which x belongs in this model."""
         if isinstance(x, RDD):
-            return self._java_model.predict(x.map(_convert_to_vector))
+            return x.map(self.predict(x))
 
         x = _convert_to_vector(x)
-        return self._java_model.predict(x)
+        return self.call("predict", x)
 
     @since('1.6.0')
     def computeCost(self, point):
@@ -95,7 +97,6 @@ class BisectingKMeansModel(JavaModelWrapper):
         return self._java_model.computeCost(_convert_to_vector(point))
 
 
-@inherit_doc
 class BisectingKMeans:
     """
     A bisecting k-means algorithm based on the paper "A comparison of document clustering
@@ -122,6 +123,8 @@ class BisectingKMeans:
     @since('1.6.0')
     def setK(self, k):
         """
+        Set the number of leaf clusters.
+
         :param k: the desired number of leaf clusters (default: 4). The actual number could be
         smaller if there are no divisible leaf clusters.
         """
@@ -136,6 +139,8 @@ class BisectingKMeans:
     @since('1.6.0')
     def setMaxIterations(self, maxIterations):
         """
+        Set the maximum number of iterations.
+
         :param maxIterations: the max number of k-means iterations to split clusters (default: 20)
         """
         self.maxIterations = maxIterations
@@ -149,6 +154,8 @@ class BisectingKMeans:
     @since('1.6.0')
     def setMinDivisibleClusterSize(self, minDivisibleClusterSize):
         """
+        Set the minimum divisible cluster size.
+
         :param minDivisibleClusterSize: the minimum number of points (if >= 1.0) or the minimum
         proportion of points (if < 1.0) of a divisible cluster (default: 1)
         """
@@ -163,6 +170,8 @@ class BisectingKMeans:
     @since('1.6.0')
     def setSeed(self, seed):
         """
+        Set the seed.
+
         :param seed: a random seed (default: 42)
         """
         self.seed = seed
@@ -176,7 +185,8 @@ class BisectingKMeans:
     @since('1.6.0')
     def run(self, rdd):
         """
-        Runs the bisecting k-means algorithm return the model
+        Runs the bisecting k-means algorithm return the model.
+
         :param rdd: input RDD to be trained on
         """
         java_model = callMLlibFunc(
