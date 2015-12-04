@@ -530,6 +530,11 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 0)
   expect_equal(ncol(rdf), 2)
+
+  # collect() correctly handles multiple columns with same name
+  df <- createDataFrame(sqlContext, list(list(1, 2)), schema = c("name", "name"))
+  ldf <- collect(df)
+  expect_equal(names(ldf), c("name", "name"))
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -1197,6 +1202,7 @@ test_that("join() and merge() on a DataFrame", {
   joined <- join(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
+  expect_equal(names(collect(joined)), c("age", "name", "name", "test"))
 
   joined2 <- join(df, df2, df$name == df2$name)
   expect_equal(names(joined2), c("age", "name", "name", "test"))
