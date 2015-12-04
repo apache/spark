@@ -1593,7 +1593,7 @@ transformer.transform(df).show()
 
 ## SQLTransformer
 
-`SQLTransformer` implements the transforms which are defined by SQL statement.
+`SQLTransformer` implements the transformations which are defined by SQL statement.
 Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
 where `"__THIS__"` represents the underlying table of the input dataset.
 The select clause specifies the fields, constants, and expressions to display in
