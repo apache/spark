@@ -74,9 +74,10 @@ class SparkSQLParser(fallback: => ParserInterface) extends AbstractSparkSQLParse
   protected val TABLE = Keyword("TABLE")
   protected val TABLES = Keyword("TABLES")
   protected val UNCACHE = Keyword("UNCACHE")
+  protected val ROLE = Keyword("ROLE")
 
   override protected lazy val start: Parser[LogicalPlan] =
-    cache | uncache | set | show | desc | others
+    cache | uncache | setRole | set | show | desc | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -90,6 +91,11 @@ class SparkSQLParser(fallback: => ParserInterface) extends AbstractSparkSQLParse
       }
     | CLEAR ~ CACHE ^^^ ClearCacheCommand
     )
+
+  private lazy val setRole: Parser[LogicalPlan] =
+    SET ~ ROLE ~ ident ^^ {
+      case set ~ role ~ roleName => fallback(List(set, role, roleName).mkString(" "))
+    }
 
   private lazy val set: Parser[LogicalPlan] =
     SET ~> restInput ^^ {
@@ -120,5 +126,4 @@ class SparkSQLParser(fallback: => ParserInterface) extends AbstractSparkSQLParse
     wholeInput ^^ {
       case input => fallback.parsePlan(input)
     }
-
 }

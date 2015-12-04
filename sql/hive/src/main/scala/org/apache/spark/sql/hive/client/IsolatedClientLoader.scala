@@ -233,9 +233,9 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): ClientInterface = {
+  private[hive] def createClient(userName: String = null): ClientInterface = {
     if (!isolationOn) {
-      return new ClientWrapper(version, config, baseClassLoader, this)
+      return new ClientWrapper(userName, version, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -246,7 +246,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[ClientWrapper].getName)
         .getConstructors.head
-        .newInstance(version, config, classLoader, this)
+        .newInstance(userName, version, config, classLoader, this)
         .asInstanceOf[ClientInterface]
     } catch {
       case e: InvocationTargetException =>
