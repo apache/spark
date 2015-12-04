@@ -370,7 +370,7 @@ private[spark] class ExecutorAllocationManager(
     } else {
       logWarning(
         s"Unable to reach the cluster manager to request $numExecutorsTarget total executors!")
-      numExecutorsTarget = oldNumExecutorsTarget     
+      numExecutorsTarget = oldNumExecutorsTarget
       0
     }
   }
