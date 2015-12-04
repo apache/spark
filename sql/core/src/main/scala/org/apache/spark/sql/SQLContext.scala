@@ -795,7 +795,7 @@ class SQLContext private[sql](
     * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
     * in an range from `start` to `end` (exclusive) with an step value.
     *
-    * @since 2.0.0
+    * @since 1.6.0
     * @group dataframe
     */
   @Experimental
