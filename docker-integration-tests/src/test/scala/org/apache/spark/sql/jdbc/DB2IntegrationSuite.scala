@@ -54,11 +54,10 @@ class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001')").executeUpdate()
 
     // TODO: Test locale conversion for strings.
-    conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
-      + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
-    ).executeUpdate()
-    conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
-      "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+    conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c CLOB, d BLOB, "
+      + "e CHAR FOR BIT DATA)").executeUpdate()
+    conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', 'jumps'")
+      .executeUpdate()
   }
 
   test("Basic test") {
