@@ -232,7 +232,7 @@ private[spark] abstract class YarnSchedulerBackend(
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
           driverEndpoint.askWithRetry[Boolean](
-            RemoveExecutor(executorId, SlaveLost("AM is not yet registered")))
+            RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
       }
     }
 

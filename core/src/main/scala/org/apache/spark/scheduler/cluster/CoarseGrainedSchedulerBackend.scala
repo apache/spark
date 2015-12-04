@@ -355,7 +355,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       // because (1) disconnected event is not yet received; (2) executors die silently.
       executorDataMap.toMap.foreach { case (eid, _) =>
         driverEndpoint.askWithRetry[Boolean](
-          RemoveExecutor(eid, SlaveLost("State executor after cluster manager re-registered")))
+          RemoveExecutor(eid, SlaveLost("Stale executor after cluster manager re-registered.")))
       }
     }
   }
