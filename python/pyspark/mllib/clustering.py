@@ -88,7 +88,7 @@ class BisectingKMeansModel(JavaModelWrapper):
         """
         Find the cluster to which x belongs in this model.
 
-        :param x: Either the point to determine the cluster for or an RDD of points to determine 
+        :param x: Either the point to determine the cluster for or an RDD of points to determine
         the clusters for.
         """
         if isinstance(x, RDD):
