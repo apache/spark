@@ -95,6 +95,8 @@ class ExecutionMemoryPool(
       // don't let it be negative
       val maxToGrant =
         math.min(numBytes, math.max(0, (poolSize / numActiveTasks) - curMem))
+      logInfo(s"maxToGrant $maxToGrant, poolSize $poolSize, numActiveTasks $numActiveTasks, " +
+        s"curMem $curMem, numBytes $numBytes, taskAttemptId $taskAttemptId.")
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
       val toGrant = math.min(maxToGrant, memoryFree)
 

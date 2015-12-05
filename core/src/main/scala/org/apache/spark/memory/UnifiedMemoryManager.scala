@@ -19,7 +19,7 @@ package org.apache.spark.memory
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.{BlockStatus, BlockId}
 
 /**
@@ -55,10 +55,13 @@ private[spark] class UnifiedMemoryManager private[memory] (
     conf,
     numCores,
     storageRegionSize,
-    maxMemory - storageRegionSize) {
+    maxMemory - storageRegionSize) with Logging {
 
   // We always maintain this invariant:
   assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+
+  logInfo(s"Creating UnifedMemoryManager for $numCores cores with $maxMemory maxMemory" +
+    s", $storageRegionSize storageRegionSize.")
 
   override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
@@ -82,6 +85,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
     memoryMode match {
       case MemoryMode.ON_HEAP =>
         if (numBytes > onHeapExecutionMemoryPool.memoryFree) {
+          logInfo(s"Try to acquire $numBytes bytes memory. But, on-heap execution memory " +
+            s"poll only has ${onHeapExecutionMemoryPool.memoryFree} bytes free memory." +
+            s"${onHeapExecutionMemoryPool.poolSize} bytes pool size and " +
+            s"${onHeapExecutionMemoryPool.memoryUsed} bytes used memory." +
+            s"(taskAttemptId: $taskAttemptId)")
           val extraMemoryNeeded = numBytes - onHeapExecutionMemoryPool.memoryFree
           // There is not enough free memory in the execution pool, so try to reclaim memory from
           // storage. We can reclaim any free memory from the storage pool. If the storage pool
@@ -89,11 +97,23 @@ private[spark] class UnifiedMemoryManager private[memory] (
           // the memory that storage has borrowed from execution.
           val memoryReclaimableFromStorage =
             math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
+          logInfo(s"memoryReclaimableFromStorage $memoryReclaimableFromStorage, " +
+            s"storageMemoryPool.poolSize ${storageMemoryPool.poolSize}, storageRegionSize " +
+            s"$storageRegionSize." +
+            s"(taskAttemptId: $taskAttemptId)")
           if (memoryReclaimableFromStorage > 0) {
+            logInfo("Try to reclaim memory space from storage memory pool." +
+              s"(taskAttemptId: $taskAttemptId)")
             // Only reclaim as much space as is necessary and available:
             val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
               math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
+            logInfo(s"Reclaimed $spaceReclaimed bytes of memory from storage memory pool." +
+              s"Adding them back to onHeapExecutionMemoryPool." +
+              s"(taskAttemptId: $taskAttemptId)")
             onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+            logInfo(s"onHeapExecutionMemoryPool's size is ${onHeapExecutionMemoryPool.poolSize} " +
+              s"bytes. ${onHeapExecutionMemoryPool.memoryFree} bytes are free." +
+              s"(taskAttemptId: $taskAttemptId)")
           }
         }
         onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
