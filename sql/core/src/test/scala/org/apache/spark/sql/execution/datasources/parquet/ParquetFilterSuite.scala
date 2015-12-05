@@ -330,9 +330,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         // If the "c = 1" filter gets pushed down, this query will throw an exception which
         // Parquet emits. This is a Parquet issue (PARQUET-389).
+        val df = sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
         checkAnswer(
-          sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a"),
+          df,
           (1 to 1).map(i => Row(i, i.toString, null)))
+
+        // The fields "a" and "c" only exist in one Parquet file.
+        df.schema.fields.foreach { f =>
+          if (f.name == "a" || f.name == "c") {
+            assert(f.metadata.contains("optional"))
+          }
+        }
+
+        val pathThree = s"${dir.getCanonicalPath}/table3"
+        df.write.parquet(pathThree)
+
+        // We will remove the temporary metadata when writing Parquet file.
+        sqlContext.read.parquet(pathThree).schema.fields.foreach { f =>
+          assert(!f.metadata.contains("optional"))
+        }
       }
     }
   }

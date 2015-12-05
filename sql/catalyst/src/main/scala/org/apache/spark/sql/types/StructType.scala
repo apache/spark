@@ -335,6 +335,18 @@ object StructType extends AbstractDataType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
+  def removeMetadata(key: String, dt: DataType): DataType =
+    dt match {
+      case StructType(fields) =>
+        val newFields = fields.map { f =>
+          val mb = new MetadataBuilder()
+          f.copy(dataType = removeMetadata(key, f.dataType),
+            metadata = mb.withMetadata(f.metadata).remove(key).build())
+        }
+        StructType(newFields)
+      case _ => dt
+    }
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
@@ -352,23 +364,21 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
-        // This metadata will record the fields that only exist in one of merged StructTypes
-        val particularMeta = new MetadataBuilder()
+        // This metadata will record the fields that only exist in one of two StructTypes
+        val optionalMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                particularMeta.putBoolean("particular", false)
                 leftField.copy(
                   dataType = merge(leftType, rightType),
-                  nullable = leftNullable || rightNullable,
-                  metadata = particularMeta.build())
+                  nullable = leftNullable || rightNullable)
               }
               .orElse {
-                particularMeta.putBoolean("particular", true)
-                Some(leftField.copy(metadata = particularMeta.build()))
+                optionalMeta.putBoolean("optional", true)
+                Some(leftField.copy(metadata = optionalMeta.build()))
               }
               .foreach(newFields += _)
         }
@@ -377,8 +387,8 @@ object StructType extends AbstractDataType {
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
           .foreach { f =>
-            particularMeta.putBoolean("particular", true)
-            newFields += f.copy(metadata = particularMeta.build())
+            optionalMeta.putBoolean("optional", true)
+            newFields += f.copy(metadata = optionalMeta.build())
           }
 
         StructType(newFields)

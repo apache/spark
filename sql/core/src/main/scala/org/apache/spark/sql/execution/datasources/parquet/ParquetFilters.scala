@@ -212,7 +212,7 @@ private[sql] object ParquetFilters {
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
     val dataTypeOf = schema.filter { f =>
-      !f.metadata.contains("particular") || f.metadata.getBoolean("particular")
+      !f.metadata.contains("optional") || !f.metadata.getBoolean("optional")
     }.map(f => f.name -> f.dataType).toMap
 
     relaxParquetValidTypeMap
@@ -235,12 +235,12 @@ private[sql] object ParquetFilters {
     predicate match {
       case sources.IsNull(name) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) =>
+      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
 
       case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) =>
+      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>

@@ -268,4 +268,9 @@ class MetadataBuilder {
     map.put(key, value)
     this
   }
+
+  def remove(key: String): this.type = {
+    map.remove(key)
+    this
+  }
 }
