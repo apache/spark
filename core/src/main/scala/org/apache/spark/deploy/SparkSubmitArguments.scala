@@ -177,7 +177,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     packagesExclusions = Option(packagesExclusions)
       .orElse(sparkProperties.get("spark.jars.excludes")).orNull
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
-    numExecutors = Option(numExecutors)
+    numExecutors = Option(numExecutors).orElse(env.get("SPARK_EXECUTOR_INSTANCES"))
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
