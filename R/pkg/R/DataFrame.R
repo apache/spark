@@ -677,13 +677,23 @@ setMethod("unique",
 #' collect(sample(df, TRUE, 0.5))
 #'}
 setMethod("sample",
-          # TODO : Figure out how to send integer as java.lang.Long to JVM so
-          # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction) {
+                    fraction = "numeric", seed = "missing"),
+          function(x, withReplacement, fraction, seed) {
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
             sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            dataFrame(sdf)
+          })
+
+#' @rdname sample
+#' @name sample
+setMethod("sample",
+          # we can send seed as an argument through callJMethod
+          signature(x = "DataFrame", withReplacement = "logical",
+                    fraction = "numeric", seed = "numeric"),
+          function(x, withReplacement, fraction, seed) {
+            if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
+            sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
             dataFrame(sdf)
           })
 
@@ -691,9 +701,18 @@ setMethod("sample",
 #' @name sample_frac
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction) {
+                    fraction = "numeric", seed = "missing"),
+          function(x, withReplacement, fraction, seed) {
             sample(x, withReplacement, fraction)
+          })
+
+#' @rdname sample
+#' @name sample_frac
+setMethod("sample_frac",
+          signature(x = "DataFrame", withReplacement = "logical",
+                    fraction = "numeric", seed = "numeric"),
+          function(x, withReplacement, fraction, seed) {
+            sample(x, withReplacement, fraction, as.integer(seed))
           })
 
 #' nrow
