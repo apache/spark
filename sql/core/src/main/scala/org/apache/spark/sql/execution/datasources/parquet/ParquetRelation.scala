@@ -858,9 +858,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE"         -> CompressionCodecName.UNCOMPRESSED,
+    "NONE" -> CompressionCodecName.UNCOMPRESSED,
     "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY"       -> CompressionCodecName.SNAPPY,
-    "GZIP"         -> CompressionCodecName.GZIP,
-    "LZO"          -> CompressionCodecName.LZO)
+    "SNAPPY" -> CompressionCodecName.SNAPPY,
+    "GZIP" -> CompressionCodecName.GZIP,
+    "LZO" -> CompressionCodecName.LZO)
 }

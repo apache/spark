@@ -343,6 +343,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
     val sc = new SparkContext(conf)
     try {
+      SQLContext.clearSqlListener()
       val sqlContext = new SQLContext(sc)
       import sqlContext.implicits._
       // Run 100 successful executions and 100 failed executions.
