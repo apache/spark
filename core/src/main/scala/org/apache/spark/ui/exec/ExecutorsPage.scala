@@ -226,6 +226,7 @@ private[spark] object ExecutorsPage {
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
+      isActive,
       maxMem,
       executorLogs
     )
