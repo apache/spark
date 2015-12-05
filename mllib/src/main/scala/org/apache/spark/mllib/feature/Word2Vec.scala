@@ -263,7 +263,7 @@ class Word2Vec extends Serializable with Logging {
 
   /**
    * Computes the vector representation of each word in vocabulary.
-   * @param dataset an RDD of words
+   * @param dataset an RDD of sentences, each sentence are expressed as an iterable collection of words
    * @return a Word2VecModel
    */
   @Since("1.1.0")
@@ -469,14 +469,31 @@ class Word2VecModel private[spark] (
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
+  /**
+   * get cosineSimilarity of two word. assumed to be from the vocabulary and used after model built, otherwise will error out
+   * @param v1 one word from the vocabulary
+   * @param v2 the other word from the vocabulary
+   * @return the cosinesimilarity score in the vector space of the given two words
+   */
   def cosineSimilarity(v1: String, v2: String): Double = {
     return cosineSimilarity(getVectors(v1), getVectors(v2))
   }
 
+  /**
+   * get the built vocabulary from the input
+   * @return a map of word to its index
+   */
   def getVocabulary:Map[String,Int]={
     return wordIndex
   }
 
+  /**
+   * get cosineSimilarity of two word vectors
+   * @param v1 one word vector from the vocabulary
+   * @param v2 the other word vector from the vocabulary
+   * @return the cosineSimilarity score of two vectors
+   *
+   */
   def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
     val n = v1.length
@@ -486,6 +503,12 @@ class Word2VecModel private[spark] (
     blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
   }
 
+  /**
+   * get euclideanDistance of two word vectors
+   * @param v1 one word vector
+   * @param v2 the other word vector
+   * @return euclideanDistance of two word vectors
+   */
   def euclideanDistance(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
     val n = v1.length
@@ -525,7 +548,19 @@ class Word2VecModel private[spark] (
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
-  def findSynonyms(word: String, num: Int, norm: Boolean = false): Array[(String, Double)] = {
+  def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
+    findSynonyms(word, num, false)
+  }
+
+  /**
+   * Find synonyms of a word
+   * @param word a word
+   * @param num number of synonyms to find
+   * @param norm a flag to tell whether to output normalized cosineSimilarity or not. it will not change order, just for convinience of caller
+   *      e.g. set up threshold for filtering purpose.
+   * @return array of (word, cosineSimilarity)
+   */
+  def findSynonyms(word: String, num: Int, norm: Boolean ): Array[(String, Double)] = {
     val vector = transform(word)
     findSynonyms(vector, num, norm)
   }
@@ -534,10 +569,12 @@ class Word2VecModel private[spark] (
    * Find synonyms of the vector representation of a word
    * @param vector vector representation of a word
    * @param num number of synonyms to find
+   * @param norm an optional flag to tell whether to output normalized cosineSimilarity or not. it will not change order, just for convinience of caller
+   *      e.g. set up threshold for filtering purpose. default value is false for backward compatibility
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
-  def findSynonyms(vector: Vector, num: Int, norm: Boolean): Array[(String, Double)] = {
+  def findSynonyms(vector: Vector, num: Int, norm: Boolean = false): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
     // TODO: optimize top-k
     val fVector = vector.toArray.map(_.toFloat)
@@ -577,6 +614,11 @@ class Word2VecModel private[spark] (
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
     }
   }
+
+  /**
+   * get word vector array. length is vocabularySize*vectorSize
+   * @return the array of word vectors, need to split it by vectorSize to get each individual vector
+   */
   def getWordVectors: Array[Float] = {
     return wordVectors
   }
