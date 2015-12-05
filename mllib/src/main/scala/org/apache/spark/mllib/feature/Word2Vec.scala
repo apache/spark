@@ -138,7 +138,6 @@ class Word2Vec extends Serializable with Logging {
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
-  private val MAX_SENTENCE_LENGTH = 1000
 
   /** context words from [-window, window] */
   private val window = 5
@@ -281,16 +280,17 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
-
-    val sentences: RDD[Array[Int]] = words.mapPartitions { iter =>
+    //each partition is a collection of sentences, will be translated into arrays of Index integer
+    val sentences: RDD[Array[Int]] = dataset.mapPartitions { iter =>
       new Iterator[Array[Int]] {
         def hasNext: Boolean = iter.hasNext
 
         def next(): Array[Int] = {
           val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
-          while (iter.hasNext && sentenceLength < MAX_SENTENCE_LENGTH) {
-            val word = bcVocabHash.value.get(iter.next())
+          //do translation of each word into its index in the vocabulary, not constraint by fixed length anymore
+          for (wd <- iter.next()) {
+            val word = bcVocabHash.value.get(wd)
             word match {
               case Some(w) =>
                 sentence += w
@@ -469,13 +469,30 @@ class Word2VecModel private[spark] (
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
-  private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
+  def cosineSimilarity(v1: String, v2: String): Double = {
+    return cosineSimilarity(getVectors(v1), getVectors(v2))
+  }
+
+  def getVocabulary:Map[String,Int]={
+    return wordIndex
+  }
+
+  def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
     require(v1.length == v2.length, "Vectors should have the same length")
     val n = v1.length
     val norm1 = blas.snrm2(n, v1, 1)
     val norm2 = blas.snrm2(n, v2, 1)
     if (norm1 == 0 || norm2 == 0) return 0.0
     blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
+  }
+
+  def euclideanDistance(v1: Array[Float], v2: Array[Float]): Double = {
+    require(v1.length == v2.length, "Vectors should have the same length")
+    val n = v1.length
+    val result=new Array[Float](n)
+    Array.copy(v2,0,result,0,n)
+    blas.saxpy(n, -1, v1, 1, result, 1)
+    return blas.snrm2(n,result,1)
   }
 
   override protected def formatVersion = "1.0"
@@ -508,9 +525,9 @@ class Word2VecModel private[spark] (
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
-  def findSynonyms(word: String, num: Int): Array[(String, Double)] = {
+  def findSynonyms(word: String, num: Int, norm: Boolean = false): Array[(String, Double)] = {
     val vector = transform(word)
-    findSynonyms(vector, num)
+    findSynonyms(vector, num, norm)
   }
 
   /**
@@ -520,7 +537,7 @@ class Word2VecModel private[spark] (
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
-  def findSynonyms(vector: Vector, num: Int): Array[(String, Double)] = {
+  def findSynonyms(vector: Vector, num: Int, norm: Boolean): Array[(String, Double)] = {
     require(num > 0, "Number of similar words should > 0")
     // TODO: optimize top-k
     val fVector = vector.toArray.map(_.toFloat)
@@ -534,8 +551,13 @@ class Word2VecModel private[spark] (
     // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
+    var vecNorm = 1f
+    if (norm)
+      vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       cosVec(ind) /= wordVecNorms(ind)
+      if (norm)
+        cosVec(ind) /= vecNorm
       ind += 1
     }
     wordList.zip(cosVec)
@@ -554,6 +576,9 @@ class Word2VecModel private[spark] (
     wordIndex.map { case (word, ind) =>
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
     }
+  }
+  def getWordVectors: Array[Float] = {
+    return wordVectors
   }
 }
 
