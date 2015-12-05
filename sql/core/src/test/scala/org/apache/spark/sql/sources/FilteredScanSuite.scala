@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -78,6 +79,9 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case StringStartsWith("c", v) => _.startsWith(v)
       case StringEndsWith("c", v) => _.endsWith(v)
       case StringContains("c", v) => _.contains(v)
+      case EqualTo("c", v: String) => _.equals(v)
+      case EqualTo("c", v: UTF8String) => sys.error("UTF8String should not appear in filters")
+      case In("c", values) => (s: String) => values.map(_.asInstanceOf[String]).toSet.contains(s)
       case _ => (c: String) => true
     }
 
@@ -236,6 +240,9 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext {
 
   testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'", 1)
   testPushDown("SELECT a, b, c FROM oneToTenFiltered WHERE c like '%Ee%'", 0)
+
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE c = 'aaaaaAAAAA'", 1)
+  testPushDown("SELECT c FROM oneToTenFiltered WHERE c IN ('aaaaaAAAAA', 'foo')", 1)
 
   def testPushDown(sqlString: String, expectedCount: Int): Unit = {
     test(s"PushDown Returns $expectedCount: $sqlString") {

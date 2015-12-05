@@ -222,7 +222,7 @@ private[streaming] object WriteAheadLogBasedBlockHandler {
 /**
  * A utility that will wrap the Iterator to get the count
  */
-private class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
+private[streaming] class CountingIterator[T](iterator: Iterator[T]) extends Iterator[T] {
    private var _count = 0
 
    private def isFullyConsumed: Boolean = !iterator.hasNext

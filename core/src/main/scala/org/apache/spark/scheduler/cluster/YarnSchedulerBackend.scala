@@ -17,12 +17,13 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Future, ExecutionContext}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils
 import org.apache.spark.util.{ThreadUtils, RpcUtils}
 
@@ -43,8 +44,10 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerEndpoint = rpcEnv.setupEndpoint(
-    YarnSchedulerBackend.ENDPOINT_NAME, new YarnSchedulerEndpoint(rpcEnv))
+  private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
+
+  private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
+    YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
@@ -53,7 +56,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    yarnSchedulerEndpoint.askWithRetry[Boolean](
+    yarnSchedulerEndpointRef.askWithRetry[Boolean](
       RequestExecutors(requestedTotal, localityAwareTasks, hostToLocalTaskCount))
   }
 
@@ -61,7 +64,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * Request that the ApplicationMaster kill the specified executors.
    */
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    yarnSchedulerEndpoint.askWithRetry[Boolean](KillExecutors(executorIds))
+    yarnSchedulerEndpointRef.askWithRetry[Boolean](KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -90,6 +93,41 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
+  override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
+    new YarnDriverEndpoint(rpcEnv, properties)
+  }
+
+  /**
+   * Override the DriverEndpoint to add extra logic for the case when an executor is disconnected.
+   * This endpoint communicates with the executors and queries the AM for an executor's exit
+   * status when the executor is disconnected.
+   */
+  private class YarnDriverEndpoint(rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
+      extends DriverEndpoint(rpcEnv, sparkProperties) {
+
+    /**
+     * When onDisconnected is received at the driver endpoint, the superclass DriverEndpoint
+     * handles it by assuming the Executor was lost for a bad reason and removes the executor
+     * immediately.
+     *
+     * In YARN's case however it is crucial to talk to the application master and ask why the
+     * executor had exited. In particular, the executor may have exited due to the executor
+     * having been preempted. If the executor "exited normally" according to the application
+     * master then we pass that information down to the TaskSetManager to inform the
+     * TaskSetManager that tasks on that lost executor should not count towards a job failure.
+     *
+     * TODO there's a race condition where while we are querying the ApplicationMaster for
+     * the executor loss reason, there is the potential that tasks will be scheduled on
+     * the executor that failed. We should fix this by having this onDisconnected event
+     * also "blacklist" executors so that tasks are not assigned to them.
+     */
+    override def onDisconnected(rpcAddress: RpcAddress): Unit = {
+      addressToExecutorId.get(rpcAddress).foreach { executorId =>
+        yarnSchedulerEndpoint.handleExecutorDisconnectedFromDriver(executorId, rpcAddress)
+      }
+    }
+  }
+
   /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
@@ -100,6 +138,33 @@ private[spark] abstract class YarnSchedulerBackend(
     private val askAmThreadPool =
       ThreadUtils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-thread-pool")
     implicit val askAmExecutor = ExecutionContext.fromExecutor(askAmThreadPool)
+
+    private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
+        executorId: String,
+        executorRpcAddress: RpcAddress): Unit = {
+      amEndpoint match {
+        case Some(am) =>
+          val lossReasonRequest = GetExecutorLossReason(executorId)
+          val future = am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
+          future onSuccess {
+            case reason: ExecutorLossReason => {
+              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
+            }
+          }
+          future onFailure {
+            case NonFatal(e) => {
+              logWarning(s"Attempted to get executor loss reason" +
+                s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
+                s" but got no response. Marking as slave lost.", e)
+              driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
+            }
+            case t => throw t
+          }
+        case None =>
+          logWarning("Attempted to check for an executor loss reason" +
+            " before the AM has registered!")
+      }
+    }
 
     override def receive: PartialFunction[Any, Unit] = {
       case RegisterClusterManager(am) =>
@@ -112,6 +177,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
     }
+
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case r: RequestExecutors =>
@@ -143,7 +209,6 @@ private[spark] abstract class YarnSchedulerBackend(
             logWarning("Attempted to kill executors before the AM has registered!")
             context.reply(false)
         }
-
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

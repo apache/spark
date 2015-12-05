@@ -151,7 +151,7 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
         } finally {
           Closeables.close(in, copyThrewException);
         }
-        if (!blockManager.diskBlockManager().getFile(partitionWriters[i].blockId()).delete()) {
+        if (!partitionWriters[i].fileSegment().file().delete()) {
           logger.error("Unable to delete file for partition {}", i);
         }
       }
@@ -168,12 +168,11 @@ final class BypassMergeSortShuffleWriter<K, V> implements SortShuffleFileWriter<
   public void stop() throws IOException {
     if (partitionWriters != null) {
       try {
-        final DiskBlockManager diskBlockManager = blockManager.diskBlockManager();
         for (DiskBlockObjectWriter writer : partitionWriters) {
           // This method explicitly does _not_ throw exceptions:
-          writer.revertPartialWritesAndClose();
-          if (!diskBlockManager.getFile(writer.blockId()).delete()) {
-            logger.error("Error while deleting file for block {}", writer.blockId());
+          File file = writer.revertPartialWritesAndClose();
+          if (!file.delete()) {
+            logger.error("Error while deleting file {}", file.getAbsolutePath());
           }
         }
       } finally {

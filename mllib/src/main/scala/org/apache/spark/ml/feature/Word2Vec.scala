@@ -39,6 +39,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * The dimension of the code that you want to transform from words.
+   * Default: 100
    * @group param
    */
   final val vectorSize = new IntParam(
@@ -50,6 +51,7 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * Number of partitions for sentences of words.
+   * Default: 1
    * @group param
    */
   final val numPartitions = new IntParam(
@@ -62,6 +64,7 @@ private[feature] trait Word2VecBase extends Params
   /**
    * The minimum number of times a token must appear to be included in the word2vec model's
    * vocabulary.
+   * Default: 5
    * @group param
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +

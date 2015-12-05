@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.types._
 
@@ -119,6 +118,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, null, null) :: Nil)
 
   test("IN") {
+    checkEvaluation(In(Literal.create(null, IntegerType), Seq(Literal(1), Literal(2))), null)
+    checkEvaluation(In(Literal.create(null, IntegerType), Seq(Literal.create(null, IntegerType))),
+      null)
+    checkEvaluation(In(Literal(1), Seq(Literal.create(null, IntegerType))), null)
+    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal.create(null, IntegerType))), true)
+    checkEvaluation(In(Literal(2), Seq(Literal(1), Literal.create(null, IntegerType))), null)
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
     checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
@@ -126,14 +131,18 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1), Literal(2)))),
       true)
 
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"))), true)
+    val ns = Literal.create(null, StringType)
+    checkEvaluation(In(ns, Seq(Literal("1"), Literal("2"))), null)
+    checkEvaluation(In(ns, Seq(ns)), null)
+    checkEvaluation(In(Literal("a"), Seq(ns)), null)
+    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"), ns)), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
     primitiveTypes.map { t =>
-      val dataGen = RandomDataGenerator.forType(t, nullable = false).get
+      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
         value match {
@@ -142,9 +151,17 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
           case _ => value
         }
       }
-      val input = inputData.map(Literal(_))
-      checkEvaluation(In(input(0), input.slice(1, 10)),
-        inputData.slice(1, 10).contains(inputData(0)))
+      val input = inputData.map(Literal.create(_, t))
+      val expected = if (inputData(0) == null) {
+        null
+      } else if (inputData.slice(1, 10).contains(inputData(0))) {
+        true
+      } else if (inputData.slice(1, 10).contains(null)) {
+        null
+      } else {
+        false
+      }
+      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
     }
   }
 
@@ -158,15 +175,15 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InSet(one, hS), true)
     checkEvaluation(InSet(two, hS), true)
     checkEvaluation(InSet(two, nS), true)
-    checkEvaluation(InSet(nl, nS), true)
     checkEvaluation(InSet(three, hS), false)
-    checkEvaluation(InSet(three, nS), false)
-    checkEvaluation(And(InSet(one, hS), InSet(two, hS)), true)
+    checkEvaluation(InSet(three, nS), null)
+    checkEvaluation(InSet(nl, hS), null)
+    checkEvaluation(InSet(nl, nS), null)
 
     val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
       LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
     primitiveTypes.map { t =>
-      val dataGen = RandomDataGenerator.forType(t, nullable = false).get
+      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
         value match {
@@ -176,8 +193,16 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
       val input = inputData.map(Literal(_))
-      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet),
-        inputData.slice(1, 10).contains(inputData(0)))
+      val expected = if (inputData(0) == null) {
+        null
+      } else if (inputData.slice(1, 10).contains(inputData(0))) {
+        true
+      } else if (inputData.slice(1, 10).contains(null)) {
+        null
+      } else {
+        false
+      }
+      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet), expected)
     }
   }
 

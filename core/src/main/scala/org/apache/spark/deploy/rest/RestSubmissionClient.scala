@@ -392,15 +392,14 @@ private[spark] object RestSubmissionClient {
       mainClass: String,
       appArgs: Array[String],
       conf: SparkConf,
-      env: Map[String, String] = sys.env): SubmitRestProtocolResponse = {
+      env: Map[String, String] = Map()): SubmitRestProtocolResponse = {
     val master = conf.getOption("spark.master").getOrElse {
       throw new IllegalArgumentException("'spark.master' must be set.")
     }
     val sparkProperties = conf.getAll.toMap
-    val environmentVariables = env.filter { case (k, _) => k.startsWith("SPARK_") }
     val client = new RestSubmissionClient(master)
     val submitRequest = client.constructSubmitRequest(
-      appResource, mainClass, appArgs, sparkProperties, environmentVariables)
+      appResource, mainClass, appArgs, sparkProperties, env)
     client.createSubmission(submitRequest)
   }
 
@@ -413,6 +412,16 @@ private[spark] object RestSubmissionClient {
     val mainClass = args(1)
     val appArgs = args.slice(2, args.size)
     val conf = new SparkConf
-    run(appResource, mainClass, appArgs, conf)
+    val env = filterSystemEnvironment(sys.env)
+    run(appResource, mainClass, appArgs, conf, env)
+  }
+
+  /**
+   * Filter non-spark environment variables from any environment.
+   */
+  private[rest] def filterSystemEnvironment(env: Map[String, String]): Map[String, String] = {
+    env.filter { case (k, _) =>
+      (k.startsWith("SPARK_") && k != "SPARK_ENV_LOADED") || k.startsWith("MESOS_")
+    }
   }
 }

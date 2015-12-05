@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * :: DeveloperApi ::
  * Performs an sort merge outer join of two child relations.
- *
- * Note: this does not support full outer join yet; see SPARK-9730 for progress on this.
  */
 @DeveloperApi
 case class SortMergeOuterJoin(
@@ -52,6 +53,8 @@ case class SortMergeOuterJoin(
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        (left.output ++ right.output).map(_.withNullability(true))
       case x =>
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -62,6 +65,7 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is partitioned by the streamed input's join keys.
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning
+    case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -71,6 +75,8 @@ case class SortMergeOuterJoin(
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
     case LeftOuter => requiredOrders(leftKeys)
     case RightOuter => requiredOrders(rightKeys)
+    // there are null rows in both streams, so there is no order
+    case FullOuter => Nil
     case x => throw new IllegalArgumentException(
       s"SortMergeOuterJoin should not take $x as the JoinType")
   }
@@ -165,6 +171,26 @@ case class SortMergeOuterJoin(
           new RightOuterIterator(
             smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
 
+        case FullOuter =>
+          val leftNullRow = new GenericInternalRow(left.output.length)
+          val rightNullRow = new GenericInternalRow(right.output.length)
+          val smjScanner = new SortMergeFullOuterJoinScanner(
+            leftKeyGenerator = createLeftKeyGenerator(),
+            rightKeyGenerator = createRightKeyGenerator(),
+            keyOrdering,
+            leftIter = RowIterator.fromScala(leftIter),
+            numLeftRows,
+            rightIter = RowIterator.fromScala(rightIter),
+            numRightRows,
+            boundCondition,
+            leftNullRow,
+            rightNullRow)
+
+          new FullOuterIterator(
+            smjScanner,
+            resultProj,
+            numOutputRows).toScala
+
         case x =>
           throw new IllegalArgumentException(
             s"SortMergeOuterJoin should not take $x as the JoinType")
@@ -173,98 +199,307 @@ case class SortMergeOuterJoin(
   }
 }
 
-
+/**
+ * An iterator for outputting rows in left outer join.
+ */
 private class LeftOuterIterator(
     smjScanner: SortMergeJoinScanner,
     rightNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numRows: LongSQLMetric
-  ) extends RowIterator {
-  private[this] val joinedRow: JoinedRow = new JoinedRow()
-  private[this] var rightIdx: Int = 0
+    numOutputRows: LongSQLMetric)
+  extends OneSideOuterIterator(
+    smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
+
+  protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
+  protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
+}
+
+/**
+ * An iterator for outputting rows in right outer join.
+ */
+private class RightOuterIterator(
+    smjScanner: SortMergeJoinScanner,
+    leftNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric)
+  extends OneSideOuterIterator(
+    smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+
+  protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
+  protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
+}
+
+/**
+ * An abstract iterator for sharing code between [[LeftOuterIterator]] and [[RightOuterIterator]].
+ *
+ * Each [[OneSideOuterIterator]] has a streamed side and a buffered side. Each row on the
+ * streamed side will output 0 or many rows, one for each matching row on the buffered side.
+ * If there are no matches, then the buffered side of the joined output will be a null row.
+ *
+ * In left outer join, the left is the streamed side and the right is the buffered side.
+ * In right outer join, the right is the streamed side and the left is the buffered side.
+ *
+ * @param smjScanner a scanner that streams rows and buffers any matching rows
+ * @param bufferedSideNullRow the default row to return when a streamed row has no matches
+ * @param boundCondition an additional filter condition for buffered rows
+ * @param resultProj how the output should be projected
+ * @param numOutputRows an accumulator metric for the number of rows output
+ */
+private abstract class OneSideOuterIterator(
+    smjScanner: SortMergeJoinScanner,
+    bufferedSideNullRow: InternalRow,
+    boundCondition: InternalRow => Boolean,
+    resultProj: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric) extends RowIterator {
+
+  // A row to store the joined result, reused many times
+  protected[this] val joinedRow: JoinedRow = new JoinedRow()
+
+  // Index of the buffered rows, reset to 0 whenever we advance to a new streamed row
+  private[this] var bufferIndex: Int = 0
+
+  // This iterator is initialized lazily so there should be no matches initially
   assert(smjScanner.getBufferedMatches.length == 0)
 
-  private def advanceLeft(): Boolean = {
-    rightIdx = 0
+  // Set output methods to be overridden by subclasses
+  protected def setStreamSideOutput(row: InternalRow): Unit
+  protected def setBufferedSideOutput(row: InternalRow): Unit
+
+  /**
+   * Advance to the next row on the stream side and populate the buffer with matches.
+   * @return whether there are more rows in the stream to consume.
+   */
+  private def advanceStream(): Boolean = {
+    bufferIndex = 0
     if (smjScanner.findNextOuterJoinRows()) {
-      joinedRow.withLeft(smjScanner.getStreamedRow)
+      setStreamSideOutput(smjScanner.getStreamedRow)
       if (smjScanner.getBufferedMatches.isEmpty) {
-        // There are no matching right rows, so return nulls for the right row
-        joinedRow.withRight(rightNullRow)
+        // There are no matching rows in the buffer, so return the null row
+        setBufferedSideOutput(bufferedSideNullRow)
       } else {
-        // Find the next row from the right input that satisfied the bound condition
-        if (!advanceRightUntilBoundConditionSatisfied()) {
-          joinedRow.withRight(rightNullRow)
+        // Find the next row in the buffer that satisfied the bound condition
+        if (!advanceBufferUntilBoundConditionSatisfied()) {
+          setBufferedSideOutput(bufferedSideNullRow)
         }
       }
       true
     } else {
-      // Left input has been exhausted
+      // Stream has been exhausted
       false
     }
   }
 
-  private def advanceRightUntilBoundConditionSatisfied(): Boolean = {
+  /**
+   * Advance to the next row in the buffer that satisfies the bound condition.
+   * @return whether there is such a row in the current buffer.
+   */
+  private def advanceBufferUntilBoundConditionSatisfied(): Boolean = {
     var foundMatch: Boolean = false
-    while (!foundMatch && rightIdx < smjScanner.getBufferedMatches.length) {
-      foundMatch = boundCondition(joinedRow.withRight(smjScanner.getBufferedMatches(rightIdx)))
-      rightIdx += 1
+    while (!foundMatch && bufferIndex < smjScanner.getBufferedMatches.length) {
+      setBufferedSideOutput(smjScanner.getBufferedMatches(bufferIndex))
+      foundMatch = boundCondition(joinedRow)
+      bufferIndex += 1
     }
     foundMatch
   }
 
   override def advanceNext(): Boolean = {
-    val r = advanceRightUntilBoundConditionSatisfied() || advanceLeft()
-    if (r) numRows += 1
+    val r = advanceBufferUntilBoundConditionSatisfied() || advanceStream()
+    if (r) numOutputRows += 1
     r
   }
 
   override def getRow: InternalRow = resultProj(joinedRow)
 }
 
-private class RightOuterIterator(
-    smjScanner: SortMergeJoinScanner,
-    leftNullRow: InternalRow,
+private class SortMergeFullOuterJoinScanner(
+    leftKeyGenerator: Projection,
+    rightKeyGenerator: Projection,
+    keyOrdering: Ordering[InternalRow],
+    leftIter: RowIterator,
+    numLeftRows: LongSQLMetric,
+    rightIter: RowIterator,
+    numRightRows: LongSQLMetric,
     boundCondition: InternalRow => Boolean,
-    resultProj: InternalRow => InternalRow,
-    numRows: LongSQLMetric
-  ) extends RowIterator {
+    leftNullRow: InternalRow,
+    rightNullRow: InternalRow)  {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
-  private[this] var leftIdx: Int = 0
-  assert(smjScanner.getBufferedMatches.length == 0)
+  private[this] var leftRow: InternalRow = _
+  private[this] var leftRowKey: InternalRow = _
+  private[this] var rightRow: InternalRow = _
+  private[this] var rightRowKey: InternalRow = _
 
-  private def advanceRight(): Boolean = {
-    leftIdx = 0
-    if (smjScanner.findNextOuterJoinRows()) {
-      joinedRow.withRight(smjScanner.getStreamedRow)
-      if (smjScanner.getBufferedMatches.isEmpty) {
-        // There are no matching left rows, so return nulls for the left row
-        joinedRow.withLeft(leftNullRow)
-      } else {
-        // Find the next row from the left input that satisfied the bound condition
-        if (!advanceLeftUntilBoundConditionSatisfied()) {
-          joinedRow.withLeft(leftNullRow)
-        }
-      }
+  private[this] var leftIndex: Int = 0
+  private[this] var rightIndex: Int = 0
+  private[this] val leftMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] val rightMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] var leftMatched: BitSet = new BitSet(1)
+  private[this] var rightMatched: BitSet = new BitSet(1)
+
+  advancedLeft()
+  advancedRight()
+
+  // --- Private methods --------------------------------------------------------------------------
+
+  /**
+   * Advance the left iterator and compute the new row's join key.
+   * @return true if the left iterator returned a row and false otherwise.
+   */
+  private def advancedLeft(): Boolean = {
+    if (leftIter.advanceNext()) {
+      leftRow = leftIter.getRow
+      leftRowKey = leftKeyGenerator(leftRow)
+      numLeftRows += 1
       true
     } else {
-      // Right input has been exhausted
+      leftRow = null
+      leftRowKey = null
       false
     }
   }
 
-  private def advanceLeftUntilBoundConditionSatisfied(): Boolean = {
-    var foundMatch: Boolean = false
-    while (!foundMatch && leftIdx < smjScanner.getBufferedMatches.length) {
-      foundMatch = boundCondition(joinedRow.withLeft(smjScanner.getBufferedMatches(leftIdx)))
-      leftIdx += 1
+  /**
+   * Advance the right iterator and compute the new row's join key.
+   * @return true if the right iterator returned a row and false otherwise.
+   */
+  private def advancedRight(): Boolean = {
+    if (rightIter.advanceNext()) {
+      rightRow = rightIter.getRow
+      rightRowKey = rightKeyGenerator(rightRow)
+      numRightRows += 1
+      true
+    } else {
+      rightRow = null
+      rightRowKey = null
+      false
     }
-    foundMatch
   }
 
+  /**
+   * Populate the left and right buffers with rows matching the provided key.
+   * This consumes rows from both iterators until their keys are different from the matching key.
+   */
+  private def findMatchingRows(matchingKey: InternalRow): Unit = {
+    leftMatches.clear()
+    rightMatches.clear()
+    leftIndex = 0
+    rightIndex = 0
+
+    while (leftRowKey != null && keyOrdering.compare(leftRowKey, matchingKey) == 0) {
+      leftMatches += leftRow.copy()
+      advancedLeft()
+    }
+    while (rightRowKey != null && keyOrdering.compare(rightRowKey, matchingKey) == 0) {
+      rightMatches += rightRow.copy()
+      advancedRight()
+    }
+
+    if (leftMatches.size <= leftMatched.capacity) {
+      leftMatched.clear()
+    } else {
+      leftMatched = new BitSet(leftMatches.size)
+    }
+    if (rightMatches.size <= rightMatched.capacity) {
+      rightMatched.clear()
+    } else {
+      rightMatched = new BitSet(rightMatches.size)
+    }
+  }
+
+  /**
+   * Scan the left and right buffers for the next valid match.
+   *
+   * Note: this method mutates `joinedRow` to point to the latest matching rows in the buffers.
+   * If a left row has no valid matches on the right, or a right row has no valid matches on the
+   * left, then the row is joined with the null row and the result is considered a valid match.
+   *
+   * @return true if a valid match is found, false otherwise.
+   */
+  private def scanNextInBuffered(): Boolean = {
+    while (leftIndex < leftMatches.size) {
+      while (rightIndex < rightMatches.size) {
+        joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
+        if (boundCondition(joinedRow)) {
+          leftMatched.set(leftIndex)
+          rightMatched.set(rightIndex)
+          rightIndex += 1
+          return true
+        }
+        rightIndex += 1
+      }
+      rightIndex = 0
+      if (!leftMatched.get(leftIndex)) {
+        // the left row has never matched any right row, join it with null row
+        joinedRow(leftMatches(leftIndex), rightNullRow)
+        leftIndex += 1
+        return true
+      }
+      leftIndex += 1
+    }
+
+    while (rightIndex < rightMatches.size) {
+      if (!rightMatched.get(rightIndex)) {
+        // the right row has never matched any left row, join it with null row
+        joinedRow(leftNullRow, rightMatches(rightIndex))
+        rightIndex += 1
+        return true
+      }
+      rightIndex += 1
+    }
+
+    // There are no more valid matches in the left and right buffers
+    false
+  }
+
+  // --- Public methods --------------------------------------------------------------------------
+
+  def getJoinedRow(): JoinedRow = joinedRow
+
+  def advanceNext(): Boolean = {
+    // If we already buffered some matching rows, use them directly
+    if (leftIndex <= leftMatches.size || rightIndex <= rightMatches.size) {
+      if (scanNextInBuffered()) {
+        return true
+      }
+    }
+
+    if (leftRow != null && (leftRowKey.anyNull || rightRow == null)) {
+      joinedRow(leftRow.copy(), rightNullRow)
+      advancedLeft()
+      true
+    } else if (rightRow != null && (rightRowKey.anyNull || leftRow == null)) {
+      joinedRow(leftNullRow, rightRow.copy())
+      advancedRight()
+      true
+    } else if (leftRow != null && rightRow != null) {
+      // Both rows are present and neither have null values,
+      // so we populate the buffers with rows matching the next key
+      val comp = keyOrdering.compare(leftRowKey, rightRowKey)
+      if (comp <= 0) {
+        findMatchingRows(leftRowKey.copy())
+      } else {
+        findMatchingRows(rightRowKey.copy())
+      }
+      scanNextInBuffered()
+      true
+    } else {
+      // Both iterators have been consumed
+      false
+    }
+  }
+}
+
+private class FullOuterIterator(
+    smjScanner: SortMergeFullOuterJoinScanner,
+    resultProj: InternalRow => InternalRow,
+    numRows: LongSQLMetric
+  ) extends RowIterator {
+  private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
+
   override def advanceNext(): Boolean = {
-    val r = advanceLeftUntilBoundConditionSatisfied() || advanceRight()
+    val r = smjScanner.advanceNext()
     if (r) numRows += 1
     r
   }

@@ -22,8 +22,7 @@ import java.rmi.server.UID
 
 import org.apache.avro.Schema
 
-/* Implicit conversions */
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -73,7 +72,7 @@ private[hive] object HiveShim {
    */
   def appendReadColumns(conf: Configuration, ids: Seq[Integer], names: Seq[String]) {
     if (ids != null && ids.nonEmpty) {
-      ColumnProjectionUtils.appendReadColumns(conf, ids)
+      ColumnProjectionUtils.appendReadColumns(conf, ids.asJava)
     }
     if (names != null && names.nonEmpty) {
       appendReadColumnNames(conf, names)

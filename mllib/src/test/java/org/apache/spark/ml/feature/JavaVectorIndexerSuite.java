@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -25,8 +26,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
@@ -52,7 +51,7 @@ public class JavaVectorIndexerSuite implements Serializable {
   @Test
   public void vectorIndexerAPI() {
     // The tests are to check Java compatibility.
-    List<FeatureData> points = Lists.newArrayList(
+    List<FeatureData> points = Arrays.asList(
       new FeatureData(Vectors.dense(0.0, -2.0)),
       new FeatureData(Vectors.dense(1.0, 3.0)),
       new FeatureData(Vectors.dense(1.0, 4.0))

@@ -56,7 +56,7 @@ structType.structField <- function(x, ...) {
   })
   stObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructType",
-                       listToSeq(sfObjList))
+                       sfObjList)
   structType(stObj)
 }
 
@@ -114,6 +114,55 @@ structField.jobj <- function(x) {
   obj
 }
 
+checkType <- function(type) {
+  primtiveTypes <- c("byte",
+                     "integer",
+                     "float",
+                     "double",
+                     "numeric",
+                     "character",
+                     "string",
+                     "binary",
+                     "raw",
+                     "logical",
+                     "boolean",
+                     "timestamp",
+                     "date")
+  if (type %in% primtiveTypes) {
+    return()
+  } else {
+    # Check complex types
+    firstChar <- substr(type, 1, 1)
+    switch (firstChar,
+            a = {
+              # Array type
+              m <- regexec("^array<(.*)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 2) {
+                elemType <- matchedStrings[[1]][2]
+                checkType(elemType)
+                return()
+              }
+            },
+            m = {
+              # Map type
+              m <- regexec("^map<(.*),(.*)>$", type)
+              matchedStrings <- regmatches(type, m)
+              if (length(matchedStrings[[1]]) >= 3) {
+                keyType <- matchedStrings[[1]][2]
+                if (keyType != "string" && keyType != "character") {
+                  stop("Key type in a map must be string or character")
+                }
+                valueType <- matchedStrings[[1]][3]
+                checkType(valueType)
+                return()
+              }
+            })
+  }
+
+  stop(paste("Unsupported type for Dataframe:", type))
+}
+
 structField.character <- function(x, type, nullable = TRUE) {
   if (class(x) != "character") {
     stop("Field name must be a string.")
@@ -124,28 +173,13 @@ structField.character <- function(x, type, nullable = TRUE) {
   if (class(nullable) != "logical") {
     stop("nullable must be either TRUE or FALSE")
   }
-  options <- c("byte",
-               "integer",
-               "float",
-               "double",
-               "numeric",
-               "character",
-               "string",
-               "binary",
-               "raw",
-               "logical",
-               "boolean",
-               "timestamp",
-               "date")
-  dataType <- if (type %in% options) {
-    type
-  } else {
-    stop(paste("Unsupported type for Dataframe:", type))
-  }
+
+  checkType(type)
+
   sfObj <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                        "createStructField",
                        x,
-                       dataType,
+                       type,
                        nullable)
   structField(sfObj)
 }

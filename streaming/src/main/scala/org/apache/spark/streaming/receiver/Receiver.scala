@@ -20,7 +20,7 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.annotation.DeveloperApi
@@ -144,12 +144,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: java.util.Iterator[T], metadata: Any) {
-    supervisor.pushIterator(dataIterator, Some(metadata), None)
+    supervisor.pushIterator(dataIterator.asScala, Some(metadata), None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
-    supervisor.pushIterator(dataIterator, None, None)
+    supervisor.pushIterator(dataIterator.asScala, None, None)
   }
 
   /**

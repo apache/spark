@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.tree.loss
 
-/**
- * @since 1.2.0
- */
+import org.apache.spark.annotation.Since
+
+@Since("1.2.0")
 object Losses {
 
-  /**
-   * @since 1.2.0
-   */
+  @Since("1.2.0")
   def fromString(name: String): Loss = name match {
     case "leastSquaresError" => SquaredError
     case "leastAbsoluteError" => AbsoluteError

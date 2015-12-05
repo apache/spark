@@ -102,7 +102,7 @@ setMethod("agg",
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], listToSeq(jcols[-1]))
+              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], jcols[-1])
             } else {
               stop("agg can only support Column or character")
             }
@@ -124,7 +124,7 @@ createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
             function(x, ...) {
-              sdf <- callJMethod(x@sgd, name, toSeq(...))
+              sdf <- callJMethod(x@sgd, name, list(...))
               dataFrame(sdf)
             })
 }

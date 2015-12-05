@@ -23,16 +23,20 @@ import org.apache.spark.executor.ExecutorExitCode
  * Represents an explanation for a executor or whole slave failing or exiting.
  */
 private[spark]
-class ExecutorLossReason(val message: String) {
+class ExecutorLossReason(val message: String) extends Serializable {
   override def toString: String = message
 }
 
 private[spark]
-case class ExecutorExited(val exitCode: Int)
-  extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
+case class ExecutorExited(exitCode: Int, isNormalExit: Boolean, reason: String)
+  extends ExecutorLossReason(reason)
+
+private[spark] object ExecutorExited {
+  def apply(exitCode: Int, isNormalExit: Boolean): ExecutorExited = {
+    ExecutorExited(exitCode, isNormalExit, ExecutorExitCode.explainExitCode(exitCode))
+  }
 }
 
 private[spark]
 case class SlaveLost(_message: String = "Slave lost")
-  extends ExecutorLossReason(_message) {
-}
+  extends ExecutorLossReason(_message)

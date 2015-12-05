@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.mllib.linalg.VectorUDT
@@ -31,27 +32,35 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
    * of the special '.' term. Duplicate terms will be removed during resolution.
    */
   def resolve(schema: StructType): ResolvedRFormula = {
-    var includedTerms = Seq[String]()
+    val dotTerms = expandDot(schema)
+    var includedTerms = Seq[Seq[String]]()
     terms.foreach {
+      case col: ColumnRef =>
+        includedTerms :+= Seq(col.value)
+      case ColumnInteraction(cols) =>
+        includedTerms ++= expandInteraction(schema, cols)
       case Dot =>
-        includedTerms ++= simpleTypes(schema).filter(_ != label.value)
-      case ColumnRef(value) =>
-        includedTerms :+= value
+        includedTerms ++= dotTerms.map(Seq(_))
       case Deletion(term: Term) =>
         term match {
-          case ColumnRef(value) =>
-            includedTerms = includedTerms.filter(_ != value)
+          case inner: ColumnRef =>
+            includedTerms = includedTerms.filter(_ != Seq(inner.value))
+          case ColumnInteraction(cols) =>
+            val fromInteraction = expandInteraction(schema, cols).map(_.toSet)
+            includedTerms = includedTerms.filter(t => !fromInteraction.contains(t.toSet))
           case Dot =>
             // e.g. "- .", which removes all first-order terms
-            val fromSchema = simpleTypes(schema)
-            includedTerms = includedTerms.filter(fromSchema.contains(_))
+            includedTerms = includedTerms.filter {
+              case Seq(t) => !dotTerms.contains(t)
+              case _ => true
+            }
           case _: Deletion =>
-            assert(false, "Deletion terms cannot be nested")
+            throw new RuntimeException("Deletion terms cannot be nested")
           case _: Intercept =>
         }
       case _: Intercept =>
     }
-    ResolvedRFormula(label.value, includedTerms.distinct)
+    ResolvedRFormula(label.value, includedTerms.distinct, hasIntercept)
   }
 
   /** Whether this formula specifies fitting with an intercept term. */
@@ -67,19 +76,54 @@ private[ml] case class ParsedRFormula(label: ColumnRef, terms: Seq[Term]) {
     intercept
   }
 
+  // expands the Dot operators in interaction terms
+  private def expandInteraction(
+      schema: StructType, terms: Seq[InteractableTerm]): Seq[Seq[String]] = {
+    if (terms.isEmpty) {
+      return Seq(Nil)
+    }
+
+    val rest = expandInteraction(schema, terms.tail)
+    val validInteractions = (terms.head match {
+      case Dot =>
+        expandDot(schema).flatMap { t =>
+          rest.map { r =>
+            Seq(t) ++ r
+          }
+        }
+      case ColumnRef(value) =>
+        rest.map(Seq(value) ++ _)
+    }).map(_.distinct)
+
+    // Deduplicates feature interactions, for example, a:b is the same as b:a.
+    var seen = mutable.Set[Set[String]]()
+    validInteractions.flatMap {
+      case t if seen.contains(t.toSet) =>
+        None
+      case t =>
+        seen += t.toSet
+        Some(t)
+    }.sortBy(_.length)
+  }
+
   // the dot operator excludes complex column types
-  private def simpleTypes(schema: StructType): Seq[String] = {
+  private def expandDot(schema: StructType): Seq[String] = {
     schema.fields.filter(_.dataType match {
       case _: NumericType | StringType | BooleanType | _: VectorUDT => true
       case _ => false
-    }).map(_.name)
+    }).map(_.name).filter(_ != label.value)
   }
 }
 
 /**
  * Represents a fully evaluated and simplified R formula.
+ * @param label the column name of the R formula label (response variable).
+ * @param terms the simplified terms of the R formula. Interactions terms are represented as Seqs
+ *              of column names; non-interaction terms as length 1 Seqs.
+ * @param hasIntercept whether the formula specifies fitting with an intercept.
  */
-private[ml] case class ResolvedRFormula(label: String, terms: Seq[String])
+private[ml] case class ResolvedRFormula(
+  label: String, terms: Seq[Seq[String]], hasIntercept: Boolean)
 
 /**
  * R formula terms. See the R formula docs here for more information:
@@ -87,11 +131,17 @@ private[ml] case class ResolvedRFormula(label: String, terms: Seq[String])
  */
 private[ml] sealed trait Term
 
+/** A term that may be part of an interaction, e.g. 'x' in 'x:y' */
+private[ml] sealed trait InteractableTerm extends Term
+
 /* R formula reference to all available columns, e.g. "." in a formula */
-private[ml] case object Dot extends Term
+private[ml] case object Dot extends InteractableTerm
 
 /* R formula reference to a column, e.g. "+ Species" in a formula */
-private[ml] case class ColumnRef(value: String) extends Term
+private[ml] case class ColumnRef(value: String) extends InteractableTerm
+
+/* R formula interaction of several columns, e.g. "Sepal_Length:Species" in a formula */
+private[ml] case class ColumnInteraction(terms: Seq[InteractableTerm]) extends Term
 
 /* R formula intercept toggle, e.g. "+ 0" in a formula */
 private[ml] case class Intercept(enabled: Boolean) extends Term
@@ -100,25 +150,30 @@ private[ml] case class Intercept(enabled: Boolean) extends Term
 private[ml] case class Deletion(term: Term) extends Term
 
 /**
- * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.'.
+ * Limited implementation of R formula parsing. Currently supports: '~', '+', '-', '.', ':'.
  */
 private[ml] object RFormulaParser extends RegexParsers {
-  def intercept: Parser[Intercept] =
+  private val intercept: Parser[Intercept] =
     "([01])".r ^^ { case a => Intercept(a == "1") }
 
-  def columnRef: Parser[ColumnRef] =
+  private val columnRef: Parser[ColumnRef] =
     "([a-zA-Z]|\\.[a-zA-Z_])[a-zA-Z0-9._]*".r ^^ { case a => ColumnRef(a) }
 
-  def term: Parser[Term] = intercept | columnRef | "\\.".r ^^ { case _ => Dot }
+  private val dot: Parser[InteractableTerm] = "\\.".r ^^ { case _ => Dot }
 
-  def terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
+  private val interaction: Parser[List[InteractableTerm]] = rep1sep(columnRef | dot, ":")
+
+  private val term: Parser[Term] = intercept |
+    interaction ^^ { case terms => ColumnInteraction(terms) } | dot | columnRef
+
+  private val terms: Parser[List[Term]] = (term ~ rep("+" ~ term | "-" ~ term)) ^^ {
     case op ~ list => list.foldLeft(List(op)) {
       case (left, "+" ~ right) => left ++ Seq(right)
       case (left, "-" ~ right) => left ++ Seq(Deletion(right))
     }
   }
 
-  def formula: Parser[ParsedRFormula] =
+  private val formula: Parser[ParsedRFormula] =
     (columnRef ~ "~" ~ terms) ^^ { case r ~ "~" ~ t => ParsedRFormula(r, t) }
 
   def parse(value: String): ParsedRFormula = parseAll(formula, value) match {

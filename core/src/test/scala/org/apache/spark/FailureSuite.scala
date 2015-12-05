@@ -217,6 +217,27 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
+  // Run a 3-task map stage where one task fails once.
+  test("failure in tasks in a submitMapStage") {
+    sc = new SparkContext("local[1,2]", "test")
+    val rdd = sc.makeRDD(1 to 3, 3).map { x =>
+      FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        if (x == 1 && FailureSuiteState.tasksFailed == 0) {
+          FailureSuiteState.tasksFailed += 1
+          throw new Exception("Intentional task failure")
+        }
+      }
+      (x, x)
+    }
+    val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
+    sc.submitMapStage(dep).get()
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
+    }
+    FailureSuiteState.clear()
+  }
+
   // TODO: Need to add tests with shuffle fetch failures.
 }
 

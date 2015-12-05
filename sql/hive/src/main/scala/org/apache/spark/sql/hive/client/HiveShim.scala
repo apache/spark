@@ -23,7 +23,7 @@ import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -201,7 +201,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     setDataLocationMethod.invoke(table, new URI(loc))
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
-    getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
+    getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
 
   override def getPartitionsByFilter(
       hive: Hive,
@@ -220,7 +220,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[String]()
     getDriverResultsMethod.invoke(driver, res)
-    res.toSeq
+    res.asScala
   }
 
   override def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long = {
@@ -310,7 +310,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     setDataLocationMethod.invoke(table, new Path(loc))
 
   override def getAllPartitions(hive: Hive, table: Table): Seq[Partition] =
-    getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].toSeq
+    getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
 
   /**
    * Converts catalyst expression to the format that Hive's getPartitionsByFilter() expects, i.e.
@@ -320,7 +320,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    */
   def convertFilters(table: Table, filters: Seq[Expression]): String = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
-    val varcharKeys = table.getPartitionKeys
+    val varcharKeys = table.getPartitionKeys.asScala
       .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
@@ -354,7 +354,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
       }
 
-    partitions.toSeq
+    partitions.asScala.toSeq
   }
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
@@ -363,7 +363,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[Object]()
     getDriverResultsMethod.invoke(driver, res)
-    res.map { r =>
+    res.asScala.map { r =>
       r match {
         case s: String => s
         case a: Array[Object] => a(0).asInstanceOf[String]

@@ -20,9 +20,8 @@ package org.apache.spark.deploy.worker.ui
 import java.io.File
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.deploy.worker.ui.WorkerWebUI._
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.RpcUtils
@@ -49,7 +48,9 @@ class WorkerWebUI(
     attachPage(new WorkerPage(this))
     attachHandler(createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static"))
     attachHandler(createServletHandler("/log",
-      (request: HttpServletRequest) => logPage.renderLog(request), worker.securityMgr))
+      (request: HttpServletRequest) => logPage.renderLog(request),
+      worker.securityMgr,
+      worker.conf))
   }
 }
 

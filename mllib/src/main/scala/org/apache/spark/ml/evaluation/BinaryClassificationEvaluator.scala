@@ -38,6 +38,7 @@ class BinaryClassificationEvaluator(override val uid: String)
 
   /**
    * param for metric name in evaluation
+   * Default: areaUnderROC
    * @group param
    */
   val metricName: Param[String] = {

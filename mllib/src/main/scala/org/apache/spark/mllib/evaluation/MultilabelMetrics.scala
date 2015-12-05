@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.evaluation
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.sql.DataFrame
@@ -25,9 +26,9 @@ import org.apache.spark.sql.DataFrame
  * Evaluator for multilabel classification.
  * @param predictionAndLabels an RDD of (predictions, labels) pairs,
  * both are non-null Arrays, each with unique elements.
- * @since 1.2.0
  */
-class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
+@Since("1.2.0")
+class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double], Array[Double])]) {
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -45,6 +46,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
    * Returns subset accuracy
    * (for equal sets of labels)
    */
+  @Since("1.2.0")
   lazy val subsetAccuracy: Double = predictionAndLabels.filter { case (predictions, labels) =>
     predictions.deep == labels.deep
   }.count().toDouble / numDocs
@@ -52,6 +54,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns accuracy
    */
+  @Since("1.2.0")
   lazy val accuracy: Double = predictionAndLabels.map { case (predictions, labels) =>
     labels.intersect(predictions).size.toDouble /
       (labels.size + predictions.size - labels.intersect(predictions).size)}.sum / numDocs
@@ -60,6 +63,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns Hamming-loss
    */
+  @Since("1.2.0")
   lazy val hammingLoss: Double = predictionAndLabels.map { case (predictions, labels) =>
     labels.size + predictions.size - 2 * labels.intersect(predictions).size
   }.sum / (numDocs * numLabels)
@@ -67,6 +71,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns document-based precision averaged by the number of documents
    */
+  @Since("1.2.0")
   lazy val precision: Double = predictionAndLabels.map { case (predictions, labels) =>
     if (predictions.size > 0) {
       predictions.intersect(labels).size.toDouble / predictions.size
@@ -78,6 +83,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns document-based recall averaged by the number of documents
    */
+  @Since("1.2.0")
   lazy val recall: Double = predictionAndLabels.map { case (predictions, labels) =>
     labels.intersect(predictions).size.toDouble / labels.size
   }.sum / numDocs
@@ -85,6 +91,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns document-based f1-measure averaged by the number of documents
    */
+  @Since("1.2.0")
   lazy val f1Measure: Double = predictionAndLabels.map { case (predictions, labels) =>
     2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)
   }.sum / numDocs
@@ -104,8 +111,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns precision for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def precision(label: Double): Double = {
     val tp = tpPerClass(label)
     val fp = fpPerClass.getOrElse(label, 0L)
@@ -115,8 +122,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns recall for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def recall(label: Double): Double = {
     val tp = tpPerClass(label)
     val fn = fnPerClass.getOrElse(label, 0L)
@@ -126,8 +133,8 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
   /**
    * Returns f1-measure for a given label (category)
    * @param label the label.
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def f1Measure(label: Double): Double = {
     val p = precision(label)
     val r = recall(label)
@@ -142,6 +149,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
    * Returns micro-averaged label-based precision
    * (equals to micro-averaged document-based precision)
    */
+  @Since("1.2.0")
   lazy val microPrecision: Double = {
     val sumFp = fpPerClass.foldLeft(0L){ case(cum, (_, fp)) => cum + fp}
     sumTp.toDouble / (sumTp + sumFp)
@@ -151,6 +159,7 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
    * Returns micro-averaged label-based recall
    * (equals to micro-averaged document-based recall)
    */
+  @Since("1.2.0")
   lazy val microRecall: Double = {
     val sumFn = fnPerClass.foldLeft(0.0){ case(cum, (_, fn)) => cum + fn}
     sumTp.toDouble / (sumTp + sumFn)
@@ -160,10 +169,12 @@ class MultilabelMetrics(predictionAndLabels: RDD[(Array[Double], Array[Double])]
    * Returns micro-averaged label-based f1-measure
    * (equals to micro-averaged document-based f1-measure)
    */
+  @Since("1.2.0")
   lazy val microF1Measure: Double = 2.0 * sumTp / (2 * sumTp + sumFnClass + sumFpClass)
 
   /**
    * Returns the sequence of labels in ascending order
    */
+  @Since("1.2.0")
   lazy val labels: Array[Double] = tpPerClass.keys.toArray.sorted
 }

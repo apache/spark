@@ -23,7 +23,7 @@ import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, all, normalize, su
 import breeze.numerics.{trigamma, abs, exp}
 import breeze.stats.distributions.{Gamma, RandBasis}
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
@@ -35,8 +35,8 @@ import org.apache.spark.rdd.RDD
  *
  * An LDAOptimizer specifies which optimization/learning/inference algorithm to use, and it can
  * hold optimizer-specific parameters for users to set.
- * @since 1.4.0
  */
+@Since("1.4.0")
 @DeveloperApi
 sealed trait LDAOptimizer {
 
@@ -74,8 +74,8 @@ sealed trait LDAOptimizer {
  *  - Paper which clearly explains several algorithms, including EM:
  *    Asuncion, Welling, Smyth, and Teh.
  *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
- * @since 1.4.0
  */
+@Since("1.4.0")
 @DeveloperApi
 final class EMLDAOptimizer extends LDAOptimizer {
 
@@ -226,8 +226,8 @@ final class EMLDAOptimizer extends LDAOptimizer {
  *
  * Original Online LDA paper:
  *   Hoffman, Blei and Bach, "Online Learning for Latent Dirichlet Allocation." NIPS, 2010.
- * @since 1.4.0
  */
+@Since("1.4.0")
 @DeveloperApi
 final class OnlineLDAOptimizer extends LDAOptimizer {
 
@@ -258,7 +258,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var tau0: Double = 1024
   private var kappa: Double = 0.51
   private var miniBatchFraction: Double = 0.05
-  private var optimizeAlpha: Boolean = false
+  private var optimizeDocConcentration: Boolean = false
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
@@ -276,16 +276,16 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def getTau0: Double = this.tau0
 
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
    * Default: 1024, following the original Online LDA paper.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def setTau0(tau0: Double): this.type = {
     require(tau0 > 0, s"LDA tau0 must be positive, but was set to $tau0")
     this.tau0 = tau0
@@ -294,16 +294,16 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
   /**
    * Learning rate: exponential decay rate
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def getKappa: Double = this.kappa
 
   /**
    * Learning rate: exponential decay rate---should be between
    * (0.5, 1.0] to guarantee asymptotic convergence.
    * Default: 0.51, based on the original Online LDA paper.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def setKappa(kappa: Double): this.type = {
     require(kappa >= 0, s"Online LDA kappa must be nonnegative, but was set to $kappa")
     this.kappa = kappa
@@ -312,8 +312,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
   /**
    * Mini-batch fraction, which sets the fraction of document sampled and used in each iteration
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def getMiniBatchFraction: Double = this.miniBatchFraction
 
   /**
@@ -325,8 +325,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * maxIterations * miniBatchFraction >= 1.
    *
    * Default: 0.05, i.e., 5% of total documents.
-   * @since 1.4.0
    */
+  @Since("1.4.0")
   def setMiniBatchFraction(miniBatchFraction: Double): this.type = {
     require(miniBatchFraction > 0.0 && miniBatchFraction <= 1.0,
       s"Online LDA miniBatchFraction must be in range (0,1], but was set to $miniBatchFraction")
@@ -335,20 +335,20 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Optimize alpha, indicates whether alpha (Dirichlet parameter for document-topic distribution)
-   * will be optimized during training.
-   * @since 1.5.0
+   * Optimize docConcentration, indicates whether docConcentration (Dirichlet parameter for
+   * document-topic distribution) will be optimized during training.
    */
-  def getOptimzeAlpha: Boolean = this.optimizeAlpha
+  @Since("1.5.0")
+  def getOptimizeDocConcentration: Boolean = this.optimizeDocConcentration
 
   /**
-   * Sets whether to optimize alpha parameter during training.
+   * Sets whether to optimize docConcentration parameter during training.
    *
    * Default: false
-   * @since 1.5.0
    */
-  def setOptimzeAlpha(optimizeAlpha: Boolean): this.type = {
-    this.optimizeAlpha = optimizeAlpha
+  @Since("1.5.0")
+  def setOptimizeDocConcentration(optimizeDocConcentration: Boolean): this.type = {
+    this.optimizeDocConcentration = optimizeDocConcentration
     this
   }
 
@@ -458,7 +458,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
     // Note that this is an optimization to avoid batch.count
     updateLambda(batchResult, (miniBatchFraction * corpusSize).ceil.toInt)
-    if (optimizeAlpha) updateAlpha(gammat)
+    if (optimizeDocConcentration) updateAlpha(gammat)
     this
   }
 

@@ -310,7 +310,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     setViewAcls(Set[String](defaultUser), allowedUsers)
   }
 
-  def getViewAcls: String = viewAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getViewAcls: String = {
+    if (viewAcls.contains("*")) {
+      "*"
+    } else {
+      viewAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -321,7 +330,16 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing modify acls to: " + modifyAcls.mkString(","))
   }
 
-  def getModifyAcls: String = modifyAcls.mkString(",")
+  /**
+   * Checking the existence of "*" is necessary as YARN can't recognize the "*" in "defaultuser,*"
+   */
+  def getModifyAcls: String = {
+    if (modifyAcls.contains("*")) {
+      "*"
+    } else {
+      modifyAcls.mkString(",")
+    }
+  }
 
   /**
    * Admin acls should be set before the view or modify acls.  If you modify the admin
@@ -394,7 +412,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkUIViewPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(","))
-    !aclsEnabled || user == null || viewAcls.contains(user)
+    !aclsEnabled || user == null || viewAcls.contains(user) || viewAcls.contains("*")
   }
 
   /**
@@ -409,7 +427,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def checkModifyPermissions(user: String): Boolean = {
     logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(","))
-    !aclsEnabled || user == null || modifyAcls.contains(user)
+    !aclsEnabled || user == null || modifyAcls.contains(user) || modifyAcls.contains("*")
   }
 
 

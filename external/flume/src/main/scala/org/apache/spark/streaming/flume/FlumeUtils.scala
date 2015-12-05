@@ -21,7 +21,7 @@ import java.net.InetSocketAddress
 import java.io.{DataOutputStream, ByteArrayOutputStream}
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function.PairFunction
 import org.apache.spark.api.python.PythonRDD
@@ -247,7 +247,7 @@ object FlumeUtils {
  * This is a helper class that wraps the methods in FlumeUtils into more Python-friendly class and
  * function so that it can be easily instantiated and called from Python's FlumeUtils.
  */
-private class FlumeUtilsPythonHelper {
+private[flume] class FlumeUtilsPythonHelper {
 
   def createStream(
       jssc: JavaStreamingContext,
@@ -268,8 +268,8 @@ private class FlumeUtilsPythonHelper {
       maxBatchSize: Int,
       parallelism: Int
     ): JavaPairDStream[Array[Byte], Array[Byte]] = {
-    assert(hosts.length == ports.length)
-    val addresses = hosts.zip(ports).map {
+    assert(hosts.size() == ports.size())
+    val addresses = hosts.asScala.zip(ports.asScala).map {
       case (host, port) => new InetSocketAddress(host, port)
     }
     val dstream = FlumeUtils.createPollingStream(
@@ -286,7 +286,7 @@ private object FlumeUtilsPythonHelper {
     val output = new DataOutputStream(byteStream)
     try {
       output.writeInt(map.size)
-      map.foreach { kv =>
+      map.asScala.foreach { kv =>
         PythonRDD.writeUTF(kv._1.toString, output)
         PythonRDD.writeUTF(kv._2.toString, output)
       }

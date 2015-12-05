@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors
  */
 @Since("1.1.0")
 @Experimental
-class Normalizer(p: Double) extends VectorTransformer {
+class Normalizer @Since("1.1.0") (p: Double) extends VectorTransformer {
 
   @Since("1.1.0")
   def this() = this(2)

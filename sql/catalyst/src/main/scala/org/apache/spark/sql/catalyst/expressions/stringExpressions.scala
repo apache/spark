@@ -18,14 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
-import java.util.Arrays
-import java.util.{Map => JMap, HashMap}
-import java.util.Locale
+import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -72,7 +70,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
 case class ConcatWs(children: Seq[Expression])
-  extends Expression with ImplicitCastInputTypes with CodegenFallback {
+  extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName requires at least one argument.")
 
@@ -114,8 +112,44 @@ case class ConcatWs(children: Seq[Expression])
         boolean ${ev.isNull} = ${ev.primitive} == null;
       """
     } else {
-      // Contains a mix of strings and array<string>s. Fall back to interpreted mode for now.
-      super.genCode(ctx, ev)
+      val array = ctx.freshName("array")
+      val varargNum = ctx.freshName("varargNum")
+      val idxInVararg = ctx.freshName("idxInVararg")
+
+      val evals = children.map(_.gen(ctx))
+      val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
+        child.dataType match {
+          case StringType =>
+            ("", // we count all the StringType arguments num at once below.
+              s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.primitive};")
+          case _: ArrayType =>
+            val size = ctx.freshName("n")
+            (s"""
+              if (!${eval.isNull}) {
+                $varargNum += ${eval.primitive}.numElements();
+              }
+            """,
+            s"""
+            if (!${eval.isNull}) {
+              final int $size = ${eval.primitive}.numElements();
+              for (int j = 0; j < $size; j ++) {
+                $array[$idxInVararg ++] = ${ctx.getValue(eval.primitive, StringType, "j")};
+              }
+            }
+            """)
+        }
+      }.unzip
+
+      evals.map(_.code).mkString("\n") +
+      s"""
+        int $varargNum = ${children.count(_.dataType == StringType) - 1};
+        int $idxInVararg = 0;
+        ${varargCount.mkString("\n")}
+        UTF8String[] $array = new UTF8String[$varargNum];
+        ${varargBuild.mkString("\n")}
+        UTF8String ${ev.primitive} = UTF8String.concatWs(${evals.head.primitive}, $array);
+        boolean ${ev.isNull} = ${ev.primitive} == null;
+      """
     }
   }
 }
@@ -219,7 +253,7 @@ object StringTranslate {
     val dict = new HashMap[Character, Character]()
     var i = 0
     while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '\0'
+      val rep = if (i < replace.length()) replace.charAt(i) else '\u0000'
       if (null == dict.get(matching.charAt(i))) {
         dict.put(matching.charAt(i), rep)
       }
@@ -654,34 +688,6 @@ case class StringSpace(child: Expression)
   override def prettyName: String = "space"
 }
 
-object Substring {
-  def subStringBinarySQL(bytes: Array[Byte], pos: Int, len: Int): Array[Byte] = {
-    if (pos > bytes.length) {
-      return Array[Byte]()
-    }
-
-    var start = if (pos > 0) {
-      pos - 1
-    } else if (pos < 0) {
-      bytes.length + pos
-    } else {
-      0
-    }
-
-    val end = if ((bytes.length - start) < len) {
-      bytes.length
-    } else {
-      start + len
-    }
-
-    start = Math.max(start, 0)  // underflow
-    if (start < end) {
-      Arrays.copyOfRange(bytes, start, end)
-    } else {
-      Array[Byte]()
-    }
-  }
-}
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
@@ -704,18 +710,17 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     str.dataType match {
       case StringType => string.asInstanceOf[UTF8String]
         .substringSQL(pos.asInstanceOf[Int], len.asInstanceOf[Int])
-      case BinaryType => Substring.subStringBinarySQL(string.asInstanceOf[Array[Byte]],
+      case BinaryType => ByteArray.subStringSQL(string.asInstanceOf[Array[Byte]],
         pos.asInstanceOf[Int], len.asInstanceOf[Int])
     }
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
 
-    val cls = classOf[Substring].getName
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
         case StringType => s"$string.substringSQL($pos, $len)"
-        case BinaryType => s"$cls.subStringBinarySQL($string, $pos, $len)"
+        case BinaryType => s"${classOf[ByteArray].getName}.subStringSQL($string, $pos, $len)"
       }
     })
   }

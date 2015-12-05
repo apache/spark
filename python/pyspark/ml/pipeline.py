@@ -154,6 +154,7 @@ class Pipeline(Estimator):
     def setStages(self, value):
         """
         Set pipeline stages.
+
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """

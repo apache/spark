@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
  */
 @Since("1.3.0")
 @Experimental
-class ChiSqSelectorModel (
+class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer {
 
   require(isSorted(selectedFeatures), "Array has to be sorted asc")
@@ -109,10 +109,12 @@ class ChiSqSelectorModel (
  * Creates a ChiSquared feature selector.
  * @param numTopFeatures number of features that selector will select
  *                       (ordered by statistic value descending)
+ *                       Note that if the number of features is < numTopFeatures, then this will
+ *                       select all features.
  */
 @Since("1.3.0")
 @Experimental
-class ChiSqSelector (
+class ChiSqSelector @Since("1.3.0") (
   @Since("1.3.0") val numTopFeatures: Int) extends Serializable {
 
   /**

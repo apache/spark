@@ -17,10 +17,9 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.Node
-import scala.xml.Text
-
 import java.util.Date
+
+import scala.xml.{Node, Text}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -116,7 +115,7 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <span class="description-input" title={desc}>{desc}</span>
+      UIUtils.makeDescription(desc, basePathUri)
     }
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }

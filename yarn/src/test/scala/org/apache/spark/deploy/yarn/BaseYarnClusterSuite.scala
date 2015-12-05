@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, OutputStreamWriter}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
@@ -30,6 +30,7 @@ import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark._
+import org.apache.spark.launcher.TestClasspathBuilder
 import org.apache.spark.util.Utils
 
 abstract class BaseYarnClusterSuite
@@ -43,6 +44,9 @@ abstract class BaseYarnClusterSuite
     |log4j.appender.console.target=System.err
     |log4j.appender.console.layout=org.apache.log4j.PatternLayout
     |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+    |log4j.logger.org.apache.hadoop=WARN
+    |log4j.logger.org.eclipse.jetty=WARN
+    |log4j.logger.org.spark-project.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _
@@ -51,8 +55,7 @@ abstract class BaseYarnClusterSuite
   private var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-
-  def yarnConfig: YarnConfiguration
+  def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
@@ -65,8 +68,14 @@ abstract class BaseYarnClusterSuite
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, UTF_8)
 
+    // Disable the disk utilization check to avoid the test hanging when people's disks are
+    // getting full.
+    val yarnConf = newYarnConfig()
+    yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
+      "100.0")
+
     yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
-    yarnCluster.init(yarnConfig)
+    yarnCluster.init(yarnConf)
     yarnCluster.start()
 
     // There's a race in MiniYARNCluster in which start() may return before the RM has updated
@@ -114,25 +123,29 @@ abstract class BaseYarnClusterSuite
       sparkArgs: Seq[String] = Nil,
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
-      extraConf: Map[String, String] = Map()): Unit = {
+      extraConf: Map[String, String] = Map(),
+      extraEnv: Map[String, String] = Map()): Unit = {
     val master = if (clientMode) "yarn-client" else "yarn-cluster"
     val props = new Properties()
 
     props.setProperty("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
 
-    val childClasspath = logConfDir.getAbsolutePath() +
-      File.pathSeparator +
-      sys.props("java.class.path") +
-      File.pathSeparator +
-      extraClassPath.mkString(File.pathSeparator)
-    props.setProperty("spark.driver.extraClassPath", childClasspath)
-    props.setProperty("spark.executor.extraClassPath", childClasspath)
+    val testClasspath = new TestClasspathBuilder()
+      .buildClassPath(
+        logConfDir.getAbsolutePath() +
+        File.pathSeparator +
+        extraClassPath.mkString(File.pathSeparator))
+      .asScala
+      .mkString(File.pathSeparator)
+
+    props.setProperty("spark.driver.extraClassPath", testClasspath)
+    props.setProperty("spark.executor.extraClassPath", testClasspath)
 
     // SPARK-4267: make sure java options are propagated correctly.
     props.setProperty("spark.driver.extraJavaOptions", "-Dfoo=\"one two three\"")
     props.setProperty("spark.executor.extraJavaOptions", "-Dfoo=\"one two three\"")
 
-    yarnCluster.getConfig().foreach { e =>
+    yarnCluster.getConfig.asScala.foreach { e =>
       props.setProperty("spark.hadoop." + e.getKey(), e.getValue())
     }
 
@@ -149,7 +162,7 @@ abstract class BaseYarnClusterSuite
     props.store(writer, "Spark properties.")
     writer.close()
 
-    val extraJarArgs = if (!extraJars.isEmpty()) Seq("--jars", extraJars.mkString(",")) else Nil
+    val extraJarArgs = if (extraJars.nonEmpty) Seq("--jars", extraJars.mkString(",")) else Nil
     val mainArgs =
       if (klass.endsWith(".py")) {
         Seq(klass)
@@ -168,7 +181,7 @@ abstract class BaseYarnClusterSuite
       appArgs
 
     Utils.executeAndGetOutput(argv,
-      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()))
+      extraEnvironment = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv)
   }
 
   /**

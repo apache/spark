@@ -83,12 +83,14 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("decimal") {
-    List(0.0, 1.2, 1.1111, 5).foreach { d =>
+    List(-0.0001, 0.0, 0.001, 1.2, 1.1111, 5).foreach { d =>
       checkEvaluation(Literal(Decimal(d)), Decimal(d))
       checkEvaluation(Literal(Decimal(d.toInt)), Decimal(d.toInt))
       checkEvaluation(Literal(Decimal(d.toLong)), Decimal(d.toLong))
-      checkEvaluation(Literal(Decimal((d * 1000L).toLong, 10, 1)),
-        Decimal((d * 1000L).toLong, 10, 1))
+      checkEvaluation(Literal(Decimal((d * 1000L).toLong, 10, 3)),
+        Decimal((d * 1000L).toLong, 10, 3))
+      checkEvaluation(Literal(BigDecimal(d.toString)), Decimal(d))
+      checkEvaluation(Literal(new java.math.BigDecimal(d.toString)), Decimal(d))
     }
   }
 

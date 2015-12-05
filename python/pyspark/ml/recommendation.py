@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
@@ -80,6 +81,8 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     Row(user=1, item=0, prediction=3.19...)
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.15...)
+
+    .. versionadded:: 1.4.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -122,6 +125,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self.setParams(**kwargs)
 
     @keyword_only
+    @since("1.4.0")
     def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10):
@@ -137,6 +141,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     def _create_model(self, java_model):
         return ALSModel(java_model)
 
+    @since("1.4.0")
     def setRank(self, value):
         """
         Sets the value of :py:attr:`rank`.
@@ -144,12 +149,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.rank] = value
         return self
 
+    @since("1.4.0")
     def getRank(self):
         """
         Gets the value of rank or its default value.
         """
         return self.getOrDefault(self.rank)
 
+    @since("1.4.0")
     def setNumUserBlocks(self, value):
         """
         Sets the value of :py:attr:`numUserBlocks`.
@@ -157,12 +164,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.numUserBlocks] = value
         return self
 
+    @since("1.4.0")
     def getNumUserBlocks(self):
         """
         Gets the value of numUserBlocks or its default value.
         """
         return self.getOrDefault(self.numUserBlocks)
 
+    @since("1.4.0")
     def setNumItemBlocks(self, value):
         """
         Sets the value of :py:attr:`numItemBlocks`.
@@ -170,12 +179,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.numItemBlocks] = value
         return self
 
+    @since("1.4.0")
     def getNumItemBlocks(self):
         """
         Gets the value of numItemBlocks or its default value.
         """
         return self.getOrDefault(self.numItemBlocks)
 
+    @since("1.4.0")
     def setNumBlocks(self, value):
         """
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
@@ -183,6 +194,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.numUserBlocks] = value
         self._paramMap[self.numItemBlocks] = value
 
+    @since("1.4.0")
     def setImplicitPrefs(self, value):
         """
         Sets the value of :py:attr:`implicitPrefs`.
@@ -190,12 +202,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.implicitPrefs] = value
         return self
 
+    @since("1.4.0")
     def getImplicitPrefs(self):
         """
         Gets the value of implicitPrefs or its default value.
         """
         return self.getOrDefault(self.implicitPrefs)
 
+    @since("1.4.0")
     def setAlpha(self, value):
         """
         Sets the value of :py:attr:`alpha`.
@@ -203,12 +217,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.alpha] = value
         return self
 
+    @since("1.4.0")
     def getAlpha(self):
         """
         Gets the value of alpha or its default value.
         """
         return self.getOrDefault(self.alpha)
 
+    @since("1.4.0")
     def setUserCol(self, value):
         """
         Sets the value of :py:attr:`userCol`.
@@ -216,12 +232,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.userCol] = value
         return self
 
+    @since("1.4.0")
     def getUserCol(self):
         """
         Gets the value of userCol or its default value.
         """
         return self.getOrDefault(self.userCol)
 
+    @since("1.4.0")
     def setItemCol(self, value):
         """
         Sets the value of :py:attr:`itemCol`.
@@ -229,12 +247,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.itemCol] = value
         return self
 
+    @since("1.4.0")
     def getItemCol(self):
         """
         Gets the value of itemCol or its default value.
         """
         return self.getOrDefault(self.itemCol)
 
+    @since("1.4.0")
     def setRatingCol(self, value):
         """
         Sets the value of :py:attr:`ratingCol`.
@@ -242,12 +262,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.ratingCol] = value
         return self
 
+    @since("1.4.0")
     def getRatingCol(self):
         """
         Gets the value of ratingCol or its default value.
         """
         return self.getOrDefault(self.ratingCol)
 
+    @since("1.4.0")
     def setNonnegative(self, value):
         """
         Sets the value of :py:attr:`nonnegative`.
@@ -255,6 +277,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         self._paramMap[self.nonnegative] = value
         return self
 
+    @since("1.4.0")
     def getNonnegative(self):
         """
         Gets the value of nonnegative or its default value.
@@ -265,14 +288,18 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 class ALSModel(JavaModel):
     """
     Model fitted by ALS.
+
+    .. versionadded:: 1.4.0
     """
 
     @property
+    @since("1.4.0")
     def rank(self):
         """rank of the matrix factorization model"""
         return self._call_java("rank")
 
     @property
+    @since("1.4.0")
     def userFactors(self):
         """
         a DataFrame that stores user factors in two columns: `id` and
@@ -281,6 +308,7 @@ class ALSModel(JavaModel):
         return self._call_java("userFactors")
 
     @property
+    @since("1.4.0")
     def itemFactors(self):
         """
         a DataFrame that stores item factors in two columns: `id` and

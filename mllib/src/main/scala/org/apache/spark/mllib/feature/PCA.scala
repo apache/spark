@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
  * @param k number of principal components
  */
 @Since("1.4.0")
-class PCA(val k: Int) {
+class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
   require(k >= 1, s"PCA requires a number of principal components k >= 1 but was given $k")
 
   /**
@@ -74,7 +74,10 @@ class PCA(val k: Int) {
  * @param k number of principal components.
  * @param pc a principal components Matrix. Each column is one principal component.
  */
-class PCAModel private[spark] (val k: Int, val pc: DenseMatrix) extends VectorTransformer {
+@Since("1.4.0")
+class PCAModel private[spark] (
+    @Since("1.4.0") val k: Int,
+    @Since("1.4.0") val pc: DenseMatrix) extends VectorTransformer {
   /**
    * Transform a vector by computed Principal Components.
    *

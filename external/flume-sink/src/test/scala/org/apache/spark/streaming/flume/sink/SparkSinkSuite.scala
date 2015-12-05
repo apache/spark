@@ -20,7 +20,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{TimeUnit, CountDownLatch, Executors}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -166,7 +166,7 @@ class SparkSinkSuite extends FunSuite {
     channelContext.put("capacity", channelCapacity.toString)
     channelContext.put("transactionCapacity", 1000.toString)
     channelContext.put("keep-alive", 0.toString)
-    channelContext.putAll(overrides)
+    channelContext.putAll(overrides.asJava)
     channel.setName(scala.util.Random.nextString(10))
     channel.configure(channelContext)
 

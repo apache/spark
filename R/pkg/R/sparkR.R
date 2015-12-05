@@ -160,7 +160,7 @@ sparkR.init <- function(
   })
 
   if (nchar(sparkHome) != 0) {
-    sparkHome <- normalizePath(sparkHome)
+    sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
   sparkEnvirMap <- new.env()

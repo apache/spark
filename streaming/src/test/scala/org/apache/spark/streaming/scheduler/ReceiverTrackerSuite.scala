@@ -60,6 +60,26 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       }
     }
   }
+
+  test("should restart receiver after stopping it") {
+    withStreamingContext(new StreamingContext(conf, Milliseconds(100))) { ssc =>
+      @volatile var startTimes = 0
+      ssc.addStreamingListener(new StreamingListener {
+        override def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted): Unit = {
+          startTimes += 1
+        }
+      })
+      val input = ssc.receiverStream(new StoppableReceiver)
+      val output = new TestOutputStream(input)
+      output.register()
+      ssc.start()
+      StoppableReceiver.shouldStop = true
+      eventually(timeout(10 seconds), interval(10 millis)) {
+        // The receiver is stopped once, so if it's restarted, it should be started twice.
+        assert(startTimes === 2)
+      }
+    }
+  }
 }
 
 /** An input DStream with for testing rate controlling */
@@ -131,4 +151,35 @@ private[streaming] object RateTestReceiver {
   }
 
   def getActive(): Option[RateTestReceiver] = Option(activeReceiver)
+}
+
+/**
+ * A custom receiver that could be stopped via StoppableReceiver.shouldStop
+ */
+class StoppableReceiver extends Receiver[Int](StorageLevel.MEMORY_ONLY) {
+
+  var receivingThreadOption: Option[Thread] = None
+
+  def onStart() {
+    val thread = new Thread() {
+      override def run() {
+        while (!StoppableReceiver.shouldStop) {
+          Thread.sleep(10)
+        }
+        StoppableReceiver.this.stop("stop")
+      }
+    }
+    thread.start()
+  }
+
+  def onStop() {
+    StoppableReceiver.shouldStop = true
+    receivingThreadOption.foreach(_.join())
+    // Reset it so as to restart it
+    StoppableReceiver.shouldStop = false
+  }
+}
+
+object StoppableReceiver {
+  @volatile var shouldStop = false
 }

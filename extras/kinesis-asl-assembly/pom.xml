@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.5.0-SNAPSHOT</version>
+    <version>1.6.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -137,7 +137,6 @@
       <artifactId>maven-shade-plugin</artifactId>
       <configuration>
         <shadedArtifactAttached>false</shadedArtifactAttached>
-        <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-streaming-kinesis-asl-assembly-${project.version}.jar</outputFile>
         <artifactSet>
           <includes>
             <include>*:*</include>

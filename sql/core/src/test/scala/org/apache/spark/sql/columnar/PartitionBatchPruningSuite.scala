@@ -25,32 +25,32 @@ import org.apache.spark.sql.test.SQLTestData._
 class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
-  private lazy val originalColumnBatchSize = ctx.conf.columnBatchSize
-  private lazy val originalInMemoryPartitionPruning = ctx.conf.inMemoryPartitionPruning
+  private lazy val originalColumnBatchSize = sqlContext.conf.columnBatchSize
+  private lazy val originalInMemoryPartitionPruning = sqlContext.conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
-    ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
+    sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
 
-    val pruningData = ctx.sparkContext.makeRDD((1 to 100).map { key =>
+    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()
     pruningData.registerTempTable("pruningData")
 
     // Enable in-memory partition pruning
-    ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Enable in-memory table scan accumulators
-    ctx.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
-    ctx.cacheTable("pruningData")
+    sqlContext.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    sqlContext.cacheTable("pruningData")
   }
 
   override protected def afterAll(): Unit = {
     try {
-      ctx.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-      ctx.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-      ctx.uncacheTable("pruningData")
+      sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      sqlContext.uncacheTable("pruningData")
     } finally {
       super.afterAll()
     }

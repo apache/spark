@@ -32,7 +32,9 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
     IntegerType,
     LongType,
     FloatType,
-    DoubleType)
+    DoubleType,
+    DecimalType.SYSTEM_DEFAULT,
+    DecimalType.USER_DEFAULT)
 
   test("null handling in rows") {
     val schema = StructType(simpleTypes.map(t => StructField(t.getClass.getName, t)))

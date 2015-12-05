@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def parse(input: String): LogicalPlan = {
+  def parse(input: String): LogicalPlan = synchronized {
     // Initialize the Keywords.
     initLexical
     phrase(start)(new lexical.Scanner(input)) match {

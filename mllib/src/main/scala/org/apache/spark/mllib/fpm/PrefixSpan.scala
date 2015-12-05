@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.rdd.RDD
@@ -51,6 +51,7 @@ import org.apache.spark.storage.StorageLevel
  *       (Wikipedia)]]
  */
 @Experimental
+@Since("1.5.0")
 class PrefixSpan private (
     private var minSupport: Double,
     private var maxPatternLength: Int,
@@ -61,17 +62,20 @@ class PrefixSpan private (
    * Constructs a default instance with default parameters
    * {minSupport: `0.1`, maxPatternLength: `10`, maxLocalProjDBSize: `32000000L`}.
    */
+  @Since("1.5.0")
   def this() = this(0.1, 10, 32000000L)
 
   /**
    * Get the minimal support (i.e. the frequency of occurrence before a pattern is considered
    * frequent).
    */
+  @Since("1.5.0")
   def getMinSupport: Double = minSupport
 
   /**
    * Sets the minimal support level (default: `0.1`).
    */
+  @Since("1.5.0")
   def setMinSupport(minSupport: Double): this.type = {
     require(minSupport >= 0 && minSupport <= 1,
       s"The minimum support value must be in [0, 1], but got $minSupport.")
@@ -82,11 +86,13 @@ class PrefixSpan private (
   /**
    * Gets the maximal pattern length (i.e. the length of the longest sequential pattern to consider.
    */
+  @Since("1.5.0")
   def getMaxPatternLength: Int = maxPatternLength
 
   /**
    * Sets maximal pattern length (default: `10`).
    */
+  @Since("1.5.0")
   def setMaxPatternLength(maxPatternLength: Int): this.type = {
     // TODO: support unbounded pattern length when maxPatternLength = 0
     require(maxPatternLength >= 1,
@@ -98,12 +104,14 @@ class PrefixSpan private (
   /**
    * Gets the maximum number of items allowed in a projected database before local processing.
    */
+  @Since("1.5.0")
   def getMaxLocalProjDBSize: Long = maxLocalProjDBSize
 
   /**
    * Sets the maximum number of items (including delimiters used in the internal storage format)
    * allowed in a projected database before local processing (default: `32000000L`).
    */
+  @Since("1.5.0")
   def setMaxLocalProjDBSize(maxLocalProjDBSize: Long): this.type = {
     require(maxLocalProjDBSize >= 0L,
       s"The maximum local projected database size must be nonnegative, but got $maxLocalProjDBSize")
@@ -116,6 +124,7 @@ class PrefixSpan private (
    * @param data sequences of itemsets.
    * @return a [[PrefixSpanModel]] that contains the frequent patterns
    */
+  @Since("1.5.0")
   def run[Item: ClassTag](data: RDD[Array[Array[Item]]]): PrefixSpanModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
@@ -202,6 +211,7 @@ class PrefixSpan private (
    * @tparam Sequence sequence type, which is an Iterable of Itemsets
    * @return a [[PrefixSpanModel]] that contains the frequent sequential patterns
    */
+  @Since("1.5.0")
   def run[Item, Itemset <: jl.Iterable[Item], Sequence <: jl.Iterable[Itemset]](
       data: JavaRDD[Sequence]): PrefixSpanModel[Item] = {
     implicit val tag = fakeClassTag[Item]
@@ -211,6 +221,7 @@ class PrefixSpan private (
 }
 
 @Experimental
+@Since("1.5.0")
 object PrefixSpan extends Logging {
 
   /**
@@ -535,10 +546,14 @@ object PrefixSpan extends Logging {
    * @param freq frequency
    * @tparam Item item type
    */
-  class FreqSequence[Item](val sequence: Array[Array[Item]], val freq: Long) extends Serializable {
+  @Since("1.5.0")
+  class FreqSequence[Item] @Since("1.5.0") (
+      @Since("1.5.0") val sequence: Array[Array[Item]],
+      @Since("1.5.0") val freq: Long) extends Serializable {
     /**
      * Returns sequence as a Java List of lists for Java users.
      */
+    @Since("1.5.0")
     def javaSequence: ju.List[ju.List[Item]] = sequence.map(_.toList.asJava).toList.asJava
   }
 }
@@ -548,5 +563,7 @@ object PrefixSpan extends Logging {
  * @param freqSequences frequent sequences
  * @tparam Item item type
  */
-class PrefixSpanModel[Item](val freqSequences: RDD[PrefixSpan.FreqSequence[Item]])
+@Since("1.5.0")
+class PrefixSpanModel[Item] @Since("1.5.0") (
+    @Since("1.5.0") val freqSequences: RDD[PrefixSpan.FreqSequence[Item]])
   extends Serializable

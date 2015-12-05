@@ -203,6 +203,7 @@ object HiveTypeCoercion {
         planName: String,
         left: LogicalPlan,
         right: LogicalPlan): (LogicalPlan, LogicalPlan) = {
+      require(left.output.length == right.output.length)
 
       val castedTypes = left.output.zip(right.output).map {
         case (lhs, rhs) if lhs.dataType != rhs.dataType =>
@@ -229,15 +230,10 @@ object HiveTypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if p.analyzed => p
 
-      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(u.nodeName, left, right)
-        Union(newLeft, newRight)
-      case e @ Except(left, right) if e.childrenResolved && !e.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(e.nodeName, left, right)
-        Except(newLeft, newRight)
-      case i @ Intersect(left, right) if i.childrenResolved && !i.resolved =>
-        val (newLeft, newRight) = widenOutputTypes(i.nodeName, left, right)
-        Intersect(newLeft, newRight)
+      case s @ SetOperation(left, right) if s.childrenResolved
+          && left.output.length == right.output.length && !s.resolved =>
+        val (newLeft, newRight) = widenOutputTypes(s.nodeName, left, right)
+        s.makeCopy(Array(newLeft, newRight))
     }
   }
 
@@ -301,6 +297,9 @@ object HiveTypeCoercion {
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case SumDistinct(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Stddev(e @ StringType()) => Stddev(Cast(e, DoubleType))
+      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
+      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
     }
   }
 
@@ -400,8 +399,14 @@ object HiveTypeCoercion {
             resultType)
 
         case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-          val resultType = DecimalType.bounded(p1 - s1 + s2 + max(6, s1 + p2 + 1),
-            max(6, s1 + p2 + 1))
+          var intDig = min(DecimalType.MAX_SCALE, p1 - s1 + s2)
+          var decDig = min(DecimalType.MAX_SCALE, max(6, s1 + p2 + 1))
+          val diff = (intDig + decDig) - DecimalType.MAX_SCALE
+          if (diff > 0) {
+            decDig -= diff / 2 + 1
+            intDig = DecimalType.MAX_SCALE - decDig
+          }
+          val resultType = DecimalType.bounded(intDig + decDig, decDig)
           val widerType = widerDecimalType(p1, s1, p2, s2)
           CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
             resultType)
@@ -639,6 +644,7 @@ object HiveTypeCoercion {
    */
   object IfCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case e if !e.childrenResolved => e
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if left.dataType != right.dataType =>
         findTightestCommonTypeToString(left.dataType, right.dataType).map { widestType =>

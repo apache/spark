@@ -20,14 +20,13 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 import java.nio.ByteBuffer
+import java.util.Collections
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.spark.util.Utils
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, ListBuffer}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -40,6 +39,7 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.util.Utils
 
 class ExecutorRunnable(
     container: Container,
@@ -74,9 +74,9 @@ class ExecutorRunnable(
       .asInstanceOf[ContainerLaunchContext]
 
     val localResources = prepareLocalResources
-    ctx.setLocalResources(localResources)
+    ctx.setLocalResources(localResources.asJava)
 
-    ctx.setEnvironment(env)
+    ctx.setEnvironment(env.asJava)
 
     val credentials = UserGroupInformation.getCurrentUser().getCredentials()
     val dob = new DataOutputBuffer()
@@ -96,8 +96,9 @@ class ExecutorRunnable(
       |===============================================================================
       """.stripMargin)
 
-    ctx.setCommands(commands)
-    ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
+    ctx.setCommands(commands.asJava)
+    ctx.setApplicationACLs(
+      YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr).asJava)
 
     // If external shuffle service is enabled, register with the Yarn shuffle service already
     // started on the NodeManager and, if authentication is enabled, provide it with our secret
@@ -112,7 +113,7 @@ class ExecutorRunnable(
           // Authentication is not enabled, so just provide dummy metadata
           ByteBuffer.allocate(0)
         }
-      ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> secretBytes))
+      ctx.setServiceData(Collections.singletonMap("spark_shuffle", secretBytes))
     }
 
     // Send the start request to the ContainerManager
@@ -314,7 +315,8 @@ class ExecutorRunnable(
       env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
     }
 
-    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
+    System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
+      .foreach { case (k, v) => env(k) = v }
     env
   }
 }

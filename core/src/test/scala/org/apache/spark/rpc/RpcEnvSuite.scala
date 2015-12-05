@@ -17,6 +17,7 @@
 
 package org.apache.spark.rpc
 
+import java.io.NotSerializableException
 import java.util.concurrent.{TimeUnit, CountDownLatch, TimeoutException}
 
 import scala.collection.mutable
@@ -99,7 +100,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     }
     val rpcEndpointRef = env.setupEndpoint("send-ref", endpoint)
-
     val newRpcEndpointRef = rpcEndpointRef.askWithRetry[RpcEndpointRef]("Hello")
     val reply = newRpcEndpointRef.askWithRetry[String]("Echo")
     assert("Echo" === reply)
@@ -328,9 +328,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override def onStop(): Unit = {
         selfOption = Option(self)
       }
-
-      override def onError(cause: Throwable): Unit = {
-      }
     })
 
     env.stop(endpointRef)
@@ -516,6 +513,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(events === List(
         ("onConnected", remoteAddress),
         ("onNetworkError", remoteAddress),
+        ("onDisconnected", remoteAddress)) ||
+        events === List(
+        ("onConnected", remoteAddress),
         ("onDisconnected", remoteAddress)))
     }
   }
@@ -535,12 +535,81 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       "local", env.address, "sendWithReply-unserializable-error")
     try {
       val f = rpcEndpointRef.ask[String]("hello")
-      intercept[TimeoutException] {
+      val e = intercept[Exception] {
         Await.result(f, 1 seconds)
       }
+      assert(e.isInstanceOf[TimeoutException] || // For Akka
+        e.isInstanceOf[NotSerializableException] // For Netty
+      )
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
+    }
+  }
+
+  test("port conflict") {
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", env.address.port)
+    assert(anotherEnv.address.port != env.address.port)
+  }
+
+  test("send with authentication") {
+    val conf = new SparkConf
+    conf.set("spark.authenticate", "true")
+    conf.set("spark.authenticate.secret", "good")
+
+    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345)
+
+    try {
+      @volatile var message: String = null
+      localEnv.setupEndpoint("send-authentication", new RpcEndpoint {
+        override val rpcEnv = localEnv
+
+        override def receive: PartialFunction[Any, Unit] = {
+          case msg: String => message = msg
+        }
+      })
+      val rpcEndpointRef =
+        remoteEnv.setupEndpointRef("authentication-local", localEnv.address, "send-authentication")
+      rpcEndpointRef.send("hello")
+      eventually(timeout(5 seconds), interval(10 millis)) {
+        assert("hello" === message)
+      }
+    } finally {
+      localEnv.shutdown()
+      localEnv.awaitTermination()
+      remoteEnv.shutdown()
+      remoteEnv.awaitTermination()
+    }
+  }
+
+  test("ask with authentication") {
+    val conf = new SparkConf
+    conf.set("spark.authenticate", "true")
+    conf.set("spark.authenticate.secret", "good")
+
+    val localEnv = createRpcEnv(conf, "authentication-local", 13345)
+    val remoteEnv = createRpcEnv(conf, "authentication-remote", 14345)
+
+    try {
+      localEnv.setupEndpoint("ask-authentication", new RpcEndpoint {
+        override val rpcEnv = localEnv
+
+        override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+          case msg: String => {
+            context.reply(msg)
+          }
+        }
+      })
+      val rpcEndpointRef =
+        remoteEnv.setupEndpointRef("authentication-local", localEnv.address, "ask-authentication")
+      val reply = rpcEndpointRef.askWithRetry[String]("hello")
+      assert("hello" === reply)
+    } finally {
+      localEnv.shutdown()
+      localEnv.awaitTermination()
+      remoteEnv.shutdown()
+      remoteEnv.awaitTermination()
     }
   }
 
@@ -612,7 +681,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // once the future is complete to verify addMessageIfTimeout was invoked
     val reply3 =
       intercept[RpcTimeoutException] {
-        Await.result(fut3, 200 millis)
+        Await.result(fut3, 2000 millis)
       }.getMessage
 
     // When the future timed out, the recover callback should have used

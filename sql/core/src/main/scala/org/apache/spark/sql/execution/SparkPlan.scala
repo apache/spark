@@ -170,11 +170,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Runs this query returning the result as an array.
    */
-  def executeCollect(): Array[Row] = {
-    execute().mapPartitions { iter =>
-      val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      iter.map(converter(_).asInstanceOf[Row])
-    }.collect()
+  def executeCollect(): Array[InternalRow] = {
+    execute().map(_.copy()).collect()
+  }
+
+  /**
+   * Runs this query returning the result as an array, using external Row format.
+   */
+  def executeCollectPublic(): Array[Row] = {
+    val converter = CatalystTypeConverters.createToScalaConverter(schema)
+    executeCollect().map(converter(_).asInstanceOf[Row])
   }
 
   /**
@@ -182,9 +187,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * This is modeled after RDD.take but never runs any job locally on the driver.
    */
-  def executeTake(n: Int): Array[Row] = {
+  def executeTake(n: Int): Array[InternalRow] = {
     if (n == 0) {
-      return new Array[Row](0)
+      return new Array[InternalRow](0)
     }
 
     val childRDD = execute().map(_.copy())
@@ -218,8 +223,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       partsScanned += numPartsToTry
     }
 
-    val converter = CatalystTypeConverters.createToScalaConverter(schema)
-    buf.toArray.map(converter(_).asInstanceOf[Row])
+    buf.toArray
   }
 
   private[this] def isTesting: Boolean = sys.props.contains("spark.testing")

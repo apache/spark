@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{TestSQLContext, SharedSQLContext}
 
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -27,58 +27,67 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
-    val newContext = new SQLContext(ctx.sparkContext)
+    val newContext = new SQLContext(sparkContext)
     assert(newContext.getConf("spark.sql.testkey", "false") === "true")
   }
 
   test("programmatic ways of basic setting and getting") {
-    ctx.conf.clear()
-    assert(ctx.getAllConfs.size === 0)
+    // Set a conf first.
+    sqlContext.setConf(testKey, testVal)
+    // Clear the conf.
+    sqlContext.conf.clear()
+    // After clear, only overrideConfs used by unit test should be in the SQLConf.
+    assert(sqlContext.getAllConfs === TestSQLContext.overrideConfs)
 
-    ctx.setConf(testKey, testVal)
-    assert(ctx.getConf(testKey) === testVal)
-    assert(ctx.getConf(testKey, testVal + "_") === testVal)
-    assert(ctx.getAllConfs.contains(testKey))
+    sqlContext.setConf(testKey, testVal)
+    assert(sqlContext.getConf(testKey) === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getAllConfs.contains(testKey))
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(ctx.getConf(testKey) == testVal)
-    assert(ctx.getConf(testKey, testVal + "_") === testVal)
-    assert(ctx.getAllConfs.contains(testKey))
+    assert(sqlContext.getConf(testKey) === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getAllConfs.contains(testKey))
 
-    ctx.conf.clear()
+    sqlContext.conf.clear()
   }
 
   test("parse SQL set commands") {
-    ctx.conf.clear()
+    sqlContext.conf.clear()
     sql(s"set $testKey=$testVal")
-    assert(ctx.getConf(testKey, testVal + "_") === testVal)
-    assert(ctx.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
 
     sql("set some.property=20")
-    assert(ctx.getConf("some.property", "0") === "20")
+    assert(sqlContext.getConf("some.property", "0") === "20")
     sql("set some.property = 40")
-    assert(ctx.getConf("some.property", "0") === "40")
+    assert(sqlContext.getConf("some.property", "0") === "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
     sql(s"set $key=$vs")
-    assert(ctx.getConf(key, "0") === vs)
+    assert(sqlContext.getConf(key, "0") === vs)
 
     sql(s"set $key=")
-    assert(ctx.getConf(key, "0") === "")
+    assert(sqlContext.getConf(key, "0") === "")
 
-    ctx.conf.clear()
+    sqlContext.conf.clear()
   }
 
   test("deprecated property") {
-    ctx.conf.clear()
-    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(ctx.conf.numShufflePartitions === 10)
+    sqlContext.conf.clear()
+    val original = sqlContext.conf.numShufflePartitions
+    try{
+      sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+      assert(sqlContext.conf.numShufflePartitions === 10)
+    } finally {
+      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+    }
   }
 
   test("invalid conf value") {
-    ctx.conf.clear()
+    sqlContext.conf.clear()
     val e = intercept[IllegalArgumentException] {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }

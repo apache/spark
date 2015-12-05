@@ -62,17 +62,34 @@ private[spark] class JavaDeserializationStream(in: InputStream, loader: ClassLoa
   extends DeserializationStream {
 
   private val objIn = new ObjectInputStream(in) {
-    override def resolveClass(desc: ObjectStreamClass): Class[_] = {
-      // scalastyle:off classforname
-      Class.forName(desc.getName, false, loader)
-      // scalastyle:on classforname
-    }
+    override def resolveClass(desc: ObjectStreamClass): Class[_] =
+      try {
+        // scalastyle:off classforname
+        Class.forName(desc.getName, false, loader)
+        // scalastyle:on classforname
+      } catch {
+        case e: ClassNotFoundException =>
+          JavaDeserializationStream.primitiveMappings.get(desc.getName).getOrElse(throw e)
+      }
   }
 
   def readObject[T: ClassTag](): T = objIn.readObject().asInstanceOf[T]
   def close() { objIn.close() }
 }
 
+private object JavaDeserializationStream {
+  val primitiveMappings = Map[String, Class[_]](
+    "boolean" -> classOf[Boolean],
+    "byte" -> classOf[Byte],
+    "char" -> classOf[Char],
+    "short" -> classOf[Short],
+    "int" -> classOf[Int],
+    "long" -> classOf[Long],
+    "float" -> classOf[Float],
+    "double" -> classOf[Double],
+    "void" -> classOf[Void]
+  )
+}
 
 private[spark] class JavaSerializerInstance(
     counterReset: Int, extraDebugInfo: Boolean, defaultClassLoader: ClassLoader)

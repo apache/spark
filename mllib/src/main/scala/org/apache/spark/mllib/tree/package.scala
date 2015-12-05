@@ -24,7 +24,6 @@ package org.apache.spark.mllib
  *  - information loss calculation with entropy and Gini for classification and
  *    variance for regression,
  *  - both continuous and categorical features.
- *  @since 1.0.0
  */
 package object tree {
 }

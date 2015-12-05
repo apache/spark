@@ -29,7 +29,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("sample with replacement") {
     val n = 100
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = true, 0.05, seed = 13),
       Seq(5, 10, 52, 73).map(Row(_))
@@ -38,7 +38,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("sample without replacement") {
     val n = 100
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     checkAnswer(
       data.sample(withReplacement = false, 0.05, seed = 13),
       Seq(16, 23, 88, 100).map(Row(_))
@@ -47,7 +47,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
   test("randomSplit") {
     val n = 600
-    val data = ctx.sparkContext.parallelize(1 to n, 2).toDF("id")
+    val data = sparkContext.parallelize(1 to n, 2).toDF("id")
     for (seed <- 1 to 5) {
       val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
@@ -164,7 +164,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Frequent Items 2") {
-    val rows = ctx.sparkContext.parallelize(Seq.empty[Int], 4)
+    val rows = sparkContext.parallelize(Seq.empty[Int], 4)
     // this is a regression test, where when merging partitions, we omitted values with higher
     // counts than those that existed in the map when the map was full. This test should also fail
     // if anything like SPARK-9614 is observed once again
@@ -182,7 +182,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("sampleBy") {
-    val df = ctx.range(0, 100).select((col("id") % 3).as("key"))
+    val df = sqlContext.range(0, 100).select((col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),

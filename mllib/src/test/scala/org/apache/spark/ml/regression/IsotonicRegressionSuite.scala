@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
@@ -89,6 +90,10 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(ir.getFeatureIndex === 0)
 
     val model = ir.fit(dataset)
+
+    // copied model must have the same parent.
+    MLTestingUtils.checkCopy(model)
+
     model.transform(dataset)
       .select("label", "features", "prediction", "weight")
       .collect()

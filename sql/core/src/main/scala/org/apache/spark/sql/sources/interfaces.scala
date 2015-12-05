@@ -518,6 +518,8 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
 
   override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
+  override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum
+
   /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
    * discovered.  Note that they should always be nullable.
@@ -562,7 +564,7 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     })
   }
 
-  private[sql] def buildScan(
+  final private[sql] def buildScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputPaths: Array[String],

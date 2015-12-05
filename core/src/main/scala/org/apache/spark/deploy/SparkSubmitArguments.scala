@@ -23,7 +23,7 @@ import java.net.URI
 import java.util.{List => JList}
 import java.util.jar.JarFile
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
 
@@ -94,7 +94,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   // Set parameters from command line arguments
   try {
-    parse(args.toList)
+    parse(args.asJava)
   } catch {
     case e: IllegalArgumentException =>
       SparkSubmit.printErrorAndExit(e.getMessage())
@@ -458,7 +458,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   }
 
   override protected def handleExtraArgs(extra: JList[String]): Unit = {
-    childArgs ++= extra
+    childArgs ++= extra.asScala
   }
 
   private def printUsageAndExit(exitCode: Int, unknownParam: Any = null): Unit = {

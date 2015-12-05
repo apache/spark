@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+import scala.util.hashing.MurmurHash3
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
@@ -280,9 +283,8 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getList[T](i: Int): java.util.List[T] = {
-    scala.collection.JavaConversions.seqAsJavaList(getSeq[T](i))
-  }
+  def getList[T](i: Int): java.util.List[T] =
+    getSeq[T](i).asJava
 
   /**
    * Returns the value at position i of map type as a Scala Map.
@@ -296,9 +298,8 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getJavaMap[K, V](i: Int): java.util.Map[K, V] = {
-    scala.collection.JavaConversions.mapAsJavaMap(getMap[K, V](i))
-  }
+  def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
+    getMap[K, V](i).asJava
 
   /**
    * Returns the value at position i of struct type as an [[Row]] object.
@@ -408,6 +409,18 @@ trait Row extends Serializable {
       i += 1
     }
     true
+  }
+
+  override def hashCode: Int = {
+    // Using Scala's Seq hash code implementation.
+    var n = 0
+    var h = MurmurHash3.seqSeed
+    val len = length
+    while (n < len) {
+      h = MurmurHash3.mix(h, apply(n).##)
+      n += 1
+    }
+    MurmurHash3.finalizeHash(h, n)
   }
 
   /* ---------------------- utility methods for Scala ---------------------- */

@@ -36,7 +36,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(ctx.sparkContext, "long")
+    val l = SQLMetrics.createLongMetric(sparkContext, "long")
     val f = () => {
       l += 1L
       l.add(1L)
@@ -50,7 +50,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("Normal accumulator should do boxing") {
     // We need this test to make sure BoxingFinder works.
-    val l = ctx.sparkContext.accumulator(0L)
+    val l = sparkContext.accumulator(0L)
     val f = () => { l += 1L }
     BoxingFinder.getClassReader(f.getClass).foreach { cl =>
       val boxingFinder = new BoxingFinder()
@@ -71,19 +71,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val previousExecutionIds = ctx.listener.executionIdToData.keySet
+    val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
     df.collect()
-    ctx.sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds = ctx.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    sparkContext.listenerBus.waitUntilEmpty(10000)
+    val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)
     val executionId = executionIds.head
-    val jobs = ctx.listener.getExecution(executionId).get.jobs
+    val jobs = sqlContext.listener.getExecution(executionId).get.jobs
     // Use "<=" because there is a race condition that we may miss some jobs
     // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
     assert(jobs.size <= expectedNumOfJobs)
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
-      val metricValues = ctx.listener.getExecutionMetrics(executionId)
+      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       val actualMetrics = SparkPlanGraph(df.queryExecution.executedPlan).nodes.filter { node =>
         expectedMetrics.contains(node.id)
       }.map { node =>
@@ -474,19 +474,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = ctx.listener.executionIdToData.keySet
+      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       person.select('name).write.format("json").save(file.getAbsolutePath)
-      ctx.sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = ctx.listener.executionIdToData.keySet.diff(previousExecutionIds)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
+      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
-      val jobs = ctx.listener.getExecution(executionId).get.jobs
+      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
       // Use "<=" because there is a race condition that we may miss some jobs
       // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
       assert(jobs.size <= 1)
-      val metricValues = ctx.listener.getExecutionMetrics(executionId)
+      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
       assert(metricValues.values.toSeq === Seq(2L))

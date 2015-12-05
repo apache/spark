@@ -17,11 +17,10 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.util
 import java.lang.{Long => JLong}
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -145,8 +144,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * an array.
    */
   def glom(): JavaDStream[JList[T]] =
-    new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
-
+    new JavaDStream(dstream.glom().map(_.toSeq.asJava))
 
 
   /** Return the [[org.apache.spark.streaming.StreamingContext]] associated with this DStream */
@@ -191,7 +189,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def mapPartitions[U](f: FlatMapFunction[java.util.Iterator[T], U]): JavaDStream[U] = {
     def fn: (Iterator[T]) => Iterator[U] = {
-      (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
     }
     new JavaDStream(dstream.mapPartitions(fn)(fakeClassTag[U]))(fakeClassTag[U])
   }
@@ -204,7 +202,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   def mapPartitionsToPair[K2, V2](f: PairFlatMapFunction[java.util.Iterator[T], K2, V2])
   : JavaPairDStream[K2, V2] = {
     def fn: (Iterator[T]) => Iterator[(K2, V2)] = {
-      (x: Iterator[T]) => asScalaIterator(f.call(asJavaIterator(x)).iterator())
+      (x: Iterator[T]) => f.call(x.asJava).iterator().asScala
     }
     new JavaPairDStream(dstream.mapPartitions(fn))(fakeClassTag[K2], fakeClassTag[V2])
   }
@@ -282,7 +280,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * Return all the RDDs between 'fromDuration' to 'toDuration' (both included)
    */
   def slice(fromTime: Time, toTime: Time): JList[R] = {
-    new util.ArrayList(dstream.slice(fromTime, toTime).map(wrapRDD(_)).toSeq)
+    dstream.slice(fromTime, toTime).map(wrapRDD).asJava
   }
 
   /**

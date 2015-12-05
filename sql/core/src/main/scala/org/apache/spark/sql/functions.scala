@@ -295,6 +295,33 @@ object functions {
   def min(columnName: String): Column = min(Column(columnName))
 
   /**
+   * Aggregate function: returns the unbiased sample standard deviation
+   * of the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev(e: Column): Column = Stddev(e.expr)
+
+  /**
+   * Aggregate function: returns the population standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_pop(e: Column): Column = StddevPop(e.expr)
+
+  /**
+   * Aggregate function: returns the unbiased sample standard deviation of
+   * the expression in a group.
+   *
+   * @group agg_funcs
+   * @since 1.6.0
+   */
+  def stddev_samp(e: Column): Column = StddevSamp(e.expr)
+
+  /**
    * Aggregate function: returns the sum of all values in the expression.
    *
    * @group agg_funcs
@@ -796,7 +823,7 @@ object functions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(new SqlParser().parseExpression(expr))
+  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions

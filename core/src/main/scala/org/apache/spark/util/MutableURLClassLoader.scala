@@ -21,8 +21,6 @@ import java.net.{URLClassLoader, URL}
 import java.util.Enumeration
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConversions._
-
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  */

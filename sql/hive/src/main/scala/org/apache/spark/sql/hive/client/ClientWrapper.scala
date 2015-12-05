@@ -21,7 +21,7 @@ import java.io.{File, PrintStream}
 import java.util.{Map => JMap}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
@@ -305,10 +305,11 @@ private[hive] class ClientWrapper(
       HiveTable(
         name = h.getTableName,
         specifiedDatabase = Option(h.getDbName),
-        schema = h.getCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
-        partitionColumns = h.getPartCols.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
-        properties = h.getParameters.toMap,
-        serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.toMap,
+        schema = h.getCols.asScala.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
+        partitionColumns = h.getPartCols.asScala.map(f =>
+          HiveColumn(f.getName, f.getType, f.getComment)),
+        properties = h.getParameters.asScala.toMap,
+        serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap,
         tableType = h.getTableType match {
           case HTableType.MANAGED_TABLE => ManagedTable
           case HTableType.EXTERNAL_TABLE => ExternalTable
@@ -334,9 +335,9 @@ private[hive] class ClientWrapper(
   private def toQlTable(table: HiveTable): metadata.Table = {
     val qlTable = new metadata.Table(table.database, table.name)
 
-    qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+    qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     qlTable.setPartCols(
-      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
+      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
     table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
     table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
 
@@ -366,13 +367,13 @@ private[hive] class ClientWrapper(
   private def toHivePartition(partition: metadata.Partition): HivePartition = {
     val apiPartition = partition.getTPartition
     HivePartition(
-      values = Option(apiPartition.getValues).map(_.toSeq).getOrElse(Seq.empty),
+      values = Option(apiPartition.getValues).map(_.asScala).getOrElse(Seq.empty),
       storage = HiveStorageDescriptor(
         location = apiPartition.getSd.getLocation,
         inputFormat = apiPartition.getSd.getInputFormat,
         outputFormat = apiPartition.getSd.getOutputFormat,
         serde = apiPartition.getSd.getSerdeInfo.getSerializationLib,
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.toMap))
+        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
 
   override def getPartitionOption(
@@ -397,7 +398,7 @@ private[hive] class ClientWrapper(
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
-    client.getAllTables(dbName)
+    client.getAllTables(dbName).asScala
   }
 
   /**
@@ -514,17 +515,17 @@ private[hive] class ClientWrapper(
   }
 
   def reset(): Unit = withHiveState {
-    client.getAllTables("default").foreach { t =>
+    client.getAllTables("default").asScala.foreach { t =>
         logDebug(s"Deleting table $t")
         val table = client.getTable("default", t)
-        client.getIndexes("default", t, 255).foreach { index =>
+        client.getIndexes("default", t, 255).asScala.foreach { index =>
           shim.dropIndex(client, "default", t, index.getIndexName)
         }
         if (!table.isIndexTable) {
           client.dropTable("default", t)
         }
       }
-      client.getAllDatabases.filterNot(_ == "default").foreach { db =>
+      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }

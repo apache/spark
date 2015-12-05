@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -147,7 +147,7 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
     val result = ArrayBuffer.empty[(String, Boolean)]
-    for (name <- tables.keySet()) {
+    for (name <- tables.keySet().asScala) {
       result += ((name, true))
     }
     result

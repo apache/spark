@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{StructField => HiveStructField, _}
@@ -30,9 +32,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
-
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
 /**
  * 1. The Underlying data type in catalyst and in Hive
@@ -290,13 +289,13 @@ private[hive] trait HiveInspectors {
       DateTimeUtils.fromJavaDate(poi.getWritableConstantValue.get())
     case mi: StandardConstantMapObjectInspector =>
       // take the value from the map inspector object, rather than the input data
-      val map = mi.getWritableConstantValue
-      val keys = map.keysIterator.map(unwrap(_, mi.getMapKeyObjectInspector)).toArray
-      val values = map.valuesIterator.map(unwrap(_, mi.getMapValueObjectInspector)).toArray
+      val keyValues = mi.getWritableConstantValue.asScala.toSeq
+      val keys = keyValues.map(kv => unwrap(kv._1, mi.getMapKeyObjectInspector)).toArray
+      val values = keyValues.map(kv => unwrap(kv._2, mi.getMapValueObjectInspector)).toArray
       ArrayBasedMapData(keys, values)
     case li: StandardConstantListObjectInspector =>
       // take the value from the list inspector object, rather than the input data
-      val values = li.getWritableConstantValue
+      val values = li.getWritableConstantValue.asScala
         .map(unwrap(_, li.getListElementObjectInspector))
         .toArray
       new GenericArrayData(values)
@@ -342,7 +341,7 @@ private[hive] trait HiveInspectors {
     case li: ListObjectInspector =>
       Option(li.getList(data))
         .map { l =>
-          val values = l.map(unwrap(_, li.getListElementObjectInspector)).toArray
+          val values = l.asScala.map(unwrap(_, li.getListElementObjectInspector)).toArray
           new GenericArrayData(values)
         }
         .orNull
@@ -351,15 +350,16 @@ private[hive] trait HiveInspectors {
       if (map == null) {
         null
       } else {
-        val keys = map.keysIterator.map(unwrap(_, mi.getMapKeyObjectInspector)).toArray
-        val values = map.valuesIterator.map(unwrap(_, mi.getMapValueObjectInspector)).toArray
+        val keyValues = map.asScala.toSeq
+        val keys = keyValues.map(kv => unwrap(kv._1, mi.getMapKeyObjectInspector)).toArray
+        val values = keyValues.map(kv => unwrap(kv._2, mi.getMapValueObjectInspector)).toArray
         ArrayBasedMapData(keys, values)
       }
     // currently, hive doesn't provide the ConstantStructObjectInspector
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
-      InternalRow.fromSeq(
-        allRefs.map(r => unwrap(si.getStructFieldData(data, r), r.getFieldObjectInspector)))
+      InternalRow.fromSeq(allRefs.asScala.map(
+        r => unwrap(si.getStructFieldData(data, r), r.getFieldObjectInspector)))
   }
 
 
@@ -370,28 +370,47 @@ private[hive] trait HiveInspectors {
   protected def wrapperFor(oi: ObjectInspector, dataType: DataType): Any => Any = oi match {
     case _: JavaHiveVarcharObjectInspector =>
       (o: Any) =>
-        val s = o.asInstanceOf[UTF8String].toString
-        new HiveVarchar(s, s.size)
+        if (o != null) {
+          val s = o.asInstanceOf[UTF8String].toString
+          new HiveVarchar(s, s.size)
+        } else {
+          null
+        }
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
+      (o: Any) =>
+        if (o != null) {
+          HiveDecimal.create(o.asInstanceOf[Decimal].toJavaBigDecimal)
+        } else {
+          null
+        }
 
     case _: JavaDateObjectInspector =>
-      (o: Any) => DateTimeUtils.toJavaDate(o.asInstanceOf[Int])
+      (o: Any) =>
+        if (o != null) {
+          DateTimeUtils.toJavaDate(o.asInstanceOf[Int])
+        } else {
+          null
+        }
 
     case _: JavaTimestampObjectInspector =>
-      (o: Any) => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+      (o: Any) =>
+        if (o != null) {
+          DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        } else {
+          null
+        }
 
     case soi: StandardStructObjectInspector =>
       val schema = dataType.asInstanceOf[StructType]
-      val wrappers = soi.getAllStructFieldRefs.zip(schema.fields).map { case (ref, field) =>
-        wrapperFor(ref.getFieldObjectInspector, field.dataType)
+      val wrappers = soi.getAllStructFieldRefs.asScala.zip(schema.fields).map {
+        case (ref, field) => wrapperFor(ref.getFieldObjectInspector, field.dataType)
       }
       (o: Any) => {
         if (o != null) {
           val struct = soi.create()
           val row = o.asInstanceOf[InternalRow]
-          soi.getAllStructFieldRefs.zip(wrappers).zipWithIndex.foreach {
+          soi.getAllStructFieldRefs.asScala.zip(wrappers).zipWithIndex.foreach {
             case ((field, wrapper), i) =>
               soi.setStructFieldData(struct, field, wrapper(row.get(i, schema(i).dataType)))
           }
@@ -518,7 +537,7 @@ private[hive] trait HiveInspectors {
       // 1. create the pojo (most likely) object
       val result = x.create()
       var i = 0
-      while (i < fieldRefs.length) {
+      while (i < fieldRefs.size) {
         // 2. set the property for the pojo
         val tpe = structType(i).dataType
         x.setStructFieldData(
@@ -533,9 +552,9 @@ private[hive] trait HiveInspectors {
       val fieldRefs = x.getAllStructFieldRefs
       val structType = dataType.asInstanceOf[StructType]
       val row = a.asInstanceOf[InternalRow]
-      val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
+      val result = new java.util.ArrayList[AnyRef](fieldRefs.size)
       var i = 0
-      while (i < fieldRefs.length) {
+      while (i < fieldRefs.size) {
         val tpe = structType(i).dataType
         result.add(wrap(row.get(i, tpe), fieldRefs.get(i).getFieldObjectInspector, tpe))
         i += 1
@@ -693,10 +712,10 @@ private[hive] trait HiveInspectors {
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
     case s: StructObjectInspector =>
-      StructType(s.getAllStructFieldRefs.map(f => {
+      StructType(s.getAllStructFieldRefs.asScala.map(f =>
         types.StructField(
           f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
-      }))
+      ))
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
     case m: MapObjectInspector =>
       MapType(

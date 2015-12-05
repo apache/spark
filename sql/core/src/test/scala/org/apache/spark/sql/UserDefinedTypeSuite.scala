@@ -22,6 +22,7 @@ import scala.beans.{BeanInfo, BeanProperty}
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -90,7 +91,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
   }
 
   test("UDTs and UDFs") {
-    ctx.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    sqlContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
@@ -148,13 +149,29 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext {
       StructField("vec", new MyDenseVectorUDT, false)
     ))
 
-    val stringRDD = ctx.sparkContext.parallelize(data)
-    val jsonRDD = ctx.read.schema(schema).json(stringRDD)
+    val stringRDD = sparkContext.parallelize(data)
+    val jsonRDD = sqlContext.read.schema(schema).json(stringRDD)
     checkAnswer(
       jsonRDD,
       Row(1, new MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
         Row(2, new MyDenseVector(Array(2.25, 4.5, 8.75))) ::
         Nil
     )
+  }
+
+  test("SPARK-10472 UserDefinedType.typeName") {
+    assert(IntegerType.typeName === "integer")
+    assert(new MyDenseVectorUDT().typeName === "mydensevector")
+    assert(new OpenHashSetUDT(IntegerType).typeName === "openhashset")
+  }
+
+  test("Catalyst type converter null handling for UDTs") {
+    val udt = new MyDenseVectorUDT()
+    val toScalaConverter = CatalystTypeConverters.createToScalaConverter(udt)
+    assert(toScalaConverter(null) === null)
+
+    val toCatalystConverter = CatalystTypeConverters.createToCatalystConverter(udt)
+    assert(toCatalystConverter(null) === null)
+
   }
 }

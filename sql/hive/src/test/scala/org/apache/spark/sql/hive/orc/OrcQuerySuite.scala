@@ -287,6 +287,20 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("SPARK-9170: Don't implicitly lowercase of user-provided columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      sqlContext.range(0, 10).select('id as "Acol").write.format("orc").save(path)
+      sqlContext.read.format("orc").load(path).schema("Acol")
+      intercept[IllegalArgumentException] {
+        sqlContext.read.format("orc").load(path).schema("acol")
+      }
+      checkAnswer(sqlContext.read.format("orc").load(path).select("acol").sort("acol"),
+        (0 until 10).map(Row(_)))
+    }
+  }
+
   test("SPARK-8501: Avoids discovery schema from empty ORC files") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -327,6 +341,36 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
         }
+      }
+    }
+  }
+
+  test("SPARK-10623 Enable ORC PPD") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        import testImplicits._
+
+        val path = dir.getCanonicalPath
+        sqlContext.range(10).coalesce(1).write.orc(path)
+        val df = sqlContext.read.orc(path)
+
+        def checkPredicate(pred: Column, answer: Seq[Long]): Unit = {
+          checkAnswer(df.where(pred), answer.map(Row(_)))
+        }
+
+        checkPredicate('id === 5, Seq(5L))
+        checkPredicate('id <=> 5, Seq(5L))
+        checkPredicate('id < 5, 0L to 4L)
+        checkPredicate('id <= 5, 0L to 5L)
+        checkPredicate('id > 5, 6L to 9L)
+        checkPredicate('id >= 5, 5L to 9L)
+        checkPredicate('id.isNull, Seq.empty[Long])
+        checkPredicate('id.isNotNull, 0L to 9L)
+        checkPredicate('id.isin(1L, 3L, 5L), Seq(1L, 3L, 5L))
+        checkPredicate('id > 0 && 'id < 3, 1L to 2L)
+        checkPredicate('id < 1 || 'id > 8, Seq(0L, 9L))
+        checkPredicate(!('id > 3), 0L to 3L)
+        checkPredicate(!('id > 0 && 'id < 3), Seq(0L) ++ (3L to 9L))
       }
     }
   }

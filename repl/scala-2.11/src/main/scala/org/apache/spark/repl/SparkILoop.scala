@@ -118,5 +118,5 @@ object SparkILoop {
       }
     }
   }
-  def run(lines: List[String]): String = run(lines map (_ + "\n") mkString)
+  def run(lines: List[String]): String = run(lines.map(_ + "\n").mkString)
 }

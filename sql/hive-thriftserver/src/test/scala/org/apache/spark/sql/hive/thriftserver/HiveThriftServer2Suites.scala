@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URL
 import java.sql.{Date, DriverManager, SQLException, Statement}
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -375,6 +376,86 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       rs2.next()
       assert(rs2.getInt(1) === 5)
       rs2.close()
+    }
+  }
+
+  test("test add jar") {
+    withMultipleConnectionJdbcStatement(
+      {
+        statement =>
+          val jarFile =
+            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+              .split("/")
+              .mkString(File.separator)
+
+          statement.executeQuery(s"ADD JAR $jarFile")
+      },
+
+      {
+        statement =>
+          val queries = Seq(
+            "DROP TABLE IF EXISTS smallKV",
+            "CREATE TABLE smallKV(key INT, val STRING)",
+            s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE smallKV",
+            "DROP TABLE IF EXISTS addJar",
+            """CREATE TABLE addJar(key string)
+              |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'
+            """.stripMargin)
+
+          queries.foreach(statement.execute)
+
+          statement.executeQuery(
+            """
+              |INSERT INTO TABLE addJar SELECT 'k1' as key FROM smallKV limit 1
+            """.stripMargin)
+
+          val actualResult =
+            statement.executeQuery("SELECT key FROM addJar")
+          val actualResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (actualResult.next()) {
+            actualResultBuffer += actualResult.getString(1)
+          }
+          actualResult.close()
+
+          val expectedResult =
+            statement.executeQuery("SELECT 'k1'")
+          val expectedResultBuffer = new collection.mutable.ArrayBuffer[String]()
+          while (expectedResult.next()) {
+            expectedResultBuffer += expectedResult.getString(1)
+          }
+          expectedResult.close()
+
+          assert(expectedResultBuffer === actualResultBuffer)
+
+          statement.executeQuery("DROP TABLE IF EXISTS addJar")
+          statement.executeQuery("DROP TABLE IF EXISTS smallKV")
+      }
+    )
+  }
+
+  test("Checks Hive version via SET -v") {
+    withJdbcStatement { statement =>
+      val resultSet = statement.executeQuery("SET -v")
+
+      val conf = mutable.Map.empty[String, String]
+      while (resultSet.next()) {
+        conf += resultSet.getString(1) -> resultSet.getString(2)
+      }
+
+      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+    }
+  }
+
+  test("Checks Hive version via SET") {
+    withJdbcStatement { statement =>
+      val resultSet = statement.executeQuery("SET")
+
+      val conf = mutable.Map.empty[String, String]
+      while (resultSet.next()) {
+        conf += resultSet.getString(1) -> resultSet.getString(2)
+      }
+
+      assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
     }
   }
 }

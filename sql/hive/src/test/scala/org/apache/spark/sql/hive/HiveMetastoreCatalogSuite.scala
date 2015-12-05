@@ -19,18 +19,15 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.sources.DataSourceTest
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
-import org.apache.spark.sql.{Row, SaveMode, SQLContext}
-import org.apache.spark.{Logging, SparkFunSuite}
 
-
-class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
+class HiveMetastoreCatalogSuite extends SparkFunSuite with TestHiveSingleton {
+  import hiveContext.implicits._
 
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
@@ -46,14 +43,15 @@ class HiveMetastoreCatalogSuite extends SparkFunSuite with Logging {
   }
 
   test("duplicated metastore relations") {
-    val df = sql("SELECT * FROM src")
+    val df = hiveContext.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }
 }
 
-class DataSourceWithHiveMetastoreCatalogSuite extends DataSourceTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
+class DataSourceWithHiveMetastoreCatalogSuite
+  extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
   import testImplicits._
 
   private val testDF = range(1, 3).select(

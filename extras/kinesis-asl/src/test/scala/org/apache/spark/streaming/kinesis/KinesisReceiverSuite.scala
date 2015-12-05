@@ -17,10 +17,10 @@
 package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.util.Arrays
 
-import scala.collection.JavaConversions.seqAsJavaList
-
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
@@ -47,10 +47,10 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   val someSeqNum = Some(seqNum)
 
   val record1 = new Record()
-  record1.setData(ByteBuffer.wrap("Spark In Action".getBytes()))
+  record1.setData(ByteBuffer.wrap("Spark In Action".getBytes(StandardCharsets.UTF_8)))
   val record2 = new Record()
-  record2.setData(ByteBuffer.wrap("Learning Spark".getBytes()))
-  val batch = List[Record](record1, record2)
+  record2.setData(ByteBuffer.wrap("Learning Spark".getBytes(StandardCharsets.UTF_8)))
+  val batch = Arrays.asList(record1, record2)
 
   var receiverMock: KinesisReceiver = _
   var checkpointerMock: IRecordProcessorCheckpointer = _

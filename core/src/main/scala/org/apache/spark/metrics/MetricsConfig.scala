@@ -20,6 +20,7 @@ package org.apache.spark.metrics
 import java.io.{FileInputStream, InputStream}
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.matching.Regex
 
@@ -58,25 +59,20 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
 
     propertyCategories = subProperties(properties, INSTANCE_REGEX)
     if (propertyCategories.contains(DEFAULT_PREFIX)) {
-      import scala.collection.JavaConversions._
-
-      val defaultProperty = propertyCategories(DEFAULT_PREFIX)
-      for { (inst, prop) <- propertyCategories
-            if (inst != DEFAULT_PREFIX)
-            (k, v) <- defaultProperty
-            if (prop.getProperty(k) == null) } {
-        prop.setProperty(k, v)
+      val defaultProperty = propertyCategories(DEFAULT_PREFIX).asScala
+      for((inst, prop) <- propertyCategories if (inst != DEFAULT_PREFIX);
+          (k, v) <- defaultProperty if (prop.get(k) == null)) {
+        prop.put(k, v)
       }
     }
   }
 
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
     val subProperties = new mutable.HashMap[String, Properties]
-    import scala.collection.JavaConversions._
-    prop.foreach { kv =>
-      if (regex.findPrefixOf(kv._1).isDefined) {
-        val regex(prefix, suffix) = kv._1
-        subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2)
+    prop.asScala.foreach { kv =>
+      if (regex.findPrefixOf(kv._1.toString).isDefined) {
+        val regex(prefix, suffix) = kv._1.toString
+        subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2.toString)
       }
     }
     subProperties

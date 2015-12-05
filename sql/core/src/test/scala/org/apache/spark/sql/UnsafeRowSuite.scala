@@ -43,12 +43,12 @@ class UnsafeRowSuite extends SparkFunSuite {
     val arrayBackedUnsafeRow: UnsafeRow =
       UnsafeProjection.create(Array[DataType](StringType, StringType, IntegerType)).apply(row)
     assert(arrayBackedUnsafeRow.getBaseObject.isInstanceOf[Array[Byte]])
-    val bytesFromArrayBackedRow: Array[Byte] = {
+    val (bytesFromArrayBackedRow, field0StringFromArrayBackedRow): (Array[Byte], String) = {
       val baos = new ByteArrayOutputStream()
       arrayBackedUnsafeRow.writeToStream(baos, null)
-      baos.toByteArray
+      (baos.toByteArray, arrayBackedUnsafeRow.getString(0))
     }
-    val bytesFromOffheapRow: Array[Byte] = {
+    val (bytesFromOffheapRow, field0StringFromOffheapRow): (Array[Byte], String) = {
       val offheapRowPage = MemoryAllocator.UNSAFE.allocate(arrayBackedUnsafeRow.getSizeInBytes)
       try {
         Platform.copyMemory(
@@ -69,13 +69,14 @@ class UnsafeRowSuite extends SparkFunSuite {
         val baos = new ByteArrayOutputStream()
         val writeBuffer = new Array[Byte](1024)
         offheapUnsafeRow.writeToStream(baos, writeBuffer)
-        baos.toByteArray
+        (baos.toByteArray, offheapUnsafeRow.getString(0))
       } finally {
         MemoryAllocator.UNSAFE.free(offheapRowPage)
       }
     }
 
     assert(bytesFromArrayBackedRow === bytesFromOffheapRow)
+    assert(field0StringFromArrayBackedRow === field0StringFromOffheapRow)
   }
 
   test("calling getDouble() and getFloat() on null columns") {

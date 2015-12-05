@@ -23,9 +23,10 @@ import scala.util.{Try, Random}
 
 import org.scalatest.Matchers
 
-import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.{TaskContextImpl, TaskContext, SparkFunSuite}
+import org.apache.spark.shuffle.ShuffleMemoryManager
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, UnsafeProjection}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator, TaskMemoryManager}
@@ -199,9 +200,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -304,9 +303,7 @@ class UnsafeFixedWidthAggregationMapSuite
     val sorter = map.destructAndCreateExternalSorter()
 
     withClue(s"destructAndCreateExternalSorter should release memory used by the map") {
-      // 4096 * 16 is the initial size allocated for the pointer/prefix array in the in-mem sorter.
-      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() ===
-        initialMemoryConsumption + 4096 * 16)
+      assert(shuffleMemoryManager.getMemoryConsumptionForThisTask() === initialMemoryConsumption)
     }
 
     // Add more keys to the sorter and make sure the results come out sorted.
@@ -325,7 +322,7 @@ class UnsafeFixedWidthAggregationMapSuite
       // At here, we also test if copy is correct.
       iter.getKey.copy()
       iter.getValue.copy()
-      count += 1;
+      count += 1
     }
 
     // 1 record was from the map and 4096 records were explicitly inserted.
@@ -333,4 +330,48 @@ class UnsafeFixedWidthAggregationMapSuite
 
     map.free()
   }
+
+  testWithMemoryLeakDetection("convert to external sorter under memory pressure (SPARK-10474)") {
+    val smm = ShuffleMemoryManager.createForTesting(65536)
+    val pageSize = 4096
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      smm,
+      128, // initial capacity
+      pageSize,
+      false // disable perf metrics
+    )
+
+    // Insert into the map until we've run out of space
+    val rand = new Random(42)
+    var hasSpace = true
+    while (hasSpace) {
+      val str = rand.nextString(1024)
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+      if (buf == null) {
+        hasSpace = false
+      } else {
+        buf.setInt(0, str.length)
+      }
+    }
+
+    // Ensure we're actually maxed out by asserting that we can't acquire even just 1 byte
+    assert(smm.tryToAcquire(1) === 0)
+
+    // Convert the map into a sorter. This used to fail before the fix for SPARK-10474
+    // because we would try to acquire space for the in-memory sorter pointer array before
+    // actually releasing the pages despite having spilled all of them.
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      sorter = map.destructAndCreateExternalSorter()
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+    }
+  }
+
 }

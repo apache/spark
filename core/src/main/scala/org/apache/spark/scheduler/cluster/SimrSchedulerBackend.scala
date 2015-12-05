@@ -65,7 +65,9 @@ private[spark] class SimrSchedulerBackend(
   override def stop() {
     val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)
-    fs.delete(new Path(driverFilePath), false)
+    if (!fs.delete(new Path(driverFilePath), false)) {
+      logWarning(s"error deleting ${driverFilePath}")
+    }
     super.stop()
   }
 

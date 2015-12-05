@@ -148,7 +148,7 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   try {
     Snappy.getNativeLibraryVersion
   } catch {
-    case e: Error => throw new IllegalArgumentException
+    case e: Error => throw new IllegalArgumentException(e)
   }
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {

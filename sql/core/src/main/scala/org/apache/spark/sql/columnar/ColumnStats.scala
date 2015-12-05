@@ -213,8 +213,8 @@ private[sql] class StringColumnStats extends ColumnStats {
     super.gatherStats(row, ordinal)
     if (!row.isNullAt(ordinal)) {
       val value = row.getUTF8String(ordinal)
-      if (upper == null || value.compareTo(upper) > 0) upper = value
-      if (lower == null || value.compareTo(lower) < 0) lower = value
+      if (upper == null || value.compareTo(upper) > 0) upper = value.clone()
+      if (lower == null || value.compareTo(lower) < 0) lower = value.clone()
       sizeInBytes += STRING.actualSize(row, ordinal)
     }
   }

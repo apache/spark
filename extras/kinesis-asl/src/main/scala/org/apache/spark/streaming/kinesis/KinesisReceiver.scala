@@ -18,7 +18,7 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.UUID
 
-import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -202,7 +202,7 @@ private[kinesis] class KinesisReceiver(
   /** Add records of the given shard to the current block being generated */
   private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
     if (records.size > 0) {
-      val dataIterator = records.iterator().map { record =>
+      val dataIterator = records.iterator().asScala.map { record =>
         val byteBuffer = record.getData()
         val byteArray = new Array[Byte](byteBuffer.remaining())
         byteBuffer.get(byteArray)

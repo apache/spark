@@ -46,11 +46,17 @@ class MapPartitionsWithPreparationRDDSuite extends SparkFunSuite with LocalSpark
     }
 
     // Verify that the numbers are pushed in the order expected
-    val result = {
-      new MapPartitionsWithPreparationRDD[Int, Int, Unit](
-        parent, preparePartition, executePartition).collect()
-    }
+    val rdd = new MapPartitionsWithPreparationRDD[Int, Int, Unit](
+      parent, preparePartition, executePartition)
+    val result = rdd.collect()
     assert(result === Array(10, 20, 30))
+
+    TestObject.things.clear()
+    // Zip two of these RDDs, both should be prepared before the parent is executed
+    val rdd2 = new MapPartitionsWithPreparationRDD[Int, Int, Unit](
+      parent, preparePartition, executePartition)
+    val result2 = rdd.zipPartitions(rdd2)((a, b) => a).collect()
+    assert(result2 === Array(10, 10, 20, 30, 20, 30))
   }
 
 }

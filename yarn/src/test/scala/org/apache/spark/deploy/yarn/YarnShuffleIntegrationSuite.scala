@@ -34,7 +34,7 @@ import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
  */
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
-  override def yarnConfig: YarnConfiguration = {
+  override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),

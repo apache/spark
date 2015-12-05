@@ -41,6 +41,7 @@ final class Binarizer(override val uid: String)
    * Param for threshold used to binarize continuous features.
    * The features greater than the threshold, will be binarized to 1.0.
    * The features equal to or less than the threshold, will be binarized to 0.0.
+   * Default: 0.0
    * @group param
    */
   val threshold: DoubleParam =

@@ -169,9 +169,11 @@ abstract class AbstractCommandBuilder {
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
       if (prependClasses) {
-        System.err.println(
-          "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
-          "assembly.");
+        if (!isTesting) {
+          System.err.println(
+            "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
+            "assembly.");
+        }
         for (String project : projects) {
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
@@ -200,7 +202,7 @@ abstract class AbstractCommandBuilder {
     // For the user code case, we fall back to looking for the Spark assembly under SPARK_HOME.
     // That duplicates some of the code in the shell scripts that look for the assembly, though.
     String assembly = getenv(ENV_SPARK_ASSEMBLY);
-    if (assembly == null && isEmpty(getenv("SPARK_TESTING"))) {
+    if (assembly == null && !isTesting) {
       assembly = findAssembly();
     }
     addToClassPath(cp, assembly);
@@ -215,12 +217,14 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, "lib_managed/jars");
     }
 
-    checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-      libdir.getAbsolutePath());
-    for (File jar : libdir.listFiles()) {
-      if (jar.getName().startsWith("datanucleus-")) {
-        addToClassPath(cp, jar.getAbsolutePath());
+    if (libdir.isDirectory()) {
+      for (File jar : libdir.listFiles()) {
+        if (jar.getName().startsWith("datanucleus-")) {
+          addToClassPath(cp, jar.getAbsolutePath());
+        }
       }
+    } else {
+      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -256,15 +260,15 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    File scala210 = new File(sparkHome, "assembly/target/scala-2.10");
-    File scala211 = new File(sparkHome, "assembly/target/scala-2.11");
+    File scala210 = new File(sparkHome, "launcher/target/scala-2.10");
+    File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
     checkState(!scala210.isDirectory() || !scala211.isDirectory(),
       "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
     if (scala210.isDirectory()) {
       return "2.10";
     } else {
-      checkState(scala211.isDirectory(), "Cannot find any assembly build directories.");
+      checkState(scala211.isDirectory(), "Cannot find any build directories.");
       return "2.11";
     }
   }

@@ -17,34 +17,11 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import scala.annotation.tailrec
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-
-/**
- * A pattern that matches any number of filter operations on top of another relational operator.
- * Adjacent filter operators are collected and their conditions are broken up and returned as a
- * sequence of conjunctive predicates.
- *
- * @return A tuple containing a sequence of conjunctive predicates that should be used to filter the
- *         output and a relational operator.
- */
-object FilteredOperation extends PredicateHelper {
-  type ReturnType = (Seq[Expression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = Some(collectFilters(Nil, plan))
-
-  @tailrec
-  private def collectFilters(filters: Seq[Expression], plan: LogicalPlan): ReturnType = plan match {
-    case Filter(condition, child) =>
-      collectFilters(filters ++ splitConjunctivePredicates(condition), child)
-    case other => (filters, other)
-  }
-}
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -62,8 +39,9 @@ object PhysicalOperation extends PredicateHelper {
   }
 
   /**
-   * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
-   * examples for alias in-lining/substitution.  Before:
+   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * Here are two examples for alias in-lining/substitution.
+   * Before:
    * {{{
    *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
    *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
@@ -74,15 +52,15 @@ object PhysicalOperation extends PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  def collectProjectsAndFilters(plan: LogicalPlan):
+  private def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
-      case Project(fields, child) =>
+      case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) =>
+      case Filter(condition, child) if condition.deterministic =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
@@ -91,11 +69,11 @@ object PhysicalOperation extends PredicateHelper {
         (None, Nil, other, Map.empty)
     }
 
-  def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
+  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
     case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
-  def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
+  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
@@ -195,8 +173,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       // as join keys.
       val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case EqualTo(l, r) =>
+            (canEvaluate(l, left) && canEvaluate(r, right)) ||
+            (canEvaluate(l, right) && canEvaluate(r, left))
           case _ => false
         }
 
@@ -204,10 +183,9 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
         case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
       }
-      val leftKeys = joinKeys.map(_._1)
-      val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
+        val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {

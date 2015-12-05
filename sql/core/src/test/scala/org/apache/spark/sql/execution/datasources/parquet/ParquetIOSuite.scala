@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.collection.JavaConversions._
+import java.util.Collections
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
@@ -28,7 +30,7 @@ import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
-import org.apache.parquet.hadoop.metadata.{CompressionCodecName, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.metadata.{BlockMetaData, CompressionCodecName, FileMetaData, ParquetMetadata}
 import org.apache.parquet.hadoop.{Footer, ParquetFileWriter, ParquetOutputCommitter, ParquetWriter}
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
@@ -99,7 +101,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("fixed-length decimals") {
     def makeDecimalRDD(decimal: DecimalType): DataFrame =
-      sqlContext.sparkContext
+      sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
         .toDF()
@@ -117,7 +119,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("date type") {
     def makeDateRDD(): DataFrame =
-      sqlContext.sparkContext
+      sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(DateTimeUtils.toJavaDate(i)))
         .toDF()
@@ -205,9 +207,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("compression codec") {
     def compressionCodecFor(path: String): String = {
       val codecs = ParquetTypesConverter
-        .readMetaData(new Path(path), Some(configuration))
-        .getBlocks
-        .flatMap(_.getColumns)
+        .readMetaData(new Path(path), Some(hadoopConfiguration)).getBlocks.asScala
+        .flatMap(_.getColumns.asScala)
         .map(_.getCodec.name())
         .distinct
 
@@ -276,14 +277,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("write metadata") {
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
-      val fs = FileSystem.getLocal(configuration)
+      val fs = FileSystem.getLocal(hadoopConfiguration)
       val attributes = ScalaReflection.attributesFor[(Int, String)]
-      ParquetTypesConverter.writeMetaData(attributes, path, configuration)
+      ParquetTypesConverter.writeMetaData(attributes, path, hadoopConfiguration)
 
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
-      val metaData = ParquetTypesConverter.readMetaData(path, Some(configuration))
+      val metaData = ParquetTypesConverter.readMetaData(path, Some(hadoopConfiguration))
       val actualSchema = metaData.getFileMetaData.getSchema
       val expectedSchema = ParquetTypesConverter.convertFromAttributes(attributes)
 
@@ -348,14 +349,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       """.stripMargin)
 
     withTempPath { location =>
-      val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
+      val extraMetadata = Collections.singletonMap(
+        CatalystReadSupport.SPARK_METADATA_KEY, sparkSchema.toString)
       val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, "Spark")
       val path = new Path(location.getCanonicalPath)
 
       ParquetFileWriter.writeMetadataFile(
-        sqlContext.sparkContext.hadoopConfiguration,
+        sparkContext.hadoopConfiguration,
         path,
-        new Footer(path, new ParquetMetadata(fileMetadata, Nil)) :: Nil)
+        Collections.singletonList(
+          new Footer(path, new ParquetMetadata(fileMetadata, Collections.emptyList()))))
 
       assertResult(sqlContext.read.parquet(path.toString).schema) {
         StructType(
@@ -367,12 +370,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-6352 DirectParquetOutputCommitter") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
 
     // Write to a parquet file and let it fail.
     // _temporary should be missing if direct output committer works.
     try {
-      configuration.set("spark.sql.parquet.output.committer.class",
+      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
         classOf[DirectParquetOutputCommitter].getCanonicalName)
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
@@ -380,23 +383,23 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
         }
         val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(configuration)
+        val fs = path.getFileSystem(hadoopConfiguration)
         assert(!fs.exists(path))
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
   test("SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
 
     // Write to a parquet file and let it fail.
     // _temporary should be missing if direct output committer works.
     try {
-      configuration.set("spark.sql.parquet.output.committer.class",
+      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
         "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
       sqlContext.udf.register("div0", (x: Int) => x / 0)
       withTempPath { dir =>
@@ -404,25 +407,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           sqlContext.sql("select div0(1)").write.parquet(dir.getCanonicalPath)
         }
         val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(configuration)
+        val fs = path.getFileSystem(hadoopConfiguration)
         assert(!fs.exists(path))
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
     withTempPath { dir =>
-      val clonedConf = new Configuration(configuration)
+      val clonedConf = new Configuration(hadoopConfiguration)
 
-      configuration.set(
+      hadoopConfiguration.set(
         SQLConf.OUTPUT_COMMITTER_CLASS.key, classOf[ParquetOutputCommitter].getCanonicalName)
 
-      configuration.set(
+      hadoopConfiguration.set(
         "spark.sql.parquet.output.committer.class",
         classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName)
 
@@ -433,8 +436,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         assert(message === "Intentional exception for testing purposes")
       } finally {
         // Hadoop 1 doesn't have `Configuration.unset`
-        configuration.clear()
-        clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       }
     }
   }
@@ -452,11 +455,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
 
     // Using a output committer that always fail when committing a task, so that both
     // `commitTask()` and `abortTask()` are invoked.
-    configuration.set(
+    hadoopConfiguration.set(
       "spark.sql.parquet.output.committer.class",
       classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName)
 
@@ -480,8 +483,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 }

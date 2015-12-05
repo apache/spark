@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -54,16 +55,16 @@ public class JavaBucketizerSuite {
   public void bucketizerTest() {
     double[] splits = {-0.5, 0.0, 0.5};
 
-    JavaRDD<Row> data = jsc.parallelize(Lists.newArrayList(
-      RowFactory.create(-0.5),
-      RowFactory.create(-0.3),
-      RowFactory.create(0.0),
-      RowFactory.create(0.2)
-    ));
     StructType schema = new StructType(new StructField[] {
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame dataset = jsql.createDataFrame(data, schema);
+    DataFrame dataset = jsql.createDataFrame(
+      Arrays.asList(
+        RowFactory.create(-0.5),
+        RowFactory.create(-0.3),
+        RowFactory.create(0.0),
+        RowFactory.create(0.2)),
+      schema);
 
     Bucketizer bucketizer = new Bucketizer()
       .setInputCol("feature")

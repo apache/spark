@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Success, Failure, Try}
 
@@ -55,7 +55,7 @@ object ResolvedDataSource extends Logging {
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
-    serviceLoader.iterator().filter(_.shortName().equalsIgnoreCase(provider)).toList match {
+    serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
       /** the provider format did not match any given registered aliases */
       case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
         case Success(dataSource) => dataSource

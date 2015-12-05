@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.{lang => jl}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.expressions._
@@ -209,7 +209,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.toSeq)
+  def fill(valueMap: java.util.Map[String, Any]): DataFrame = fill0(valueMap.asScala.toSeq)
 
   /**
    * (Scala-specific) Returns a new [[DataFrame]] that replaces null values.
@@ -254,7 +254,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def replace[T](col: String, replacement: java.util.Map[T, T]): DataFrame = {
-    replace[T](col, replacement.toMap : Map[T, T])
+    replace[T](col, replacement.asScala.toMap)
   }
 
   /**
@@ -277,7 +277,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * @since 1.3.1
    */
   def replace[T](cols: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
-    replace(cols.toSeq, replacement.toMap)
+    replace(cols.toSeq, replacement.asScala.toMap)
   }
 
   /**

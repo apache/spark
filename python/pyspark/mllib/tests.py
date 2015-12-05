@@ -166,13 +166,13 @@ class VectorTests(MLlibTestCase):
                      [1., 2., 3., 4.],
                      [1., 2., 3., 4.]])
         arr = pyarray.array('d', [0, 1, 2, 3])
-        self.assertEquals(10.0, sv.dot(dv))
+        self.assertEqual(10.0, sv.dot(dv))
         self.assertTrue(array_equal(array([3., 6., 9., 12.]), sv.dot(mat)))
-        self.assertEquals(30.0, dv.dot(dv))
+        self.assertEqual(30.0, dv.dot(dv))
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
-        self.assertEquals(30.0, lst.dot(dv))
+        self.assertEqual(30.0, lst.dot(dv))
         self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
-        self.assertEquals(7.0, sv.dot(arr))
+        self.assertEqual(7.0, sv.dot(arr))
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})
@@ -181,18 +181,50 @@ class VectorTests(MLlibTestCase):
         lst1 = [4, 3, 2, 1]
         arr = pyarray.array('d', [0, 2, 1, 3])
         narr = array([0, 2, 1, 3])
-        self.assertEquals(15.0, _squared_distance(sv, dv))
-        self.assertEquals(25.0, _squared_distance(sv, lst))
-        self.assertEquals(20.0, _squared_distance(dv, lst))
-        self.assertEquals(15.0, _squared_distance(dv, sv))
-        self.assertEquals(25.0, _squared_distance(lst, sv))
-        self.assertEquals(20.0, _squared_distance(lst, dv))
-        self.assertEquals(0.0, _squared_distance(sv, sv))
-        self.assertEquals(0.0, _squared_distance(dv, dv))
-        self.assertEquals(0.0, _squared_distance(lst, lst))
-        self.assertEquals(25.0, _squared_distance(sv, lst1))
-        self.assertEquals(3.0, _squared_distance(sv, arr))
-        self.assertEquals(3.0, _squared_distance(sv, narr))
+        self.assertEqual(15.0, _squared_distance(sv, dv))
+        self.assertEqual(25.0, _squared_distance(sv, lst))
+        self.assertEqual(20.0, _squared_distance(dv, lst))
+        self.assertEqual(15.0, _squared_distance(dv, sv))
+        self.assertEqual(25.0, _squared_distance(lst, sv))
+        self.assertEqual(20.0, _squared_distance(lst, dv))
+        self.assertEqual(0.0, _squared_distance(sv, sv))
+        self.assertEqual(0.0, _squared_distance(dv, dv))
+        self.assertEqual(0.0, _squared_distance(lst, lst))
+        self.assertEqual(25.0, _squared_distance(sv, lst1))
+        self.assertEqual(3.0, _squared_distance(sv, arr))
+        self.assertEqual(3.0, _squared_distance(sv, narr))
+
+    def test_hash(self):
+        v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
+        v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v4 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        self.assertEqual(hash(v1), hash(v2))
+        self.assertEqual(hash(v1), hash(v3))
+        self.assertEqual(hash(v2), hash(v3))
+        self.assertFalse(hash(v1) == hash(v4))
+        self.assertFalse(hash(v2) == hash(v4))
+
+    def test_eq(self):
+        v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v2 = SparseVector(4, [(1, 1.0), (3, 5.5)])
+        v3 = DenseVector([0.0, 1.0, 0.0, 5.5])
+        v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
+        v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
+        v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        self.assertEqual(v1, v2)
+        self.assertEqual(v1, v3)
+        self.assertFalse(v2 == v4)
+        self.assertFalse(v1 == v5)
+        self.assertFalse(v1 == v6)
+
+    def test_equals(self):
+        indices = [1, 2, 4]
+        values = [1., 3., 2.]
+        self.assertTrue(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 1., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 3., 0., 2.]))
+        self.assertFalse(Vectors._equals(indices, values, list(range(5)), [0., 1., 3., 2., 2.]))
 
     def test_conversion(self):
         # numpy arrays should be automatically upcast to float64
@@ -206,13 +238,13 @@ class VectorTests(MLlibTestCase):
 
     def test_sparse_vector_indexing(self):
         sv = SparseVector(4, {1: 1, 3: 2})
-        self.assertEquals(sv[0], 0.)
-        self.assertEquals(sv[3], 2.)
-        self.assertEquals(sv[1], 1.)
-        self.assertEquals(sv[2], 0.)
-        self.assertEquals(sv[-1], 2)
-        self.assertEquals(sv[-2], 0)
-        self.assertEquals(sv[-4], 0)
+        self.assertEqual(sv[0], 0.)
+        self.assertEqual(sv[3], 2.)
+        self.assertEqual(sv[1], 1.)
+        self.assertEqual(sv[2], 0.)
+        self.assertEqual(sv[-1], 2)
+        self.assertEqual(sv[-2], 0)
+        self.assertEqual(sv[-4], 0)
         for ind in [4, -5]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
         for ind in [7.8, '1']:
@@ -223,7 +255,7 @@ class VectorTests(MLlibTestCase):
         expected = [[0, 6], [1, 8], [4, 10]]
         for i in range(3):
             for j in range(2):
-                self.assertEquals(mat[i, j], expected[i][j])
+                self.assertEqual(mat[i, j], expected[i][j])
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
@@ -276,11 +308,11 @@ class VectorTests(MLlibTestCase):
         # Test sparse matrix creation.
         sm1 = SparseMatrix(
             3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0])
-        self.assertEquals(sm1.numRows, 3)
-        self.assertEquals(sm1.numCols, 4)
-        self.assertEquals(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
-        self.assertEquals(sm1.rowIndices.tolist(), [1, 2, 1, 2])
-        self.assertEquals(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
+        self.assertEqual(sm1.numRows, 3)
+        self.assertEqual(sm1.numCols, 4)
+        self.assertEqual(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
+        self.assertEqual(sm1.rowIndices.tolist(), [1, 2, 1, 2])
+        self.assertEqual(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
         self.assertTrue(
             repr(sm1),
             'SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)')
@@ -293,13 +325,13 @@ class VectorTests(MLlibTestCase):
 
         for i in range(3):
             for j in range(4):
-                self.assertEquals(expected[i][j], sm1[i, j])
+                self.assertEqual(expected[i][j], sm1[i, j])
         self.assertTrue(array_equal(sm1.toArray(), expected))
 
         # Test conversion to dense and sparse.
         smnew = sm1.toDense().toSparse()
-        self.assertEquals(sm1.numRows, smnew.numRows)
-        self.assertEquals(sm1.numCols, smnew.numCols)
+        self.assertEqual(sm1.numRows, smnew.numRows)
+        self.assertEqual(sm1.numCols, smnew.numCols)
         self.assertTrue(array_equal(sm1.colPtrs, smnew.colPtrs))
         self.assertTrue(array_equal(sm1.rowIndices, smnew.rowIndices))
         self.assertTrue(array_equal(sm1.values, smnew.values))
@@ -307,11 +339,11 @@ class VectorTests(MLlibTestCase):
         sm1t = SparseMatrix(
             3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0],
             isTransposed=True)
-        self.assertEquals(sm1t.numRows, 3)
-        self.assertEquals(sm1t.numCols, 4)
-        self.assertEquals(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
-        self.assertEquals(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
-        self.assertEquals(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
+        self.assertEqual(sm1t.numRows, 3)
+        self.assertEqual(sm1t.numCols, 4)
+        self.assertEqual(sm1t.colPtrs.tolist(), [0, 2, 3, 5])
+        self.assertEqual(sm1t.rowIndices.tolist(), [0, 1, 2, 0, 2])
+        self.assertEqual(sm1t.values.tolist(), [3.0, 2.0, 4.0, 9.0, 8.0])
 
         expected = [
             [3, 2, 0, 0],
@@ -320,18 +352,18 @@ class VectorTests(MLlibTestCase):
 
         for i in range(3):
             for j in range(4):
-                self.assertEquals(expected[i][j], sm1t[i, j])
+                self.assertEqual(expected[i][j], sm1t[i, j])
         self.assertTrue(array_equal(sm1t.toArray(), expected))
 
     def test_dense_matrix_is_transposed(self):
         mat1 = DenseMatrix(3, 2, [0, 4, 1, 6, 3, 9], isTransposed=True)
         mat = DenseMatrix(3, 2, [0, 1, 3, 4, 6, 9])
-        self.assertEquals(mat1, mat)
+        self.assertEqual(mat1, mat)
 
         expected = [[0, 4], [1, 6], [3, 9]]
         for i in range(3):
             for j in range(2):
-                self.assertEquals(mat1[i, j], expected[i][j])
+                self.assertEqual(mat1[i, j], expected[i][j])
         self.assertTrue(array_equal(mat1.toArray(), expected))
 
         sm = mat1.toSparse()
@@ -380,8 +412,8 @@ class ListTests(MLlibTestCase):
         ]
         clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||",
                                 initializationSteps=7, epsilon=1e-4)
-        self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
-        self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
+        self.assertEqual(clusters.predict(data[0]), clusters.predict(data[1]))
+        self.assertEqual(clusters.predict(data[2]), clusters.predict(data[3]))
 
     def test_kmeans_deterministic(self):
         from pyspark.mllib.clustering import KMeans
@@ -411,8 +443,8 @@ class ListTests(MLlibTestCase):
         clusters = GaussianMixture.train(data, 2, convergenceTol=0.001,
                                          maxIterations=10, seed=56)
         labels = clusters.predict(data).collect()
-        self.assertEquals(labels[0], labels[1])
-        self.assertEquals(labels[2], labels[3])
+        self.assertEqual(labels[0], labels[1])
+        self.assertEqual(labels[2], labels[3])
 
     def test_gmm_deterministic(self):
         from pyspark.mllib.clustering import GaussianMixture
@@ -424,7 +456,7 @@ class ListTests(MLlibTestCase):
         clusters2 = GaussianMixture.train(data, 5, convergenceTol=0.001,
                                           maxIterations=10, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
-            self.assertEquals(round(c1, 7), round(c2, 7))
+            self.assertEqual(round(c1, 7), round(c2, 7))
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
@@ -679,18 +711,18 @@ class SciPyTests(MLlibTestCase):
         lil[1, 0] = 1
         lil[3, 0] = 2
         sv = SparseVector(4, {1: 1, 3: 2})
-        self.assertEquals(sv, _convert_to_vector(lil))
-        self.assertEquals(sv, _convert_to_vector(lil.tocsc()))
-        self.assertEquals(sv, _convert_to_vector(lil.tocoo()))
-        self.assertEquals(sv, _convert_to_vector(lil.tocsr()))
-        self.assertEquals(sv, _convert_to_vector(lil.todok()))
+        self.assertEqual(sv, _convert_to_vector(lil))
+        self.assertEqual(sv, _convert_to_vector(lil.tocsc()))
+        self.assertEqual(sv, _convert_to_vector(lil.tocoo()))
+        self.assertEqual(sv, _convert_to_vector(lil.tocsr()))
+        self.assertEqual(sv, _convert_to_vector(lil.todok()))
 
         def serialize(l):
             return ser.loads(ser.dumps(_convert_to_vector(l)))
-        self.assertEquals(sv, serialize(lil))
-        self.assertEquals(sv, serialize(lil.tocsc()))
-        self.assertEquals(sv, serialize(lil.tocsr()))
-        self.assertEquals(sv, serialize(lil.todok()))
+        self.assertEqual(sv, serialize(lil))
+        self.assertEqual(sv, serialize(lil.tocsc()))
+        self.assertEqual(sv, serialize(lil.tocsr()))
+        self.assertEqual(sv, serialize(lil.todok()))
 
     def test_dot(self):
         from scipy.sparse import lil_matrix
@@ -698,7 +730,7 @@ class SciPyTests(MLlibTestCase):
         lil[1, 0] = 1
         lil[3, 0] = 2
         dv = DenseVector(array([1., 2., 3., 4.]))
-        self.assertEquals(10.0, dv.dot(lil))
+        self.assertEqual(10.0, dv.dot(lil))
 
     def test_squared_distance(self):
         from scipy.sparse import lil_matrix
@@ -707,8 +739,8 @@ class SciPyTests(MLlibTestCase):
         lil[3, 0] = 2
         dv = DenseVector(array([1., 2., 3., 4.]))
         sv = SparseVector(4, {0: 1, 1: 2, 2: 3, 3: 4})
-        self.assertEquals(15.0, dv.squared_distance(lil))
-        self.assertEquals(15.0, sv.squared_distance(lil))
+        self.assertEqual(15.0, dv.squared_distance(lil))
+        self.assertEqual(15.0, sv.squared_distance(lil))
 
     def scipy_matrix(self, size, values):
         """Create a column SciPy matrix from a dictionary of values"""
@@ -727,8 +759,8 @@ class SciPyTests(MLlibTestCase):
             self.scipy_matrix(3, {2: 1.1})
         ]
         clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
-        self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
-        self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
+        self.assertEqual(clusters.predict(data[0]), clusters.predict(data[1]))
+        self.assertEqual(clusters.predict(data[2]), clusters.predict(data[3]))
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
@@ -952,12 +984,12 @@ class Word2VecTests(MLlibTestCase):
             .setNumIterations(10) \
             .setSeed(1024) \
             .setMinCount(3)
-        self.assertEquals(model.vectorSize, 2)
+        self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
-        self.assertEquals(model.numPartitions, 2)
-        self.assertEquals(model.numIterations, 10)
-        self.assertEquals(model.seed, 1024)
-        self.assertEquals(model.minCount, 3)
+        self.assertEqual(model.numPartitions, 2)
+        self.assertEqual(model.numIterations, 10)
+        self.assertEqual(model.seed, 1024)
+        self.assertEqual(model.minCount, 3)
 
     def test_word2vec_get_vectors(self):
         data = [
@@ -970,7 +1002,7 @@ class Word2VecTests(MLlibTestCase):
             ["a"]
         ]
         model = Word2Vec().fit(self.sc.parallelize(data))
-        self.assertEquals(len(model.getVectors()), 3)
+        self.assertEqual(len(model.getVectors()), 3)
 
 
 class StandardScalerTests(MLlibTestCase):
@@ -1012,8 +1044,8 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         """Test that the model params are set correctly"""
         stkm = StreamingKMeans()
         stkm.setK(5).setDecayFactor(0.0)
-        self.assertEquals(stkm._k, 5)
-        self.assertEquals(stkm._decayFactor, 0.0)
+        self.assertEqual(stkm._k, 5)
+        self.assertEqual(stkm._decayFactor, 0.0)
 
         # Model not set yet.
         self.assertIsNone(stkm.latestModel())
@@ -1021,9 +1053,9 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         stkm.setInitialCenters(
             centers=[[0.0, 0.0], [1.0, 1.0]], weights=[1.0, 1.0])
-        self.assertEquals(
+        self.assertEqual(
             stkm.latestModel().centers, [[0.0, 0.0], [1.0, 1.0]])
-        self.assertEquals(stkm.latestModel().clusterWeights, [1.0, 1.0])
+        self.assertEqual(stkm.latestModel().clusterWeights, [1.0, 1.0])
 
     def test_accuracy_for_single_center(self):
         """Test that parameters obtained are correct for a single center."""
@@ -1038,7 +1070,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(stkm.latestModel().clusterWeights, [25.0])
+            self.assertEqual(stkm.latestModel().clusterWeights, [25.0])
             return True
         self._eventually(condition, catch_assertions=True)
 
@@ -1082,7 +1114,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         def condition():
             finalModel = stkm.latestModel()
             self.assertTrue(all(finalModel.centers == array(initCenters)))
-            self.assertEquals(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
+            self.assertEqual(finalModel.clusterWeights, [5.0, 5.0, 5.0, 5.0])
             return True
         self._eventually(condition, catch_assertions=True)
 
@@ -1109,7 +1141,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(result, [[0], [1], [2], [3]])
+            self.assertEqual(result, [[0], [1], [2], [3]])
             return True
 
         self._eventually(condition, catch_assertions=True)
@@ -1231,7 +1263,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(len(models), len(input_batches))
+            self.assertEqual(len(models), len(input_batches))
             return True
 
         # We want all batches to finish for this test.
@@ -1265,7 +1297,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(len(true_predicted), len(input_batches))
+            self.assertEqual(len(true_predicted), len(input_batches))
             return True
 
         self._eventually(condition, catch_assertions=True)
@@ -1368,7 +1400,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(len(model_weights), len(batches))
+            self.assertEqual(len(model_weights), len(batches))
             return True
 
         # We want all batches to finish for this test.
@@ -1401,7 +1433,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         self.ssc.start()
 
         def condition():
-            self.assertEquals(len(samples), len(batches))
+            self.assertEqual(len(samples), len(batches))
             return True
 
         # We want all batches to finish for this test.

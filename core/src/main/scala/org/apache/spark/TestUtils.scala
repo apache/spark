@@ -19,11 +19,12 @@ package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
+import java.nio.charset.StandardCharsets
+import java.util.Arrays
 import java.util.jar.{JarEntry, JarOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.{ByteStreams, Files}
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
@@ -71,7 +72,7 @@ private[spark] object TestUtils {
     files.foreach { case (k, v) =>
       val entry = new JarEntry(k)
       jarStream.putNextEntry(entry)
-      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(UTF_8)), jarStream)
+      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)), jarStream)
     }
     jarStream.close()
     jarFile.toURI.toURL
@@ -125,7 +126,7 @@ private[spark] object TestUtils {
     } else {
       Seq()
     }
-    compiler.getTask(null, null, null, options, null, Seq(sourceFile)).call()
+    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
 
     val fileName = className + ".class"
     val result = new File(fileName)

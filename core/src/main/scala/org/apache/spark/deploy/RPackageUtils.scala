@@ -22,7 +22,7 @@ import java.util.jar.JarFile
 import java.util.logging.Level
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 
@@ -110,7 +110,7 @@ private[deploy] object RPackageUtils extends Logging {
       print(s"Building R package with the command: $installCmd", printStream)
     }
     try {
-      val builder = new ProcessBuilder(installCmd)
+      val builder = new ProcessBuilder(installCmd.asJava)
       builder.redirectErrorStream(true)
       val env = builder.environment()
       env.clear()
@@ -175,8 +175,10 @@ private[deploy] object RPackageUtils extends Logging {
               print(s"ERROR: Failed to build R package in $file.", printStream)
               print(RJarDoc, printStream)
             }
-          } finally {
-            rSource.delete() // clean up
+          } finally { // clean up
+            if (!rSource.delete()) {
+              logWarning(s"Error deleting ${rSource.getPath()}")
+            }
           }
         } else {
           if (verbose) {
@@ -211,7 +213,9 @@ private[deploy] object RPackageUtils extends Logging {
     val filesToBundle = listFilesRecursively(dir, Seq(".zip"))
     // create a zip file from scratch, do not append to existing file.
     val zipFile = new File(dir, name)
-    zipFile.delete()
+    if (!zipFile.delete()) {
+      logWarning(s"Error deleting ${zipFile.getPath()}")
+    }
     val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
     try {
       filesToBundle.foreach { file =>

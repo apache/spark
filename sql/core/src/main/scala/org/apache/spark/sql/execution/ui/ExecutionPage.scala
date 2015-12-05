@@ -74,16 +74,14 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
                 }}
               </li>
             }}
-            <li>
-              <strong>Detail: </strong><br/>
-              <pre>{executionUIData.physicalPlanDescription}</pre>
-            </li>
           </ul>
         </div>
 
       val metrics = listener.getExecutionMetrics(executionId)
 
-      summary ++ planVisualization(metrics, executionUIData.physicalPlanGraph)
+      summary ++
+        planVisualization(metrics, executionUIData.physicalPlanGraph) ++
+        physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
       <div>No information to display for Plan {executionId}</div>
     }
@@ -124,4 +122,23 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
 
   private def jobURL(jobId: Long): String =
     "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+
+  private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
+    <div>
+      <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
+        <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+        <a>Details</a>
+      </span>
+    </div>
+    <div id="physical-plan-details" style="display: none;">
+      <pre>{physicalPlanDescription}</pre>
+    </div>
+    <script>
+      function clickPhysicalPlanDetails() {{
+        $('#physical-plan-details').toggle();
+        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+      }}
+    </script>
+    <br/>
+  }
 }

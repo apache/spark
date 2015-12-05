@@ -19,11 +19,16 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.{SparkConf, TaskContext, ShuffleDependency}
+import org.apache.spark.{Logging, SparkConf, TaskContext, ShuffleDependency}
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.hash.HashShuffleReader
 
-private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager {
+private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
+
+  if (!conf.getBoolean("spark.shuffle.spill", true)) {
+    logWarning(
+      "spark.shuffle.spill was set to false, but this configuration is ignored as of Spark 1.6+." +
+        " Shuffle will continue to spill to disk when necessary.")
+  }
 
   private val indexShuffleBlockResolver = new IndexShuffleBlockResolver(conf)
   private val shuffleMapNumber = new ConcurrentHashMap[Int, Int]()
@@ -48,7 +53,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext): ShuffleReader[K, C] = {
     // We currently use the same block store shuffle fetcher as the hash-based shuffle.
-    new HashShuffleReader(
+    new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
 

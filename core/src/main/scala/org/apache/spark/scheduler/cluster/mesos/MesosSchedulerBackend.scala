@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.File
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.{Scheduler => MScheduler, _}
@@ -31,7 +31,6 @@ import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.util.Utils
-
 
 /**
  * A SchedulerBackend for running fine-grained tasks on Mesos. Each Spark task is mapped to a
@@ -127,16 +126,14 @@ private[spark] class MesosSchedulerBackend(
     }
     val builder = MesosExecutorInfo.newBuilder()
     val (resourcesAfterCpu, usedCpuResources) =
-      partitionResources(availableResources, "cpus", scheduler.CPUS_PER_TASK)
+      partitionResources(availableResources, "cpus", mesosExecutorCores)
     val (resourcesAfterMem, usedMemResources) =
-      partitionResources(resourcesAfterCpu, "mem", calculateTotalMemory(sc))
+      partitionResources(resourcesAfterCpu.asJava, "mem", calculateTotalMemory(sc))
 
-    builder.addAllResources(usedCpuResources)
-    builder.addAllResources(usedMemResources)
+    builder.addAllResources(usedCpuResources.asJava)
+    builder.addAllResources(usedMemResources.asJava)
 
-    sc.conf.getOption("spark.mesos.uris").map { uris =>
-      setupUris(uris, command)
-    }
+    sc.conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
 
     val executorInfo = builder
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
@@ -148,7 +145,7 @@ private[spark] class MesosSchedulerBackend(
         .setupContainerBuilderDockerInfo(image, sc.conf, executorInfo.getContainerBuilder())
     }
 
-    (executorInfo.build(), resourcesAfterMem)
+    (executorInfo.build(), resourcesAfterMem.asJava)
   }
 
   /**
@@ -193,7 +190,7 @@ private[spark] class MesosSchedulerBackend(
 
   private def getTasksSummary(tasks: JArrayList[MesosTaskInfo]): String = {
     val builder = new StringBuilder
-    tasks.foreach { t =>
+    tasks.asScala.foreach { t =>
       builder.append("Task id: ").append(t.getTaskId.getValue).append("\n")
         .append("Slave id: ").append(t.getSlaveId.getValue).append("\n")
         .append("Task resources: ").append(t.getResourcesList).append("\n")
@@ -211,7 +208,7 @@ private[spark] class MesosSchedulerBackend(
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
       // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = offers.partition { o =>
+      val (usableOffers, unUsableOffers) = offers.asScala.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
@@ -323,10 +320,10 @@ private[spark] class MesosSchedulerBackend(
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(executorInfo)
       .setName(task.name)
-      .addAllResources(cpuResources)
+      .addAllResources(cpuResources.asJava)
       .setData(MesosTaskLaunchData(task.serializedTask, task.attemptNumber).toByteString)
       .build()
-    (taskInfo, finalResources)
+    (taskInfo, finalResources.asJava)
   }
 
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
@@ -392,7 +389,7 @@ private[spark] class MesosSchedulerBackend(
                             slaveId: SlaveID, status: Int) {
     logInfo("Executor lost: %s, marking slave %s as lost".format(executorId.getValue,
                                                                  slaveId.getValue))
-    recordSlaveLost(d, slaveId, ExecutorExited(status))
+    recordSlaveLost(d, slaveId, ExecutorExited(status, isNormalExit = false))
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.{List => JList, Map => JMap}
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
-import scala.collection.JavaConverters.mapAsJavaMapConverter
+import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord

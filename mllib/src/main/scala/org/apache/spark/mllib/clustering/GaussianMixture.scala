@@ -21,7 +21,7 @@ import scala.collection.mutable.IndexedSeq
 
 import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
@@ -53,6 +53,7 @@ import org.apache.spark.util.Utils
  * @param maxIterations The maximum number of iterations to perform
  */
 @Experimental
+@Since("1.3.0")
 class GaussianMixture private (
     private var k: Int,
     private var convergenceTol: Double,
@@ -62,8 +63,8 @@ class GaussianMixture private (
   /**
    * Constructs a default instance. The default parameters are {k: 2, convergenceTol: 0.01,
    * maxIterations: 100, seed: random}.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def this() = this(2, 0.01, 100, Utils.random.nextLong())
 
   // number of samples per cluster to use when initializing Gaussians
@@ -77,8 +78,8 @@ class GaussianMixture private (
    * Set the initial GMM starting point, bypassing the random initialization.
    * You must call setK() prior to calling this method, and the condition
    * (model.k == this.k) must be met; failure will result in an IllegalArgumentException
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def setInitialModel(model: GaussianMixtureModel): this.type = {
     if (model.k == k) {
       initialModel = Some(model)
@@ -90,14 +91,14 @@ class GaussianMixture private (
 
   /**
    * Return the user supplied initial GMM, if supplied
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def getInitialModel: Option[GaussianMixtureModel] = initialModel
 
   /**
    * Set the number of Gaussians in the mixture model.  Default: 2
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def setK(k: Int): this.type = {
     this.k = k
     this
@@ -105,14 +106,14 @@ class GaussianMixture private (
 
   /**
    * Return the number of Gaussians in the mixture model
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def getK: Int = k
 
   /**
    * Set the maximum number of iterations to run. Default: 100
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
     this.maxIterations = maxIterations
     this
@@ -120,15 +121,15 @@ class GaussianMixture private (
 
   /**
    * Return the maximum number of iterations to run
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def getMaxIterations: Int = maxIterations
 
   /**
    * Set the largest change in log-likelihood at which convergence is
    * considered to have occurred.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def setConvergenceTol(convergenceTol: Double): this.type = {
     this.convergenceTol = convergenceTol
     this
@@ -137,14 +138,14 @@ class GaussianMixture private (
   /**
    * Return the largest change in log-likelihood at which convergence is
    * considered to have occurred.
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def getConvergenceTol: Double = convergenceTol
 
   /**
    * Set the random seed
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def setSeed(seed: Long): this.type = {
     this.seed = seed
     this
@@ -152,14 +153,14 @@ class GaussianMixture private (
 
   /**
    * Return the random seed
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def getSeed: Long = seed
 
   /**
    * Perform expectation maximization
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def run(data: RDD[Vector]): GaussianMixtureModel = {
     val sc = data.sparkContext
 
@@ -169,9 +170,7 @@ class GaussianMixture private (
     // Get length of the input vectors
     val d = breezeData.first().length
 
-    // Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
-    // d > 25 except for when k is very small
-    val distributeGaussians = ((k - 1.0) / k) * d > 25
+    val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(k, d)
 
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -205,15 +204,15 @@ class GaussianMixture private (
       // (often referred to as the "M" step in literature)
       val sumWeights = sums.weights.sum
 
-      if (distributeGaussians) {
+      if (shouldDistributeGaussians) {
         val numPartitions = math.min(k, 1024)
         val tuples =
           Seq.tabulate(k)(i => (sums.means(i), sums.sigmas(i), sums.weights(i)))
         val (ws, gs) = sc.parallelize(tuples, numPartitions).map { case (mean, sigma, weight) =>
           updateWeightsAndGaussians(mean, sigma, weight, sumWeights)
-        }.collect.unzip
-        Array.copy(ws, 0, weights, 0, ws.length)
-        Array.copy(gs, 0, gaussians, 0, gs.length)
+        }.collect().unzip
+        Array.copy(ws.toArray, 0, weights, 0, ws.length)
+        Array.copy(gs.toArray, 0, gaussians, 0, gs.length)
       } else {
         var i = 0
         while (i < k) {
@@ -235,8 +234,8 @@ class GaussianMixture private (
 
   /**
    * Java-friendly version of [[run()]]
-   * @since 1.3.0
    */
+  @Since("1.3.0")
   def run(data: JavaRDD[Vector]): GaussianMixtureModel = run(data.rdd)
 
   private def updateWeightsAndGaussians(
@@ -269,6 +268,16 @@ class GaussianMixture private (
     x.foreach(xi => ss += (xi - mu) :^ 2.0)
     diag(ss / x.length.toDouble)
   }
+}
+
+private[clustering] object GaussianMixture {
+  /**
+   * Heuristic to distribute the computation of the [[MultivariateGaussian]]s, approximately when
+   * d > 25 except for when k is very small.
+   * @param k  Number of topics
+   * @param d  Number of features
+   */
+  def shouldDistributeGaussians(k: Int, d: Int): Boolean = ((k - 1.0) / k) * d > 25
 }
 
 // companion class to provide zero constructor for ExpectationSum

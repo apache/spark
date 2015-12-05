@@ -27,9 +27,10 @@ setOldClass("jobj")
 #'              \code{jsonFile}, \code{table} etc.
 #' @rdname DataFrame
 #' @seealso jsonFile, table
+#' @docType class
 #'
-#' @param env An R environment that stores bookkeeping states of the DataFrame
-#' @param sdf A Java object reference to the backing Scala DataFrame
+#' @slot env An R environment that stores bookkeeping states of the DataFrame
+#' @slot sdf A Java object reference to the backing Scala DataFrame
 #' @export
 setClass("DataFrame",
          slots = list(env = "environment",
@@ -61,6 +62,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname printSchema
+#' @name printSchema
 #' @export
 #' @examples
 #'\dontrun{
@@ -84,6 +86,7 @@ setMethod("printSchema",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname schema
+#' @name schema
 #' @export
 #' @examples
 #'\dontrun{
@@ -106,6 +109,7 @@ setMethod("schema",
 #' @param x A SparkSQL DataFrame
 #' @param extended Logical. If extended is False, explain() only prints the physical plan.
 #' @rdname explain
+#' @name explain
 #' @export
 #' @examples
 #'\dontrun{
@@ -135,6 +139,7 @@ setMethod("explain",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname isLocal
+#' @name isLocal
 #' @export
 #' @examples
 #'\dontrun{
@@ -158,6 +163,7 @@ setMethod("isLocal",
 #' @param numRows The number of rows to print. Defaults to 20.
 #'
 #' @rdname showDF
+#' @name showDF
 #' @export
 #' @examples
 #'\dontrun{
@@ -181,6 +187,7 @@ setMethod("showDF",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname show
+#' @name show
 #' @export
 #' @examples
 #'\dontrun{
@@ -206,6 +213,7 @@ setMethod("show", "DataFrame",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname dtypes
+#' @name dtypes
 #' @export
 #' @examples
 #'\dontrun{
@@ -230,6 +238,8 @@ setMethod("dtypes",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname columns
+#' @name columns
+#' @aliases names
 #' @export
 #' @examples
 #'\dontrun{
@@ -248,7 +258,7 @@ setMethod("columns",
           })
 
 #' @rdname columns
-#' @aliases names,DataFrame,function-method
+#' @name names
 setMethod("names",
           signature(x = "DataFrame"),
           function(x) {
@@ -256,11 +266,12 @@ setMethod("names",
           })
 
 #' @rdname columns
+#' @name names<-
 setMethod("names<-",
           signature(x = "DataFrame"),
           function(x, value) {
             if (!is.null(value)) {
-              sdf <- callJMethod(x@sdf, "toDF", listToSeq(as.list(value)))
+              sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
           })
@@ -273,6 +284,7 @@ setMethod("names<-",
 #' @param tableName A character vector containing the name of the table
 #'
 #' @rdname registerTempTable
+#' @name registerTempTable
 #' @export
 #' @examples
 #'\dontrun{
@@ -299,6 +311,7 @@ setMethod("registerTempTable",
 #' the existing rows in the table.
 #'
 #' @rdname insertInto
+#' @name insertInto
 #' @export
 #' @examples
 #'\dontrun{
@@ -321,7 +334,8 @@ setMethod("insertInto",
 #'
 #' @param x A SparkSQL DataFrame
 #'
-#' @rdname cache-methods
+#' @rdname cache
+#' @name cache
 #' @export
 #' @examples
 #'\dontrun{
@@ -347,6 +361,7 @@ setMethod("cache",
 #'
 #' @param x The DataFrame to persist
 #' @rdname persist
+#' @name persist
 #' @export
 #' @examples
 #'\dontrun{
@@ -372,6 +387,7 @@ setMethod("persist",
 #' @param x The DataFrame to unpersist
 #' @param blocking Whether to block until all blocks are deleted
 #' @rdname unpersist-methods
+#' @name unpersist
 #' @export
 #' @examples
 #'\dontrun{
@@ -397,6 +413,7 @@ setMethod("unpersist",
 #' @param x A SparkSQL DataFrame
 #' @param numPartitions The number of partitions to use.
 #' @rdname repartition
+#' @name repartition
 #' @export
 #' @examples
 #'\dontrun{
@@ -446,6 +463,7 @@ setMethod("toJSON",
 #' @param x A SparkSQL DataFrame
 #' @param path The directory where the file is saved
 #' @rdname saveAsParquetFile
+#' @name saveAsParquetFile
 #' @export
 #' @examples
 #'\dontrun{
@@ -467,6 +485,7 @@ setMethod("saveAsParquetFile",
 #'
 #' @param x A SparkSQL DataFrame
 #' @rdname distinct
+#' @name distinct
 #' @export
 #' @examples
 #'\dontrun{
@@ -488,7 +507,8 @@ setMethod("distinct",
 #' @description Returns a new DataFrame containing distinct rows in this DataFrame
 #'
 #' @rdname unique
-#' @aliases unique
+#' @name unique
+#' @aliases distinct
 setMethod("unique",
           signature(x = "DataFrame"),
           function(x) {
@@ -526,7 +546,7 @@ setMethod("sample",
           })
 
 #' @rdname sample
-#' @aliases sample
+#' @name sample_frac
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
@@ -541,6 +561,8 @@ setMethod("sample_frac",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname count
+#' @name count
+#' @aliases nrow
 #' @export
 #' @examples
 #'\dontrun{
@@ -574,6 +596,7 @@ setMethod("nrow",
 #' @param x a SparkSQL DataFrame
 #'
 #' @rdname ncol
+#' @name ncol
 #' @export
 #' @examples
 #'\dontrun{
@@ -593,6 +616,7 @@ setMethod("ncol",
 #' @param x a SparkSQL DataFrame
 #'
 #' @rdname dim
+#' @name dim
 #' @export
 #' @examples
 #'\dontrun{
@@ -613,8 +637,8 @@ setMethod("dim",
 #' @param x A SparkSQL DataFrame
 #' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
 #' should be converted to factors. FALSE by default.
-
-#' @rdname collect-methods
+#' @rdname collect
+#' @name collect
 #' @export
 #' @examples
 #'\dontrun{
@@ -628,18 +652,49 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
-            # listCols is a list of raw vectors, one per column
-            listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
-            cols <- lapply(listCols, function(col) {
-              objRaw <- rawConnection(col)
-              numRows <- readInt(objRaw)
-              col <- readCol(objRaw, numRows)
-              close(objRaw)
-              col
-            })
-            names(cols) <- columns(x)
-            do.call(cbind.data.frame, list(cols, stringsAsFactors = stringsAsFactors))
-          })
+            names <- columns(x)
+            ncol <- length(names)
+            if (ncol <= 0) {
+              # empty data.frame with 0 columns and 0 rows
+              data.frame()
+            } else {
+              # listCols is a list of columns
+              listCols <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "dfToCols", x@sdf)
+              stopifnot(length(listCols) == ncol)
+
+              # An empty data.frame with 0 columns and number of rows as collected
+              nrow <- length(listCols[[1]])
+              if (nrow <= 0) {
+                df <- data.frame()
+              } else {
+                df <- data.frame(row.names = 1 : nrow)
+              }
+
+              # Append columns one by one
+              for (colIndex in 1 : ncol) {
+                # Note: appending a column of list type into a data.frame so that
+                # data of complex type can be held. But getting a cell from a column
+                # of list type returns a list instead of a vector. So for columns of
+                # non-complex type, append them as vector.
+                col <- listCols[[colIndex]]
+                if (length(col) <= 0) {
+                  df[[names[colIndex]]] <- col
+                } else {
+                  # TODO: more robust check on column of primitive types
+                  vec <- do.call(c, col)
+                  if (class(vec) != "list") {
+                    df[[names[colIndex]]] <- vec
+                  } else {
+                    # For columns of complex type, be careful to access them.
+                    # Get a column of complex type returns a list.
+                    # Get a cell from a column of complex type returns a list instead of a vector.
+                    df[[names[colIndex]]] <- col
+                 }
+              }
+            }
+            df
+          }
+        })
 
 #' Limit
 #'
@@ -650,6 +705,7 @@ setMethod("collect",
 #' @return A new DataFrame containing the number of rows specified.
 #'
 #' @rdname limit
+#' @name limit
 #' @export
 #' @examples
 #' \dontrun{
@@ -669,6 +725,7 @@ setMethod("limit",
 #' Take the first NUM rows of a DataFrame and return a the results as a data.frame
 #'
 #' @rdname take
+#' @name take
 #' @export
 #' @examples
 #'\dontrun{
@@ -696,6 +753,7 @@ setMethod("take",
 #' @return A data.frame
 #'
 #' @rdname head
+#' @name head
 #' @export
 #' @examples
 #'\dontrun{
@@ -717,6 +775,7 @@ setMethod("head",
 #' @param x A SparkSQL DataFrame
 #'
 #' @rdname first
+#' @name first
 #' @export
 #' @examples
 #'\dontrun{
@@ -732,7 +791,7 @@ setMethod("first",
             take(x, 1)
           })
 
-# toRDD()
+# toRDD
 #
 # Converts a Spark DataFrame to an RDD while preserving column names.
 #
@@ -769,6 +828,7 @@ setMethod("toRDD",
 #' @seealso GroupedData
 #' @aliases group_by
 #' @rdname groupBy
+#' @name groupBy
 #' @export
 #' @examples
 #' \dontrun{
@@ -783,16 +843,16 @@ setMethod("groupBy",
            function(x, ...) {
              cols <- list(...)
              if (length(cols) >= 1 && class(cols[[1]]) == "character") {
-               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], listToSeq(cols[-1]))
+               sgd <- callJMethod(x@sdf, "groupBy", cols[[1]], cols[-1])
              } else {
                jcol <- lapply(cols, function(c) { c@jc })
-               sgd <- callJMethod(x@sdf, "groupBy", listToSeq(jcol))
+               sgd <- callJMethod(x@sdf, "groupBy", jcol)
              }
              groupedData(sgd)
            })
 
 #' @rdname groupBy
-#' @aliases group_by
+#' @name group_by
 setMethod("group_by",
           signature(x = "DataFrame"),
           function(x, ...) {
@@ -804,7 +864,8 @@ setMethod("group_by",
 #' Compute aggregates by specifying a list of columns
 #'
 #' @param x a DataFrame
-#' @rdname DataFrame
+#' @rdname agg
+#' @name agg
 #' @aliases summarize
 #' @export
 setMethod("agg",
@@ -813,8 +874,8 @@ setMethod("agg",
             agg(groupBy(x), ...)
           })
 
-#' @rdname DataFrame
-#' @aliases agg
+#' @rdname agg
+#' @name summarize
 setMethod("summarize",
           signature(x = "DataFrame"),
           function(x, ...) {
@@ -890,12 +951,14 @@ getColumn <- function(x, c) {
 }
 
 #' @rdname select
+#' @name $
 setMethod("$", signature(x = "DataFrame"),
           function(x, name) {
             getColumn(x, name)
           })
 
 #' @rdname select
+#' @name $<-
 setMethod("$<-", signature(x = "DataFrame"),
           function(x, name, value) {
             stopifnot(class(value) == "Column" || is.null(value))
@@ -922,8 +985,11 @@ setMethod("$<-", signature(x = "DataFrame"),
             x
           })
 
-#' @rdname select
-setMethod("[[", signature(x = "DataFrame"),
+setClassUnion("numericOrcharacter", c("numeric", "character"))
+
+#' @rdname subset
+#' @name [[
+setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
           function(x, i) {
             if (is.numeric(i)) {
               cols <- columns(x)
@@ -932,7 +998,8 @@ setMethod("[[", signature(x = "DataFrame"),
             getColumn(x, i)
           })
 
-#' @rdname select
+#' @rdname subset
+#' @name [
 setMethod("[", signature(x = "DataFrame", i = "missing"),
           function(x, i, j, ...) {
             if (is.numeric(j)) {
@@ -945,6 +1012,51 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
             select(x, j)
           })
 
+#' @rdname subset
+#' @name [
+setMethod("[", signature(x = "DataFrame", i = "Column"),
+          function(x, i, j, ...) {
+            # It could handle i as "character" but it seems confusing and not required
+            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
+            filtered <- filter(x, i)
+            if (!missing(j)) {
+              filtered[, j, ...]
+            } else {
+              filtered
+            }
+          })
+
+#' Subset
+#'
+#' Return subsets of DataFrame according to given conditions
+#' @param x A DataFrame
+#' @param subset A logical expression to filter on rows
+#' @param select expression for the single Column or a list of columns to select from the DataFrame
+#' @return A new DataFrame containing only the rows that meet the condition with selected columns
+#' @export
+#' @rdname subset
+#' @name subset
+#' @aliases [
+#' @family subsetting functions
+#' @examples
+#' \dontrun{
+#'   # Columns can be selected using `[[` and `[`
+#'   df[[2]] == df[["age"]]
+#'   df[,2] == df[,"age"]
+#'   df[,c("name", "age")]
+#'   # Or to filter rows
+#'   df[df$age > 20,]
+#'   # DataFrame can be subset on both rows and Columns
+#'   df[df$name == "Smith", c(1,2)]
+#'   df[df$age %in% c(19, 30), 1:2]
+#'   subset(df, df$age %in% c(19, 30), 1:2)
+#'   subset(df, df$age %in% c(19), select = c(1,2))
+#' }
+setMethod("subset", signature(x = "DataFrame"),
+          function(x, subset, select, ...) {
+            x[subset, select, ...]
+          })
+
 #' Select
 #'
 #' Selects a set of columns with names or Column expressions.
@@ -953,6 +1065,8 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #' @return A new DataFrame with selected columns
 #' @export
 #' @rdname select
+#' @name select
+#' @family subsetting functions
 #' @examples
 #' \dontrun{
 #'   select(df, "*")
@@ -960,15 +1074,12 @@ setMethod("[", signature(x = "DataFrame", i = "missing"),
 #'   select(df, df$name, df$age + 1)
 #'   select(df, c("col1", "col2"))
 #'   select(df, list(df$name, df$age + 1))
-#'   # Columns can also be selected using `[[` and `[`
-#'   df[[2]] == df[["age"]]
-#'   df[,2] == df[,"age"]
 #'   # Similar to R data frames columns can also be selected using `$`
 #'   df$age
 #' }
 setMethod("select", signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
-            sdf <- callJMethod(x@sdf, "select", col, toSeq(...))
+            sdf <- callJMethod(x@sdf, "select", col, list(...))
             dataFrame(sdf)
           })
 
@@ -979,7 +1090,7 @@ setMethod("select", signature(x = "DataFrame", col = "Column"),
             jcols <- lapply(list(col, ...), function(c) {
               c@jc
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(jcols))
+            sdf <- callJMethod(x@sdf, "select", jcols)
             dataFrame(sdf)
           })
 
@@ -995,7 +1106,7 @@ setMethod("select",
                 col(c)@jc
               }
             })
-            sdf <- callJMethod(x@sdf, "select", listToSeq(cols))
+            sdf <- callJMethod(x@sdf, "select", cols)
             dataFrame(sdf)
           })
 
@@ -1008,6 +1119,7 @@ setMethod("select",
 #' @param ... Additional expressions
 #' @return A DataFrame
 #' @rdname selectExpr
+#' @name selectExpr
 #' @export
 #' @examples
 #'\dontrun{
@@ -1021,7 +1133,7 @@ setMethod("selectExpr",
           signature(x = "DataFrame", expr = "character"),
           function(x, expr, ...) {
             exprList <- list(expr, ...)
-            sdf <- callJMethod(x@sdf, "selectExpr", listToSeq(exprList))
+            sdf <- callJMethod(x@sdf, "selectExpr", exprList)
             dataFrame(sdf)
           })
 
@@ -1034,6 +1146,8 @@ setMethod("selectExpr",
 #' @param col A Column expression.
 #' @return A DataFrame with the new column added.
 #' @rdname withColumn
+#' @name withColumn
+#' @aliases mutate transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1053,11 +1167,12 @@ setMethod("withColumn",
 #'
 #' Return a new DataFrame with the specified columns added.
 #'
-#' @param x A DataFrame
+#' @param .data A DataFrame
 #' @param col a named argument of the form name = col
 #' @return A new DataFrame with the new columns added.
 #' @rdname withColumn
-#' @aliases withColumn
+#' @name mutate
+#' @aliases withColumn transform
 #' @export
 #' @examples
 #'\dontrun{
@@ -1067,10 +1182,12 @@ setMethod("withColumn",
 #' df <- jsonFile(sqlContext, path)
 #' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
 #' names(newDF) # Will contain newCol, newCol2
+#' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
 #' }
 setMethod("mutate",
-          signature(x = "DataFrame"),
-          function(x, ...) {
+          signature(.data = "DataFrame"),
+          function(.data, ...) {
+            x <- .data
             cols <- list(...)
             stopifnot(length(cols) > 0)
             stopifnot(class(cols[[1]]) == "Column")
@@ -1085,6 +1202,16 @@ setMethod("mutate",
             do.call(select, c(x, x$"*", cols))
           })
 
+#' @export
+#' @rdname withColumn
+#' @name transform
+#' @aliases withColumn mutate
+setMethod("transform",
+          signature(`_data` = "DataFrame"),
+          function(`_data`, ...) {
+            mutate(`_data`, ...)
+          })
+
 #' WithColumnRenamed
 #'
 #' Rename an existing column in a DataFrame.
@@ -1094,6 +1221,7 @@ setMethod("mutate",
 #' @param newCol The new column name.
 #' @return A DataFrame with the column name changed.
 #' @rdname withColumnRenamed
+#' @name withColumnRenamed
 #' @export
 #' @examples
 #'\dontrun{
@@ -1124,6 +1252,7 @@ setMethod("withColumnRenamed",
 #' @param newCol A named pair of the form new_column_name = existing_column
 #' @return A DataFrame with the column name changed.
 #' @rdname withColumnRenamed
+#' @name rename
 #' @aliases withColumnRenamed
 #' @export
 #' @examples
@@ -1165,6 +1294,8 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @param ... Additional sorting fields
 #' @return A DataFrame where all elements are sorted.
 #' @rdname arrange
+#' @name arrange
+#' @aliases orderby
 #' @export
 #' @examples
 #'\dontrun{
@@ -1180,18 +1311,18 @@ setMethod("arrange",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col, ...) {
             if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "sort", col, toSeq(...))
+              sdf <- callJMethod(x@sdf, "sort", col, list(...))
             } else if (class(col) == "Column") {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
-              sdf <- callJMethod(x@sdf, "sort", listToSeq(jcols))
+              sdf <- callJMethod(x@sdf, "sort", jcols)
             }
             dataFrame(sdf)
           })
 
 #' @rdname arrange
-#' @aliases orderBy,DataFrame,function-method
+#' @name orderby
 setMethod("orderBy",
           signature(x = "DataFrame", col = "characterOrColumn"),
           function(x, col) {
@@ -1207,6 +1338,8 @@ setMethod("orderBy",
 #' or a string containing a SQL statement
 #' @return A DataFrame containing only the rows that meet the condition.
 #' @rdname filter
+#' @name filter
+#' @family subsetting functions
 #' @export
 #' @examples
 #'\dontrun{
@@ -1228,7 +1361,7 @@ setMethod("filter",
           })
 
 #' @rdname filter
-#' @aliases where,DataFrame,function-method
+#' @name where
 setMethod("where",
           signature(x = "DataFrame", condition = "characterOrColumn"),
           function(x, condition) {
@@ -1247,6 +1380,7 @@ setMethod("where",
 #' 'inner', 'outer', 'left_outer', 'right_outer', 'semijoin'. The default joinType is "inner".
 #' @return A DataFrame containing the result of the join operation.
 #' @rdname join
+#' @name join
 #' @export
 #' @examples
 #'\dontrun{
@@ -1279,8 +1413,9 @@ setMethod("join",
             dataFrame(sdf)
           })
 
-#' rdname merge
-#' aliases join
+#' @rdname merge
+#' @name merge
+#' @aliases join
 setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, joinExpr = NULL, joinType = NULL, ...) {
@@ -1298,6 +1433,7 @@ setMethod("merge",
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the union.
 #' @rdname unionAll
+#' @name unionAll
 #' @export
 #' @examples
 #'\dontrun{
@@ -1319,6 +1455,7 @@ setMethod("unionAll",
 #' @description Returns a new DataFrame containing rows of all parameters.
 #
 #' @rdname rbind
+#' @name rbind
 #' @aliases unionAll
 setMethod("rbind",
           signature(... = "DataFrame"),
@@ -1339,6 +1476,7 @@ setMethod("rbind",
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the intersect.
 #' @rdname intersect
+#' @name intersect
 #' @export
 #' @examples
 #'\dontrun{
@@ -1364,6 +1502,7 @@ setMethod("intersect",
 #' @param y A Spark DataFrame
 #' @return A DataFrame containing the result of the except operation.
 #' @rdname except
+#' @name except
 #' @export
 #' @examples
 #'\dontrun{
@@ -1403,6 +1542,8 @@ setMethod("except",
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
 #' @rdname write.df
+#' @name write.df
+#' @aliases saveDF
 #' @export
 #' @examples
 #'\dontrun{
@@ -1435,7 +1576,7 @@ setMethod("write.df",
           })
 
 #' @rdname write.df
-#' @aliases saveDF
+#' @name saveDF
 #' @export
 setMethod("saveDF",
           signature(df = "DataFrame", path = "character"),
@@ -1466,6 +1607,7 @@ setMethod("saveDF",
 #' @param mode One of 'append', 'overwrite', 'error', 'ignore'
 #'
 #' @rdname saveAsTable
+#' @name saveAsTable
 #' @export
 #' @examples
 #'\dontrun{
@@ -1505,6 +1647,8 @@ setMethod("saveAsTable",
 #' @param ... Additional expressions
 #' @return A DataFrame
 #' @rdname describe
+#' @name describe
+#' @aliases summary
 #' @export
 #' @examples
 #'\dontrun{
@@ -1520,16 +1664,17 @@ setMethod("describe",
           signature(x = "DataFrame", col = "character"),
           function(x, col, ...) {
             colList <- list(col, ...)
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
 #' @rdname describe
+#' @name describe
 setMethod("describe",
           signature(x = "DataFrame"),
           function(x) {
             colList <- as.list(c(columns(x)))
-            sdf <- callJMethod(x@sdf, "describe", listToSeq(colList))
+            sdf <- callJMethod(x@sdf, "describe", colList)
             dataFrame(sdf)
           })
 
@@ -1538,7 +1683,7 @@ setMethod("describe",
 #' @description Computes statistics for numeric columns of the DataFrame
 #'
 #' @rdname summary
-#' @aliases describe
+#' @name summary
 setMethod("summary",
           signature(x = "DataFrame"),
           function(x) {
@@ -1562,6 +1707,8 @@ setMethod("summary",
 #' @return A DataFrame
 #'
 #' @rdname nafunctions
+#' @name dropna
+#' @aliases na.omit
 #' @export
 #' @examples
 #'\dontrun{
@@ -1584,16 +1731,17 @@ setMethod("dropna",
 
             naFunctions <- callJMethod(x@sdf, "na")
             sdf <- callJMethod(naFunctions, "drop",
-                               as.integer(minNonNulls), listToSeq(as.list(cols)))
+                               as.integer(minNonNulls), as.list(cols))
             dataFrame(sdf)
           })
 
-#' @aliases dropna
+#' @rdname nafunctions
+#' @name na.omit
 #' @export
 setMethod("na.omit",
-          signature(x = "DataFrame"),
-          function(x, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
-            dropna(x, how, minNonNulls, cols)
+          signature(object = "DataFrame"),
+          function(object, how = c("any", "all"), minNonNulls = NULL, cols = NULL) {
+            dropna(object, how, minNonNulls, cols)
           })
 
 #' fillna
@@ -1615,6 +1763,7 @@ setMethod("na.omit",
 #' @return A DataFrame
 #'
 #' @rdname nafunctions
+#' @name fillna
 #' @export
 #' @examples
 #'\dontrun{
@@ -1666,7 +1815,7 @@ setMethod("fillna",
             sdf <- if (length(cols) == 0) {
               callJMethod(naFunctions, "fill", value)
             } else {
-              callJMethod(naFunctions, "fill", value, listToSeq(as.list(cols)))
+              callJMethod(naFunctions, "fill", value, as.list(cols))
             }
             dataFrame(sdf)
           })
@@ -1685,6 +1834,7 @@ setMethod("fillna",
 #'         occurrences will have zero as their counts.
 #'
 #' @rdname statfunctions
+#' @name crosstab
 #' @export
 #' @examples
 #' \dontrun{
@@ -1698,3 +1848,28 @@ setMethod("crosstab",
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
             collect(dataFrame(sct))
           })
+
+
+#' This function downloads the contents of a DataFrame into an R's data.frame.
+#' Since data.frames are held in memory, ensure that you have enough memory
+#' in your system to accommodate the contents.
+#' 
+#' @title Download data from a DataFrame into a data.frame
+#' @param x a DataFrame
+#' @return a data.frame
+#' @rdname as.data.frame
+#' @examples \dontrun{
+#' 
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' df <- as.data.frame(irisDF[irisDF$Species == "setosa", ])
+#' }
+setMethod("as.data.frame",
+          signature(x = "DataFrame"),
+          function(x, ...) {
+            # Check if additional parameters have been passed
+            if (length(list(...)) > 0) {
+              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
+            }
+            collect(x)
+          }
+)

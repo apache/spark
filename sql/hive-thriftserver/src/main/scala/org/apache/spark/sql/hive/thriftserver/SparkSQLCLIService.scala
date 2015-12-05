@@ -21,6 +21,8 @@ import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.shims.Utils
@@ -33,8 +35,6 @@ import org.apache.hive.service.{AbstractService, Service, ServiceException}
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
-
-import scala.collection.JavaConversions._
 
 private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: HiveContext)
   extends CLIService(hiveServer)
@@ -76,7 +76,7 @@ private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
   def initCompositeService(hiveConf: HiveConf) {
     // Emulating `CompositeService.init(hiveConf)`
     val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
-    serviceList.foreach(_.init(hiveConf))
+    serviceList.asScala.foreach(_.init(hiveConf))
 
     // Emulating `AbstractService.init(hiveConf)`
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.NOTINITED)

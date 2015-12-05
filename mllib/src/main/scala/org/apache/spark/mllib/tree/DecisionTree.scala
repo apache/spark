@@ -22,7 +22,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.RandomForest.NodeIndexInfo
@@ -43,10 +43,11 @@ import org.apache.spark.util.random.XORShiftRandom
  * @param strategy The configuration parameters for the tree algorithm which specify the type
  *                 of algorithm (classification, regression, etc.), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
- * @since 1.0.0
  */
+@Since("1.0.0")
 @Experimental
-class DecisionTree (private val strategy: Strategy) extends Serializable with Logging {
+class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
+  extends Serializable with Logging {
 
   strategy.assertValid()
 
@@ -54,8 +55,8 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
@@ -64,9 +65,7 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
   }
 }
 
-/**
- * @since 1.0.0
- */
+@Since("1.0.0")
 object DecisionTree extends Serializable with Logging {
 
   /**
@@ -84,8 +83,8 @@ object DecisionTree extends Serializable with Logging {
    *                 of algorithm (classification, regression, etc.), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
-  */
+   */
+ @Since("1.0.0")
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).run(input)
   }
@@ -106,8 +105,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -134,8 +133,8 @@ object DecisionTree extends Serializable with Logging {
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * @param numClasses number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -168,8 +167,8 @@ object DecisionTree extends Serializable with Logging {
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.0.0
    */
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       algo: Algo,
@@ -201,8 +200,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainClassifier(
       input: RDD[LabeledPoint],
       numClasses: Int,
@@ -217,8 +216,8 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainClassifier]]
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
       numClasses: Int,
@@ -247,8 +246,8 @@ object DecisionTree extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 32)
    * @return DecisionTreeModel that can be used for prediction
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainRegressor(
       input: RDD[LabeledPoint],
       categoricalFeaturesInfo: Map[Int, Int],
@@ -261,8 +260,8 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Java-friendly API for [[org.apache.spark.mllib.tree.DecisionTree$#trainRegressor]]
-   * @since 1.1.0
    */
+  @Since("1.1.0")
   def trainRegressor(
       input: JavaRDD[LabeledPoint],
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],

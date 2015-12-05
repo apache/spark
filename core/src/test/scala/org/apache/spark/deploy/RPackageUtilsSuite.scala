@@ -21,14 +21,14 @@ import java.io.{PrintStream, OutputStream, File}
 import java.net.URI
 import java.util.jar.Attributes.Name
 import java.util.jar.{JarFile, Manifest}
-import java.util.zip.{ZipEntry, ZipFile}
+import java.util.zip.ZipFile
 
-import org.scalatest.BeforeAndAfterEach
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.r.RUtils
@@ -142,7 +142,7 @@ class RPackageUtilsSuite extends SparkFunSuite with BeforeAndAfterEach {
       IvyTestUtils.writeFile(fakePackageDir, "DESCRIPTION", "abc")
       val finalZip = RPackageUtils.zipRLibraries(tempDir, "sparkr.zip")
       assert(finalZip.exists())
-      val entries = new ZipFile(finalZip).entries().toSeq.map(_.getName)
+      val entries = new ZipFile(finalZip).entries().asScala.map(_.getName).toSeq
       assert(entries.contains("/test.R"))
       assert(entries.contains("/SparkR/abc.R"))
       assert(entries.contains("/SparkR/DESCRIPTION"))

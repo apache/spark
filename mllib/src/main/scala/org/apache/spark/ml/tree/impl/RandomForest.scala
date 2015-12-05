@@ -179,22 +179,28 @@ private[ml] object RandomForest extends Logging {
       }
     }
 
+    val numFeatures = metadata.numFeatures
+
     parentUID match {
       case Some(uid) =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(uid, rootNode.toNode, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(uid, rootNode.toNode, numFeatures,
+              strategy.getNumClasses)
           }
         } else {
-          topNodes.map(rootNode => new DecisionTreeRegressionModel(uid, rootNode.toNode))
+          topNodes.map { rootNode =>
+            new DecisionTreeRegressionModel(uid, rootNode.toNode, numFeatures)
+          }
         }
       case None =>
         if (strategy.algo == OldAlgo.Classification) {
           topNodes.map { rootNode =>
-            new DecisionTreeClassificationModel(rootNode.toNode, strategy.getNumClasses)
+            new DecisionTreeClassificationModel(rootNode.toNode, numFeatures,
+              strategy.getNumClasses)
           }
         } else {
-          topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode))
+          topNodes.map(rootNode => new DecisionTreeRegressionModel(rootNode.toNode, numFeatures))
         }
     }
   }

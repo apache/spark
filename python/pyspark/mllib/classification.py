@@ -241,7 +241,7 @@ class LogisticRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.01, regType="l2", intercept=False,
-              validateData=True):
+              validateData=True, convergenceTol=0.001):
         """
         Train a logistic regression model on the given data.
 
@@ -274,11 +274,13 @@ class LogisticRegressionWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
@@ -439,7 +441,7 @@ class SVMWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, regType="l2",
-              intercept=False, validateData=True):
+              intercept=False, validateData=True, convergenceTol=0.001):
         """
         Train a support vector machine on the given data.
 
@@ -472,11 +474,13 @@ class SVMWithSGD(object):
         :param validateData:      Boolean parameter which indicates if
                                   the algorithm should validate data
                                   before training. (default: True)
+        :param convergenceTol:    A condition which decides iteration termination.
+                                  (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, regType,
-                                 bool(intercept), bool(validateData))
+                                 bool(intercept), bool(validateData), float(convergenceTol))
 
         return _regression_train_wrapper(train, SVMModel, data, initialWeights)
 
@@ -600,12 +604,15 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     :param miniBatchFraction: Fraction of data on which SGD is run for each
                               iteration.
     :param regParam: L2 Regularization parameter.
+    :param convergenceTol: A condition which decides iteration termination.
     """
-    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.01):
+    def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, regParam=0.01,
+                 convergenceTol=0.001):
         self.stepSize = stepSize
         self.numIterations = numIterations
         self.regParam = regParam
         self.miniBatchFraction = miniBatchFraction
+        self.convergenceTol = convergenceTol
         self._model = None
         super(StreamingLogisticRegressionWithSGD, self).__init__(
             model=self._model)

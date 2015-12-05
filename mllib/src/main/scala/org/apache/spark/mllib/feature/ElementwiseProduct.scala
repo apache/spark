@@ -29,7 +29,8 @@ import org.apache.spark.mllib.linalg._
  */
 @Since("1.4.0")
 @Experimental
-class ElementwiseProduct(val scalingVec: Vector) extends VectorTransformer {
+class ElementwiseProduct @Since("1.4.0") (
+    @Since("1.4.0") val scalingVec: Vector) extends VectorTransformer {
 
   /**
    * Does the hadamard product transformation.

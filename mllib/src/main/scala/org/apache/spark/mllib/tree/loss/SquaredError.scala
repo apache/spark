@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 
@@ -29,8 +29,8 @@ import org.apache.spark.mllib.tree.model.TreeEnsembleModel
  * The squared (L2) error is defined as:
  *   (y - F(x))**2
  * where y is the label and F(x) is the model prediction for features x.
- * @since 1.2.0
  */
+@Since("1.2.0")
 @DeveloperApi
 object SquaredError extends Loss {
 
@@ -41,8 +41,8 @@ object SquaredError extends Loss {
    * @param prediction Predicted label.
    * @param label True label.
    * @return Loss gradient
-   * @since 1.2.0
    */
+  @Since("1.2.0")
   override def gradient(prediction: Double, label: Double): Double = {
     - 2.0 * (label - prediction)
   }

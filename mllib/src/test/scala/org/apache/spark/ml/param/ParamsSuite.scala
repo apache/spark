@@ -40,6 +40,10 @@ class ParamsSuite extends SparkFunSuite {
 
     assert(inputCol.toString === s"${uid}__inputCol")
 
+    intercept[java.util.NoSuchElementException] {
+      solver.getOrDefault(solver.handleInvalid)
+    }
+
     intercept[IllegalArgumentException] {
       solver.setMaxIter(-1)
     }
@@ -102,12 +106,13 @@ class ParamsSuite extends SparkFunSuite {
 
   test("params") {
     val solver = new TestParams()
-    import solver.{maxIter, inputCol}
+    import solver.{handleInvalid, maxIter, inputCol}
 
     val params = solver.params
-    assert(params.length === 2)
-    assert(params(0).eq(inputCol), "params must be ordered by name")
-    assert(params(1).eq(maxIter))
+    assert(params.length === 3)
+    assert(params(0).eq(handleInvalid), "params must be ordered by name")
+    assert(params(1).eq(inputCol), "params must be ordered by name")
+    assert(params(2).eq(maxIter))
 
     assert(!solver.isSet(maxIter))
     assert(solver.isDefined(maxIter))
@@ -122,7 +127,7 @@ class ParamsSuite extends SparkFunSuite {
     assert(solver.explainParam(maxIter) ===
       "maxIter: maximum number of iterations (>= 0) (default: 10, current: 100)")
     assert(solver.explainParams() ===
-      Seq(inputCol, maxIter).map(solver.explainParam).mkString("\n"))
+      Seq(handleInvalid, inputCol, maxIter).map(solver.explainParam).mkString("\n"))
 
     assert(solver.getParam("inputCol").eq(inputCol))
     assert(solver.getParam("maxIter").eq(maxIter))

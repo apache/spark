@@ -1,7 +1,7 @@
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
-high-level APIs in Scala, Java, and Python, and an optimized engine that
+high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 MLlib for machine learning, GraphX for graph processing,
@@ -94,5 +94,5 @@ distribution.
 
 ## Configuration
 
-Please refer to the [Configuration guide](http://spark.apache.org/docs/latest/configuration.html)
+Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.

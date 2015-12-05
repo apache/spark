@@ -51,7 +51,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val hasMultipleAttempts = appsToShow.exists(_.attempts.size > 1)
     val appTable =
       if (hasMultipleAttempts) {
-        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow, appsToShow)
+        // Sorting is disable here as table sort on rowspan has issues.
+        // ref. SPARK-10172
+        UIUtils.listingTable(appWithAttemptHeader, appWithAttemptRow,
+          appsToShow, sortable = false)
       } else {
         UIUtils.listingTable(appHeader, appRow, appsToShow)
       }

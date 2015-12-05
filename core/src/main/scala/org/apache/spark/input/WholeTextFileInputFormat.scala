@@ -17,7 +17,7 @@
 
 package org.apache.spark.input
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.InputSplit
@@ -52,10 +52,8 @@ private[spark] class WholeTextFileInputFormat
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
-    val files = listStatus(context)
-    val totalLen = files.map { file =>
-      if (file.isDir) 0L else file.getLen
-    }.sum
+    val files = listStatus(context).asScala
+    val totalLen = files.map(file => if (file.isDir) 0L else file.getLen).sum
     val maxSplitSize = Math.ceil(totalLen * 1.0 /
       (if (minPartitions == 0) 1 else minPartitions)).toLong
     super.setMaxSplitSize(maxSplitSize)

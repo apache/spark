@@ -53,7 +53,11 @@ private[parquet] class DirectParquetOutputCommitter(outputPath: Path, context: T
   override def setupTask(taskContext: TaskAttemptContext): Unit = {}
 
   override def commitJob(jobContext: JobContext) {
-    val configuration = ContextUtil.getConfiguration(jobContext)
+    val configuration = {
+      // scalastyle:off jobcontext
+      ContextUtil.getConfiguration(jobContext)
+      // scalastyle:on jobcontext
+    }
     val fileSystem = outputPath.getFileSystem(configuration)
 
     if (configuration.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
