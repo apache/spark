@@ -41,6 +41,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
@@ -430,7 +431,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       }
 
       for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
-        final byte[] key = entry.getKey().array();
+        final byte[] key = JavaUtils.bufferToArray(entry.getKey());
         final byte[] value = entry.getValue();
         final BytesToBytesMap.Location loc =
           map.lookup(key, Platform.BYTE_ARRAY_OFFSET, key.length);
@@ -480,7 +481,7 @@ public abstract class AbstractBytesToBytesMapSuite {
         }
       }
       for (Map.Entry<ByteBuffer, byte[]> entry : expected.entrySet()) {
-        final byte[] key = entry.getKey().array();
+        final byte[] key = JavaUtils.bufferToArray(entry.getKey());
         final byte[] value = entry.getValue();
         final BytesToBytesMap.Location loc =
           map.lookup(key, Platform.BYTE_ARRAY_OFFSET, key.length);
