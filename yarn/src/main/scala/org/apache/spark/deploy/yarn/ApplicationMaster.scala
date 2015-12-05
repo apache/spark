@@ -600,11 +600,12 @@ private[spark] class ApplicationMaster(
               localityAwareTasks, hostToLocalTaskCount)) {
               resetAllocatorInterval()
             }
+            context.reply(true)
 
           case None =>
             logWarning("Container allocator is not ready to request executors yet.")
+            context.reply(false)
         }
-        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
