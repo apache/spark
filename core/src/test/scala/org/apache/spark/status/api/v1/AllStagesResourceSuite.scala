@@ -18,6 +18,7 @@
 package org.apache.spark.status.api.v1
 
 import java.util.Date
+
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkFunSuite
@@ -27,79 +28,47 @@ import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 
 class AllStagesResourceSuite extends SparkFunSuite {
 
-  test("test firstTaskLaunchedTime, there are no tasks") {
-
-    val status = StageStatus.PENDING
+  def getFirstTaskLaunchTime(taskLaunchTimes: Seq[Long]): Option[Date] = {
+    val tasks = taskLaunchTimes.zipWithIndex.map { case (time, idx) =>
+      idx.toLong -> new TaskUIData(
+        new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false), None, None)
+    }.toMap
+    val stageUiData = new StageUIData()
+    stageUiData.taskData = mapToHashmap(tasks)
+    val status = StageStatus.ACTIVE
     val stageInfo = new StageInfo(
       1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc", Seq.empty)
-    val includeDetails = false
+    val stageData = AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, false)
 
-    val noTasks = new StageUIData()
+    stageData.firstTaskLaunchedTime
+  }
 
-    var actual = AllStagesResource.stageUiToStageData(
-      status, stageInfo, noTasks, includeDetails)
+  def mapToHashmap(original: Map[Long, TaskUIData]): HashMap[Long, TaskUIData] = {
+    val map = new HashMap[Long, TaskUIData]
+    original.foreach { e => map.put(e._1, e._2) }
 
-    assert(actual.firstTaskLaunchedTime == None)
+    return map
+  }
+
+  test("test firstTaskLaunchedTime, there are no tasks") {
+
+    val timeList = Seq[Long]()
+    val result = getFirstTaskLaunchTime(timeList)
+    assert(result == None)
   }
 
   test("test firstTaskLaunchedTime, there are tasks but none launched") {
 
-    val status = StageStatus.ACTIVE
-    val stageInfo = new StageInfo(
-      1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc", Seq.empty)
-    val includeDetails = false
-
-    // generate some tasks, launched time is minus
-    val taskNoLaunched1 = new TaskUIData(
-      new TaskInfo(1, 1, 1, -100, "", "", TaskLocality.ANY, false), None, None)
-    val taskNoLaunched2 = new TaskUIData(
-      new TaskInfo(1, 1, 1, -200, "", "", TaskLocality.ANY, false), None, None)
-    val taskNoLaunched3 = new TaskUIData(
-      new TaskInfo(1, 1, 1, -300, "", "", TaskLocality.ANY, false), None, None)
-
-    // construct hashmap
-    var taskDataNoLaunched = new HashMap[Long, TaskUIData]
-    taskDataNoLaunched.put(1, taskNoLaunched1)
-    taskDataNoLaunched.put(2, taskNoLaunched2)
-    taskDataNoLaunched.put(3, taskNoLaunched3)
-
-    val tasksNoLaunched = new StageUIData()
-    tasksNoLaunched.taskData = taskDataNoLaunched
-
-    val actual = AllStagesResource.stageUiToStageData(
-      status, stageInfo, tasksNoLaunched, includeDetails)
-
-    assert(actual.firstTaskLaunchedTime == None)
+    val timeList = Seq[Long](-100L, -200L, -300L)
+    val result = getFirstTaskLaunchTime(timeList)
+    assert(result == None)
   }
 
   test("test firstTaskLaunchedTime, there are tasks and some launched") {
 
-    val status = StageStatus.COMPLETE
-    val stageInfo = new StageInfo(
-      1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc", Seq.empty)
-    val includeDetails = false
-
-    // generate some tasks, min lauched time 1449255596000L
-    val taskLaunched1 = new TaskUIData(
-      new TaskInfo(1, 1, 1, 1449255596000L, "", "", TaskLocality.ANY, false), None, None)
-    val taskLaunched2 = new TaskUIData(
-      new TaskInfo(1, 1, 1, 1449255597000L, "", "", TaskLocality.ANY, false), None, None)
-    val taskLaunched3 = new TaskUIData(
-      new TaskInfo(1, 1, 1, -100, "", "", TaskLocality.ANY, false), None, None)
-
-    // construct hashmap
-    var taskDataLaunched = new HashMap[Long, TaskUIData]
-    taskDataLaunched.put(1, taskLaunched1)
-    taskDataLaunched.put(2, taskLaunched2)
-    taskDataLaunched.put(3, taskLaunched3)
-
-    val tasksLaunched = new StageUIData()
-    tasksLaunched.taskData = taskDataLaunched
-
-    val actual = AllStagesResource.stageUiToStageData(
-      status, stageInfo, tasksLaunched, includeDetails)
-
-    assert(actual.firstTaskLaunchedTime == Some(new Date(1449255596000L)))
+    val timeList = Seq[Long](-100L, 1449255596000L, 1449255597000L)
+    val result = getFirstTaskLaunchTime(timeList)
+    assert(result == Some(new Date(1449255596000L)))
   }
 
 }
