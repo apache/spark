@@ -131,7 +131,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
         case (l: Filter, r: Filter) =>
           (l.cleanArgs.collectFirst({ case e: Expression => e }),
             r.cleanArgs.collectFirst({ case e: Expression => e })) match {
-            case (Some(cond1: Expression), Some(cond2: Expression)) => equivalentConditions(cond1, cond2)
+            case (Some(cond1: Expression), Some(cond2: Expression))
+              => equivalentConditions(cond1, cond2)
             case _ => false
           }
         case _ => false
@@ -141,7 +142,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
   }
 
     /**
-     * Returns true if two conditions are equivalent. Equality check is tolerant of ordering different.
+     * Returns true if two conditions are equivalent. Equality check is tolerant of ordering
+     * different.
      */
   def equivalentConditions(left: Expression, right: Expression): Boolean = {
     logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
