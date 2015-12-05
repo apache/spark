@@ -178,8 +178,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("selectExpr with udtf") {
     val df = Seq((Map("1" -> 1), 1)).toDF("a", "b")
-    val v = df.selectExpr("explode(a)").select("key", "value")
-
     checkAnswer(
       df.selectExpr("explode(a)"),
       Row("1", 1) :: Nil)

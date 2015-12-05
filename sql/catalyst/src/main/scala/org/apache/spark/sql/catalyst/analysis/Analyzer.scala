@@ -149,12 +149,12 @@ class Analyzer(
       exprs.zipWithIndex.map {
         case (expr, i) =>
           expr transform {
-            case u @ UnresolvedAlias(child, _) => child match {
+            case u @ UnresolvedAlias(child, optionalAliasName) => child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case other => Alias(other, u.aliasName.getOrElse(s"_c$i"))()
+              case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
