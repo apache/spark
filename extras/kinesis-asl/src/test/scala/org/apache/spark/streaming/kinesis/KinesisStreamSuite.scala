@@ -29,6 +29,7 @@ import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
@@ -196,7 +197,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
   testIfEnabled("custom message handling") {
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
-    def addFive(r: Record): Int = new String(r.getData.array()).toInt + 5
+    def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
     val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
       Seconds(10), StorageLevel.MEMORY_ONLY, addFive,

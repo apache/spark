@@ -178,7 +178,20 @@ private[spark] object Utils extends Logging {
   /**
    * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.DataOutput]]
    */
-  def writeByteBuffer(bb: ByteBuffer, out: ObjectOutput): Unit = {
+  def writeByteBuffer(bb: ByteBuffer, out: DataOutput): Unit = {
+    if (bb.hasArray) {
+      out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    } else {
+      val bbval = new Array[Byte](bb.remaining())
+      bb.get(bbval)
+      out.write(bbval)
+    }
+  }
+
+  /**
+   * Primitive often used when writing [[java.nio.ByteBuffer]] to [[java.io.OutputStream]]
+   */
+  def writeByteBuffer(bb: ByteBuffer, out: OutputStream): Unit = {
     if (bb.hasArray) {
       out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
     } else {
