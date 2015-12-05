@@ -109,7 +109,7 @@
     <dependency>
       <groupId>org.jpmml</groupId>
       <artifactId>pmml-model</artifactId>
-      <version>1.1.15</version>
+      <version>1.2.7</version>
       <exclusions>
         <exclusion>
           <groupId>com.sun.xml.fastinfoset</groupId>
