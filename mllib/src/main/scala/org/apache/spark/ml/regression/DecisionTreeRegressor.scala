@@ -17,18 +17,20 @@
 
 package org.apache.spark.ml.regression
 
+
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.{DecisionTreeModel, DecisionTreeParams, Node, TreeRegressorParams}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.functions.{lit, col}
 
 /**
  * :: Experimental ::
@@ -40,7 +42,7 @@ import org.apache.spark.sql.DataFrame
 @Experimental
 final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
-  with DecisionTreeParams with TreeRegressorParams {
+  with DecisionTreeParams with TreeRegressorParams with HasWeightCol{
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtr"))
@@ -73,10 +75,23 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
 
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
+  /**
+   * Whether to over-/under-sample training instances according to the given weights in weightCol.
+   * If empty, all instances are treated equally (weight 1.0).
+   * Default is empty, so all instances have weight one.
+   * @group setParam
+   */
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+  setDefault(weightCol -> "")
+
   override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val oldDataset = dataset.select(col($(labelCol)), w, col($(featuresCol))).map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
+    }
     val strategy = getOldStrategy(categoricalFeatures)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), parentUID = Some(uid))

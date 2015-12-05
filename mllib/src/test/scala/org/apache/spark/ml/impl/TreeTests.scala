@@ -18,15 +18,16 @@
 package org.apache.spark.ml.impl
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.tree._
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame}
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -141,5 +142,13 @@ private[ml] object TreeTests extends SparkFunSuite {
       (leftWeight * leftImp.calculate() + rightWeight * rightImp.calculate())
     val pred = parentImp.predict
     new InternalNode(pred, parentImp.calculate(), gain, left, right, split, parentImp)
+  }
+
+  def generateNoisyData(n: Int, seed: Long): Seq[LabeledPoint] = {
+    val rnd = new Random(seed)
+    Range(0, n).map { i =>
+      LabeledPoint(rnd.nextInt(2),
+        Vectors.dense(rnd.nextInt(4), rnd.nextDouble(), rnd.nextInt(4), rnd.nextDouble()))
+    }
   }
 }

@@ -18,6 +18,8 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.feature.{Instance, IndexToString, VectorIndexer, StringIndexer}
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.LeafNode
@@ -180,6 +182,53 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val importances = rf.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
+  }
+
+  test("training with weighted data") {
+    val (dataset, testDataset) = {
+      val keyFeature = Vectors.dense(0, 1.0, 2, 1.2)
+      val data0 = Array.fill(20)(Instance(0, 0.1, keyFeature))
+      val data1 = Array.fill(10)(Instance(1, 20.0, keyFeature))
+
+      val testData = Seq(Instance(0, 0.1, keyFeature))
+      (sqlContext.createDataFrame(sc.parallelize(data0 ++ data1, 2)),
+        sqlContext.createDataFrame(sc.parallelize(testData, 2)))
+    }
+
+    val labelIndexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("indexedLabel")
+      .fit(dataset)
+
+    val featureIndexer = new VectorIndexer()
+      .setInputCol("features")
+      .setOutputCol("indexedFeatures")
+      .setMaxCategories(4)
+      .fit(dataset)
+
+    val rf = new RandomForestClassifier()
+      .setLabelCol("indexedLabel")
+      .setFeaturesCol("indexedFeatures")
+      .setSeed(1)
+
+    val labelConverter = new IndexToString()
+      .setInputCol("prediction")
+      .setOutputCol("predictedLabel")
+      .setLabels(labelIndexer.labels)
+
+    val pipeline = new Pipeline()
+      .setStages(Array(labelIndexer, featureIndexer, rf, labelConverter))
+
+    val model1 = pipeline.fit(dataset)
+    val model2 = pipeline.fit(dataset, rf.weightCol->"weight")
+
+    val predDataset1 = model1.transform(testDataset)
+    val predDataset2 = model2.transform(testDataset)
+
+    val prediction1 = predDataset1.select("predictedLabel").head().getString(0)
+    val prediction2 = predDataset2.select("predictedLabel").head().getString(0)
+    assert(prediction1.toDouble === 0.0)
+    assert(prediction2.toDouble === 1.0)
   }
 
   /////////////////////////////////////////////////////////////////////////////

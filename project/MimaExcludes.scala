@@ -104,6 +104,19 @@ object MimaExcludes {
           "org.apache.spark.sql.SQLContext.createSession")
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.RandomForest.run"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.RandomForest.findSplits"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.TreePoint.convertToTreeRDD"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.TreePoint.labeledPointToTreePoint"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.TreePoint.findBin"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.ml.tree.impl.TreePoint.this")
+      ) ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_="),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
