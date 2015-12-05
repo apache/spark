@@ -1177,4 +1177,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
+
+  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+    val df = sqlContext.sql(
+      "select case when 1>0 then struct(cast(floor(10) as int)) else struct(20) end as val")
+    assert(df.select($"val").first().getStruct(0) === Row(10))
+  }
 }
