@@ -744,9 +744,17 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
+#' @rdname decode
+#' @export
+setGeneric("decode", function(x, charset) { standardGeneric("decode") })
+
 #' @rdname dense_rank
 #' @export
 setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
+
+#' @rdname encode
+#' @export
+setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 
 #' @rdname explode
 #' @export
@@ -1000,6 +1008,10 @@ setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
 #' @rdname stddev_samp
 #' @export
 setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
+
+#' @rdname struct
+#' @export
+setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 
 #' @rdname substring_index
 #' @export
