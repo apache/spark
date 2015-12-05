@@ -134,7 +134,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
             case (Some(cond1: Expression), Some(cond2: Expression)) => equivalentConditions(cond1, cond2)
             case _ => false
           }
-        case (l: Project, r: Project) => Set(l.cleanArgs) == Set(r.cleanArgs)
+        case (l: Project, r: Project) => l.cleanArgs.toSet == r.cleanArgs.toSet
         case _ => false
       })
     } &&
@@ -146,8 +146,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
      */
   def equivalentConditions(left: Expression, right: Expression): Boolean = {
     logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
-    val leftPredicates = Set(splitConjunctivePredicates(left))
-    val rightPredicates = Set(splitConjunctivePredicates(right))
+    val leftPredicates = splitConjunctivePredicates(left).toSet
+    val rightPredicates = splitConjunctivePredicates(right).toSet
     // TODO: support OR
     logDebug(s"equivalentConditions Result: [${leftPredicates == rightPredicates}]")
     leftPredicates == rightPredicates
