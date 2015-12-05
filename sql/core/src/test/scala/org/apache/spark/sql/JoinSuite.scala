@@ -40,6 +40,15 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
+  test("column-suffixes are added for same column names") {
+    val join = testData2.join(testData2, Seq("a"), "inner")
+    assert(join.columns === Seq("a", "b_x", "b_y"))
+
+    // Exlpicitly specifying the suffixes
+    val join2 = testData2.join(testData2, Seq("a"), "inner", ("_c", "_d"))
+    assert(join2.columns === Seq("a", "b_c", "b_d"))
+  }
+
   def assertJoin(sqlString: String, c: Class[_]): Any = {
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
