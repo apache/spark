@@ -730,7 +730,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     val serializableConf = new SerializableJobConf(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, serializableConf.value)
+      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass,
+        new JobConf(serializableConf.value))
     }
     self.foreachRDD(saveFunc)
   }

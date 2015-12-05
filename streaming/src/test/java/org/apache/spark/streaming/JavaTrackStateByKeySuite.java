@@ -95,7 +95,7 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
 
     JavaTrackStateDStream<String, Integer, Boolean, Double> stateDstream2 =
         wordsDstream.trackStateByKey(
-            StateSpec.<String, Integer, Boolean, Double> function(trackStateFunc2)
+            StateSpec.<String, Integer, Boolean, Double>function(trackStateFunc2)
                 .initialState(initialRDD)
                 .numPartitions(10)
                 .partitioner(new HashPartitioner(10))

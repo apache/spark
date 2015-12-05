@@ -15,29 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.sql.execution
 
-import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.metric.SQLMetricInfo
 import org.apache.spark.util.Utils
 
 /**
- * Driver -> Executor message to trigger a thread dump.
+ * :: DeveloperApi ::
+ * Stores information about a SQL SparkPlan.
  */
-private[spark] case object TriggerThreadDump
+@DeveloperApi
+class SparkPlanInfo(
+    val nodeName: String,
+    val simpleString: String,
+    val children: Seq[SparkPlanInfo],
+    val metrics: Seq[SQLMetricInfo])
 
-/**
- * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
- */
-private[spark]
-class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
+private[sql] object SparkPlanInfo {
 
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case TriggerThreadDump =>
-      context.reply(Utils.getThreadDump())
+  def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
+    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
+        Utils.getFormattedClassName(metric.param))
+    }
+    val children = plan.children.map(fromSparkPlan)
+
+    new SparkPlanInfo(plan.nodeName, plan.simpleString, children, metrics)
   }
-
-}
-
-object ExecutorEndpoint {
-  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
 }

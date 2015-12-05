@@ -26,7 +26,6 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
@@ -45,9 +44,10 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.{execution => sparkexecution}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkException}
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark.  Allows the
@@ -339,6 +339,15 @@ class SQLContext private[sql](
   }
 
   /**
+    * Returns true if the [[Queryable]] is currently cached in-memory.
+    * @group cachemgmt
+    * @since 1.3.0
+    */
+  private[sql] def isCached(qName: Queryable): Boolean = {
+    cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+  /**
    * Caches the specified table in-memory.
    * @group cachemgmt
    * @since 1.3.0
@@ -401,7 +410,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
@@ -417,7 +426,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SparkPlan.currentContext.set(self)
+    SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     DataFrame(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -1236,6 +1245,7 @@ class SQLContext private[sql](
   sparkContext.addSparkListener(new SparkListener {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       SQLContext.clearInstantiatedContext()
+      SQLContext.clearSqlListener()
     }
   })
 
@@ -1262,6 +1272,8 @@ object SQLContext {
    * Reference to the created SQLContext.
    */
   @transient private val instantiatedContext = new AtomicReference[SQLContext]()
+
+  @transient private val sqlListener = new AtomicReference[SQLListener]()
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
@@ -1307,6 +1319,10 @@ object SQLContext {
     Option(instantiatedContext.get())
   }
 
+  private[sql] def clearSqlListener(): Unit = {
+    sqlListener.set(null)
+  }
+
   /**
    * Changes the SQLContext that will be returned in this thread and its children when
    * SQLContext.getOrCreate() is called. This can be used to ensure that a given thread receives
@@ -1328,7 +1344,7 @@ object SQLContext {
     activeContext.remove()
   }
 
-  private[sql] def getActiveContextOption(): Option[SQLContext] = {
+  private[sql] def getActive(): Option[SQLContext] = {
     Option(activeContext.get())
   }
 
@@ -1355,9 +1371,13 @@ object SQLContext {
    * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
    */
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    val listener = new SQLListener(sc.conf)
-    sc.addSparkListener(listener)
-    sc.ui.foreach(new SQLTab(listener, _))
-    listener
+    if (sqlListener.get() == null) {
+      val listener = new SQLListener(sc.conf)
+      if (sqlListener.compareAndSet(null, listener)) {
+        sc.addSparkListener(listener)
+        sc.ui.foreach(new SQLTab(listener, _))
+      }
+    }
+    sqlListener.get()
   }
 }

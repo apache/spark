@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.protocol;
+package org.apache.spark.sql.execution.metric
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
-
-import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * Abstract class for response messages that contain a large data portion kept in a separate
- * buffer. These messages are treated especially by MessageEncoder.
+ * :: DeveloperApi ::
+ * Stores information about a SQL Metric.
  */
-public abstract class ResponseWithBody implements ResponseMessage {
-  public final ManagedBuffer body;
-  public final boolean isBodyInFrame;
-
-  protected ResponseWithBody(ManagedBuffer body, boolean isBodyInFrame) {
-    this.body = body;
-    this.isBodyInFrame = isBodyInFrame;
-  }
-
-  public abstract ResponseMessage createFailureResponse(String error);
-}
+@DeveloperApi
+class SQLMetricInfo(
+    val name: String,
+    val accumulatorId: Long,
+    val metricParam: String)
