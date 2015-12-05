@@ -134,7 +134,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
             case (Some(cond1: Expression), Some(cond2: Expression)) => equivalentConditions(cond1, cond2)
             case _ => false
           }
-        case (l: Project, r: Project) => l.cleanArgs.toSet == r.cleanArgs.toSet
         case _ => false
       })
     } &&
