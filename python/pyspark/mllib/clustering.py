@@ -58,6 +58,10 @@ class BisectingKMeansModel(JavaModelWrapper):
     True
     >>> model.k
     4
+    >>> model.computeCost(array([0.0, 0.0]))
+    0.0
+    >>> model.k == len(model.clusterCenters)
+    True
     >>> model = bskm.setK(2).run(sc.parallelize(data))
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
@@ -81,7 +85,12 @@ class BisectingKMeansModel(JavaModelWrapper):
 
     @since('1.6.0')
     def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
+        """
+        Find the cluster to which x belongs in this model.
+
+        :param x: Either the point to determine the cluster for or an RDD of points to determine 
+        the clusters for.
+        """
         if isinstance(x, RDD):
             return x.map(self.predict(x))
 
@@ -93,8 +102,10 @@ class BisectingKMeansModel(JavaModelWrapper):
         """
         Return the Bisecting K-means cost (sum of squared distances of points to
         their nearest center) for this model on the given data.
+
+        :param point: the point to compute the cost to
         """
-        return self._java_model.computeCost(_convert_to_vector(point))
+        return self.call("computeCost", _convert_to_vector(point))
 
 
 class BisectingKMeans:
