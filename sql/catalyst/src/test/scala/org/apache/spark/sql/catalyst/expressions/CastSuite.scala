@@ -734,7 +734,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val complex = Literal.create(
       Row(
         Seq("123", "true", "f"),
-        Map("a" ->"123", "b" -> "true", "c" -> "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
         Row(0)),
       StructType(Seq(
         StructField("a",

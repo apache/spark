@@ -82,7 +82,9 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
   def w(value: T): ParamPair[T] = this -> value
 
   /** Creates a param pair with the given value (for Scala). */
+  // scalastyle:off
   def ->(value: T): ParamPair[T] = ParamPair(this, value)
+  // scalastyle:on
 
   /** Encodes a param value into JSON, which can be decoded by [[jsonDecode()]]. */
   def jsonEncode(value: T): String = {

@@ -101,21 +101,21 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("SparkContext.union creates UnionRDD if at least one RDD has no partitioner") {
-    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
-    val rddWithNoPartitioner = sc.parallelize(Seq(2->true))
+    val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
+    val rddWithNoPartitioner = sc.parallelize(Seq(2 -> true))
     val unionRdd = sc.union(rddWithNoPartitioner, rddWithPartitioner)
     assert(unionRdd.isInstanceOf[UnionRDD[_]])
   }
 
   test("SparkContext.union creates PartitionAwareUnionRDD if all RDDs have partitioners") {
-    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
+    val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
     val unionRdd = sc.union(rddWithPartitioner, rddWithPartitioner)
     assert(unionRdd.isInstanceOf[PartitionerAwareUnionRDD[_]])
   }
 
   test("PartitionAwareUnionRDD raises exception if at least one RDD has no partitioner") {
-    val rddWithPartitioner = sc.parallelize(Seq(1->true)).partitionBy(new HashPartitioner(1))
-    val rddWithNoPartitioner = sc.parallelize(Seq(2->true))
+    val rddWithPartitioner = sc.parallelize(Seq(1 -> true)).partitionBy(new HashPartitioner(1))
+    val rddWithNoPartitioner = sc.parallelize(Seq(2 -> true))
     intercept[IllegalArgumentException] {
       new PartitionerAwareUnionRDD(sc, Seq(rddWithNoPartitioner, rddWithPartitioner))
     }

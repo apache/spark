@@ -50,7 +50,7 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setMaxDepth(2)
       .setMaxBins(100)
       .setSeed(1)
-    val categoricalFeatures = Map(0 -> 3, 1-> 3)
+    val categoricalFeatures = Map(0 -> 3, 1 -> 3)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
 
@@ -59,12 +59,12 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setImpurity("variance")
       .setMaxDepth(2)
       .setMaxBins(100)
-    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures)
   }
 
   test("copied model must have the same parent") {
-    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
     val model = new DecisionTreeRegressor()
       .setImpurity("variance")
