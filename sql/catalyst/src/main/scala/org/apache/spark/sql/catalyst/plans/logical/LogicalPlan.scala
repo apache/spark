@@ -134,14 +134,16 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
             case (Some(cond1: Expression), Some(cond2: Expression)) => equivalentConditions(cond1, cond2)
             case _ => false
           }
-          //equivalentConditions(l.cleanArgs[0], r.cleanArgs[0])
-        // case (l: Project, r: Project) => equivalentProjectLists(l.projectList, r.projectList)
+        case (l: Project, r: Project) => Set(l.cleanArgs) == Set(r.cleanArgs)
         case _ => false
       })
     } &&
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
+    /**
+     * Returns true if two conditions are equivalent. Equality check is tolerant of ordering different.
+     */
   def equivalentConditions(left: Expression, right: Expression): Boolean = {
     logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
     val leftPredicates = Set(splitConjunctivePredicates(left))
