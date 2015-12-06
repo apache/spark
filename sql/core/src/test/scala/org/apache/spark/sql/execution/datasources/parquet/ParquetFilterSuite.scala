@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -347,6 +348,37 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         // We will remove the temporary metadata when writing Parquet file.
         sqlContext.read.parquet(pathThree).schema.fields.foreach { f =>
+          assert(!f.metadata.contains("optional"))
+        }
+
+        val pathFour = s"${dir.getCanonicalPath}/table4"
+        val dfStruct = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
+        dfStruct.select(struct("a").as("s")).write.parquet(pathFour)
+
+        val pathFive = s"${dir.getCanonicalPath}/table5"
+        val dfStruct2 = sparkContext.parallelize(Seq((1, 1))).toDF("c", "b")
+        dfStruct2.select(struct("c").as("s")).write.parquet(pathFive)
+
+        // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
+        // Parquet emits.
+        val dfStruct3 = sqlContext.read.parquet(pathFour, pathFive).filter("s.c = 1")
+          .selectExpr("s.c", "s.a")
+        checkAnswer(
+          dfStruct3,
+          (1 to 1).map(i => Row(i, null)))
+
+        // The fields "s.a" and "s.c" only exist in one Parquet file.
+        dfStruct3.schema.fields.foreach { f =>
+          if (f.name == "s.a" || f.name == "s.c") {
+            assert(f.metadata.contains("optional"))
+          }
+        }
+
+        val pathSix = s"${dir.getCanonicalPath}/table6"
+        dfStruct3.write.parquet(pathSix)
+
+        // We will remove the temporary metadata when writing Parquet file.
+        sqlContext.read.parquet(pathSix).schema.fields.foreach { f =>
           assert(!f.metadata.contains("optional"))
         }
       }

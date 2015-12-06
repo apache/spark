@@ -207,13 +207,19 @@ private[sql] object ParquetFilters {
      */
   }
 
+  private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
+    case StructType(fields) =>
+      fields.filter { f =>
+        !f.metadata.contains("optional") || !f.metadata.getBoolean("optional")
+      }.map(f => f.name -> f.dataType) ++ fields.flatMap { f => getFieldMap(f.dataType) }
+    case _ => Array.empty[(String, DataType)]
+  }
+
   /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = schema.filter { f =>
-      !f.metadata.contains("optional") || !f.metadata.getBoolean("optional")
-    }.map(f => f.name -> f.dataType).toMap
+    val dataTypeOf = getFieldMap(schema).toMap
 
     relaxParquetValidTypeMap
 
