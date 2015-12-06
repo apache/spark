@@ -12,6 +12,7 @@
   "totalInputBytes" : 28000288,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 13180,
+  "isActive" : true,
   "maxMemory" : 278302556,
   "executorLogs" : { }
 } ]
