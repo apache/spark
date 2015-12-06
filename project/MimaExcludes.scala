@@ -155,6 +155,10 @@ object MimaExcludes {
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
+      ) ++ Seq (
+        // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.ExecutorSummary.this")
       )
     case v if v.startsWith("1.5") =>
       Seq(
