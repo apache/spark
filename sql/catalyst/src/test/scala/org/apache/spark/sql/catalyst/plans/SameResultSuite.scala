@@ -58,7 +58,13 @@ class SameResultSuite extends SparkFunSuite {
   test("filters") {
     assertSameResult(testRelation.where('a === 'b), testRelation2.where('a === 'b))
     assertSameResult(testRelation.where('a === 'b && 'c === 'd),
-      testRelation2.where('c === 'd && 'a === 'b ))
+      testRelation2.where('c === 'd && 'a === 'b )
+    )
+
+    assertSameResult(testRelation.where('a === 'b && 'c === 'd),
+      testRelation2.where('a === 'c && 'b === 'd),
+      result = false
+    )
   }
 
   test("sorts") {
