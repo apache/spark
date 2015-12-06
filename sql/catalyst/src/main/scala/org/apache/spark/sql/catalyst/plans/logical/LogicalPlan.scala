@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 
 
-abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper with Logging {
 
   private var _analyzed: Boolean = false
 
@@ -127,33 +127,58 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       cleanLeft.children.size == cleanRight.children.size && {
       logDebug(
         s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      cleanRight.cleanArgs == cleanLeft.cleanArgs
+      (cleanRight.cleanArgs == cleanLeft.cleanArgs) || ((cleanLeft, cleanRight) match {
+        case (l: Filter, r: Filter) =>
+          equivalentConditions(cleanExpression(l.condition, l.children.flatMap(_.output)),
+            cleanExpression(r.condition, r.children.flatMap(_.output)))
+        case _ => false
+      })
     } &&
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
+  /**
+   * Returns true if two conditions are equivalent. Equality check is tolerant of ordering
+   * different.
+   */
+  def equivalentConditions(left: Expression, right: Expression): Boolean = {
+    logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
+
+    val leftAndPredicates = splitConjunctivePredicates(left).toSet
+    val rightAndPredicates = splitConjunctivePredicates(right).toSet
+    val leftOrPredicates = splitDisjunctivePredicates(left).toSet
+    val rightOrPredicates = splitDisjunctivePredicates(right).toSet
+    logDebug(s"equivalentConditions Result: [${leftAndPredicates == rightAndPredicates}]")
+    // We split the two conditions into conjunctive predicates and disjunctive predicates
+    // If either of them match, we consider them equivalent conditions
+    (leftAndPredicates == rightAndPredicates) || (leftOrPredicates == rightOrPredicates)
+  }
+
+  /** Clean an expression so that differences in expression id should not affect equality */
+  def cleanExpression(e: Expression, input: Seq[Attribute]) = e match {
+    case a: Alias =>
+      // As the root of the expression, Alias will always take an arbitrary exprId, we need
+      // to erase that for equality testing.
+      val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+      BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
+    case other => BindReferences.bindReference(other, input, allowFailures = true)
+  }
+
+
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
-    def cleanExpression(e: Expression) = e match {
-      case a: Alias =>
-        // As the root of the expression, Alias will always take an arbitrary exprId, we need
-        // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
-        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
-      case other => BindReferences.bindReference(other, input, allowFailures = true)
-    }
 
     productIterator.map {
       // Children are checked using sameResult above.
       case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e)
+      case e: Expression => cleanExpression(e, input)
       case s: Option[_] => s.map {
-        case e: Expression => cleanExpression(e)
+        case e: Expression => cleanExpression(e, input)
         case other => other
       }
       case s: Seq[_] => s.map {
-        case e: Expression => cleanExpression(e)
+        case e: Expression => cleanExpression(e, input)
         case other => other
       }
       case other => other

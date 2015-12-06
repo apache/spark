@@ -28,8 +28,8 @@ import org.apache.spark.sql.catalyst.util._
  * Tests for the sameResult function of [[LogicalPlan]].
  */
 class SameResultSuite extends SparkFunSuite {
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int)
+  val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int, 'd.int)
 
   def assertSameResult(a: LogicalPlan, b: LogicalPlan, result: Boolean = true): Unit = {
     val aAnalyzed = a.analyze
@@ -57,6 +57,21 @@ class SameResultSuite extends SparkFunSuite {
 
   test("filters") {
     assertSameResult(testRelation.where('a === 'b), testRelation2.where('a === 'b))
+    assertSameResult(testRelation.where('a === 'b && 'c === 'd),
+      testRelation2.where('c === 'd && 'a === 'b )
+    )
+    assertSameResult(testRelation.where('a === 'b || 'c === 'd),
+      testRelation2.where('c === 'd || 'a === 'b )
+    )
+
+    assertSameResult(testRelation.where('a === 'b && 'c === 'd),
+      testRelation2.where('a === 'c && 'b === 'd),
+      result = false
+    )
+    assertSameResult(testRelation.where('a === 'b || 'c === 'd),
+      testRelation2.where('a === 'c || 'b === 'd),
+      result = false
+    )
   }
 
   test("sorts") {
