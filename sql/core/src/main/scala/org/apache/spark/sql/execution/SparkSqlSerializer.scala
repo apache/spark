@@ -26,6 +26,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.twitter.chill.ResourcePool
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance}
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.MutablePair
@@ -76,7 +77,7 @@ private[sql] object SparkSqlSerializer {
 
   def serialize[T: ClassTag](o: T): Array[Byte] =
     acquireRelease { k =>
-      k.serialize(o).array()
+      JavaUtils.bufferToArray(k.serialize(o))
     }
 
   def deserialize[T: ClassTag](bytes: Array[Byte]): T =

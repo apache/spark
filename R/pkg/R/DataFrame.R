@@ -822,21 +822,21 @@ setMethod("collect",
                 # Get a column of complex type returns a list.
                 # Get a cell from a column of complex type returns a list instead of a vector.
                 col <- listCols[[colIndex]]
-                colName <- dtypes[[colIndex]][[1]]
                 if (length(col) <= 0) {
-                  df[[colName]] <- col
+                  df[[colIndex]] <- col
                 } else {
                   colType <- dtypes[[colIndex]][[2]]
                   # Note that "binary" columns behave like complex types.
                   if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
-                    df[[colName]] <- vec
+                    df[[colIndex]] <- vec
                   } else {
-                    df[[colName]] <- col
+                    df[[colIndex]] <- col
                   }
                 }
               }
+              names(df) <- names(x)
               df
             }
           })
