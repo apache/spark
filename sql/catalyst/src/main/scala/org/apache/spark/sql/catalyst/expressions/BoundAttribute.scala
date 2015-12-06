@@ -28,8 +28,8 @@ object BoundReference {
     ordinal: Int,
     dataType: DataType,
     nullable: Boolean,
-    originalName: String): BoundReference =
-      BoundReference(ordinal, dataType, nullable).setOriginalName(originalName)
+    name: String): BoundReference =
+      BoundReference(ordinal, dataType, nullable).setName(name)
 }
 
 /**
@@ -67,12 +67,12 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     }
   }
 
-  override def name: String = originalName.getOrElse(s"i[$ordinal]")
+  override def name: String = _name.getOrElse(s"i[$ordinal]")
 
-  private var originalName: Option[String] = None
+  private var _name: Option[String] = None
 
-  def setOriginalName(name: String): BoundReference = {
-    originalName = Some(name)
+  def setName(name: String): BoundReference = {
+    _name = Some(name)
     this
   }
 

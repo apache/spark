@@ -34,8 +34,10 @@ package object codegen {
     object CleanExpressions extends rules.Rule[Expression] {
       def apply(e: Expression): Expression = e transform {
         case Alias(c, name) =>
+          // If we remove an Alias on a BoundReference, the Alias name will not be able
+          // to referred later in some expressions, e.g., CreateStructUnsafe's dataType.
           if (c.isInstanceOf[BoundReference]) {
-            c.asInstanceOf[BoundReference].setOriginalName(name)
+            c.asInstanceOf[BoundReference].setName(name)
           } else {
             c
           }
