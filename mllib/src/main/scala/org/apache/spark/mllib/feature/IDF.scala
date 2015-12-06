@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
+import scala.collection.mutable.ArrayBuffer
+
 import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.annotation.Since
@@ -211,14 +213,17 @@ private object IDFModel {
     val n = v.size
     v match {
       case SparseVector(size, indices, values) =>
+        val newElements = new ArrayBuffer[(Int, Double)]
         val nnz = indices.size
-        val newValues = new Array[Double](nnz)
         var k = 0
         while (k < nnz) {
-          newValues(k) = values(k) * idf(indices(k))
+          val newValue = values(k) * idf(indices(k))
+          if (newValue != 0.0) {
+            newElements.append((indices(k), newValue))
+          }
           k += 1
         }
-        Vectors.sparse(n, indices, newValues)
+        Vectors.sparse(n, newElements.toArray)
       case DenseVector(values) =>
         val newValues = new Array[Double](n)
         var j = 0
