@@ -27,6 +27,7 @@ import org.mockito.Matchers.{any, anyLong}
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
@@ -36,7 +37,7 @@ import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, StorageLevel
 /**
  * Helper trait for sharing code among [[MemoryManager]] tests.
  */
-private[memory] trait MemoryManagerSuite extends SparkFunSuite {
+private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   import MemoryManagerSuite.DEFAULT_ENSURE_FREE_SPACE_CALLED
 
@@ -51,6 +52,11 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
    * code makes explicit assertions on this variable through [[assertEnsureFreeSpaceCalled]].
    */
   private val ensureFreeSpaceCalled = new AtomicLong(DEFAULT_ENSURE_FREE_SPACE_CALLED)
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    ensureFreeSpaceCalled.set(DEFAULT_ENSURE_FREE_SPACE_CALLED)
+  }
 
   /**
    * Make a mocked [[MemoryStore]] whose [[MemoryStore.ensureFreeSpace]] method is stubbed.
