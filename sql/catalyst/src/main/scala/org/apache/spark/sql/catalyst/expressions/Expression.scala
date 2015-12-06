@@ -180,7 +180,9 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns the string representation of this expression that is safe to be put in
    * code comments of generated code.
    */
-  protected def toCommentSafeString: String = this.toString.replace("*/", "\\*\\/")
+  protected def toCommentSafeString: String = this.toString
+    .replace("*/", "\\*\\/")
+    .replace("\\u", "\\\\u")
 }
 
 

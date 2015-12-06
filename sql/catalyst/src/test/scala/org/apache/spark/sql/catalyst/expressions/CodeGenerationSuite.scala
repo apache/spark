@@ -143,4 +143,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       true,
       InternalRow(UTF8String.fromString("*/")))
   }
+
+  test("\\u in the data") {
+    // When \ u appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape \ u to \\u.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("\\u")))
+  }
 }
