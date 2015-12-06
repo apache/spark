@@ -28,8 +28,8 @@ intPairs <- list(list(1L, -1), list(2L, 100), list(2L, 1), list(1L, 200))
 intRdd <- parallelize(sc, intPairs, 2L)
 
 test_that("get number of partitions in RDD", {
-  expect_equal(numPartitions(rdd), 2)
-  expect_equal(numPartitions(intRdd), 2)
+  expect_equal(getNumPartitions(rdd), 2)
+  expect_equal(getNumPartitions(intRdd), 2)
 })
 
 test_that("first on RDD", {
@@ -304,18 +304,18 @@ test_that("repartition/coalesce on RDDs", {
 
   # repartition
   r1 <- repartition(rdd, 2)
-  expect_equal(numPartitions(r1), 2L)
+  expect_equal(getNumPartitions(r1), 2L)
   count <- length(collectPartition(r1, 0L))
   expect_true(count >= 8 && count <= 12)
 
   r2 <- repartition(rdd, 6)
-  expect_equal(numPartitions(r2), 6L)
+  expect_equal(getNumPartitions(r2), 6L)
   count <- length(collectPartition(r2, 0L))
   expect_true(count >= 0 && count <= 4)
 
   # coalesce
   r3 <- coalesce(rdd, 1)
-  expect_equal(numPartitions(r3), 1L)
+  expect_equal(getNumPartitions(r3), 1L)
   count <- length(collectPartition(r3, 0L))
   expect_equal(count, 20)
 })
