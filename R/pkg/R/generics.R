@@ -627,6 +627,10 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
+setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
+
+#' @rdname column
+#' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname column
@@ -808,9 +812,9 @@ setGeneric("initcap", function(x) { standardGeneric("initcap") })
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname isNaN
+#' @rdname is.nan
 #' @export
-setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
+setGeneric("isnan", function(x) { standardGeneric("isnan") })
 
 #' @rdname kurtosis
 #' @export
