@@ -274,4 +274,12 @@ class AnalysisSuite extends AnalysisTest {
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
   }
+
+  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+    val caseBranches = Seq((Literal(1) > Literal(0)),
+      CreateStruct(Seq(Cast(Floor(Literal(10)), IntegerType))),
+      CreateStruct(Seq(Literal(10))))
+    val plan = OneRowRelation.select(Alias(CaseWhen(caseBranches), "val")())
+    assertAnalysisSuccess(plan)
+  }
 }
