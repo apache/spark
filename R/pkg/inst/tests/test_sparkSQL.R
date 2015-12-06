@@ -883,7 +883,7 @@ test_that("column functions", {
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
-  c5 <- hour(c) + initcap(c) + isNaN(c) + last(c) + last_day(c) + length(c)
+  c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
   c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c)
@@ -894,6 +894,10 @@ test_that("column functions", {
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
+  c16 <- is.nan(c) + isnan(c) + isNaN(c)
+
+  # Test if base::is.nan() is exposed
+  expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
