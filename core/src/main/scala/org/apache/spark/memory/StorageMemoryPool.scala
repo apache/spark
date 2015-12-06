@@ -128,9 +128,11 @@ class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
     } else {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
       val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      memoryStore.ensureFreeSpace(spaceToFree - spaceFreedByReleasingUnusedMemory, evictedBlocks)
+      memoryStore.freeSpaceForExecution(
+        spaceToFree - spaceFreedByReleasingUnusedMemory, evictedBlocks)
       val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
-      _memoryUsed -= spaceFreedByEviction
+      // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
+      // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.
       decrementPoolSize(spaceFreedByEviction)
       spaceFreedByReleasingUnusedMemory + spaceFreedByEviction
     }

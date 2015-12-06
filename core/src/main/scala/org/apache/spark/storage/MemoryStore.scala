@@ -406,16 +406,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Try to free up a given amount of space by evicting existing blocks.
+   * Try to free up the given amount of storage memory for use by execution by evicting blocks.
    *
    * @param space the amount of memory to free, in bytes
    * @param droppedBlocks a holder for blocks evicted in the process
    * @return whether the requested free space is freed.
    */
-  private[spark] def ensureFreeSpace(
+  private[spark] def freeSpaceForExecution(
       space: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    ensureFreeSpace(None, space, droppedBlocks)
+    evictBlocksToFreeSpace(None, space, droppedBlocks)
   }
 
   /**
@@ -449,42 +449,66 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
     memoryManager.synchronized {
       val freeMemory = maxMemory - memoryUsed
-      val rddToAdd = blockId.flatMap(getRddId)
-      val selectedBlocks = new ArrayBuffer[BlockId]
-      var selectedMemory = 0L
 
       logInfo(s"Ensuring $space bytes of free space " +
         blockId.map { id => s"for block $id" }.getOrElse("") +
         s"(free: $freeMemory, max: $maxMemory)")
 
-      // Fail fast if the block simply won't fit
       if (space > maxMemory) {
+        // Fail fast if the block simply won't fit
         logInfo("Will not " + blockId.map { id => s"store $id" }.getOrElse("free memory") +
           s" as the required space ($space bytes) exceeds our memory limit ($maxMemory bytes)")
-        return false
+        false
+      } else if (freeMemory >= space) {
+        // No need to evict anything if there is already enough free space
+        true
+      } else {
+        // Evict blocks as necessary
+        evictBlocksToFreeSpace(blockId, freeMemory - space, droppedBlocks)
       }
+    }
+  }
 
-      // No need to evict anything if there is already enough free space
-      if (freeMemory >= space) {
-        return true
-      }
-
+  /**
+    * Try to evict blocks to free up a given amount of space to store a particular block.
+    * Can fail if either the block is bigger than our memory or it would require replacing
+    * another block from the same RDD (which leads to a wasteful cyclic replacement pattern for
+    * RDDs that don't fit into memory that we want to avoid).
+    *
+    * Compared to [[ensureFreeSpace()]], this method will drop blocks without first checking whether
+    * there is free storage memory which could be used to store a new block; as a result, this
+    * method should be used when evicting stroage blocks in order to reclaim memory for use by
+    * execution.
+    *
+    * @param blockId the ID of the block we are freeing space for, if any
+    * @param space the size of this block
+    * @param droppedBlocks a holder for blocks evicted in the process
+    * @return whether the requested free space is freed.
+    */
+  private def evictBlocksToFreeSpace(
+      blockId: Option[BlockId],
+      space: Long,
+      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    memoryManager.synchronized {
+      var freedMemory = 0L
+      val rddToAdd = blockId.flatMap(getRddId)
+      val selectedBlocks = new ArrayBuffer[BlockId]
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
       entries.synchronized {
         val iterator = entries.entrySet().iterator()
-        while (freeMemory + selectedMemory < space && iterator.hasNext) {
+        while (freedMemory < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
           if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
             selectedBlocks += blockId
-            selectedMemory += pair.getValue.size
+            freedMemory += pair.getValue.size
           }
         }
       }
 
-      if (freeMemory + selectedMemory >= space) {
+      if (freedMemory >= space) {
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
         for (blockId <- selectedBlocks) {
           val entry = entries.synchronized { entries.get(blockId) }

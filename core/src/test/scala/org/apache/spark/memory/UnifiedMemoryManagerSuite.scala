@@ -131,7 +131,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     // Execution wants 200 bytes but only 150 are free, so storage is evicted
     assert(mm.acquireExecutionMemory(200L, taskAttemptId, MemoryMode.ON_HEAP) === 200L)
     assert(mm.executionMemoryUsed === 300L)
-    assertEnsureFreeSpaceCalled(ms, 50L)
+    assertEnsureFreeSpaceNotCalled(ms)
+    assertFreeSpaceForExecutionCalled(ms, 50L)
     assert(mm.executionMemoryUsed === 300L)
     assert(evictedBlocks.nonEmpty)
     mm.releaseAllStorageMemory()
