@@ -124,7 +124,6 @@ private[sql] class CacheManager extends Logging {
     found
   }
 
-
   /** Optionally returns cached data for the given [[Queryable]] */
   private[sql] def lookupCachedData(query: Queryable): Option[CachedData] = readLock {
     lookupCachedData(query.queryExecution.analyzed)
