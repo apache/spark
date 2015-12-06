@@ -467,6 +467,7 @@ private[sql] class JDBCRDD(
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
       }
+      closed = true
     }
 
     override def hasNext: Boolean = {
