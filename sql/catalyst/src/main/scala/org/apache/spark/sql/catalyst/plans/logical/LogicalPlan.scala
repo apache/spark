@@ -129,53 +129,56 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
         s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
       (cleanRight.cleanArgs == cleanLeft.cleanArgs) || ((cleanLeft, cleanRight) match {
         case (l: Filter, r: Filter) =>
-          (l.cleanArgs.collectFirst({ case e: Expression => e }),
-            r.cleanArgs.collectFirst({ case e: Expression => e })) match {
-            case (Some(cond1: Expression), Some(cond2: Expression))
-              => equivalentConditions(cond1, cond2)
-            case _ => false
-          }
+          equivalentConditions(cleanExpression(l.condition, l.children.flatMap(_.output)),
+            cleanExpression(r.condition, r.children.flatMap(_.output)))
         case _ => false
       })
     } &&
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
-    /**
-     * Returns true if two conditions are equivalent. Equality check is tolerant of ordering
-     * different.
-     */
+  /**
+   * Returns true if two conditions are equivalent. Equality check is tolerant of ordering
+   * different.
+   */
   def equivalentConditions(left: Expression, right: Expression): Boolean = {
     logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
-    val leftPredicates = splitConjunctivePredicates(left).toSet
-    val rightPredicates = splitConjunctivePredicates(right).toSet
-    // TODO: support OR
-    logDebug(s"equivalentConditions Result: [${leftPredicates == rightPredicates}]")
-    leftPredicates == rightPredicates
+
+    val leftAndPredicates = splitConjunctivePredicates(left).toSet
+    val rightAndPredicates = splitConjunctivePredicates(right).toSet
+    val leftOrPredicates = splitDisjunctivePredicates(left).toSet
+    val rightOrPredicates = splitDisjunctivePredicates(right).toSet
+    logDebug(s"equivalentConditions Result: [${leftAndPredicates == rightAndPredicates}]")
+    // We split the two conditions into conjunctive predicates and disjunctive predicates
+    // If either of them match, we consider them equivalent conditions
+    (leftAndPredicates == rightAndPredicates) || (leftOrPredicates == rightOrPredicates)
   }
+
+  /** Clean an expression so that differences in expression id should not affect equality */
+  def cleanExpression(e: Expression, input: Seq[Attribute]) = e match {
+    case a: Alias =>
+      // As the root of the expression, Alias will always take an arbitrary exprId, we need
+      // to erase that for equality testing.
+      val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+      BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
+    case other => BindReferences.bindReference(other, input, allowFailures = true)
+  }
+
 
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     val input = children.flatMap(_.output)
-    def cleanExpression(e: Expression) = e match {
-      case a: Alias =>
-        // As the root of the expression, Alias will always take an arbitrary exprId, we need
-        // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
-        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
-      case other => BindReferences.bindReference(other, input, allowFailures = true)
-    }
 
     productIterator.map {
       // Children are checked using sameResult above.
       case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e)
+      case e: Expression => cleanExpression(e, input)
       case s: Option[_] => s.map {
-        case e: Expression => cleanExpression(e)
+        case e: Expression => cleanExpression(e, input)
         case other => other
       }
       case s: Seq[_] => s.map {
-        case e: Expression => cleanExpression(e)
+        case e: Expression => cleanExpression(e, input)
         case other => other
       }
       case other => other
