@@ -259,6 +259,21 @@ setMethod("column",
           function(x) {
             col(x)
           })
+#' corr
+#'
+#' Computes the Pearson Correlation Coefficient for two Columns.
+#'
+#' @rdname corr
+#' @name corr
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{corr(df$c, df$d)}
+setMethod("corr", signature(x = "Column"),
+          function(x, col2) {
+            stopifnot(class(col2) == "Column")
+            jc <- callJStatic("org.apache.spark.sql.functions", "corr", x@jc, col2@jc)
+            column(jc)
+          })
 
 #' cos
 #'

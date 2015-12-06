@@ -411,7 +411,7 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
+setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
 #' @rdname summary
 #' @export
