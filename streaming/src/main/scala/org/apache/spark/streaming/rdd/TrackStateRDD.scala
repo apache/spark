@@ -179,22 +179,43 @@ private[streaming] class TrackStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, E:
 
 private[streaming] object TrackStateRDD {
 
-  def createFromPairRDD[K: ClassTag, V: ClassTag, S: ClassTag, T: ClassTag](
+  def createFromPairRDD[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
       pairRDD: RDD[(K, S)],
       partitioner: Partitioner,
-      updateTime: Time): TrackStateRDD[K, V, S, T] = {
+      updateTime: Time): TrackStateRDD[K, V, S, E] = {
 
     val rddOfTrackStateRecords = pairRDD.partitionBy(partitioner).mapPartitions ({ iterator =>
       val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
       iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime.milliseconds) }
-      Iterator(TrackStateRDDRecord(stateMap, Seq.empty[T]))
+      Iterator(TrackStateRDDRecord(stateMap, Seq.empty[E]))
     }, preservesPartitioning = true)
 
     val emptyDataRDD = pairRDD.sparkContext.emptyRDD[(K, V)].partitionBy(partitioner)
 
     val noOpFunc = (time: Time, key: K, value: Option[V], state: State[S]) => None
 
-    new TrackStateRDD[K, V, S, T](rddOfTrackStateRecords, emptyDataRDD, noOpFunc, updateTime, None)
+    new TrackStateRDD[K, V, S, E](rddOfTrackStateRecords, emptyDataRDD, noOpFunc, updateTime, None)
+  }
+
+  def createFromRDD[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
+      rdd: RDD[(K, S, Long)],
+      partitioner: Partitioner,
+      updateTime: Time): TrackStateRDD[K, V, S, E] = {
+
+    val pairRDD = rdd.map { x => (x._1, (x._2, x._3)) }
+    val rddOfTrackStateRecords = pairRDD.partitionBy(partitioner).mapPartitions({ iterator =>
+      val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
+      iterator.foreach { case (key, (state, updateTime)) =>
+        stateMap.put(key, state, updateTime)
+      }
+      Iterator(TrackStateRDDRecord(stateMap, Seq.empty[E]))
+    }, preservesPartitioning = true)
+
+    val emptyDataRDD = pairRDD.sparkContext.emptyRDD[(K, V)].partitionBy(partitioner)
+
+    val noOpFunc = (time: Time, key: K, value: Option[V], state: State[S]) => None
+
+    new TrackStateRDD[K, V, S, E](rddOfTrackStateRecords, emptyDataRDD, noOpFunc, updateTime, None)
   }
 }
 

@@ -132,22 +132,37 @@ class InternalTrackStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassT
   /** Method that generates a RDD for the given time */
   override def compute(validTime: Time): Option[RDD[TrackStateRDDRecord[K, S, E]]] = {
     // Get the previous state or create a new empty state RDD
-    val prevStateRDD = getOrCompute(validTime - slideDuration).getOrElse {
-      TrackStateRDD.createFromPairRDD[K, V, S, E](
-        spec.getInitialStateRDD().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
-        partitioner, validTime
-      )
+    val prevStateRDD = getOrCompute(validTime - slideDuration) match {
+      case Some(rdd) =>
+        if (rdd.partitioner != Some(partitioner)) {
+          // If the RDD is not partitioned the right way, let us repartition it using the
+          // partition index as the key. This is to ensure that state RDD is always partitioned
+          // before creating another state RDD using it
+          TrackStateRDD.createFromRDD[K, V, S, E](
+            rdd.flatMap { _.stateMap.getAll() }, partitioner, validTime)
+        } else {
+          rdd
+        }
+      case None =>
+        TrackStateRDD.createFromPairRDD[K, V, S, E](
+          spec.getInitialStateRDD().getOrElse(new EmptyRDD[(K, S)](ssc.sparkContext)),
+          partitioner,
+          validTime
+        )
     }
 
+
     // Compute the new state RDD with previous state RDD and partitioned data RDD
-    parent.getOrCompute(validTime).map { dataRDD =>
-      val partitionedDataRDD = dataRDD.partitionBy(partitioner)
-      val timeoutThresholdTime = spec.getTimeoutInterval().map { interval =>
-        (validTime - interval).milliseconds
-      }
-      new TrackStateRDD(
-        prevStateRDD, partitionedDataRDD, trackingFunction, validTime, timeoutThresholdTime)
+    // Even if there is no data RDD, use an empty one to create a new state RDD
+    val dataRDD = parent.getOrCompute(validTime).getOrElse {
+      context.sparkContext.emptyRDD[(K, V)]
     }
+    val partitionedDataRDD = dataRDD.partitionBy(partitioner)
+    val timeoutThresholdTime = spec.getTimeoutInterval().map { interval =>
+      (validTime - interval).milliseconds
+    }
+    Some(new TrackStateRDD(
+      prevStateRDD, partitionedDataRDD, trackingFunction, validTime, timeoutThresholdTime))
   }
 }
 
