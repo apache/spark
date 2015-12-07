@@ -112,6 +112,7 @@
     <module>repl</module>
     <module>launcher</module>
     <module>external/kafka</module>
+    <module>external/kafka-v09</module>
     <module>external/kafka-assembly</module>
   </modules>
 
