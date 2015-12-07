@@ -61,6 +61,7 @@ private[spark] object YarnProviderUtils extends Logging {
       case Some(value) => value.asInstanceOf[String]
       case None => entityId
     }
+    val version = numberField(en, FIELD_ENTITY_VERSION, 0).longValue
 
     // the spark attempt ID; only unique amongst entities
     val sparkAttemptId = stringFieldOption(en, FIELD_ATTEMPT_ID)
@@ -79,7 +80,8 @@ private[spark] object YarnProviderUtils extends Logging {
       sparkUser,
       completed,
       entityId,
-      sparkAttemptId)
+      sparkAttemptId,
+      version)
 
     // return the single attempt which can be built from this entity
     new TimelineApplicationHistoryInfo(appId, name, attempt :: Nil)
@@ -92,9 +94,9 @@ private[spark] object YarnProviderUtils extends Logging {
    * @return a string description
    */
   def describeApplicationHistoryInfo(info: TimelineApplicationHistoryInfo): String = {
-    val core = s"TimelineApplicationHistoryInfo [${info.id }] ${info.name }"
+    val core = s"TimelineApplicationHistoryInfo [${info.id}] ${info.name}"
     if (info.attempts.isEmpty) {
-      s"$core :  no attempts"
+      s"$core : no attempts"
     } else {
       val attempt = info.attempts.head
       s"$core : " + info.attempts.map(describeAttempt).mkString("[{", "}, {", "}]")
@@ -201,43 +203,40 @@ private[spark] object YarnProviderUtils extends Logging {
   }
 
   /**
-   * Merge two attempt info, including prioritizing the outcome
-   * to completed events, falling back to the latest one.
+   * Compare two entries of information about the same application attempt —and decide which
+   * is the most recent one.
    *
-   * @param a1 attempt 1
-   * @param a2 attempt 2
+   * @param attemp1 attempt 1
+   * @param attempt2 attempt 2
    * @return the preferred outcome
    */
-  def mostRecentAttempt(a1: TimelineApplicationAttemptInfo, a2: TimelineApplicationAttemptInfo):
-  TimelineApplicationAttemptInfo = {
-    if (a2.completed) a2
-    else if (a1.completed) a1
-    else if (a2.lastUpdated >= a1.lastUpdated) a2
-    else a1
-  }
-
-  /**
-   * Sort attempts by age.
-   *
-   * @param a1 attempt 1
-   * @param a2 attempt 2
-   * @return an ordering for lists where oldest comes first
-   */
-  def attemptOlderThan(a1: TimelineApplicationAttemptInfo, a2: TimelineApplicationAttemptInfo)
-    : Boolean = {
-    a1.lastUpdated < a2.lastUpdated
+  def mostRecentAttempt(attemp1: TimelineApplicationAttemptInfo,
+      attempt2: TimelineApplicationAttemptInfo): TimelineApplicationAttemptInfo = {
+    (attemp1, attempt2) match {
+      case (a1, a2) if a1.version > 0 && a2.version > 0 =>
+        // use the version field if set
+        if (a2.version > a2.version) a2 else a1
+      case (a1, a2) if a1.completed => a1
+      case (a1, a2) if a2.completed => a2
+      case (a1, a2) if a2.lastUpdated >= a1.lastUpdated => a2
+      case (a1, _) => a1
+    }
   }
 
   /**
    * Comparator to find which attempt is newer than the other.
    *
-   * @param a1 attempt 1
-   * @param a2 attempt 2
-   * @return an ordering for lists where newest comes first
+   * @param attempt1 attempt 1
+   * @param attempt2 attempt 2
+   * @return true if attempt1 is considered newer than attempt2
    */
-  def attemptNewerThan(a1: TimelineApplicationAttemptInfo, a2: TimelineApplicationAttemptInfo)
-    : Boolean = {
-    !attemptOlderThan(a1, a2)
+  def attemptNewerThan(attempt1: TimelineApplicationAttemptInfo,
+      attempt2: TimelineApplicationAttemptInfo): Boolean = {
+    if (attempt1.version > 0 && attempt2.version > 0) {
+      attempt1.version > attempt2.version
+    } else {
+      attempt1.lastUpdated > attempt2.lastUpdated
+    }
   }
 
   /**
@@ -365,7 +364,7 @@ private[spark] object YarnProviderUtils extends Logging {
    * @return a filtered list containing only those applications which are considered incompleted.
    */
   def findIncompleteApplications(history: Seq[TimelineApplicationHistoryInfo])
-  : Seq[TimelineApplicationHistoryInfo] = {
+    : Seq[TimelineApplicationHistoryInfo] = {
     history.filter(x => !isCompleted(x))
   }
 
@@ -387,7 +386,7 @@ private[spark] object YarnProviderUtils extends Logging {
    * @return the application or `None`
    */
   def findAppById(history: Seq[TimelineApplicationHistoryInfo], id: String)
-  : Option[TimelineApplicationHistoryInfo] = {
+    : Option[TimelineApplicationHistoryInfo] = {
     history.find(_.id == id)
   }
 
