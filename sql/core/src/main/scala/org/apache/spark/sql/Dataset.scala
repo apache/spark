@@ -77,8 +77,10 @@ class Dataset[T] private[sql](
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
     unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
 
-  /** The encoder where the expressions used to construct an object from an input
-   * row have been bound to the ordinals of the given schema */
+  /**
+   * The encoder where the expressions used to construct an object from an input row have been
+   * bound to the ordinals of the given schema.
+   */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
   private implicit def classTag = resolvedTEncoder.clsTag
