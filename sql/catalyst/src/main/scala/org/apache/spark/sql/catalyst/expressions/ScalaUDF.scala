@@ -168,12 +168,12 @@ case class ScalaUDF(
   lazy val outputEncoder: ExpressionEncoder[Row] =
       RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
 
-  override def eval(input: InternalRow): Any = {
-    val reflectedFunc = runtimeMirror(function.getClass.getClassLoader).reflect(function)
-    val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
+  lazy val reflectedFunc = runtimeMirror(function.getClass.getClassLoader).reflect(function)
+  lazy val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
       .asTerm.alternatives
-    val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod)
+  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod)
 
+  override def eval(input: InternalRow): Any = {
     val projected = InternalRow.fromSeq(children.map(_.eval(input)))
     val cRow: Row = inputEncoder.fromRow(projected)
 
