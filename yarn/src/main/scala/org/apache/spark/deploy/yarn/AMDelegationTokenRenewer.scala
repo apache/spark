@@ -52,6 +52,8 @@ private[yarn] class AMDelegationTokenRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration) extends Logging {
 
+  import YarnConfigKeys._
+
   private var lastCredentialsFileSuffix = 0
 
   private val delegationTokenRenewer =
@@ -60,11 +62,9 @@ private[yarn] class AMDelegationTokenRenewer(
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
 
-  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
-  private val daysToKeepFiles =
-    sparkConf.getInt("spark.yarn.credentials.file.retention.days", 5)
-  private val numFilesToKeep =
-    sparkConf.getInt("spark.yarn.credentials.file.retention.count", 5)
+  private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
+  private val daysToKeepFiles = sparkConf.get(CREDENTIALS_FILE_MAX_RETENTION)
+  private val numFilesToKeep = sparkConf.get(CREDENTIAL_FILE_MAX_COUNT)
   private val freshHadoopConf =
     hadoopUtil.getConfBypassingFSCache(hadoopConf, new Path(credentialsFile).toUri.getScheme)
 
@@ -76,8 +76,8 @@ private[yarn] class AMDelegationTokenRenewer(
    *
    */
   private[spark] def scheduleLoginFromKeytab(): Unit = {
-    val principal = sparkConf.get("spark.yarn.principal")
-    val keytab = sparkConf.get("spark.yarn.keytab")
+    val principal = sparkConf.get(PRINCIPAL).get
+    val keytab = sparkConf.get(KEYTAB).get
 
     /**
      * Schedule re-login and creation of new tokens. If tokens have already expired, this method

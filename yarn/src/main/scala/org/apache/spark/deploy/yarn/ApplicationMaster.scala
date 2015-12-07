@@ -46,6 +46,8 @@ private[spark] class ApplicationMaster(
     client: YarnRMClient)
   extends Logging {
 
+  import YarnConfigKeys._
+
   // Load the properties file with the Spark configuration and set entries as system properties,
   // so that user code run inside the AM also has access to them.
   if (args.propertiesFile != null) {
@@ -68,14 +70,14 @@ private[spark] class ApplicationMaster(
   private val maxNumExecutorFailures = {
     val defaultKey =
       if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-        "spark.dynamicAllocation.maxExecutors"
+        DYN_ALLOCATION_MAX_EXECUTORS.key
       } else {
         "spark.executor.instances"
       }
     val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
     val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
 
-    sparkConf.getInt("spark.yarn.max.executor.failures", defaultMaxNumExecutorFailures)
+    sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
   }
 
   @volatile private var exitCode = 0
@@ -96,14 +98,13 @@ private[spark] class ApplicationMaster(
   private val heartbeatInterval = {
     // Ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapses.
     val expiryInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
-    math.max(0, math.min(expiryInterval / 2,
-      sparkConf.getTimeAsMs("spark.yarn.scheduler.heartbeat.interval-ms", "3s")))
+    math.max(0, math.min(expiryInterval / 2, sparkConf.get(RM_HEARTBEAT_INTERVAL)))
   }
 
   // Initial wait interval before allocator poll, to allow for quicker ramp up when executors are
   // being requested.
   private val initialAllocationInterval = math.min(heartbeatInterval,
-    sparkConf.getTimeAsMs("spark.yarn.scheduler.initial-allocation.interval", "200ms"))
+    sparkConf.get(INITIAL_HEARTBEAT_INTERVAL))
 
   // Next wait interval before allocator poll.
   private var nextAllocationInterval = initialAllocationInterval
@@ -178,7 +179,7 @@ private[spark] class ApplicationMaster(
 
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
-      if (sparkConf.contains("spark.yarn.credentials.file")) {
+      if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
         delegationTokenRenewerOption = Some(new AMDelegationTokenRenewer(sparkConf, yarnConf))
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
@@ -275,7 +276,7 @@ private[spark] class ApplicationMaster(
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
-      sparkConf.getOption("spark.yarn.historyServer.address")
+      sparkConf.get(HISTORY_SERVER_ADDRESS)
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
         .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
@@ -356,7 +357,7 @@ private[spark] class ApplicationMaster(
 
   private def launchReporterThread(): Thread = {
     // The number of failures in a row until Reporter thread give up
-    val reporterMaxFailures = sparkConf.getInt("spark.yarn.scheduler.reporterThread.maxFailures", 5)
+    val reporterMaxFailures = sparkConf.get(MAX_REPORTER_THREAD_FAILURES)
 
     val t = new Thread {
       override def run() {
@@ -423,7 +424,7 @@ private[spark] class ApplicationMaster(
   private def cleanupStagingDir(fs: FileSystem) {
     var stagingDirPath: Path = null
     try {
-      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
+      val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
         if (stagingDirPath == null) {
@@ -442,7 +443,7 @@ private[spark] class ApplicationMaster(
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     sparkContextRef.synchronized {
-      val totalWaitTime = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
+      val totalWaitTime = sparkConf.get(AM_MAX_WAIT_TIME)
       val deadline = System.currentTimeMillis() + totalWaitTime
 
       while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
@@ -467,7 +468,7 @@ private[spark] class ApplicationMaster(
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    val totalWaitTimeMs = sparkConf.getTimeAsMs("spark.yarn.am.waitTime", "100s")
+    val totalWaitTimeMs = sparkConf.get(AM_MAX_WAIT_TIME)
     val deadline = System.currentTimeMillis + totalWaitTimeMs
 
     while (!driverUp && !finished && System.currentTimeMillis < deadline) {

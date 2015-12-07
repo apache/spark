@@ -85,7 +85,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val resource: Resource) {
 
   // Number of CPUs per task
-  private val CPUS_PER_TASK = sparkConf.getInt("spark.task.cpus", 1)
+  private val CPUS_PER_TASK = sparkConf.get(YarnConfigKeys.CPUS_PER_TASK)
 
   /**
    * Calculate each container's node locality and rack locality

@@ -43,6 +43,8 @@ import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
+  import YarnConfigKeys._
+
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")
   }
@@ -91,8 +93,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
 
   test("Local jar URIs") {
     val conf = new Configuration()
-    val sparkConf = new SparkConf().set(Client.CONF_SPARK_JAR, SPARK)
-      .set("spark.yarn.user.classpath.first", "true")
+    val sparkConf = new SparkConf()
+      .set(SPARK_JAR, SPARK)
+      .set(USER_CLASS_PATH_FIRST, true)
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
@@ -117,13 +120,13 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
       }
     cp should contain(pwdVar)
     cp should contain (s"$pwdVar${Path.SEPARATOR}${Client.LOCALIZED_CONF_DIR}")
-    cp should not contain (Client.SPARK_JAR)
-    cp should not contain (Client.APP_JAR)
+    cp should not contain (Client.SPARK_JAR_NAME)
+    cp should not contain (Client.APP_JAR_NAME)
   }
 
   test("Jar path propagation through SparkConf") {
     val conf = new Configuration()
-    val sparkConf = new SparkConf().set(Client.CONF_SPARK_JAR, SPARK)
+    val sparkConf = new SparkConf().set(SPARK_JAR, SPARK)
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
     val client = spy(new Client(args, conf, sparkConf))
@@ -133,7 +136,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     val tempDir = Utils.createTempDir()
     try {
       client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
-      sparkConf.getOption(Client.CONF_SPARK_USER_JAR) should be (Some(USER))
+      sparkConf.get(APP_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
       // staging dir.
@@ -148,7 +151,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
         })
         .mkString(",")
 
-      sparkConf.getOption(Client.CONF_SPARK_YARN_SECONDARY_JARS) should be (Some(expected))
+      sparkConf.get(SECONDARY_JARS) should be (Some(expected.split(",").toSeq))
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -157,9 +160,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
   test("Cluster path translation") {
     val conf = new Configuration()
     val sparkConf = new SparkConf()
-      .set(Client.CONF_SPARK_JAR, "local:/localPath/spark.jar")
-      .set("spark.yarn.config.gatewayPath", "/localPath")
-      .set("spark.yarn.config.replacementPath", "/remotePath")
+      .set(SPARK_JAR.key, "local:/localPath/spark.jar")
+      .set(GATEWAY_ROOT_PATH, "/localPath")
+      .set(REPLACEMENT_ROOT_PATH, "/remotePath")
 
     Client.getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
     Client.getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
@@ -179,8 +182,8 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
     // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
     // may not be removed depending on the version of Hadoop being used.
     val sparkConf = new SparkConf()
-      .set(Client.CONF_SPARK_YARN_APPLICATION_TAGS, ",tag1, dup,tag2 , ,multi word , dup")
-      .set("spark.yarn.maxAppAttempts", "42")
+      .set(APPLICATION_TAGS.key, ",tag1, dup,tag2 , ,multi word , dup")
+      .set(MAX_APP_ATTEMPTS, 42)
     val args = new ClientArguments(Array(
       "--name", "foo-test-app",
       "--queue", "staging-queue"), sparkConf)

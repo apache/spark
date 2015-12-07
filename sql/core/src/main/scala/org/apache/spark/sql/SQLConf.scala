@@ -24,6 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkConf.ConfEntry
 import org.apache.spark.sql.catalyst.CatalystConf
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,157 +36,81 @@ import org.apache.spark.sql.catalyst.CatalystConf
 private[spark] object SQLConf {
 
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, SQLConfEntry[_]]())
+    new java.util.HashMap[String, ConfEntry[_]]())
 
-  /**
-   * An entry contains all meta information for a configuration.
-   *
-   * @param key the key for the configuration
-   * @param defaultValue the default value for the configuration
-   * @param valueConverter how to convert a string to the value. It should throw an exception if the
-   *                       string does not have the required format.
-   * @param stringConverter how to convert a value to a string that the user can use it as a valid
-   *                        string value. It's usually `toString`. But sometimes, a custom converter
-   *                        is necessary. E.g., if T is List[String], `a, b, c` is better than
-   *                        `List(a, b, c)`.
-   * @param doc the document for the configuration
-   * @param isPublic if this configuration is public to the user. If it's `false`, this
-   *                 configuration is only used internally and we should not expose it to the user.
-   * @tparam T the value type
-   */
-  private[sql] class SQLConfEntry[T] private(
-      val key: String,
-      val defaultValue: Option[T],
-      val valueConverter: String => T,
-      val stringConverter: T => String,
-      val doc: String,
-      val isPublic: Boolean) {
-
-    def defaultValueString: String = defaultValue.map(stringConverter).getOrElse("<undefined>")
-
-    override def toString: String = {
-      s"SQLConfEntry(key = $key, defaultValue=$defaultValueString, doc=$doc, isPublic = $isPublic)"
-    }
+  private def register[T](entry: ConfEntry[T]): ConfEntry[T] = sqlConfEntries.synchronized {
+    require(!sqlConfEntries.containsKey(entry.key),
+      s"Duplicate SQLConfEntry. ${entry.key} has been registered")
+    sqlConfEntries.put(entry.key, entry)
+    entry
   }
 
-  private[sql] object SQLConfEntry {
+  private[sql] def intConf(
+      key: String,
+      defaultValue: Option[Int] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Int] =
+    register(SparkConf.intConf(key, defaultValue = defaultValue, doc = doc, isPublic = isPublic))
 
-    private def apply[T](
-          key: String,
-          defaultValue: Option[T],
-          valueConverter: String => T,
-          stringConverter: T => String,
-          doc: String,
-          isPublic: Boolean): SQLConfEntry[T] =
-      sqlConfEntries.synchronized {
-        if (sqlConfEntries.containsKey(key)) {
-          throw new IllegalArgumentException(s"Duplicate SQLConfEntry. $key has been registered")
-        }
-        val entry =
-          new SQLConfEntry[T](key, defaultValue, valueConverter, stringConverter, doc, isPublic)
-        sqlConfEntries.put(key, entry)
-        entry
-      }
+  private[sql] def longConf(
+      key: String,
+      defaultValue: Option[Long] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Long] =
+    register(SparkConf.longConf(key, defaultValue = defaultValue, doc = doc, isPublic = isPublic))
 
-    def intConf(
-          key: String,
-          defaultValue: Option[Int] = None,
-          doc: String = "",
-          isPublic: Boolean = true): SQLConfEntry[Int] =
-      SQLConfEntry(key, defaultValue, { v =>
-        try {
-          v.toInt
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be int, but was $v")
-        }
-      }, _.toString, doc, isPublic)
+  private[sql] def doubleConf(
+      key: String,
+      defaultValue: Option[Double] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Double] =
+    register(SparkConf.doubleConf(key, defaultValue = defaultValue, doc = doc, isPublic = isPublic))
 
-    def longConf(
-        key: String,
-        defaultValue: Option[Long] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Long] =
-      SQLConfEntry(key, defaultValue, { v =>
-        try {
-          v.toLong
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be long, but was $v")
-        }
-      }, _.toString, doc, isPublic)
-
-    def doubleConf(
-        key: String,
-        defaultValue: Option[Double] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Double] =
-      SQLConfEntry(key, defaultValue, { v =>
-        try {
-          v.toDouble
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalArgumentException(s"$key should be double, but was $v")
-        }
-      }, _.toString, doc, isPublic)
-
-    def booleanConf(
-        key: String,
-        defaultValue: Option[Boolean] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Boolean] =
-      SQLConfEntry(key, defaultValue, { v =>
-        try {
-          v.toBoolean
-        } catch {
-          case _: IllegalArgumentException =>
-            throw new IllegalArgumentException(s"$key should be boolean, but was $v")
-        }
-      }, _.toString, doc, isPublic)
-
-    def stringConf(
-        key: String,
-        defaultValue: Option[String] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[String] =
-      SQLConfEntry(key, defaultValue, v => v, v => v, doc, isPublic)
-
-    def enumConf[T](
-        key: String,
-        valueConverter: String => T,
-        validValues: Set[T],
-        defaultValue: Option[T] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[T] =
-      SQLConfEntry(key, defaultValue, v => {
-        val _v = valueConverter(v)
-        if (!validValues.contains(_v)) {
-          throw new IllegalArgumentException(
-            s"The value of $key should be one of ${validValues.mkString(", ")}, but was $v")
-        }
-        _v
-      }, _.toString, doc, isPublic)
-
-    def seqConf[T](
-        key: String,
-        valueConverter: String => T,
-        defaultValue: Option[Seq[T]] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Seq[T]] = {
-      SQLConfEntry(
-        key, defaultValue, _.split(",").map(valueConverter), _.mkString(","), doc, isPublic)
-    }
-
-    def stringSeqConf(
-        key: String,
-        defaultValue: Option[Seq[String]] = None,
-        doc: String = "",
-        isPublic: Boolean = true): SQLConfEntry[Seq[String]] = {
-      seqConf(key, s => s, defaultValue, doc, isPublic)
-    }
+  private[sql] def booleanConf(
+      key: String,
+      defaultValue: Option[Boolean] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Boolean] = {
+    register(SparkConf.booleanConf(key, defaultValue = defaultValue, doc = doc,
+     isPublic = isPublic))
   }
 
-  import SQLConfEntry._
+  private[sql] def stringConf(
+      key: String,
+      defaultValue: Option[String] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[String] =
+    register(SparkConf.stringConf(key, defaultValue = defaultValue, doc = doc, isPublic = isPublic))
+
+  private[sql] def enumConf[T](
+      key: String,
+      valueConverter: String => T,
+      validValues: Set[T],
+      defaultValue: Option[T] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[T] = {
+    register(SparkConf.enumConf(key, valueConverter, validValues, defaultValue = defaultValue,
+      doc = doc, isPublic = isPublic))
+  }
+
+  private[sql] def seqConf[T](
+      key: String,
+      valueConverter: String => T,
+      defaultValue: Option[Seq[T]] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Seq[T]] = {
+    register(SparkConf.seqConf(key, valueConverter, defaultValue = defaultValue, doc = doc,
+      isPublic = isPublic))
+  }
+
+  private[sql] def stringSeqConf(
+      key: String,
+      defaultValue: Option[Seq[String]] = None,
+      doc: String = "",
+      isPublic: Boolean = true): ConfEntry[Seq[String]] = {
+    register(SparkConf.stringSeqConf(key, defaultValue = defaultValue, doc = doc,
+      isPublic = isPublic))
+  }
 
   val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
     defaultValue = Some(true),
@@ -482,6 +408,7 @@ private[spark] object SQLConf {
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
 private[sql] class SQLConf extends Serializable with CatalystConf {
+  import SparkConf._
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -602,7 +529,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
   }
 
   /** Set the given Spark SQL configuration property. */
-  def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  def setConf[T](entry: ConfEntry[T], value: T): Unit = {
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
@@ -621,19 +548,19 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfEntry is not the
    * desired one.
    */
-  def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+  def getConf[T](entry: ConfEntry[T], defaultValue: T): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[SQLConfEntry]].
+   * yet, return `defaultValue` in [[ConfEntry]].
    */
-  def getConf[T](entry: SQLConfEntry[T]): T = {
+  def getConf[T](entry: ConfEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
       getOrElse(throw new NoSuchElementException(entry.key))
@@ -673,7 +600,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     settings.remove(key)
   }
 
-  private[spark] def unsetConf(entry: SQLConfEntry[_]): Unit = {
+  private[spark] def unsetConf(entry: ConfEntry[_]): Unit = {
     settings.remove(entry.key)
   }
 
