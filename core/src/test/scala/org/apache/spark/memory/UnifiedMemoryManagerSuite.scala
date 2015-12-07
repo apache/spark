@@ -152,7 +152,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(evictedBlocks.isEmpty)
   }
 
-  test("execution can evict storage blocks when storage memory is below max mem (SPARK-12155)") {
+  test("execution can evict storage blocks when storage memory is below max mem (SPARK-12165)") {
     val maxMemory = 1000L
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
