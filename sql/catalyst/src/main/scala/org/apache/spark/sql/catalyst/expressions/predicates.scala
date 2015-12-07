@@ -65,6 +65,20 @@ trait PredicateHelper {
     }
   }
 
+  /**
+   * Returns true if two expressions are equivalent predicates. Equality check is tolerant of
+   * ordering different.
+   */
+  def equivalentPredicates(left: Expression, right: Expression): Boolean = {
+    val leftAndPredicates = splitConjunctivePredicates(left).toSet
+    val rightAndPredicates = splitConjunctivePredicates(right).toSet
+    val leftOrPredicates = splitDisjunctivePredicates(left).toSet
+    val rightOrPredicates = splitDisjunctivePredicates(right).toSet
+    // We split the two conditions into conjunctive predicates and disjunctive predicates
+    // If either of them match, we consider them equivalent conditions
+    (leftAndPredicates == rightAndPredicates) || (leftOrPredicates == rightOrPredicates)
+  }
+
   // Substitute any known alias from a map.
   protected def replaceAlias(
       condition: Expression,

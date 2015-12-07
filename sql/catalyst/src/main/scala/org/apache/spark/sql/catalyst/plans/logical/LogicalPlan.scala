@@ -129,29 +129,12 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
         s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
       (cleanRight.cleanArgs == cleanLeft.cleanArgs) || ((cleanLeft, cleanRight) match {
         case (l: Filter, r: Filter) =>
-          equivalentConditions(cleanExpression(l.condition, l.children.flatMap(_.output)),
+          equivalentPredicates(cleanExpression(l.condition, l.children.flatMap(_.output)),
             cleanExpression(r.condition, r.children.flatMap(_.output)))
         case _ => false
       })
     } &&
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
-  }
-
-  /**
-   * Returns true if two conditions are equivalent. Equality check is tolerant of ordering
-   * different.
-   */
-  def equivalentConditions(left: Expression, right: Expression): Boolean = {
-    logDebug(s"equivalentConditions: [${left.toString}] with [${right.toString}]")
-
-    val leftAndPredicates = splitConjunctivePredicates(left).toSet
-    val rightAndPredicates = splitConjunctivePredicates(right).toSet
-    val leftOrPredicates = splitDisjunctivePredicates(left).toSet
-    val rightOrPredicates = splitDisjunctivePredicates(right).toSet
-    logDebug(s"equivalentConditions Result: [${leftAndPredicates == rightAndPredicates}]")
-    // We split the two conditions into conjunctive predicates and disjunctive predicates
-    // If either of them match, we consider them equivalent conditions
-    (leftAndPredicates == rightAndPredicates) || (leftOrPredicates == rightOrPredicates)
   }
 
   /** Clean an expression so that differences in expression id should not affect equality */
