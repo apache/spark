@@ -604,10 +604,11 @@ private[spark] class BlockManager(
 
       if (data != null) {
         if (asBlockResult) {
+          val dataSize = data.remaining()
           return Some(new BlockResult(
             dataDeserialize(blockId, data),
             DataReadMethod.Network,
-            data.remaining()))
+            dataSize))
         } else {
           return Some(data)
         }
