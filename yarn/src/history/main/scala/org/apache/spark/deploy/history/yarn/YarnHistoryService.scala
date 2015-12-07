@@ -1242,7 +1242,14 @@ private[spark] object YarnHistoryService {
   val FIELD_ATTEMPT_ID = "attemptId"
 
   /**
-   * Entity `OTHER_INFO` field: SPARK version
+   * Entity `OTHER_INFO` field: a counter which is incremented whenever a new timeline entity
+   * is created in this JVM (hence, attempt). It can be used to compare versions of the
+   * current entity with any cached copy -it is less brittle than using timestamps.
+   */
+  val FIELD_ENTITY_VERSION = "entityCreateCounter"
+
+  /**
+   * Entity `OTHER_INFO` field: Spark version
    */
   val FIELD_SPARK_VERSION = "sparkVersion"
 
