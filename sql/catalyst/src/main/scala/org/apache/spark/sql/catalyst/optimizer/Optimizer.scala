@@ -18,14 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.FullOuter
-import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.RightOuter
-import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -44,6 +42,7 @@ object DefaultOptimizer extends Optimizer {
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
+      ReorderJoin,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -708,6 +707,53 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
       } else {
         filter
       }
+  }
+}
+
+/**
+  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
+  * one condition.
+  *
+  * The order of joins will not be changed if all of them already have at least one condition.
+  */
+object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
+
+  /**
+    * Join a list of plans together and push down the conditions into them.
+    *
+    * The joined plan are picked from left to right, prefer those has at least one join condition.
+    *
+    * @param input a list of LogicalPlans to join.
+    * @param conditions a list of condition for join.
+    */
+  def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
+    assert(input.size >= 2)
+    if (input.size == 2) {
+      Join(input(0), input(1), Inner, conditions.reduceLeftOption(And))
+    } else {
+      val left :: rest = input.toList
+      // find out the first join that have at least one join condition
+      val conditionalJoin = rest.find { plan =>
+        val refs = left.outputSet ++ plan.outputSet
+        conditions.filterNot(canEvaluate(_, left)).filterNot(canEvaluate(_, plan))
+          .exists(_.references.subsetOf(refs))
+      }
+      // pick the next one if no condition left
+      val right = conditionalJoin.getOrElse(rest.head)
+
+      val joinedRefs = left.outputSet ++ right.outputSet
+      val (joinConditions, others) = conditions.partition(_.references.subsetOf(joinedRefs))
+      val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
+
+      // should not have reference to same logical plan
+      createOrderedJoin(Seq(joined) ++ rest.filterNot(_ eq right), others)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case j @ ExtractFiltersAndInnerJoins(input, conditions)
+        if input.size > 2 && conditions.nonEmpty =>
+      createOrderedJoin(input, conditions)
   }
 }
 
