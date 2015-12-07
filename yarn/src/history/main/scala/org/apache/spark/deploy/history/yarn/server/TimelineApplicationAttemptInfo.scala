@@ -41,8 +41,9 @@ private[spark] class TimelineApplicationAttemptInfo(
     sparkUser: String,
     completed: Boolean,
     val entityId: String,
-    val sparkAttemptId: Option[String]
-    ) extends ApplicationAttemptInfo(attemptId,
+    val sparkAttemptId: Option[String],
+    val version: Long = 0)
+    extends ApplicationAttemptInfo(attemptId,
   startTime,
   endTime,
   lastUpdated,
@@ -56,14 +57,16 @@ private[spark] class TimelineApplicationAttemptInfo(
    */
   override def toString: String = {
     val never = "-"
-
-    s"attemptId $attemptId" +
-      s" attemptId $entityId," +
-      s" sparkAttemptId $sparkAttemptId," +
-      s" started ${timeShort(startTime, never)}," +
-      s" ended ${timeShort(endTime, never)}" +
-      s" updated ${timeShort(lastUpdated, never)}" +
-      s" completed = $completed"
+    s"""
+       | attemptId $attemptId,
+       | completed = $completed",
+       | sparkAttemptId $sparkAttemptId,
+       | started ${timeShort(startTime, never)},
+       | ended ${timeShort(endTime, never)},
+       | updated ${timeShort(lastUpdated, never)},
+       | sparkUser = $sparkUser",
+       | version = $version",
+     """.stripMargin
   }
 
 }
