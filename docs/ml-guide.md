@@ -955,22 +955,15 @@ model.transform(test)
 
 ## Example: Saving and Loading a Previously Created Model Pipeline
 
-Often times it is worth it to save a model to disk for usage later. In Spark 1.6, similar model import/export functionality was added to the Pipeline API. All basic transformers are now supports as well as several Spark ML methods. Below is a list of the currently supported models.
+Often times it is worth it to save a model to disk for usage later. In Spark 1.6, similar model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML Models such as:
 
-* AFTSurvivalRegression
-* IsotonicRegression
-* LDA
 * K-Means
 * Naive Bayes
 * ALS
 * Linear Regression
 * Logistic Regression
-* Decision Tree Classifiers and Regressors
-* RFormulas
-* Multilayer Perceptrons
 
-
-Below is an example of how a pipeline can be persisted and loaded. We are using one of the pipelines from the previous example to do so.
+Below is an example of how a pipeline can be persisted and loaded. This example uses a model that we trained and created above.
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.ml.Pipeline
@@ -981,47 +974,48 @@ import org.apache.spark.sql.Row
 
 // Prepare training documents from a list of (id, text, label) tuples.
 val training = sqlContext.createDataFrame(Seq(
-(0L, "a b c d e spark", 1.0),
-(1L, "b d", 0.0),
-(2L, "spark f g h", 1.0),
-(3L, "hadoop mapreduce", 0.0)
+  (0L, "a b c d e spark", 1.0),
+  (1L, "b d", 0.0),
+  (2L, "spark f g h", 1.0),
+  (3L, "hadoop mapreduce", 0.0)
 )).toDF("id", "text", "label")
 
 // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
 val tokenizer = new Tokenizer()
-.setInputCol("text")
-.setOutputCol("words")
+  .setInputCol("text")
+  .setOutputCol("words")
 val hashingTF = new HashingTF()
-.setNumFeatures(1000)
-.setInputCol(tokenizer.getOutputCol)
-.setOutputCol("features")
+  .setNumFeatures(1000)
+  .setInputCol(tokenizer.getOutputCol)
+  .setOutputCol("features")
 val lr = new LogisticRegression()
-.setMaxIter(10)
-.setRegParam(0.01)
+  .setMaxIter(10)
+  .setRegParam(0.01)
+
 val pipeline = new Pipeline()
-.setStages(Array(tokenizer, hashingTF, lr))
+  .setStages(Array(tokenizer, hashingTF, lr))
 
 val model = pipeline.fit(training)
 model.save("/tmp/spark-logistic-regression-model")
 
-// to load in the model
+// load in the model
 val loadedModel = Pipeline.load("/tmp/spark-logistic-regression-model")
 // or equivalently
-Pipeline.read.load("/tmp/spark-logistic-regression-model")
+val loadedModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
+
 val test = sqlContext.createDataFrame(Seq(
-(4L, "spark i j k"),
-(5L, "l m n"),
-(6L, "mapreduce spark"),
-(7L, "apache hadoop")
+  (4L, "spark i j k"),
+  (5L, "l m n"),
+  (6L, "mapreduce spark"),
+  (7L, "apache hadoop")
 )).toDF("id", "text")
 
 // Make predictions on test documents.
 loadedModel.transform(test)
-.select("id", "text", "probability", "prediction")
-.collect()
-.foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+  .select("id", "text", "probability", "prediction")
+  .collect()
+  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
 {% endhighlight %}
-</div>
 </div>
