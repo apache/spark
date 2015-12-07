@@ -490,39 +490,18 @@ class DataFrame private[sql](
    * there is no way to disambiguate which side of the join you would like to reference.
    *
    * @param right Right side of the join operation.
+   * @param left Left side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   * @param suffixes Suffixes will be added to column names if they aren't present
-   *                 in join condition and repeat. The first element in the tuple is
-   *                 the suffix for the left and the second element for the right dataframes.
    * @group dfops
    * @since 1.6.0
    */
-  def join(right: DataFrame, usingColumns: Seq[String], joinType: String,
-           suffixes: (String, String) = ("_x", "_y")): DataFrame = {
-    val nonJoinedLeftCols = this.columns.filterNot(col => usingColumns.contains(col))
-    val nonJoinedRightCols = right.columns.filterNot(col => usingColumns.contains(col))
-
-    // Retrieves columns with the same name which aren't used in join condition but have the
-    // same name in both dataframes
-    val intersectedNonJoinCols = nonJoinedLeftCols.intersect(nonJoinedRightCols)
-
-    // In case the same column names have been used for both dataframes, alias column names
-    // with corresponding. Suffixes will be created for dataframes in order to avoid repeated
-    // column names in resulting dataframe
-    val (leftDF, rightDF) =
-      if (intersectedNonJoinCols.size > 0) {
-        val leftCols = createAliasesForIntersectedCols(this, intersectedNonJoinCols, suffixes._1)
-        val rightCols = createAliasesForIntersectedCols(right, intersectedNonJoinCols, suffixes._2)
-        (this.select(leftCols: _*), right.select(rightCols: _*))
-      } else {
-        (this, right)
-      }
-
+  private[sql] def join(right: DataFrame, left: DataFrame, usingColumns: Seq[String],
+           joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
-    val joined = sqlContext.executePlan(Join(leftDF.logicalPlan,
-      rightDF.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
+    val joined = sqlContext.executePlan(Join(left.logicalPlan,
+      right.logicalPlan, joinType = Inner, None)).analyzed.asInstanceOf[Join]
 
     // Project only one of the join columns.
     val joinedCols = usingColumns.map(col => withPlan(joined.right).resolve(col))
@@ -544,6 +523,67 @@ class DataFrame private[sql](
           condition)
       )
     }
+  }
+
+  /**
+   * Equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @param suffixes Suffixes will be added to column names if they aren't present
+   *                 in join condition and repeat. The first element in the tuple is
+   *                 the suffix for the left and the second element for the right dataframes.
+   * @group dfops
+   * @since 1.6.0
+   */
+  def join(right: DataFrame, usingColumns: Seq[String], joinType: String,
+           suffixes: (String, String)): DataFrame = {
+    val nonJoinedLeftCols = this.columns.filterNot(col => usingColumns.contains(col))
+    val nonJoinedRightCols = right.columns.filterNot(col => usingColumns.contains(col))
+
+    // Retrieves columns with the same name which aren't used in join condition but have the
+    // same name in both dataframes
+    val intersectedNonJoinCols = nonJoinedLeftCols.intersect(nonJoinedRightCols)
+
+    // In case the same column names have been used for both dataframes, alias column names
+    // with corresponding. Suffixes will be created for dataframes in order to avoid repeated
+    // column names in resulting dataframe
+    val (leftDF, rightDF) =
+      if (intersectedNonJoinCols.size > 0) {
+        val leftCols = createAliasesForIntersectedCols(this, intersectedNonJoinCols, suffixes._1)
+        val rightCols = createAliasesForIntersectedCols(right, intersectedNonJoinCols, suffixes._2)
+        (this.select(leftCols: _*), right.select(rightCols: _*))
+      } else {
+        (this, right)
+      }
+    join(rightDF, leftDF, usingColumns, joinType)
+  }
+
+/**
+   * Equi-join with another [[DataFrame]] using the given columns.
+   *
+   * Different from other join functions, the join columns will only appear once in the output,
+   * i.e. similar to SQL's `JOIN USING` syntax.
+   *
+   * Note that if you perform a self-join using this function without aliasing the input
+   * [[DataFrame]]s, you will NOT be able to reference any columns after the join, since
+   * there is no way to disambiguate which side of the join you would like to reference.
+   *
+   * @param right Right side of the join operation.
+   * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @since 1.6.0
+   */
+  def join(right: DataFrame, usingColumns: Seq[String], joinType: String): DataFrame = {
+    join(right, usingColumns, joinType, ("_x", "_y"))
   }
 
   /**
