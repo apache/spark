@@ -17,16 +17,13 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.mockito.Mockito.when
 
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore, TestBlockId}
+import org.apache.spark.storage.{MemoryStore, TestBlockId}
 
 class StaticMemoryManagerSuite extends MemoryManagerSuite {
   private val conf = new SparkConf().set("spark.storage.unrollFraction", "0.4")
-  private val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
   /**
    * Make a [[StaticMemoryManager]] and a [[MemoryStore]] with limited class dependencies.
