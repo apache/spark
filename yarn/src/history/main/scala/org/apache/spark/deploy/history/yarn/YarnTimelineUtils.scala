@@ -67,11 +67,18 @@ private[spark] object YarnTimelineUtils extends Logging {
   val E_EMPTY_EVENTINFO = "Empty 'eventinfo' entry"
 
   /**
-   * counter incremented on every spark event to timeline event creation,
+   * Counter incremented on every spark event to timeline event creation,
    * so guaranteeing uniqueness of event IDs across a single application attempt
    * (which is implicitly, one per JVM).
    */
-  val uid = new AtomicLong(System.currentTimeMillis())
+  val eventCreateCounter = new AtomicLong(System.currentTimeMillis())
+
+  /**
+   * A counter incremented every time a new entity is created. This is included as an "other"
+   * field in the entity information -so can be used as a probe to determine if the entity
+   * has been updated since a previous check.
+   */
+  val entityVersionCounter = new AtomicLong(1)
 
   /**
    * Converts a Java object to its equivalent json4s representation.
@@ -173,7 +180,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     try {
       val tlEvent = new TimelineEvent()
       tlEvent.setEventType(Utils.getFormattedClassName(event)
-          + "-" + YarnTimelineUtils.uid.incrementAndGet.toString)
+          + "-" + eventCreateCounter.incrementAndGet.toString)
       tlEvent.setTimestamp(timestamp)
       val kvMap = new JHashMap[String, Object]()
       val json = JsonProtocol.sparkEventToJson(event)
@@ -198,9 +205,8 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @return a description
    */
   def describeEvent(event: TimelineEvent): String = {
-    val sparkEventDetails = try { {
+    val sparkEventDetails = try {
       toSparkEvent(event).toString
-    }
     } catch {
       case _: MappingException =>
        "(cannot convert event details to spark exception)"
@@ -681,6 +687,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     entity.addOtherInfo(FIELD_APP_NAME, appName)
     entity.addOtherInfo(FIELD_APP_USER, userName)
     entity.addOtherInfo(FIELD_SPARK_VERSION, spark.SPARK_VERSION)
+    entity.addOtherInfo(FIELD_ENTITY_VERSION, entityVersionCounter.getAndIncrement().toString)
     started(entity, startTime)
     if (endTime != 0) {
       entity.addPrimaryFilter(FILTER_APP_END, FILTER_APP_END_VALUE)
