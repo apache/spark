@@ -27,6 +27,11 @@ checkStructField <- function(actual, expectedName, expectedType, expectedNullabl
   expect_equal(actual$nullable(), expectedNullable)
 }
 
+markUtf8 <- function(s) {
+  Encoding(s) <- "UTF-8"
+  s
+}
+
 # Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
@@ -72,6 +77,8 @@ test_that("infer types and check types", {
   expect_equal(infer_type(e), "map<string,integer>")
 
   expect_error(checkType("map<integer,integer>"), "Key type in a map must be string or character")
+
+  expect_equal(infer_type(as.raw(c(1, 2, 3))), "binary")
 })
 
 test_that("structType and structField", {
@@ -250,6 +257,10 @@ test_that("create DataFrame from list or data.frame", {
 
   mtcarsdf <- createDataFrame(sqlContext, mtcars)
   expect_equivalent(collect(mtcarsdf), mtcars)
+
+  bytes <- as.raw(c(1, 2, 3))
+  df <- createDataFrame(sqlContext, list(list(bytes)))
+  expect_equal(collect(df)[[1]][[1]], bytes)
 })
 
 test_that("create DataFrame with different data types", {
@@ -524,6 +535,11 @@ test_that("collect() returns a data.frame", {
   expect_equal(names(rdf)[1], "age")
   expect_equal(nrow(rdf), 0)
   expect_equal(ncol(rdf), 2)
+
+  # collect() correctly handles multiple columns with same name
+  df <- createDataFrame(sqlContext, list(list(1, 2)), schema = c("name", "name"))
+  ldf <- collect(df)
+  expect_equal(names(ldf), c("name", "name"))
 })
 
 test_that("limit() returns DataFrame with the correct number of rows", {
@@ -540,11 +556,6 @@ test_that("collect() and take() on a DataFrame return the same number of rows an
 })
 
 test_that("collect() support Unicode characters", {
-  markUtf8 <- function(s) {
-    Encoding(s) <- "UTF-8"
-    s
-  }
-
   lines <- c("{\"name\":\"안녕하세요\"}",
              "{\"name\":\"您好\", \"age\":30}",
              "{\"name\":\"こんにちは\", \"age\":19}",
@@ -620,6 +631,26 @@ test_that("schema(), dtypes(), columns(), names() return the correct values/form
   testNames <- names(df)
   expect_equal(length(testNames), 2)
   expect_equal(testNames[2], "name")
+})
+
+test_that("names() colnames() set the column names", {
+  df <- jsonFile(sqlContext, jsonPath)
+  names(df) <- c("col1", "col2")
+  expect_equal(colnames(df)[2], "col2")
+
+  colnames(df) <- c("col3", "col4")
+  expect_equal(names(df)[1], "col3")
+
+  # Test base::colnames base::names
+  m2 <- cbind(1, 1:4)
+  expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
+  colnames(m2) <- c("x","Y")
+  expect_equal(colnames(m2), c("x", "Y"))
+
+  z <- list(a = 1, b = "c", c = 1:3)
+  expect_equal(names(z)[3], "c")
+  names(z)[3] <- "c2"
+  expect_equal(names(z)[3], "c2")
 })
 
 test_that("head() and first() return the correct data", {
@@ -852,7 +883,7 @@ test_that("column functions", {
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
   c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
-  c5 <- hour(c) + initcap(c) + isNaN(c) + last(c) + last_day(c) + length(c)
+  c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
   c7 <- mean(c) + min(c) + month(c) + negate(c) + quarter(c)
   c8 <- reverse(c) + rint(c) + round(c) + rtrim(c) + sha1(c)
@@ -861,8 +892,12 @@ test_that("column functions", {
   c11 <- to_date(c) + trim(c) + unbase64(c) + unhex(c) + upper(c)
   c12 <- variance(c)
   c13 <- lead("col", 1) + lead(c, 1) + lag("col", 1) + lag(c, 1)
-  c14 <- cumeDist() + ntile(1)
-  c15 <- denseRank() + percentRank() + rank() + rowNumber()
+  c14 <- cume_dist() + ntile(1) + corr(c, c1)
+  c15 <- dense_rank() + percent_rank() + rank() + row_number()
+  c16 <- is.nan(c) + isnan(c) + isNaN(c)
+
+  # Test if base::is.nan() is exposed
+  expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
 
   # Test if base::rank() is exposed
   expect_equal(class(rank())[[1]], "Column")
@@ -880,14 +915,15 @@ test_that("column functions", {
   expect_equal(collect(df3)[[2, 1]], FALSE)
   expect_equal(collect(df3)[[3, 1]], TRUE)
 
+  df4 <- select(df, countDistinct(df$age, df$name))
+  expect_equal(collect(df4)[[1, 1]], 2)
+
   expect_equal(collect(select(df, sum(df$age)))[1, 1], 49)
-
   expect_true(abs(collect(select(df, stddev(df$age)))[1, 1] - 7.778175) < 1e-6)
-
   expect_equal(collect(select(df, var_pop(df$age)))[1, 1], 30.25)
 
-  df4 <- createDataFrame(sqlContext, list(list(a = "010101")))
-  expect_equal(collect(select(df4, conv(df4$a, 2, 16)))[1, 1], "15")
+  df5 <- createDataFrame(sqlContext, list(list(a = "010101")))
+  expect_equal(collect(select(df5, conv(df5$a, 2, 16)))[1, 1], "15")
 
   # Test array_contains() and sort_array()
   df <- createDataFrame(sqlContext, list(list(list(1L, 2L, 3L)), list(list(6L, 5L, 4L))))
@@ -901,8 +937,33 @@ test_that("column functions", {
 
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
+
+  # Test struct()
+  df <- createDataFrame(sqlContext,
+                        list(list(1L, 2L, 3L), list(4L, 5L, 6L)),
+                        schema = c("a", "b", "c"))
+  result <- collect(select(df, struct("a", "c")))
+  expected <- data.frame(row.names = 1:2)
+  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+                                 listToStruct(list(a = 4L, c = 6L)))
+  expect_equal(result, expected)
+
+  result <- collect(select(df, struct(df$a, df$b)))
+  expected <- data.frame(row.names = 1:2)
+  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+                                 listToStruct(list(a = 4L, b = 5L)))
+  expect_equal(result, expected)
+
+  # Test encode(), decode()
+  bytes <- as.raw(c(0xe5, 0xa4, 0xa7, 0xe5, 0x8d, 0x83, 0xe4, 0xb8, 0x96, 0xe7, 0x95, 0x8c))
+  df <- createDataFrame(sqlContext,
+                        list(list(markUtf8("大千世界"), "utf-8", bytes)),
+                        schema = c("a", "b", "c"))
+  result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
+  expect_equal(result[[1]][[1]], bytes)
+  expect_equal(result[[2]], markUtf8("大千世界"))
 })
-#
+
 test_that("column binary mathfunctions", {
   lines <- c("{\"a\":1, \"b\":5}",
              "{\"a\":2, \"b\":6}",
@@ -1170,6 +1231,7 @@ test_that("join() and merge() on a DataFrame", {
   joined <- join(df, df2)
   expect_equal(names(joined), c("age", "name", "name", "test"))
   expect_equal(count(joined), 12)
+  expect_equal(names(collect(joined)), c("age", "name", "name", "test"))
 
   joined2 <- join(df, df2, df$name == df2$name)
   expect_equal(names(joined2), c("age", "name", "name", "test"))
@@ -1616,7 +1678,7 @@ test_that("with() on a DataFrame", {
   expect_equal(nrow(sum2), 35)
 })
 
-test_that("Method coltypes() to get R's data types of a DataFrame", {
+test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(irisDF), c(rep("numeric", 4), "character"))
 
   data <- data.frame(c1=c(1,2,3),
@@ -1635,6 +1697,24 @@ test_that("Method coltypes() to get R's data types of a DataFrame", {
   x <- createDataFrame(sqlContext, list(list(as.environment(
     list("a"="b", "c"="d", "e"="f")))))
   expect_equal(coltypes(x), "map<string,string>")
+
+  df <- selectExpr(jsonFile(sqlContext, jsonPath), "name", "(age * 1.21) as age")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
+
+  df1 <- select(df, cast(df$age, "integer"))
+  coltypes(df) <- c("character", "integer")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
+  value <- collect(df[, 2])[[3, 1]]
+  expect_equal(value, collect(df1)[[3, 1]])
+  expect_equal(value, 22)
+
+  coltypes(df) <- c(NA, "numeric")
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
+
+  expect_error(coltypes(df) <- c("character"),
+               "Length of type vector should match the number of columns for DataFrame")
+  expect_error(coltypes(df) <- c("environment", "list"),
+               "Only atomic type is supported for column types")
 })
 
 unlink(parquetPath)
