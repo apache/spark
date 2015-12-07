@@ -51,9 +51,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
 
-  // Flag to specify whether AM is registered or not.
-  @volatile private var isAmRegistered = false
-
   /** Application ID. */
   protected var appId: Option[ApplicationId] = None
 
@@ -62,6 +59,9 @@ private[spark] abstract class YarnSchedulerBackend(
 
   /** Scheduler extension services. */
   private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
+
+  // Flag to specify whether this schedulerBackend should be reset.
+  private var shouldResetOnAmRegister = false
 
   /**
    * Bind to YARN. This *must* be done before calling [[start()]].
@@ -240,9 +240,8 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
-        if (!isAmRegistered) {
-          // First time when AM is registered
-          isAmRegistered = true
+        if (!shouldResetOnAmRegister) {
+          shouldResetOnAmRegister = true
         } else {
           // AM is already registered before, this potentially means that AM is failed and
           // re-registered after the failure. This will only be happened in yarn-client mode.
