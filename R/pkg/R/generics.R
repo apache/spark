@@ -133,7 +133,11 @@ setGeneric("sumRDD", function(x) { standardGeneric("sumRDD") })
 # @export
 setGeneric("name", function(x) { standardGeneric("name") })
 
-# @rdname numPartitions
+# @rdname getNumPartitions
+# @export
+setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
+
+# @rdname getNumPartitions
 # @export
 setGeneric("numPartitions", function(x) { standardGeneric("numPartitions") })
 
@@ -411,7 +415,7 @@ setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("corr", function(x, col1, col2, method = "pearson") {standardGeneric("corr") })
+setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
 #' @rdname summary
 #' @export
@@ -623,6 +627,10 @@ setGeneric("getItem", function(x, ...) { standardGeneric("getItem") })
 
 #' @rdname column
 #' @export
+setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
+
+#' @rdname column
+#' @export
 setGeneric("isNull", function(x) { standardGeneric("isNull") })
 
 #' @rdname column
@@ -744,9 +752,17 @@ setGeneric("dayofmonth", function(x) { standardGeneric("dayofmonth") })
 #' @export
 setGeneric("dayofyear", function(x) { standardGeneric("dayofyear") })
 
+#' @rdname decode
+#' @export
+setGeneric("decode", function(x, charset) { standardGeneric("decode") })
+
 #' @rdname dense_rank
 #' @export
 setGeneric("dense_rank", function(x) { standardGeneric("dense_rank") })
+
+#' @rdname encode
+#' @export
+setGeneric("encode", function(x, charset) { standardGeneric("encode") })
 
 #' @rdname explode
 #' @export
@@ -796,9 +812,9 @@ setGeneric("initcap", function(x) { standardGeneric("initcap") })
 #' @export
 setGeneric("instr", function(y, x) { standardGeneric("instr") })
 
-#' @rdname isNaN
+#' @rdname is.nan
 #' @export
-setGeneric("isNaN", function(x) { standardGeneric("isNaN") })
+setGeneric("isnan", function(x) { standardGeneric("isnan") })
 
 #' @rdname kurtosis
 #' @export
@@ -1000,6 +1016,10 @@ setGeneric("stddev_pop", function(x) { standardGeneric("stddev_pop") })
 #' @rdname stddev_samp
 #' @export
 setGeneric("stddev_samp", function(x) { standardGeneric("stddev_samp") })
+
+#' @rdname struct
+#' @export
+setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 
 #' @rdname substring_index
 #' @export

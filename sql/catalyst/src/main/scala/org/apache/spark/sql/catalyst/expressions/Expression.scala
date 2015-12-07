@@ -207,11 +207,12 @@ abstract class Expression extends TreeNode[Expression] {
     }.toString
   }
 
-
   private def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
+
+  override def simpleString: String = toString
 
   override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
 
@@ -219,7 +220,9 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns the string representation of this expression that is safe to be put in
    * code comments of generated code.
    */
-  protected def toCommentSafeString: String = this.toString.replace("*/", "\\*\\/")
+  protected def toCommentSafeString: String = this.toString
+    .replace("*/", "\\*\\/")
+    .replace("\\u", "\\\\u")
 }
 
 
