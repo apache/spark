@@ -697,7 +697,7 @@ setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
           function(x, withReplacement, fraction, seed) {
-              sample(x, withReplacement, fraction, as.integer(seed))
+            sample(x, withReplacement, fraction, seed)
           })
 
 #' nrow
