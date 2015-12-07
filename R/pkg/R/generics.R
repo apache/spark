@@ -339,8 +339,8 @@ setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 # @export
 setGeneric("leftOuterJoin", function(x, y, numPartitions) { standardGeneric("leftOuterJoin") })
 
-# @rdname partitionBy
-# @export
+#' @rdname partitionBy
+#' @export
 setGeneric("partitionBy", function(x, ...) { standardGeneric("partitionBy") })
 
 # @rdname reduceByKey

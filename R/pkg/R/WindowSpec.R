@@ -18,12 +18,13 @@
 # WindowSpec.R - WindowSpec class and methods implemented in S4 OO classes
 
 #' @include generics.R jobj.R column.R
+NULL
 
 #' @title S4 class that represents a WindowSpec
 #' @description WindowSpec can be created by using Window.partitionBy()
 #'              or Window.orderBy()
 #' @rdname WindowSpec
-#' @seealso window
+#' @seealso \link{Window.partitionBy}, \link{Window.orderBy}
 #'
 #' @param sws A Java object reference to the backing Scala WindowSpec
 #' @export
@@ -53,6 +54,7 @@ setMethod("show", "WindowSpec",
 #' @param x a WindowSpec
 #' @return a WindowSpec
 #' @rdname partitionBy
+#' @family windowspec_method
 #' @export
 #' @examples
 #' \dontrun{
@@ -81,6 +83,7 @@ setMethod("partitionBy",
 #' @param x a WindowSpec
 #' @return a WindowSpec
 #' @rdname arrange
+#' @family windowspec_method
 #' @export
 #' @examples
 #' \dontrun{
@@ -119,6 +122,7 @@ setMethod("orderBy",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rowsBetween
+#' @family windowspec_method
 #' @export
 #' @examples
 #' \dontrun{
@@ -147,6 +151,7 @@ setMethod("rowsBetween",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rangeBetween
+#' @family windowspec_method
 #' @export
 #' @examples
 #' \dontrun{
