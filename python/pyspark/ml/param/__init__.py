@@ -40,6 +40,7 @@ class Param(object):
         self.doc = str(doc)
 
     def _copy_new_parent(self, parent):
+        """Copy the current param to a new parent, must be a dummy param."""
         if self.parent == dummy:
             param = copy.copy(self)
             param.parent = parent

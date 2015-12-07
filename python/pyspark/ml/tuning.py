@@ -135,16 +135,14 @@ class CrossValidator(Estimator):
         """
         super(CrossValidator, self).__init__()
         #: param for estimator to be cross-validated
-        self.estimator = Param(self, "estimator", "estimator to be cross-validated")
+        self.estimator = CrossValidator.estimator._copy_new_parent(self)
         #: param for estimator param maps
-        self.estimatorParamMaps = Param(self, "estimatorParamMaps", "estimator param maps")
+        self.estimatorParamMaps = CrossValidator.estimatorParamMaps._copy_new_parent(self)
         #: param for the evaluator used to select hyper-parameters that
         #: maximize the cross-validated metric
-        self.evaluator = Param(
-            self, "evaluator",
-            "evaluator used to select hyper-parameters that maximize the cross-validated metric")
+        self.evaluator = CrossValidator.evaluator._copy_new_parent(self)
         #: param for number of folds for cross validation
-        self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
+        self.numFolds = CrossValidator.numFolds._copy_new_parent(self)
         self._setDefault(numFolds=3)
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
