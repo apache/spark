@@ -191,10 +191,9 @@ class DagBag(WithLogger):
                 if not all([s in content for s in ('DAG', 'airflow')]):
                     return
 
-        if (
-                not only_if_updated or
-                filepath not in self.file_last_changed or
-                dttm != self.file_last_changed[filepath]):
+        if (not only_if_updated or
+                    filepath not in self.file_last_changed or
+                    dttm != self.file_last_changed[filepath]):
             try:
                 self.log_info("Importing " + filepath)
                 if mod_name in sys.modules:
@@ -202,9 +201,8 @@ class DagBag(WithLogger):
                 with utils.timeout(30):
                     m = imp.load_source(mod_name, filepath)
             except Exception as e:
-                self.log_error("Failed to import: " + filepath)
+                self.log_exception("Failed to import: " + filepath)
                 self.import_errors[filepath] = str(e)
-                self.log_exception(e)
                 self.file_last_changed[filepath] = dttm
                 return
 
@@ -1029,7 +1027,6 @@ class TaskInstance(Base):
 
         self.render_templates()
         task_copy.dry_run()
-
 
     def handle_failure(self, error, test_mode=False, context=None):
         logging.exception(error)
@@ -2131,7 +2128,7 @@ class DAG(WithLogger):
         Maintains and returns the currently active runs as a list of dates
         """
         TI = TaskInstance
-        session =  settings.Session()
+        session = settings.Session()
         active_dates = []
         active_runs = (
             session.query(DagRun)
@@ -2218,8 +2215,7 @@ class DAG(WithLogger):
         if not start_date:
             start_date = (datetime.today()-timedelta(30)).date()
             start_date = datetime.combine(start_date, datetime.min.time())
-        if not end_date:
-            end_date = datetime.now()
+        end_date = end_date or datetime.now()
         tis = session.query(TI).filter(
             TI.dag_id == self.dag_id,
             TI.execution_date >= start_date,
@@ -2323,9 +2319,8 @@ class DAG(WithLogger):
         result.params = self.params
         return result
 
-    def sub_dag(
-            self, task_regex,
-            include_downstream=False, include_upstream=True):
+    def sub_dag(self, task_regex, include_downstream=False,
+                include_upstream=True):
         """
         Returns a subset of the current dag as a deep copy of the current dag
         based on a regex that should match one or many tasks, and includes

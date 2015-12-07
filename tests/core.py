@@ -10,6 +10,7 @@ import unittest
 import logging
 
 from airflow import configuration
+from airflow.executors import SequentialExecutor, LocalExecutor
 from airflow.models import Variable
 
 configuration.test_mode()
@@ -17,7 +18,7 @@ from airflow import jobs, models, DAG, utils, operators, hooks, macros, settings
 from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
-from airflow.settings import Session
+from airflow.settings import Session, WithLogger
 from lxml import html
 
 NUM_EXAMPLE_DAGS = 7
@@ -405,7 +406,7 @@ class CoreTest(unittest.TestCase):
 
         assert len(stream_handlers) == 1
 
-    def setting_log_level_then_calling_log_should_keep_the_old_value(self):
+    def test_setting_log_level_then_calling_log_should_keep_the_old_value(self):
 
         # if the log level is set externally, i.e. either through
         # --logging-level or anything, then its value should not be overridden
@@ -416,6 +417,17 @@ class CoreTest(unittest.TestCase):
         settings.log_to_stdout()
 
         assert root_logger.level == logging.DEBUG
+
+    def test_class_with_logger_should_have_logger_with_correct_name(self):
+
+        # each class should automatically receive a logger with a correct name
+
+        class Blah(WithLogger):
+            pass
+
+        assert Blah().logger().name == "Blah"
+        assert SequentialExecutor().logger().name == "SequentialExecutor"
+        assert LocalExecutor().logger().name == "LocalExecutor"
 
 
 class CliTests(unittest.TestCase):
