@@ -1246,7 +1246,7 @@ private[spark] object YarnHistoryService {
    * is created in this JVM (hence, attempt). It can be used to compare versions of the
    * current entity with any cached copy -it is less brittle than using timestamps.
    */
-  val FIELD_ENTITY_VERSION = "entityCreateCounter"
+  val FIELD_ENTITY_VERSION = "entityVersion"
 
   /**
    * Entity `OTHER_INFO` field: Spark version
