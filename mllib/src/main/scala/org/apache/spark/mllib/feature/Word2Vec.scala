@@ -306,22 +306,25 @@ class Word2Vec extends Serializable with Logging {
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
 
-    if (vocabSize.toLong * vectorSize * 8 >= Int.MaxValue) {
+    if (vocabSize.toLong * vectorSize >= Int.MaxValue) {
       throw new RuntimeException("Please increase minCount or decrease vectorSize in Word2Vec" +
         " to avoid an OOM. You are highly recommended to make your vocabSize*vectorSize, " +
-        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue/8`.")
+        "which is " + vocabSize + "*" + vectorSize + " for now, less than `Int.MaxValue`.")
     }
 
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
     var alpha = learningRate
+
     for (k <- 1 to numIterations) {
+      val bcSyn0Global = sc.broadcast(syn0Global)
+      val bcSyn1Global = sc.broadcast(syn1Global)
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
         val syn1Modify = new Array[Int](vocabSize)
-        val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
+        val model = iter.foldLeft((bcSyn0Global.value, bcSyn1Global.value, 0, 0)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
             var wc = wordCount
@@ -405,6 +408,8 @@ class Word2Vec extends Serializable with Logging {
         }
         i += 1
       }
+      bcSyn0Global.unpersist(false)
+      bcSyn1Global.unpersist(false)
     }
     newSentences.unpersist()
 
@@ -599,13 +604,21 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
       val vectorSize = model.values.head.size
       val numWords = model.size
-      val metadata = compact(render
-        (("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
-         ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
+      val metadata = compact(render(
+        ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
+        ("vectorSize" -> vectorSize) ~ ("numWords" -> numWords)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
+      // We want to partition the model in partitions of size 32MB
+      val partitionSize = (1L << 25)
+      // We calculate the approximate size of the model
+      // We only calculate the array size, not considering
+      // the string size, the formula is:
+      // floatSize * numWords * vectorSize
+      val approxSize = 4L * numWords * vectorSize
+      val nPartitions = ((approxSize / partitionSize) + 1).toInt
       val dataArray = model.toSeq.map { case (w, v) => Data(w, v) }
-      sc.parallelize(dataArray.toSeq, 1).toDF().write.parquet(Loader.dataPath(path))
+      sc.parallelize(dataArray.toSeq, nPartitions).toDF().write.parquet(Loader.dataPath(path))
     }
   }
 

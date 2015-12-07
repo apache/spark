@@ -20,7 +20,7 @@ runScript <- function() {
   sparkHome <- Sys.getenv("SPARK_HOME")
   sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
   jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
-  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
+  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
   submitPath <- file.path(sparkHome, "bin/spark-submit")
   res <- system2(command = submitPath,
                  args = c(jarPath, scriptPath),
