@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.history.yarn
 
 import org.apache.spark.{Logging, SparkContext, SparkFirehoseListener}
-import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * Spark listener which queues up all received events to the [[YarnHistoryService]] passed
