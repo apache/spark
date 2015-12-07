@@ -77,7 +77,7 @@ setMethod("cov",
 #' Calculates the correlation of two columns of a DataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
@@ -95,8 +95,9 @@ setMethod("cov",
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
 setMethod("corr",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          signature(x = "DataFrame"),
           function(x, col1, col2, method = "pearson") {
+            stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
@@ -109,7 +110,7 @@ setMethod("corr",
 #'
 #' @param x A SparkSQL DataFrame.
 #' @param cols A vector column names to search frequent items in.
-#' @param support (Optional) The minimum frequency for an item to be considered `frequent`. 
+#' @param support (Optional) The minimum frequency for an item to be considered `frequent`.
 #'                Should be greater than 1e-4. Default support = 0.01.
 #' @return a local R data.frame with the frequent items in each column
 #'
@@ -131,7 +132,7 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 #' sampleBy
 #'
 #' Returns a stratified sample without replacement based on the fraction given on each stratum.
-#' 
+#'
 #' @param x A SparkSQL DataFrame
 #' @param col column that defines strata
 #' @param fractions A named list giving sampling fraction for each stratum. If a stratum is
