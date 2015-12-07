@@ -25,16 +25,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.{StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 
-
 class AllStagesResourceSuite extends SparkFunSuite {
 
   def getFirstTaskLaunchTime(taskLaunchTimes: Seq[Long]): Option[Date] = {
-    val tasks = taskLaunchTimes.zipWithIndex.map { case (time, idx) =>
-      idx.toLong -> new TaskUIData(
+    val tasks = new HashMap[Long, TaskUIData]
+    taskLaunchTimes.zipWithIndex.foreach { case (time, idx) =>
+      tasks(idx.toLong) = new TaskUIData(
         new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false), None, None)
-    }.toMap
+    }
+
     val stageUiData = new StageUIData()
-    stageUiData.taskData = mapToHashmap(tasks)
+    stageUiData.taskData = tasks
     val status = StageStatus.ACTIVE
     val stageInfo = new StageInfo(
       1, 1, "stage 1", 10, Seq.empty, Seq.empty, "details abc", Seq.empty)
@@ -43,28 +44,21 @@ class AllStagesResourceSuite extends SparkFunSuite {
     stageData.firstTaskLaunchedTime
   }
 
-  def mapToHashmap(original: Map[Long, TaskUIData]): HashMap[Long, TaskUIData] = {
-    val map = new HashMap[Long, TaskUIData]
-    original.foreach { e => map.put(e._1, e._2) }
-
-    return map
-  }
-
-  test("test firstTaskLaunchedTime, there are no tasks") {
+  test("firstTaskLaunchedTime when there are no tasks") {
 
     val timeList = Seq[Long]()
     val result = getFirstTaskLaunchTime(timeList)
     assert(result == None)
   }
 
-  test("test firstTaskLaunchedTime, there are tasks but none launched") {
+  test("firstTaskLaunchedTime when there are tasks but none launched") {
 
     val timeList = Seq[Long](-100L, -200L, -300L)
     val result = getFirstTaskLaunchTime(timeList)
     assert(result == None)
   }
 
-  test("test firstTaskLaunchedTime, there are tasks and some launched") {
+  test("firstTaskLaunchedTime when there are tasks and some launched") {
 
     val timeList = Seq[Long](-100L, 1449255596000L, 1449255597000L)
     val result = getFirstTaskLaunchTime(timeList)
