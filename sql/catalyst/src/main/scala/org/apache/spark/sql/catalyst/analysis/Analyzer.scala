@@ -187,20 +187,16 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case Aggregate(groups, aggs, child) =>
-        var newGroups = Seq[Expression]()
-        groups.foreach(group =>
-          newGroups = newGroups :+ (group match {
-            case clauseName if clauseName.prettyString forall Character.isDigit =>
-                aggs(group.prettyString.toInt - 1) match {
-                case u : UnresolvedAlias =>
-                  u.child
-                case a : Alias =>
-                  a.child
-              }
-            case _ => group
-          }))
-        Aggregate(newGroups, aggs, child)
-
+        Aggregate(groups.map(group => group match {
+          case g if g.prettyString forall Character.isDigit =>
+            aggs(g.prettyString.toInt - 1) match {
+              case u : UnresolvedAlias =>
+                u.child
+              case a : Alias =>
+                a.child
+            }
+          case _ => group
+        }), aggs, child)
     }
   }
 
