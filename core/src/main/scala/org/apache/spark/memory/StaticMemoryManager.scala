@@ -57,7 +57,14 @@ private[spark] class StaticMemoryManager(
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+    if (numBytes > storageMemoryPool.poolSize) {
+      // Fail fast if the block simply won't fit
+      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+        s"memory limit (${storageMemoryPool.poolSize} bytes)")
+      false
+    } else {
+      storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+    }
   }
 
   override def acquireUnrollMemory(

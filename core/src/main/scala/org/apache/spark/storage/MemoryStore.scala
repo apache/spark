@@ -454,12 +454,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         blockId.map { id => s"for block $id" }.getOrElse("") +
         s"(free: $freeMemory, max: $maxMemory)")
 
-      if (space > maxMemory) {
-        // Fail fast if the block simply won't fit
-        logInfo("Will not " + blockId.map { id => s"store $id" }.getOrElse("free memory") +
-          s" as the required space ($space bytes) exceeds our memory limit ($maxMemory bytes)")
-        false
-      } else if (freeMemory >= space) {
+      assert(space <= maxMemory)
+
+      if (freeMemory >= space) {
         // No need to evict anything if there is already enough free space
         true
       } else {

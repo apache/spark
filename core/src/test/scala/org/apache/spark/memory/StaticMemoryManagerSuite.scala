@@ -90,7 +90,7 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 110L)
     // Acquire more than the max, not granted
     assert(!mm.acquireStorageMemory(dummyBlock, maxStorageMem + 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, maxStorageMem + 1L)
+    assertEnsureFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
     // Acquire up to the max, requests after this are still granted due to LRU eviction
     assert(mm.acquireStorageMemory(dummyBlock, maxStorageMem, evictedBlocks))

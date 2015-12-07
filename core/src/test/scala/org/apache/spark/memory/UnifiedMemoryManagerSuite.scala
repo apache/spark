@@ -84,7 +84,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(evictedBlocks.isEmpty)
     // Acquire more than the max, not granted
     assert(!mm.acquireStorageMemory(dummyBlock, maxMemory + 1L, evictedBlocks))
-    assertEnsureFreeSpaceCalled(ms, maxMemory + 1L)
+    assertEnsureFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
     assert(evictedBlocks.isEmpty)
     // Acquire up to the max, requests after this are still granted due to LRU eviction

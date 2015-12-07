@@ -110,6 +110,12 @@ private[spark] class UnifiedMemoryManager private[memory] (
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
+    if (numBytes > maxMemory) {
+      // Fail fast if the block simply won't fit
+      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+        s"memory limit ($maxMemory bytes)")
+      return false
+    }
     if (numBytes > storageMemoryPool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
