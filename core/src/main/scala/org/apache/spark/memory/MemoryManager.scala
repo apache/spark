@@ -25,7 +25,6 @@ import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.storage.{BlockId, BlockStatus, MemoryStore}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
-import org.apache.spark.unsafe.Platform
 
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
@@ -190,14 +189,7 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.unsafe.offHeap", false)) {
-      if (!Platform.unaligned()) {
-        throw new IllegalArgumentException(s"No support for unaligned Unsafe")
-      }
-      MemoryMode.OFF_HEAP
-    } else {
-      MemoryMode.ON_HEAP
-    }
+    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
   }
 
   /**
