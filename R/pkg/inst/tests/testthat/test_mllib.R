@@ -26,7 +26,7 @@ sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 
 test_that("glm and predict", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   test <- select(training, "Sepal_Length")
   model <- glm(Sepal_Width ~ Sepal_Length, training, family = "gaussian")
   prediction <- predict(model, test)
@@ -39,7 +39,7 @@ test_that("glm and predict", {
 })
 
 test_that("glm should work with long formula", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   training$LongLongLongLongLongName <- training$Sepal_Width
   training$VeryLongLongLongLonLongName <- training$Sepal_Length
   training$AnotherLongLongLongLongName <- training$Species
@@ -51,7 +51,7 @@ test_that("glm should work with long formula", {
 })
 
 test_that("predictions match with native glm", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   vals <- collect(select(predict(model, training), "prediction"))
   rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
@@ -59,7 +59,7 @@ test_that("predictions match with native glm", {
 })
 
 test_that("dot minus and intercept vs native glm", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   model <- glm(Sepal_Width ~ . - Species + 0, data = training)
   vals <- collect(select(predict(model, training), "prediction"))
   rVals <- predict(glm(Sepal.Width ~ . - Species + 0, data = iris), iris)
@@ -67,7 +67,7 @@ test_that("dot minus and intercept vs native glm", {
 })
 
 test_that("feature interaction vs native glm", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   model <- glm(Sepal_Width ~ Species:Sepal_Length, data = training)
   vals <- collect(select(predict(model, training), "prediction"))
   rVals <- predict(glm(Sepal.Width ~ Species:Sepal.Length, data = iris), iris)
@@ -75,7 +75,7 @@ test_that("feature interaction vs native glm", {
 })
 
 test_that("summary coefficients match with native glm", {
-  training <- createDataFrame(sqlContext, iris)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, solver = "normal"))
   coefs <- unlist(stats$coefficients)
   devianceResiduals <- unlist(stats$devianceResiduals)
@@ -92,7 +92,7 @@ test_that("summary coefficients match with native glm", {
 })
 
 test_that("summary coefficients match with native glm of family 'binomial'", {
-  df <- createDataFrame(sqlContext, iris)
+  df <- suppressWarnings(createDataFrame(sqlContext, iris))
   training <- filter(df, df$Species != "setosa")
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
     family = "binomial"))
