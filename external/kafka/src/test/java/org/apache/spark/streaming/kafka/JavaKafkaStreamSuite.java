@@ -106,6 +106,7 @@ public class JavaKafkaStreamSuite implements Serializable {
 
     words.countByValue().foreachRDD(
       new VoidFunction<JavaPairRDD<String, Long>>() {
+
         @Override
         public void call(JavaPairRDD<String, Long> rdd) {
           List<Tuple2<String, Long>> ret = rdd.collect();
