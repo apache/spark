@@ -175,7 +175,7 @@ public final class UnsafeInMemorySorter {
       this.position = 0;
     }
 
-    public SortedIterator clone () {
+    public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(numRecords);
       iter.position = position;
       iter.baseObject = baseObject;
@@ -224,6 +224,13 @@ public final class UnsafeInMemorySorter {
    */
   public SortedIterator getSortedIterator() {
     sorter.sort(array, 0, pos / 2, sortComparator);
+    return new SortedIterator(pos / 2);
+  }
+
+  /**
+   * Returns an iterator over record pointers in original order (inserted).
+   */
+  public SortedIterator getIterator() {
     return new SortedIterator(pos / 2);
   }
 }

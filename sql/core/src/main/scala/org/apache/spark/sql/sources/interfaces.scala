@@ -607,7 +607,7 @@ abstract class HadoopFsRelation private[sql](
         def castPartitionValuesToUserSchema(row: InternalRow) = {
           InternalRow((0 until row.numFields).map { i =>
             Cast(
-              Literal.create(row.getString(i), StringType),
+              Literal.create(row.getUTF8String(i), StringType),
               userProvidedSchema.fields(i).dataType).eval()
           }: _*)
         }
