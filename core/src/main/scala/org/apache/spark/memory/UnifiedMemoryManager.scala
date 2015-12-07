@@ -100,7 +100,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.OFF_HEAP =>
         // For now, we only support on-heap caching of data, so we do not need to interact with
         // the storage pool when allocating off-heap memory. This will change in the future, though.
-        super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
+        offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
     }
   }
 

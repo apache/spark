@@ -53,6 +53,13 @@ private[spark] class StaticMemoryManager(
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
+  override def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+  }
+
   override def acquireUnrollMemory(
       blockId: BlockId,
       numBytes: Long,
@@ -61,6 +68,17 @@ private[spark] class StaticMemoryManager(
     val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
     val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
     storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
+  }
+
+  private[memory]
+  override def acquireExecutionMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      memoryMode: MemoryMode): Long = synchronized {
+    memoryMode match {
+      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+    }
   }
 }
 
