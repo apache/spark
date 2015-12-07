@@ -109,10 +109,11 @@ private[stat] object ChiSqTest extends Logging {
           }
           i += 1
           distinctLabels += label
-          features.toArray.slice(startCol, endCol).zip(startCol until endCol).map {
-            case (feature, col) =>
-              allDistinctFeatures(col) += feature
-              (col, feature, label)
+          val featureArray = features.toArray
+          (startCol until endCol).map { col =>
+            val feature = featureArray(col)
+            allDistinctFeatures(col) += feature
+            (col, feature, label)
           }
         }
       }.countByValue()
