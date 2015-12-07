@@ -248,7 +248,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     try {
       events.asScala.map(describeEvent).mkString("\n")
       val otherInfo = entity.getOtherInfo.asScala.map {
-        case (k, v) => s" $k = $v;"
+        case (k, v) => s" $k ='$v': ${v.getClass};"
       }.mkString("\n")
       s"Timeline Entity " + header +
           " " + otherInfo + "\n" +
@@ -687,7 +687,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     entity.addOtherInfo(FIELD_APP_NAME, appName)
     entity.addOtherInfo(FIELD_APP_USER, userName)
     entity.addOtherInfo(FIELD_SPARK_VERSION, spark.SPARK_VERSION)
-    entity.addOtherInfo(FIELD_ENTITY_VERSION, entityVersionCounter.getAndIncrement().toString)
+    entity.addOtherInfo(FIELD_ENTITY_VERSION, entityVersionCounter.getAndIncrement())
     started(entity, startTime)
     if (endTime != 0) {
       entity.addPrimaryFilter(FILTER_APP_END, FILTER_APP_END_VALUE)
