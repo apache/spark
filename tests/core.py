@@ -7,6 +7,7 @@ import os
 import re
 from time import sleep
 import unittest
+import logging
 
 from airflow import configuration
 from airflow.models import Variable
@@ -392,6 +393,29 @@ class CoreTest(unittest.TestCase):
         # making sure replacement actually happened
         assert "{AIRFLOW_HOME}" not in cfg
         assert "{FERNET_KEY}" not in cfg
+
+    def test_calling_log_to_stdout_2X_should_add_only_one_stream_handler(self):
+
+        settings.log_to_stdout()
+        settings.log_to_stdout()
+        root_logger = logging.getLogger()
+
+        stream_handlers = [h for h in root_logger.handlers
+                           if isinstance(h, logging.StreamHandler)]
+
+        assert len(stream_handlers) == 1
+
+    def setting_log_level_then_calling_log_should_keep_the_old_value(self):
+
+        # if the log level is set externally, i.e. either through
+        # --logging-level or anything, then its value should not be overridden
+        # by the default "INFO" in log_to_stdout
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+        settings.log_to_stdout()
+
+        assert root_logger.level == logging.DEBUG
 
 
 class CliTests(unittest.TestCase):
