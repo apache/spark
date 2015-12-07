@@ -1,0 +1,381 @@
+{
+  "entities": [
+    {
+      "events": [
+        {
+          "timestamp": 1443746071340,
+          "eventtype": "SparkListenerApplicationStart-3",
+          "eventinfo": {
+            "User": "root",
+            "App ID": "application_1443668830514_0009",
+            "Event": "SparkListenerApplicationStart",
+            "App Name": "SparkSQL::10.0.0.143",
+            "App Attempt ID": null,
+            "Timestamp": 1443746021367
+          }
+        },
+        {
+          "timestamp": 1443746071307,
+          "eventtype": "SparkListenerEnvironmentUpdate-2",
+          "eventinfo": {
+            "System Properties": {
+              "SPARK_YARN_MODE": "true",
+              "java.vm.version": "24.79-b02",
+              "hive.server2.thrift.http.path": "/",
+              "sun.jnu.encoding": "UTF-8",
+              "java.vendor.url": "http://java.oracle.com/",
+              "java.vm.info": "mixed mode",
+              "user.dir": "/usr/hadoop/spark/bin",
+              "sun.cpu.isalist": "",
+              "java.awt.graphicsenv": "sun.awt.X11GraphicsEnvironment",
+              "sun.os.patch.level": "unknown",
+              "hive.server2.transport.mode": "http",
+              "sun.nio.ch.bugLevel": "",
+              "java.io.tmpdir": "/tmp",
+              "user.home": "/root",
+              "java.awt.printerjob": "sun.print.PSPrinterJob",
+              "java.version": "1.7.0_79",
+              "file.encoding.pkg": "sun.io",
+              "java.vendor.url.bug": "http://bugreport.sun.com/bugreport/",
+              "file.encoding": "UTF-8",
+              "sun.java.command": "org.apache.spark.deploy.SparkSubmit --master yarn-client --conf spark.driver.memory=1g --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 --driver-cores 1 --executor-memory 1g --num-executors 1 spark-internal --hiveconf hive.server2.transport.mode=http --hiveconf hive.server2.thrift.http.port=10002 --hiveconf hive.server2.thrift.http.path=/",
+              "line.separator": "\n",
+              "hive.server2.thrift.http.port": "10002",
+              "java.vm.specification.vendor": "Oracle Corporation",
+              "java.vm.vendor": "Oracle Corporation",
+              "SPARK_SUBMIT": "true",
+              "sun.io.unicode.encoding": "UnicodeLittle",
+              "user.name": "root",
+              "os.arch": "amd64",
+              "user.language": "en",
+              "java.runtime.version": "1.7.0_79-b14",
+              "sun.boot.class.path": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/resources.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/rt.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/sunrsasign.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jsse.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jce.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/charsets.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/rhino.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jfr.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/classes",
+              "sun.cpu.endian": "little",
+              "awt.toolkit": "sun.awt.X11.XToolkit",
+              "sun.boot.library.path": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/amd64",
+              "java.home": "/usr/lib/jvm/java-7-openjdk-amd64/jre",
+              "java.vm.name": "OpenJDK 64-Bit Server VM",
+              "java.endorsed.dirs": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/endorsed",
+              "sun.management.compiler": "HotSpot 64-Bit Tiered Compilers",
+              "java.runtime.name": "OpenJDK Runtime Environment",
+              "java.library.path": "/usr/java/packages/lib/amd64:/usr/lib/x86_64-linux-gnu/jni:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib/jni:/lib:/usr/lib",
+              "file.separator": "/",
+              "java.specification.vendor": "Oracle Corporation",
+              "java.vm.specification.version": "1.7",
+              "sun.java.launcher": "SUN_STANDARD",
+              "user.timezone": "Etc/UTC",
+              "os.name": "Linux",
+              "path.separator": ":",
+              "java.ext.dirs": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/ext:/usr/java/packages/lib/ext",
+              "sun.arch.data.model": "64",
+              "java.specification.name": "Java Platform API Specification",
+              "os.version": "3.13.0-63-generic",
+              "java.class.version": "51.0",
+              "user.country": "US",
+              "java.vendor": "Oracle Corporation",
+              "java.vm.specification.name": "Java Virtual Machine Specification",
+              "java.specification.version": "1.7"
+            },
+            "JVM Information": {
+              "Scala Version": "version 2.10.4",
+              "Java Home": "/usr/lib/jvm/java-7-openjdk-amd64/jre",
+              "Java Version": "1.7.0_79 (Oracle Corporation)"
+            },
+            "Event": "SparkListenerEnvironmentUpdate",
+            "Spark Properties": {
+              "spark.yarn.queue": "default",
+              "spark.scheduler.mode": "FIFO",
+              "spark.history.kerberos.principal": "none",
+              "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_HOSTS": "headnode0.example.net,headnode1.example.net",
+              "spark.yarn.applicationMaster.waitTries": "10",
+              "spark.master": "yarn-client",
+              "spark.ui.filters": "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter",
+              "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_URI_BASES": "http://headnode0.example.net:8088/proxy/application_1443668830514_0009,http://headnode1.example.net:8088/proxy/application_1443668830514_0009",
+              "spark.yarn.scheduler.heartbeat.interval-ms": "5000",
+              "spark.history.yarn.diagnostics": "true",
+              "spark.history.provider": "org.apache.spark.deploy.yarn.history.YarnHistoryProvider",
+              "spark.kryo.referenceTracking": "false",
+              "spark.executor.memory": "1g",
+              "spark.executor.instances": "1",
+              "spark.app.id": "application_1443668830514_0009",
+              "spark.eventLog.enabled": "true",
+              "spark.driver.memory": "1g",
+              "spark.yarn.submit.file.replication": "3",
+              "spark.yarn.executor.memoryOverhead": "390",
+              "spark.jars": "",
+              "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+              "spark.history.fs.logDirectory": "/tmp/spark-events",
+              "spark.yarn.preserve.staging.files": "false",
+              "spark.yarn.max.executor.failures": "4",
+              "spark.yarn.services": "org.apache.spark.deploy.yarn.history.YarnHistoryService",
+              "spark.yarn.am.extraJavaOptions": "-Dhdp.version=2.3.2.0-2937",
+              "spark.history.retainedApplications": "0",
+              "spark.externalBlockStore.folderName": "spark-1c27ac67-8503-4dfc-9ac7-871c343409d5",
+              "spark.history.kerberos.keytab": "none",
+              "spark.driver.extraJavaOptions": "-Dhdp.version=2.3.2.0-2937",
+              "spark.driver.appUIAddress": "http://10.0.0.143:4040",
+              "spark.driver.host": "10.0.0.143",
+              "spark.fileserver.uri": "http://10.0.0.143:50237",
+              "spark.yarn.driver.memoryOverhead": "390",
+              "spark.yarn.containerLauncherMaxThreads": "25",
+              "spark.eventLog.dir": "/tmp/spark-events",
+              "spark.yarn.historyServer.address": "headnode0.example.net:18080",
+              "spark.app.name": "SparkSQL::10.0.0.143",
+              "spark.driver.port": "37375",
+              "spark.executor.id": "driver",
+              "spark.history.ui.port": "18080"
+            },
+            "Classpath Entries": {
+              "/usr/hadoop/spark/lib/datanucleus-core-3.2.10.jar": "System Classpath",
+              "/usr/hadoop/spark/sbin/../conf/": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/conf/": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/lib/azure-storage-2.2.0.jar": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/hadoop-azure.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/datanucleus-rdbms-3.2.9.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/spark-assembly-1.4.1.2.3.2.0-2937-hadoop2.7.1.2.3.2.0-2937.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/datanucleus-api-jdo-3.2.6.jar": "System Classpath"
+            }
+          }
+        },
+        {
+          "timestamp": 1443746071268,
+          "eventtype": "SparkListenerBlockManagerAdded-1",
+          "eventinfo": {
+            "Block Manager ID": {
+              "Port": 42692,
+              "Host": "10.0.0.143",
+              "Executor ID": "driver"
+            },
+            "Event": "SparkListenerBlockManagerAdded",
+            "Maximum Memory": 556038881,
+            "Timestamp": 1443746070770
+          }
+        }
+      ],
+      "entitytype": "spark_event_v01",
+      "entity": "application_1443668830514_0009",
+      "starttime": 1443746071268,
+      "domain": "DEFAULT",
+      "relatedentities": {},
+      "primaryfilters": {
+        "appName": [
+          "SparkSQL::10.0.0.143"
+        ],
+        "appUser": [
+          "root"
+        ],
+        "startApp": [
+          "SparkListenerApplicationStart"
+        ]
+      },
+      "otherinfo": {
+        "startTime": 1443746021367,
+        "appName": "SparkSQL::10.0.0.143",
+        "appUser": "root",
+        "lastUpdated": 1443746071352
+      }
+    },
+    {
+      "events": [
+        {
+          "timestamp": 1443746012909,
+          "eventtype": "SparkListenerApplicationEnd-419",
+          "eventinfo": {
+            "Event": "SparkListenerApplicationEnd",
+            "Timestamp": 1443746012909
+          }
+        },
+        {
+          "timestamp": 1443741864403,
+          "eventtype": "SparkListenerBlockManagerAdded-4",
+          "eventinfo": {
+            "Block Manager ID": {
+              "Port": 40348,
+              "Host": "10.0.0.231",
+              "Executor ID": "1"
+            },
+            "Event": "SparkListenerBlockManagerAdded",
+            "Maximum Memory": 556038881,
+            "Timestamp": 1443741864358
+          }
+        },
+        {
+          "timestamp": 1443741820933,
+          "eventtype": "SparkListenerApplicationStart-3",
+          "eventinfo": {
+            "User": "root",
+            "App ID": "application_1443668830514_0008",
+            "Event": "SparkListenerApplicationStart",
+            "App Name": "SparkSQL::10.0.0.143",
+            "App Attempt ID": null,
+            "Timestamp": 1443741773688
+          }
+        },
+        {
+          "timestamp": 1443741820913,
+          "eventtype": "SparkListenerEnvironmentUpdate-2",
+          "eventinfo": {
+            "System Properties": {
+              "SPARK_YARN_MODE": "true",
+              "java.vm.version": "24.79-b02",
+              "hive.server2.thrift.http.path": "/",
+              "sun.jnu.encoding": "UTF-8",
+              "java.vendor.url": "http://java.oracle.com/",
+              "java.vm.info": "mixed mode",
+              "user.dir": "/usr/hadoop/spark/sbin",
+              "sun.cpu.isalist": "",
+              "java.awt.graphicsenv": "sun.awt.X11GraphicsEnvironment",
+              "sun.os.patch.level": "unknown",
+              "hive.server2.transport.mode": "http",
+              "sun.nio.ch.bugLevel": "",
+              "java.io.tmpdir": "/tmp",
+              "user.home": "/root",
+              "java.awt.printerjob": "sun.print.PSPrinterJob",
+              "java.version": "1.7.0_79",
+              "file.encoding.pkg": "sun.io",
+              "java.vendor.url.bug": "http://bugreport.sun.com/bugreport/",
+              "file.encoding": "UTF-8",
+              "sun.java.command": "org.apache.spark.deploy.SparkSubmit --master yarn-client --conf spark.driver.memory=1g --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 --driver-cores 1 --executor-memory 1g --num-executors 1 spark-internal --hiveconf hive.server2.transport.mode=http --hiveconf hive.server2.thrift.http.port=10002 --hiveconf hive.server2.thrift.http.path=/",
+              "line.separator": "\n",
+              "hive.server2.thrift.http.port": "10002",
+              "java.vm.specification.vendor": "Oracle Corporation",
+              "java.vm.vendor": "Oracle Corporation",
+              "SPARK_SUBMIT": "true",
+              "sun.io.unicode.encoding": "UnicodeLittle",
+              "user.name": "root",
+              "os.arch": "amd64",
+              "user.language": "en",
+              "java.runtime.version": "1.7.0_79-b14",
+              "sun.boot.class.path": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/resources.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/rt.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/sunrsasign.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jsse.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jce.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/charsets.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/rhino.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/jfr.jar:/usr/lib/jvm/java-7-openjdk-amd64/jre/classes",
+              "sun.cpu.endian": "little",
+              "awt.toolkit": "sun.awt.X11.XToolkit",
+              "sun.boot.library.path": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/amd64",
+              "java.home": "/usr/lib/jvm/java-7-openjdk-amd64/jre",
+              "java.vm.name": "OpenJDK 64-Bit Server VM",
+              "java.endorsed.dirs": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/endorsed",
+              "sun.management.compiler": "HotSpot 64-Bit Tiered Compilers",
+              "java.runtime.name": "OpenJDK Runtime Environment",
+              "java.library.path": "/usr/java/packages/lib/amd64:/usr/lib/x86_64-linux-gnu/jni:/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:/usr/lib/jni:/lib:/usr/lib",
+              "file.separator": "/",
+              "java.specification.vendor": "Oracle Corporation",
+              "java.vm.specification.version": "1.7",
+              "sun.java.launcher": "SUN_STANDARD",
+              "user.timezone": "Etc/UTC",
+              "os.name": "Linux",
+              "path.separator": ":",
+              "hdp.version": "2.3.2.0-2937",
+              "java.ext.dirs": "/usr/lib/jvm/java-7-openjdk-amd64/jre/lib/ext:/usr/java/packages/lib/ext",
+              "sun.arch.data.model": "64",
+              "java.specification.name": "Java Platform API Specification",
+              "os.version": "3.13.0-63-generic",
+              "java.class.version": "51.0",
+              "user.country": "US",
+              "java.vendor": "Oracle Corporation",
+              "java.vm.specification.name": "Java Virtual Machine Specification",
+              "java.specification.version": "1.7"
+            },
+            "JVM Information": {
+              "Scala Version": "version 2.10.4",
+              "Java Home": "/usr/lib/jvm/java-7-openjdk-amd64/jre",
+              "Java Version": "1.7.0_79 (Oracle Corporation)"
+            },
+            "Event": "SparkListenerEnvironmentUpdate",
+            "Spark Properties": {
+              "spark.yarn.queue": "default",
+              "spark.scheduler.mode": "FIFO",
+              "spark.history.kerberos.principal": "none",
+              "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_HOSTS": "headnode0.example.net,headnode1.example.net",
+              "spark.yarn.applicationMaster.waitTries": "10",
+              "spark.master": "yarn-client",
+              "spark.ui.filters": "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter",
+              "spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.param.PROXY_URI_BASES": "http://headnode0.example.net:8088/proxy/application_1443668830514_0008,http://headnode1.example.net:8088/proxy/application_1443668830514_0008",
+              "spark.yarn.scheduler.heartbeat.interval-ms": "5000",
+              "spark.history.yarn.diagnostics": "true",
+              "spark.history.provider": "org.apache.spark.deploy.yarn.history.YarnHistoryProvider",
+              "spark.kryo.referenceTracking": "false",
+              "spark.executor.memory": "1g",
+              "spark.executor.instances": "1",
+              "spark.app.id": "application_1443668830514_0008",
+              "spark.eventLog.enabled": "true",
+              "spark.driver.memory": "1g",
+              "spark.yarn.submit.file.replication": "3",
+              "spark.yarn.executor.memoryOverhead": "390",
+              "spark.jars": "",
+              "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+              "spark.history.fs.logDirectory": "/tmp/spark-events",
+              "spark.yarn.preserve.staging.files": "false",
+              "spark.yarn.max.executor.failures": "4",
+              "spark.yarn.services": "org.apache.spark.deploy.yarn.history.YarnHistoryService",
+              "spark.yarn.am.extraJavaOptions": "-Dhdp.version=2.3.2.0-2937",
+              "spark.history.retainedApplications": "0",
+              "spark.externalBlockStore.folderName": "spark-58c6e87e-4ced-44ee-b7cc-3aa354626aa5",
+              "spark.history.kerberos.keytab": "none",
+              "spark.driver.extraJavaOptions": "-Dhdp.version=2.3.2.0-2937",
+              "spark.driver.appUIAddress": "http://10.0.0.143:4040",
+              "spark.driver.host": "10.0.0.143",
+              "spark.fileserver.uri": "http://10.0.0.143:59458",
+              "spark.yarn.driver.memoryOverhead": "390",
+              "spark.yarn.containerLauncherMaxThreads": "25",
+              "spark.eventLog.dir": "/tmp/spark-events",
+              "spark.yarn.historyServer.address": "headnode0.example.net:18080",
+              "spark.app.name": "SparkSQL::10.0.0.143",
+              "spark.driver.port": "42736",
+              "spark.executor.id": "driver",
+              "spark.history.ui.port": "18080"
+            },
+            "Classpath Entries": {
+              "/usr/hadoop/spark/lib/datanucleus-core-3.2.10.jar": "System Classpath",
+              "/usr/hadoop/spark/sbin/../conf/": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/conf/": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/lib/azure-storage-2.2.0.jar": "System Classpath",
+              "/usr/hadoop/current/hadoop-client/hadoop-azure.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/datanucleus-rdbms-3.2.9.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/spark-assembly-1.4.1.2.3.2.0-2937-hadoop2.7.1.2.3.2.0-2937.jar": "System Classpath",
+              "/usr/hadoop/spark/lib/datanucleus-api-jdo-3.2.6.jar": "System Classpath"
+            }
+          }
+        },
+        {
+          "timestamp": 1443741820869,
+          "eventtype": "SparkListenerBlockManagerAdded-1",
+          "eventinfo": {
+            "Block Manager ID": {
+              "Port": 37616,
+              "Host": "10.0.0.143",
+              "Executor ID": "driver"
+            },
+            "Event": "SparkListenerBlockManagerAdded",
+            "Maximum Memory": 556038881,
+            "Timestamp": 1443741820309
+          }
+        }
+      ],
+      "entitytype": "spark_event_v01",
+      "entity": "application_1443668830514_0008",
+      "starttime": 1443741820869,
+      "domain": "DEFAULT",
+      "relatedentities": {},
+      "primaryfilters": {
+        "appName": [
+          "SparkSQL::10.0.0.143"
+        ],
+        "appUser": [
+          "root"
+        ],
+        "endApp": [
+          "SparkListenerApplicationEnd"
+        ],
+        "startApp": [
+          "SparkListenerApplicationStart"
+        ]
+      },
+      "otherinfo": {
+        "startTime": 1443741773688,
+        "appName": "SparkSQL::10.0.0.143",
+        "appUser": "root",
+        "lastUpdated": 1443746012912,
+        "endTime": 1443746012909
+      }
+    }
+  ]
+}
