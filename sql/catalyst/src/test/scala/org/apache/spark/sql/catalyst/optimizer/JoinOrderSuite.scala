@@ -34,16 +34,16 @@ class JoinOrderSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubQueries) ::
-        Batch("Filter Pushdown", Once,
-          CombineFilters,
-          PushPredicateThroughProject,
-          BooleanSimplification,
-          ReorderJoin,
-          PushPredicateThroughJoin,
-          PushPredicateThroughGenerate,
-          PushPredicateThroughAggregate,
-          ColumnPruning,
-          ProjectCollapsing) :: Nil
+      Batch("Filter Pushdown", Once,
+        CombineFilters,
+        PushPredicateThroughProject,
+        BooleanSimplification,
+        ReorderJoin,
+        PushPredicateThroughJoin,
+        PushPredicateThroughGenerate,
+        PushPredicateThroughAggregate,
+        ColumnPruning,
+        ProjectCollapsing) :: Nil
 
   }
 
