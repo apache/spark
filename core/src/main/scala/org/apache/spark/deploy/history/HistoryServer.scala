@@ -228,6 +228,7 @@ object HistoryServer extends Logging {
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
+    logInfo(s"History provider class: $providerName")
     val provider = Utils.classForName(providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
@@ -254,6 +255,8 @@ object HistoryServer extends Logging {
       val principalName = conf.get("spark.history.kerberos.principal")
       val keytabFilename = conf.get("spark.history.kerberos.keytab")
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
+    } else {
+      logDebug(s"Kerberos is not enabled")
     }
   }
 

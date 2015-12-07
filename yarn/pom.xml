@@ -187,6 +187,11 @@
       <artifactId>libfb303</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-jaxb-annotations</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <profiles>
