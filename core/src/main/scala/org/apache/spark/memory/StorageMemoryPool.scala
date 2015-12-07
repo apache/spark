@@ -73,27 +73,31 @@ class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
    *
    * @param blockId the ID of the block we are acquiring storage memory for
    * @param numBytesToAcquire the size of this block
-   * @param numBytesToFree the size of space to be freed through evicting blocks
+   * @param maxNumBytesToFree the maximum amount of space to be freed through evicting blocks
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      numBytesToFree: Long,
+      maxNumBytesToFree: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
-    assert(numBytesToFree >= 0)
+    assert(maxNumBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    memoryStore.ensureFreeSpace(blockId, numBytesToFree, evictedBlocks)
-    // Register evicted blocks, if any, with the active task metrics
-    Option(TaskContext.get()).foreach { tc =>
-      val metrics = tc.taskMetrics()
-      val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
-      metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
+    if (numBytesToAcquire > memoryFree && maxNumBytesToFree > 0) {
+      val additionalMemoryRequired = numBytesToAcquire - memoryFree
+      memoryStore.evictBlocksToFreeSpace(
+        Some(blockId), Math.min(maxNumBytesToFree, additionalMemoryRequired), evictedBlocks)
+      // Register evicted blocks, if any, with the active task metrics
+      Option(TaskContext.get()).foreach { tc =>
+        val metrics = tc.taskMetrics()
+        val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+        metrics.updatedBlocks = Some(lastUpdatedBlocks ++ evictedBlocks.toSeq)
+      }
     }
     // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
-    // back into this StorageMemoryPool in order to free. Therefore, these variables should have
-    // been updated.
+    // back into this StorageMemoryPool in order to free memory. Therefore, these variables
+    // should have been updated.
     val enoughMemory = numBytesToAcquire <= memoryFree
     if (enoughMemory) {
       _memoryUsed += numBytesToAcquire
@@ -128,8 +132,8 @@ class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
     } else {
       // If reclaiming free memory did not adequately shrink the pool, begin evicting blocks:
       val evictedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
-      memoryStore.freeSpaceForExecution(
-        spaceToFree - spaceFreedByReleasingUnusedMemory, evictedBlocks)
+      memoryStore.evictBlocksToFreeSpace(
+        None, spaceToFree - spaceFreedByReleasingUnusedMemory, evictedBlocks)
       val spaceFreedByEviction = evictedBlocks.map(_._2.memSize).sum
       // When a block is released, BlockManager.dropFromMemory() calls releaseMemory(), so we do
       // not need to decrement _memoryUsed here. However, we do need to decrement the pool size.

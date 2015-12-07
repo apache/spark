@@ -406,67 +406,21 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Try to free up the given amount of storage memory for use by execution by evicting blocks.
-   *
-   * @param space the amount of memory to free, in bytes
-   * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether the requested free space is freed.
-   */
-  private[spark] def freeSpaceForExecution(
-      space: Long,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    evictBlocksToFreeSpace(None, space, droppedBlocks)
-  }
-
-  /**
-   * Try to free up a given amount of space to store a block by evicting existing ones.
-   *
-   * @param space the amount of memory to free, in bytes
-   * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether the requested free space is freed.
-   */
-  private[spark] def ensureFreeSpace(
-      blockId: BlockId,
-      space: Long,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    memoryManager.synchronized {
-      val freeMemory = maxMemory - memoryUsed
-
-      logInfo(s"Ensuring $space bytes of free space for block $blockId" +
-        s"(free: $freeMemory, max: $maxMemory)")
-
-      assert(space <= maxMemory)
-
-      if (freeMemory >= space) {
-        // No need to evict anything if there is already enough free space
-        true
-      } else {
-        // Evict blocks as necessary
-        evictBlocksToFreeSpace(Some(blockId), freeMemory - space, droppedBlocks)
-      }
-    }
-  }
-
-  /**
     * Try to evict blocks to free up a given amount of space to store a particular block.
     * Can fail if either the block is bigger than our memory or it would require replacing
     * another block from the same RDD (which leads to a wasteful cyclic replacement pattern for
     * RDDs that don't fit into memory that we want to avoid).
-    *
-    * Compared to [[ensureFreeSpace()]], this method will drop blocks without first checking whether
-    * there is free storage memory which could be used to store a new block; as a result, this
-    * method should be used when evicting stroage blocks in order to reclaim memory for use by
-    * execution.
     *
     * @param blockId the ID of the block we are freeing space for, if any
     * @param space the size of this block
     * @param droppedBlocks a holder for blocks evicted in the process
     * @return whether the requested free space is freed.
     */
-  private def evictBlocksToFreeSpace(
+  private[spark] def evictBlocksToFreeSpace(
       blockId: Option[BlockId],
       space: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    assert(space > 0)
     memoryManager.synchronized {
       var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)

@@ -41,49 +41,43 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 
   protected val evictedBlocks = new mutable.ArrayBuffer[(BlockId, BlockStatus)]
 
-  import MemoryManagerSuite.DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED
-  import MemoryManagerSuite.DEFAULT_ENSURE_FREE_SPACE_CALLED
+  import MemoryManagerSuite.DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED
 
   // Note: Mockito's verify mechanism does not provide a way to reset method call counts
   // without also resetting stubbed methods. Since our test code relies on the latter,
-  // we need to use our own variable to track invocations of `freeSpaceForUseByExecution` and
-  // `ensureFreeSpace`.
+  // we need to use our own variable to track invocations of `evictBlocksToFreeSpace`.
 
   /**
-   * The amount of free space requested in the last call to [[MemoryStore.freeSpaceForExecution]].
+   * The amount of space requested in the last call to [[MemoryStore.evictBlocksToFreeSpace]].
    *
-   * This set whenever [[MemoryStore.freeSpaceForExecution]] is called, and cleared when the test
+   * This set whenever [[MemoryStore.evictBlocksToFreeSpace]] is called, and cleared when the test
    * code makes explicit assertions on this variable through
-   * [[assertFreeSpaceForExecutionCalled]].
+   * [[assertEvictBlocksToFreeSpaceCalled]].
    */
-  private val freeSpaceForExecutionCalled = new AtomicLong(0)
-
-  private val ensureFreeSpaceCalled = new AtomicLong(0)
+  private val evictBlocksToFreeSpaceCalled = new AtomicLong(0)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
     evictedBlocks.clear()
-    freeSpaceForExecutionCalled.set(DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED)
-    ensureFreeSpaceCalled.set(DEFAULT_ENSURE_FREE_SPACE_CALLED)
+    evictBlocksToFreeSpaceCalled.set(DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED)
   }
 
   /**
-   * Make a mocked [[MemoryStore]] whose [[MemoryStore.ensureFreeSpace]] and
-   * [[MemoryStore.freeSpaceForExecution]] methods are stubbed.
+   * Make a mocked [[MemoryStore]] whose [[MemoryStore.evictBlocksToFreeSpace]] method is stubbed.
    *
    * This allows our test code to release storage memory when these methods are called
    * without relying on [[org.apache.spark.storage.BlockManager]] and all of its dependencies.
    */
   protected def makeMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
-    when(ms.freeSpaceForExecution(anyLong(), any())).thenAnswer(freeSpaceForExecutionAnswer(mm))
-    when(ms.ensureFreeSpace(any(), anyLong(), any())).thenAnswer(ensureFreeSpaceAnswer(mm))
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any()))
+      .thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
     mm.setMemoryStore(ms)
     ms
   }
 
   /**
-    * Simulate the part of [[MemoryStore.ensureFreeSpace]] that releases storage memory.
+    * Simulate the part of [[MemoryStore.evictBlocksToFreeSpace]] that releases storage memory.
     *
     * This is a significant simplification of the real method, which actually drops existing
     * blocks based on the size of each block. Instead, here we simply release as many bytes
@@ -91,37 +85,26 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     * test without relying on the [[org.apache.spark.storage.BlockManager]], which brings in
     * many other dependencies.
     *
-    * Every call to this method will set a global variable, [[ensureFreeSpaceCalled]], that
+    * Every call to this method will set a global variable, [[evictBlocksToFreeSpaceCalled]], that
     * records the number of bytes this is called with. This variable is expected to be cleared
-    * by the test code later through [[assertEnsureFreeSpaceCalled]].
+    * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
     */
-  private def ensureFreeSpaceAnswer(mm: MemoryManager): Answer[Boolean] = {
+  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Boolean] = {
     new Answer[Boolean] {
       override def answer(invocation: InvocationOnMock): Boolean = {
         val args = invocation.getArguments
-        val numBytes = args(1).asInstanceOf[Long]
-        require(ensureFreeSpaceCalled.get() === DEFAULT_ENSURE_FREE_SPACE_CALLED,
-          "bad test: ensureFreeSpace() variable was not reset")
-        ensureFreeSpaceCalled.set(numBytes)
-
-        def freeMemory = mm.maxStorageMemory - mm.storageMemoryUsed
-
-        // Fail fast if the block simply won't fit
-        if (numBytes > mm.maxStorageMemory) {
-          return false
-        }
-
-        // No need to evict anything if there is already enough free space
-        if (freeMemory >= numBytes) {
-          return true
-        }
-
-        val spaceToRelease = numBytes - freeMemory
-        if (spaceToRelease <= mm.storageMemoryUsed) {
+        val numBytesToFree = args(1).asInstanceOf[Long]
+        assert(numBytesToFree > 0)
+        require(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
+          "bad test: evictBlocksToFreeSpace() variable was not reset")
+        evictBlocksToFreeSpaceCalled.set(numBytesToFree)
+        if (numBytesToFree <= mm.storageMemoryUsed) {
           // We can evict enough blocks to fulfill the request for space
-          mm.releaseStorageMemory(spaceToRelease)
+          mm.releaseStorageMemory(numBytesToFree)
           args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
-            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytes, 0L, 0L)))
+            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
+          evictedBlocks.append(
+            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
           true
         } else {
           // No blocks were evicted because eviction would not free enough space.
@@ -132,69 +115,20 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   }
 
   /**
-    * Simulate the part of [[MemoryStore.freeSpaceForExecution]] that releases storage memory.
-    *
-    * This is a significant simplification of the real method, which actually drops existing
-    * blocks based on the size of each block. Instead, here we simply release as many bytes
-    * as needed to ensure the requested amount of free space. This allows us to set up the
-    * test without relying on the [[org.apache.spark.storage.BlockManager]], which brings in
-    * many other dependencies.
-    *
-    * Every call to this method will set a global variable, [[freeSpaceForExecutionCalled]], that
-    * records the number of bytes this is called with. This variable is expected to be cleared
-    * by the test code later through [[assertFreeSpaceForExecutionCalled]].
-    */
-  private def freeSpaceForExecutionAnswer(mm: MemoryManager): Answer[Boolean] = {
-    new Answer[Boolean] {
-      override def answer(invocation: InvocationOnMock): Boolean = {
-        val args = invocation.getArguments
-        val numBytes = args(0).asInstanceOf[Long]
-        require(freeSpaceForExecutionCalled.get() === DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED,
-          "bad test: freeSpaceForExecution() variable was not reset")
-        freeSpaceForExecutionCalled.set(numBytes)
-        assert(numBytes <= mm.storageMemoryUsed)
-        mm.releaseStorageMemory(numBytes)
-        args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
-          (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytes, 0L, 0L)))
-        evictedBlocks.append(
-          (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytes, 0L, 0L)))
-        true
-      }
-    }
+   * Assert that [[MemoryStore.evictBlocksToFreeSpace]] is called with the given parameters.
+   */
+  protected def assertEvictBlocksToFreeSpaceCalled(ms: MemoryStore, numBytes: Long): Unit = {
+    assert(evictBlocksToFreeSpaceCalled.get() === numBytes,
+      s"expected evictBlocksToFreeSpace() to be called with $numBytes")
+    evictBlocksToFreeSpaceCalled.set(DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED)
   }
 
   /**
-   * Assert that [[MemoryStore.freeSpaceForExecution]] is called with the given parameters.
+   * Assert that [[MemoryStore.evictBlocksToFreeSpace]] is NOT called.
    */
-  protected def assertFreeSpaceForExecutionCalled(ms: MemoryStore, numBytes: Long): Unit = {
-    assert(freeSpaceForExecutionCalled.get() === numBytes,
-      s"expected freeSpaceForExecution() to be called with $numBytes")
-    freeSpaceForExecutionCalled.set(DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED)
-  }
-
-  /**
-   * Assert that [[MemoryStore.freeSpaceForExecution]] is NOT called.
-   */
-  protected def assertFreeSpaceForExecutionNotCalled[T](ms: MemoryStore): Unit = {
-    assert(freeSpaceForExecutionCalled.get() === DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED,
-      "freeSpaceForExecution() should not have been called!")
-  }
-
-    /**
-   * Assert that [[MemoryStore.ensureFreeSpace]] is called with the given parameters.
-   */
-  protected def assertEnsureFreeSpaceCalled(ms: MemoryStore, numBytes: Long): Unit = {
-    assert(ensureFreeSpaceCalled.get() === numBytes,
-      s"expected ensureFreeSpace() to be called with $numBytes")
-      ensureFreeSpaceCalled.set(DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED)
-  }
-
-  /**
-   * Assert that [[MemoryStore.ensureFreeSpace]] is NOT called.
-   */
-  protected def assertEnsureFreeSpaceNotCalled[T](ms: MemoryStore): Unit = {
-    assert(ensureFreeSpaceCalled.get() === DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED,
-      "ensureFreeSpace() should not have been called!")
+  protected def assertEvictBlocksToFreeSpaceNotCalled[T](ms: MemoryStore): Unit = {
+    assert(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
+      "evictBlocksToFreeSpace() should not have been called!")
   }
 
   /**
@@ -351,6 +285,5 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
 }
 
 private object MemoryManagerSuite {
-  private val DEFAULT_FREE_SPACE_FOR_EXECUTION_CALLED = -1L
-  private val DEFAULT_ENSURE_FREE_SPACE_CALLED = -1L
+  private val DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED = -1L
 }
