@@ -89,7 +89,7 @@ class Dataset[T] private[sql](
   override def schema: StructType = resolvedTEncoder.schema
 
   /**
-   * Prints the schema of the underlying [[DataFrame]] to the console in a nice tree format.
+   * Prints the schema of the underlying [[Dataset]] to the console in a nice tree format.
    * @since 1.6.0
    */
   override def printSchema(): Unit = toDF().printSchema()
@@ -145,7 +145,7 @@ class Dataset[T] private[sql](
   def toDF(): DataFrame = DataFrame(sqlContext, logicalPlan)
 
   /**
-   * Returns this Dataset.
+   * Returns this [[Dataset]].
    * @since 1.6.0
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
@@ -153,7 +153,7 @@ class Dataset[T] private[sql](
   def toDS(): Dataset[T] = this
 
   /**
-   * Converts this Dataset to an RDD.
+   * Converts this [[Dataset]] to an RDD.
    * @since 1.6.0
    */
   def rdd: RDD[T] = {
@@ -189,7 +189,7 @@ class Dataset[T] private[sql](
   def show(numRows: Int): Unit = show(numRows, truncate = true)
 
   /**
-   * Displays the top 20 rows of [[DataFrame]] in a tabular form. Strings more than 20 characters
+   * Displays the top 20 rows of [[Dataset]] in a tabular form. Strings more than 20 characters
    * will be truncated, and all cells will be aligned right.
    *
    * @since 1.6.0
@@ -197,7 +197,7 @@ class Dataset[T] private[sql](
   def show(): Unit = show(20)
 
   /**
-   * Displays the top 20 rows of [[DataFrame]] in a tabular form.
+   * Displays the top 20 rows of [[Dataset]] in a tabular form.
    *
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
@@ -207,7 +207,7 @@ class Dataset[T] private[sql](
   def show(truncate: Boolean): Unit = show(20, truncate)
 
   /**
-   * Displays the [[DataFrame]] in a tabular form. For example:
+   * Displays the [[Dataset]] in a tabular form. For example:
    * {{{
    *   year  month AVG('Adj Close) MAX('Adj Close)
    *   1980  12    0.503218        0.595103
@@ -662,9 +662,7 @@ class Dataset[T] private[sql](
   def collect(): Array[T] = {
     // This is different from Dataset.rdd in that it collects Rows, and then runs the encoders
     // to convert the rows into objects of type T.
-    val tEnc = resolvedTEncoder
-    val input = queryExecution.analyzed.output
-    val bound = tEnc.bind(input)
+    val bound = resolvedTEncoder.bind(queryExecution.analyzed.output)
     queryExecution.toRdd.map(_.copy()).collect().map(bound.fromRow)
   }
 
