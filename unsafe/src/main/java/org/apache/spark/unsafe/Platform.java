@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
+import java.security.AccessController;
 
 import sun.misc.Unsafe;
 
@@ -32,6 +33,23 @@ public final class Platform {
   public static final int LONG_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
+  
+  private static final boolean unaligned;
+  static {
+    // Copied from java.nio.Bits.java#unaligned
+    String arch = AccessController
+        .doPrivileged(new sun.security.action.GetPropertyAction("os.arch"));
+    unaligned = arch.equals("i386") || arch.equals("x86") || arch.equals("amd64")
+        || arch.equals("x86_64");
+  }
+
+  /**
+   * @return true when running JVM is having sun's Unsafe package available in it and underlying
+   *         system having unaligned-access capability.
+   */
+  public static boolean unaligned() {
+    return unaligned;
+  }
 
   public static int getInt(Object object, long offset) {
     return _UNSAFE.getInt(object, offset);
