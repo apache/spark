@@ -327,7 +327,7 @@ private[parquet] class CatalystRowConverter(
       // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
       // it.
       val buffer = value.toByteBuffer
-      val offset = buffer.position()
+      val offset = buffer.arrayOffset() + buffer.position()
       val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
@@ -644,8 +644,8 @@ private[parquet] object CatalystRowConverter {
     // copying it.
     val buffer = binary.toByteBuffer
     val bytes = buffer.array()
-    val start = buffer.position()
-    val end = buffer.limit()
+    val start = buffer.arrayOffset() + buffer.position()
+    val end = buffer.arrayOffset() + buffer.limit()
 
     var unscaled = 0L
     var i = start
