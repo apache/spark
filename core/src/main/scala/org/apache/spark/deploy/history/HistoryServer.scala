@@ -103,7 +103,11 @@ class HistoryServer(
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      if (req.getQueryString == null) {
+        res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      } else {
+        res.sendRedirect(res.encodeRedirectURL(req.getRequestURI + "?" + req.getQueryString))
+      }
     }
 
     // SPARK-5983 ensure TRACE is not supported
