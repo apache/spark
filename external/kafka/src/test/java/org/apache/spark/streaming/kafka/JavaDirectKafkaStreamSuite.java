@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.spark.api.java.function.VoidFunction;
 import scala.Tuple2;
 
 import kafka.common.TopicAndPartition;
@@ -131,16 +132,15 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
     unifiedStream.foreachRDD(
-        new Function<JavaRDD<String>, Void>() {
+        new VoidFunction<JavaRDD<String>>() {
           @Override
-          public Void call(JavaRDD<String> rdd) {
+          public void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
             for (OffsetRange o : offsetRanges.get()) {
               System.out.println(
                 o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
               );
             }
-            return null;
           }
         }
     );

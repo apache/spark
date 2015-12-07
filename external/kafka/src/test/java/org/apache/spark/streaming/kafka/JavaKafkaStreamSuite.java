@@ -20,6 +20,7 @@ package org.apache.spark.streaming.kafka;
 import java.io.Serializable;
 import java.util.*;
 
+import org.apache.spark.api.java.function.VoidFunction;
 import scala.Tuple2;
 
 import kafka.serializer.StringDecoder;
@@ -104,9 +105,10 @@ public class JavaKafkaStreamSuite implements Serializable {
     );
 
     words.countByValue().foreachRDD(
-      new Function<JavaPairRDD<String, Long>, Void>() {
+      new VoidFunction<JavaPairRDD<String, Long>>() {
+
         @Override
-        public Void call(JavaPairRDD<String, Long> rdd) {
+        public void call(JavaPairRDD<String, Long> rdd) {
           List<Tuple2<String, Long>> ret = rdd.collect();
           for (Tuple2<String, Long> r : ret) {
             if (result.containsKey(r._1())) {
@@ -115,8 +117,6 @@ public class JavaKafkaStreamSuite implements Serializable {
               result.put(r._1(), r._2());
             }
           }
-
-          return null;
         }
       }
     );
