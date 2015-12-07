@@ -26,12 +26,10 @@ import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 /**
  * Trait implemented by everything setting up a context; the model is that
  * the traits can be chained, with the final state determined by the order
- * <p>
- * <ol>
- *   <li>base implementation does nothing</li>
- *   <li>subclass traits are expected to call the superclass first, then
- *   apply their own options</li>
- * </ol>
+ *
+ * 1. base implementation does nothing.
+ * 2. subclass traits are expected to call the superclass first, then
+ *   apply their own options.
  */
 trait ContextSetup {
 

@@ -29,9 +29,9 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse.TimelinePutError
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent, TimelinePutResponse}
-import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.json4s.{MappingException, JValue}
@@ -513,7 +513,8 @@ private[spark] object YarnTimelineUtils extends Logging {
 
   /**
    * Lookup a numeric field in the `otherInfo` section of a [[TimelineEntity]],
-   * fall back to `defval` if the field is absent or cannot be parsed
+   * fall back to `defval` if the field is absent or cannot be parsed.
+   *
    * @param en entity
    * @param name field name
    * @param defval default value; default is 0L
@@ -617,7 +618,8 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Add a filter and field if the value is set
+   * Add a filter and field if the value is set.
+   *
    * @param entity entity to update
    * @param name filter/field name
    * @param value optional value
@@ -628,7 +630,8 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Add a filter and field
+   * Add a filter and field.
+   *
    * @param entity entity to update
    * @param name filter/field name
    * @param value value
@@ -734,11 +737,10 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Simple sanity checks for endpoint address, including
-   * hostname lookup.
+   * Simple sanity checks for endpoint address, including hostname lookup.
    *
    * This can be used to help validate the address on startup, to postpone
-   * later delays
+   * later delays.
    *
    * @param endpoint address of service to talk to
    * @return the URL passed in
