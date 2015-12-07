@@ -121,25 +121,29 @@ private[ui] class ExecutorsPage(
     val diskUsed = info.diskUsed
 
     // Determine Color Opacity from 0.5-1
-    var activeTasksAlpha = 1.0
-    var failedTasksAlpha = 1.0
-    var completedTasksAlpha = 1.0
-    var totalDurationAlpha = 1.0
-    if (info.totalCores > 0) {
-      // activeTasks range from 0 to all cores
-      activeTasksAlpha = (info.activeTasks.toDouble / info.totalCores) * 0.5 + 0.5
-    }
-    if (info.totalTasks > 0) {
-      // failedTasks range max at 10% failure, alpha > 1 doesn't affect CSS
-      failedTasksAlpha = (10 * info.failedTasks.toDouble / info.totalTasks) * 0.5 + 0.5
-      // completedTasks range ignores 90% of tasks
-      completedTasksAlpha
-        = math.max(((10 * info.completedTasks.toDouble / info.totalTasks) - 9) * 0.5 + 0.5, 0.5)
-    }
-    if (info.totalDuration > 0) {
-      // totalDuration range from 0 to 50% GC time, alpha > 1 doesn't affect CSS
-      totalDurationAlpha = info.totalGCTime.toDouble / info.totalDuration + 0.5
-    }
+    // activeTasks range from 0 to all cores
+    val activeTasksAlpha =
+      if (info.totalCores > 0) {
+        (info.activeTasks.toDouble / info.totalCores) * 0.5 + 0.5
+      } else {
+        1
+      }
+    // failedTasks range max at 10% failure, alpha max = 1
+    // completedTasks range ignores 90% of tasks
+    val (failedTasksAlpha, completedTasksAlpha) =
+      if (info.totalTasks > 0) {
+        (math.min(10 * info.failedTasks.toDouble / info.totalTasks, 1) * 0.5 + 0.5,
+        math.max(((10 * info.completedTasks.toDouble / info.totalTasks) - 9) * 0.5 + 0.5, 0.5))
+      } else {
+        (1, 1)
+      }
+    // totalDuration range from 0 to 50% GC time, alpha max = 1
+    val totalDurationAlpha =
+      if (info.totalDuration > 0) {
+        math.min(info.totalGCTime.toDouble / info.totalDuration + 0.5, 1)
+      } else {
+        1
+      }
 
     <tr>
       <td>{info.id}</td>
