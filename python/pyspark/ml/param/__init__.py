@@ -46,7 +46,7 @@ class Param(object):
             param.parent = parent
             return param
         else:
-            raise raise ValueError("Cannot copy from non-dummy parent %s." % parent)
+            raise ValueError("Cannot copy from non-dummy parent %s." % parent)
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
