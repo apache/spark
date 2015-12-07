@@ -120,16 +120,25 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * can do better should override this function.
    */
   def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubQueries(this)
-    val cleanRight = EliminateSubQueries(plan)
+    val hasSubQueriesInLeft = this.collect { case _: Subquery => }.nonEmpty
+    val hasSubQueriesInRight = plan.collect { case _: Subquery => }.nonEmpty
 
-    cleanLeft.getClass == cleanRight.getClass &&
-      cleanLeft.children.size == cleanRight.children.size && {
-      logDebug(
-        s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      cleanRight.cleanArgs == cleanLeft.cleanArgs
-    } &&
-    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
+    if (hasSubQueriesInLeft || hasSubQueriesInRight) {
+      val cleanLeft = EliminateSubQueries(this)
+      val cleanRight = EliminateSubQueries(plan)
+      cleanLeft.sameResult(cleanRight)
+    } else {
+      val cleanLeft = this
+      val cleanRight = plan
+
+      cleanLeft.getClass == cleanRight.getClass &&
+        cleanLeft.children.size == cleanRight.children.size && {
+        logDebug(
+          s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
+        cleanRight.cleanArgs == cleanLeft.cleanArgs
+      } &&
+      (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
+    }
   }
 
   /** Args that have cleaned such that differences in expression id should not affect equality */
