@@ -662,6 +662,7 @@ setMethod("unique",
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
 #'
 #' @family DataFrame functions
 #' @rdname sample
