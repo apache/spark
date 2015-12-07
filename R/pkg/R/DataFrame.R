@@ -682,6 +682,8 @@ setMethod("sample",
           function(x, withReplacement, fraction, seed) {
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
             if (!missing(seed)) {
+              # TODO : Figure out how to send integer as java.lang.Long to JVM so
+              # we can send seed as an argument through callJMethod
               sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
             } else {
               sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
@@ -695,11 +697,7 @@ setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
           function(x, withReplacement, fraction, seed) {
-            if (!missing(seed)) {
               sample(x, withReplacement, fraction, as.integer(seed))
-            } else {
-              sample(x, withReplacement, fraction)
-            }
           })
 
 #' nrow
