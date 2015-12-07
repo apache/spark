@@ -17,6 +17,9 @@
 
 package org.apache.spark.deploy.history.yarn.integration
 
+import org.scalatest.Matchers
+
+import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationHistoryInfo, TimelineApplicationAttemptInfo}
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
@@ -27,7 +30,8 @@ import org.apache.spark.{Logging, SparkFunSuite}
 /**
  * Test of utility methods in [[org.apache.spark.deploy.history.yarn.server.YarnProviderUtils]]
  */
-class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssertions {
+class YarnProviderUtilsSuite extends SparkFunSuite with Logging
+  with ExtraAssertions with Matchers {
 
   def historyInfo(id: String, started: Long, ended: Long, complete: Boolean):
       TimelineApplicationHistoryInfo = {
@@ -220,12 +224,18 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
       "app",
       "user",
       1000, 0, 1000)
+    val entityDescription = describeEntity(entity)
+    val ev1 = entity.getOtherInfo.get(FIELD_ENTITY_VERSION)
+    val version = numberField(entity, FIELD_ENTITY_VERSION, -1).longValue()
+    assert (0 < version, s"wrong version in $entityDescription")
+
     // build an TimelineApplicationHistoryInfo instance
     val info = toApplicationHistoryInfo(entity)
     assert(yarnAppStr === info.id, "info.id")
     val attempt = info.attempts.head
-    assert(sparkAttemptId === attempt.attemptId, "attempt.attemptId")
-    assert(yarnAttemptIdStr === attempt.entityId, "attempt.entityId")
+    assert(sparkAttemptId === attempt.attemptId, s"attempt.attemptId in $attempt")
+    assert(yarnAttemptIdStr === attempt.entityId, s"attempt.entityId in $attempt")
+    assert(version === attempt.version, s"version in $attempt")
   }
 
   test("EntityWithoutAttempt") {
