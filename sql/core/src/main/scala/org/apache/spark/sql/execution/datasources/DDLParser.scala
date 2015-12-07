@@ -66,15 +66,15 @@ class DDLParser(parseQuery: String => LogicalPlan)
   protected def start: Parser[LogicalPlan] = ddl
 
   /**
-   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...) [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable(intField int, stringField string...)
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE [TEMPORARY] TABLE avroTable [IF NOT EXISTS]
+   * `CREATE [TEMPORARY] TABLE [IF NOT EXISTS] avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * AS SELECT ...

@@ -254,6 +254,7 @@ setMethod("dtypes",
 #' @family DataFrame functions
 #' @rdname columns
 #' @name columns
+
 #' @export
 #' @examples
 #'\dontrun{
@@ -262,6 +263,7 @@ setMethod("dtypes",
 #' path <- "path/to/file.json"
 #' df <- jsonFile(sqlContext, path)
 #' columns(df)
+#' colnames(df)
 #'}
 setMethod("columns",
           signature(x = "DataFrame"),
@@ -288,6 +290,121 @@ setMethod("names<-",
               sdf <- callJMethod(x@sdf, "toDF", as.list(value))
               dataFrame(sdf)
             }
+          })
+
+#' @rdname columns
+#' @name colnames
+setMethod("colnames",
+          signature(x = "DataFrame"),
+          function(x) {
+            columns(x)
+          })
+
+#' @rdname columns
+#' @name colnames<-
+setMethod("colnames<-",
+          signature(x = "DataFrame", value = "character"),
+          function(x, value) {
+            sdf <- callJMethod(x@sdf, "toDF", as.list(value))
+            dataFrame(sdf)
+          })
+
+#' coltypes
+#'
+#' Get column types of a DataFrame
+#'
+#' @param x A SparkSQL DataFrame
+#' @return value A character vector with the column types of the given DataFrame
+#' @rdname coltypes
+#' @name coltypes
+#' @family DataFrame functions
+#' @export
+#' @examples
+#'\dontrun{
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' coltypes(irisDF)
+#'}
+setMethod("coltypes",
+          signature(x = "DataFrame"),
+          function(x) {
+            # Get the data types of the DataFrame by invoking dtypes() function
+            types <- sapply(dtypes(x), function(x) {x[[2]]})
+
+            # Map Spark data types into R's data types using DATA_TYPES environment
+            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+              # Check for primitive types
+              type <- PRIMITIVE_TYPES[[x]]
+
+              if (is.null(type)) {
+                # Check for complex types
+                for (t in names(COMPLEX_TYPES)) {
+                  if (substring(x, 1, nchar(t)) == t) {
+                    type <- COMPLEX_TYPES[[t]]
+                    break
+                  }
+                }
+
+                if (is.null(type)) {
+                  stop(paste("Unsupported data type: ", x))
+                }
+              }
+              type
+            })
+
+            # Find which types don't have mapping to R
+            naIndices <- which(is.na(rTypes))
+
+            # Assign the original scala data types to the unmatched ones
+            rTypes[naIndices] <- types[naIndices]
+
+            rTypes
+          })
+
+#' coltypes
+#'
+#' Set the column types of a DataFrame.
+#'
+#' @param x A SparkSQL DataFrame
+#' @param value A character vector with the target column types for the given
+#'    DataFrame. Column types can be one of integer, numeric/double, character, logical, or NA
+#'    to keep that column as-is.
+#' @rdname coltypes
+#' @name coltypes<-
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- jsonFile(sqlContext, path)
+#' coltypes(df) <- c("character", "integer")
+#' coltypes(df) <- c(NA, "numeric")
+#'}
+setMethod("coltypes<-",
+          signature(x = "DataFrame", value = "character"),
+          function(x, value) {
+            cols <- columns(x)
+            ncols <- length(cols)
+            if (length(value) == 0) {
+              stop("Cannot set types of an empty DataFrame with no Column")
+            }
+            if (length(value) != ncols) {
+              stop("Length of type vector should match the number of columns for DataFrame")
+            }
+            newCols <- lapply(seq_len(ncols), function(i) {
+              col <- getColumn(x, cols[i])
+              if (!is.na(value[i])) {
+                stype <- rToSQLTypes[[value[i]]]
+                if (is.null(stype)) {
+                  stop("Only atomic type is supported for column types")
+                }
+                cast(col, stype)
+              } else {
+                col
+              }
+            })
+            nx <- select(x, newCols)
+            dataFrame(nx@sdf)
           })
 
 #' Register Temporary Table
@@ -676,8 +793,8 @@ setMethod("dim",
 setMethod("collect",
           signature(x = "DataFrame"),
           function(x, stringsAsFactors = FALSE) {
-            names <- columns(x)
-            ncol <- length(names)
+            dtypes <- dtypes(x)
+            ncol <- length(dtypes)
             if (ncol <= 0) {
               # empty data.frame with 0 columns and 0 rows
               data.frame()
@@ -700,25 +817,29 @@ setMethod("collect",
                 # data of complex type can be held. But getting a cell from a column
                 # of list type returns a list instead of a vector. So for columns of
                 # non-complex type, append them as vector.
+                #
+                # For columns of complex type, be careful to access them.
+                # Get a column of complex type returns a list.
+                # Get a cell from a column of complex type returns a list instead of a vector.
                 col <- listCols[[colIndex]]
                 if (length(col) <= 0) {
-                  df[[names[colIndex]]] <- col
+                  df[[colIndex]] <- col
                 } else {
-                  # TODO: more robust check on column of primitive types
-                  vec <- do.call(c, col)
-                  if (class(vec) != "list") {
-                    df[[names[colIndex]]] <- vec
+                  colType <- dtypes[[colIndex]][[2]]
+                  # Note that "binary" columns behave like complex types.
+                  if (!is.null(PRIMITIVE_TYPES[[colType]]) && colType != "binary") {
+                    vec <- do.call(c, col)
+                    stopifnot(class(vec) != "list")
+                    df[[colIndex]] <- vec
                   } else {
-                    # For columns of complex type, be careful to access them.
-                    # Get a column of complex type returns a list.
-                    # Get a cell from a column of complex type returns a list instead of a vector.
-                    df[[names[colIndex]]] <- col
-                 }
+                    df[[colIndex]] <- col
+                  }
+                }
               }
+              names(df) <- names(x)
+              df
             }
-            df
-          }
-        })
+          })
 
 #' Limit
 #'
@@ -2101,147 +2222,4 @@ setMethod("with",
           function(data, expr, ...) {
             newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
-          })
-
-#' Returns the column types of a DataFrame.
-#'
-#' @name coltypes
-#' @title Get column types of a DataFrame
-#' @family dataframe_funcs
-#' @param x (DataFrame)
-#' @return value (character) A character vector with the column types of the given DataFrame
-#' @rdname coltypes
-#' @examples \dontrun{
-#' irisDF <- createDataFrame(sqlContext, iris)
-#' coltypes(irisDF)
-#' }
-setMethod("coltypes",
-          signature(x = "DataFrame"),
-          function(x) {
-            # Get the data types of the DataFrame by invoking dtypes() function
-            types <- sapply(dtypes(x), function(x) {x[[2]]})
-
-            # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
-
-              # Check for primitive types
-              type <- PRIMITIVE_TYPES[[x]]
-
-              if (is.null(type)) {
-                # Check for complex types
-                for (t in names(COMPLEX_TYPES)) {
-                  if (substring(x, 1, nchar(t)) == t) {
-                    type <- COMPLEX_TYPES[[t]]
-                    break
-                  }
-                }
-
-                if (is.null(type)) {
-                  stop(paste("Unsupported data type: ", x))
-                }
-              }
-              type
-            })
-
-            # Find which types don't have mapping to R
-            naIndices <- which(is.na(rTypes))
-
-            # Assign the original scala data types to the unmatched ones
-            rTypes[naIndices] <- types[naIndices]
-
-            rTypes
-          })
-
-#' Display the structure of a DataFrame, including column names, column types, as well as a
-#' a small sample of rows.
-#' @name str
-#' @title Compactly display the structure of a dataset
-#' @rdname str
-#' @family DataFrame functions
-#' @param object a DataFrame
-#' @examples \dontrun{
-#' # Create a DataFrame from the Iris dataset
-#' irisDF <- createDataFrame(sqlContext, iris)
-#' 
-#' # Show the structure of the DataFrame
-#' str(irisDF)
-#' }
-setMethod("str",
-          signature(object = "DataFrame"),
-          function(object) {
-
-            # TODO: These could be made global parameters, though in R it's not the case
-            MAX_CHAR_PER_ROW <- 120
-            MAX_COLS <- 100
-
-            # Get the column names and types of the DataFrame
-            names <- names(object)
-            types <- coltypes(object)
-
-            # Get the number of rows.
-            # TODO: Ideally, this should be cached
-            cachedCount <- nrow(object)
-
-            # Get the first elements of the dataset. Limit number of columns accordingly
-            localDF <- if (ncol(object) > MAX_COLS) {
-                           head(object[, c(1:MAX_COLS)])
-                         } else {
-                           head(object)
-                         }
-
-            # The number of observations will be displayed only if the number
-            # of rows of the dataset has already been cached.
-            if (!is.null(cachedCount)) {
-              cat(paste0("'", class(object), "': ", cachedCount, " obs. of ",
-                    length(names), " variables:\n"))
-            } else {
-              cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
-            }
-
-            # Whether the ... should be printed at the end of each row
-            ellipsis <- FALSE
-
-            # Add ellipsis (i.e., "...") if there are more rows than shown
-            if (!is.null(cachedCount) && (cachedCount > 6)) {
-              ellipsis <- TRUE
-            }
-
-            if (nrow(localDF) > 0) {
-              for (i in 1 : ncol(localDF)) {
-                firstElements <- ""
-
-                # Get the first elements for each column
-                if (types[i] == "character") {
-                  firstElements <- paste(paste0("\"", localDF[,i], "\""), collapse = " ")
-                } else {
-                  firstElements <- paste(localDF[,i], collapse = " ")
-                }
-
-                # Add the corresponding number of spaces for alignment
-                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
-
-                # Get the short type. For 'character', it would be 'chr';
-                # 'for numeric', it's 'num', etc.
-                dataType <- SHORT_TYPES[[types[i]]]
-                if (is.null(dataType)) {
-                  dataType <- substring(types[i], 1, 3)
-                }
-
-                # Concatenate the colnames, coltypes, and first
-                # elements of each column
-                line <- paste0(" $ ", names[i], spaces, ": ",
-                  dataType, " ",firstElements)
-
-                # Chop off extra characters if this is too long
-                cat(substr(line, 1, MAX_CHAR_PER_ROW))
-                if (ellipsis) {
-                  cat(" ...")
-                }
-                cat("\n")
-              }
-
-              if (ncol(localDF) < ncol(object)) {
-                cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
-              }
-            }
           })

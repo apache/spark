@@ -33,7 +33,7 @@ SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
-TACHYON_VERSION="0.8.1"
+TACHYON_VERSION="0.8.2"
 TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
 TACHYON_URL="http://tachyon-project.org/downloads/files/${TACHYON_VERSION}/${TACHYON_TGZ}"
 
@@ -68,9 +68,6 @@ while (( "$#" )); do
     --with-hive)
       echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
-      ;;
-    --skip-java-test)
-      SKIP_JAVA_TEST=true
       ;;
     --with-tachyon)
       SPARK_TACHYON=true

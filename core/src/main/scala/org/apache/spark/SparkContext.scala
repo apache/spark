@@ -48,20 +48,20 @@ import org.apache.mesos.MesosNativeLibrary
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.{ExecutorEndpoint, TriggerThreadDump}
 import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
   FixedLengthBinaryInputFormat}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
+import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{SparkUI, ConsoleProgressBar}
 import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
@@ -556,7 +556,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     if (!dynamicAllocationEnabled && _conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-      logInfo("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
     }
 
     _executorAllocationManager =
@@ -619,11 +619,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
         Some(Utils.getThreadDump())
       } else {
-        val (host, port) = env.blockManager.master.getRpcHostPortForExecutor(executorId).get
-        val endpointRef = env.rpcEnv.setupEndpointRef(
-          SparkEnv.executorActorSystemName,
-          RpcAddress(host, port),
-          ExecutorEndpoint.EXECUTOR_ENDPOINT_NAME)
+        val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
         Some(endpointRef.askWithRetry[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
@@ -1379,7 +1375,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     val key = if (!isLocal && scheme == "file") {
-      env.httpFileServer.addFile(new File(uri.getPath))
+      env.rpcEnv.fileServer.addFile(new File(uri.getPath))
     } else {
       schemeCorrectedPath
     }
@@ -1630,7 +1626,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       var key = ""
       if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
-        key = env.httpFileServer.addJar(new File(path))
+        key = env.rpcEnv.fileServer.addJar(new File(path))
       } else {
         val uri = new URI(path)
         key = uri.getScheme match {
@@ -1644,7 +1640,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
-                env.httpFileServer.addJar(new File(fileName))
+                env.rpcEnv.fileServer.addJar(new File(fileName))
               } catch {
                 case e: Exception =>
                   // For now just log an error but allow to go through so spark examples work.
@@ -1655,7 +1651,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
               }
             } else {
               try {
-                env.httpFileServer.addJar(new File(uri.getPath))
+                env.rpcEnv.fileServer.addJar(new File(uri.getPath))
               } catch {
                 case exc: FileNotFoundException =>
                   logError(s"Jar not found at $path")
@@ -1694,6 +1690,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Shut down the SparkContext.
   def stop() {
+    if (AsynchronousListenerBus.withinListenerThread.value) {
+      throw new SparkException("Cannot stop SparkContext within listener thread of" +
+        " AsynchronousListenerBus")
+    }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
     if (!stopped.compareAndSet(false, true)) {
@@ -2708,15 +2708,14 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case mesosUrl @ MESOS_REGEX(_) =>
+      case MESOS_REGEX(mesosUrl) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
-        val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url, sc.env.securityManager)
+          new CoarseMesosSchedulerBackend(scheduler, sc, mesosUrl, sc.env.securityManager)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, url)
+          new MesosSchedulerBackend(scheduler, sc, mesosUrl)
         }
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2726,6 +2725,11 @@ object SparkContext extends Logging {
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
         (backend, scheduler)
+
+      case zkUrl if zkUrl.startsWith("zk://") =>
+        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
+          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
+        createTaskScheduler(sc, "mesos://" + zkUrl)
 
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
@@ -2745,8 +2749,8 @@ private object SparkMasterRegex {
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters
   val SPARK_REGEX = """spark://(.*)""".r
-  // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
-  val MESOS_REGEX = """(mesos|zk)://.*""".r
+  // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
+  val MESOS_REGEX = """mesos://(.*)""".r
   // Regular expression for connection to Simr cluster
   val SIMR_REGEX = """simr://(.*)""".r
 }
