@@ -67,13 +67,17 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
     "001", None)
   val none_completed_orig_time = new TimelineApplicationAttemptInfo(None, 100, 0, 102, "spark",
     true, "001", None)
-  val attempt_1_1 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"), 100, 0, 102, "spark",
-    false, "001", None)
-  val attempt_1_1_updated =
-    new TimelineApplicationAttemptInfo(Some("attempt_1_1"), 100, 0, 150, "spark", false,
-      "001", None)
+  // app attempt started @ 100, updated @102, version 1
+  val attempt_1_1 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+    100, 0, 102, "spark", false, "001", None, 1)
+  // attempt 1.1 updated at time = 102; no version field
+  val attempt_1_1_updated = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+    100, 0, 150, "spark", false, "001", None)
+  // attempt 1.1 with the version field updated to 2; it should always be newer
+  val attempt_1_1_updated_version = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+    100, 0, 102, "spark", false, "001", None, 2)
   val attempt_1_2 = new TimelineApplicationAttemptInfo(Some("attempt_1_2"), 200, 202, 202,
-    "spark", true, "001", None)
+    "spark", true, "001", None, 3)
 
   test("timeShort") {
     assert("unset" === timeShort(0, "unset"))
@@ -219,7 +223,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
     // build an TimelineApplicationHistoryInfo instance
     val info = toApplicationHistoryInfo(entity)
     assert(yarnAppStr === info.id, "info.id")
-    val attempt = info.attempts.head.asInstanceOf[TimelineApplicationAttemptInfo]
+    val attempt = info.attempts.head
     assert(sparkAttemptId === attempt.attemptId, "attempt.attemptId")
     assert(yarnAttemptIdStr === attempt.entityId, "attempt.entityId")
   }
@@ -239,7 +243,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
     val info = toApplicationHistoryInfo(entity)
     assert(yarnAppStr === info.id)
 
-    val attempt = info.attempts.head.asInstanceOf[TimelineApplicationAttemptInfo]
+    val attempt = info.attempts.head
     assert("1" === attempt.attemptId.get, "attempt.attemptId")
     assert(yarnAppStr === attempt.entityId, "attempt.entityId")
   }
@@ -286,9 +290,11 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
   test("MergeAttemptOrdering-3") {
     assert(none_completed === mostRecentAttempt(none_incomplete, none_completed))
   }
+
   test("MergeAttemptOrdering-4") {
     assert(attempt_1_1_updated === mostRecentAttempt(attempt_1_1, attempt_1_1_updated))
   }
+
   test("MergeAttemptOrdering-5") {
     assert(attempt_1_1_updated === mostRecentAttempt(attempt_1_1_updated, attempt_1_1))
   }
@@ -301,6 +307,16 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging with ExtraAssert
   test("MergeAttemptOrdering-7") {
     assert(none_completed_orig_time ===
         mostRecentAttempt(none_completed_orig_time, none_incomplete))
+  }
+
+  test("MergeAttemptOrdering-8") {
+    assert(attempt_1_1_updated_version === mostRecentAttempt(attempt_1_1,
+      attempt_1_1_updated_version))
+  }
+
+  test("MergeAttemptOrdering-9") {
+    assert(attempt_1_1_updated_version === mostRecentAttempt(attempt_1_1_updated_version,
+      attempt_1_1))
   }
 
 }
