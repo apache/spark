@@ -122,11 +122,22 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override def output: Seq[Attribute] = left.output
 }
 
+object Join {
+  def apply(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    joinType: JoinType,
+    condition: Option[Expression]): Join = {
+    Join(left, right, joinType, condition, None)
+  }
+}
+
 case class Join(
   left: LogicalPlan,
   right: LogicalPlan,
   joinType: JoinType,
-  condition: Option[Expression]) extends BinaryNode {
+  condition: Option[Expression],
+  generatedExpressions: Option[EquivalentExpressions]) extends BinaryNode {
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -151,6 +162,17 @@ case class Join(
       expressions.forall(_.resolved) &&
       selfJoinResolved &&
       condition.forall(_.dataType == BooleanType)
+  }
+
+  override  def simpleString: String = s"$nodeName $joinType, $condition".trim
+
+  override def semanticEquals(other: LogicalPlan): Boolean = {
+    other match {
+      case Join (l, r, joinType, condition, _) => {
+        l == left && r == right && this.joinType == joinType && this.condition == condition
+      }
+      case _ => false
+    }
   }
 }
 

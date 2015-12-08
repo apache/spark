@@ -43,7 +43,7 @@ abstract class PlanTest extends SparkFunSuite {
   protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
     val normalized1 = normalizeExprIds(plan1)
     val normalized2 = normalizeExprIds(plan2)
-    if (normalized1 != normalized2) {
+    if (!normalized1.semanticEquals(normalized2)) {
       fail(
         s"""
           |== FAIL: Plans do not match ===

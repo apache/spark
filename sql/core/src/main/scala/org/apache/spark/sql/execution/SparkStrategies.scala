@@ -43,7 +43,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
       // no predicate can be evaluated by matching hash keys
-      case logical.Join(left, right, LeftSemi, condition) =>
+      case logical.Join(left, right, LeftSemi, condition, _) =>
         joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
     }
@@ -234,11 +234,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+             CanBroadcast(left), right, joinType, condition, _) if joinType != LeftSemi =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
       case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+             left, CanBroadcast(right), joinType, condition, _) if joinType != LeftSemi =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
       case _ => Nil
@@ -248,9 +248,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // TODO CartesianProduct doesn't support the Left Semi Join
-      case logical.Join(left, right, joinType, None) if joinType != LeftSemi =>
+      case logical.Join(left, right, joinType, None, _) if joinType != LeftSemi =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
-      case logical.Join(left, right, Inner, Some(condition)) =>
+      case logical.Join(left, right, Inner, Some(condition), _) =>
         execution.Filter(condition,
           execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
@@ -259,7 +259,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DefaultJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(left, right, joinType, condition) =>
+      case logical.Join(left, right, joinType, condition, _) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
             joins.BuildRight

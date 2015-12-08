@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -95,7 +97,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition) =>
+    case join @ Join(left, right, joinType, condition, _) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
@@ -150,11 +152,11 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   // flatten all inner joins, which are next to each other
   def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
-    case Join(left, right, Inner, cond) =>
+    case Join(left, right, Inner, cond, _) =>
       val (plans, conditions) = flattenJoin(left)
       (plans ++ Seq(right), conditions ++ cond.toSeq)
 
-    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition, _)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
@@ -162,9 +164,9 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 
   def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _, _)) =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, Inner, _) =>
+    case j @ Join(_, _, Inner, _, _) =>
       Some(flattenJoin(j))
     case _ => None
   }
@@ -182,5 +184,30 @@ object Unions {
   private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
     case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
     case other => other :: Nil
+  }
+}
+
+/**
+ * A pattern that finds all attributes in `expr` that cannot be nullable.
+ */
+object ExtractNonNullableAttributes extends Logging with PredicateHelper {
+  def unapply(condition: Expression): Set[Attribute] = {
+    val predicates = splitConjunctivePredicates(condition)
+
+    val result = mutable.HashSet.empty[Attribute]
+    def extract(e: Expression): Unit = e match {
+      case IsNotNull(a: Attribute) => result.add(a)
+      case BinaryComparison(a: Attribute, b: Attribute) => {
+        if (!e.isInstanceOf[EqualNullSafe]) {
+          result.add(a)
+          result.add(b)
+        }
+      }
+      case BinaryComparison(a: Attribute, _) => if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
+      case BinaryComparison(_, a: Attribute) => if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
+      case Not(child) => extract(child)
+    }
+    predicates.foreach { extract(_) }
+    result.toSet
   }
 }
