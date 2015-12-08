@@ -93,7 +93,7 @@ public class JavaStatisticsSuite implements Serializable {
   }
 
   @Test
-  public void StreamingTest() {
+  public void streamingTest() {
     List<BinarySample> trainingBatch = Arrays.asList(
       new BinarySample(true, 1.0),
       new BinarySample(false, 2.0));
