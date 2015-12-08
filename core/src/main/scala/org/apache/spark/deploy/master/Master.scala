@@ -990,7 +990,6 @@ private[deploy] class Master(
       } finally {
         logInput.close()
       }
-      Thread.sleep(20)
 
       ui
     }(rebuildUIContext)
