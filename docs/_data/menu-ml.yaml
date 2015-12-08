@@ -1,3 +1,17 @@
+- text: "Overview: estimators, transformers and pipelines"
+  url: ml-intro.html
+- text: Building and transforming features
+  url: ml-features.html
+- text: Classification and Regression
+  url: ml-classification-regression.html
+- text: Clustering
+  url: ml-clustering.html
+- text: Collaborative filtering
+  url: ml-collaborative-filtering.html
+- text: Chaining transforms with pipelines
+  url: ml-pipelines.html
+- text: Advanced topics
+  url: ml-advanced.html
 - text: Feature extraction, transformation, and selection
   url: ml-features.html
 - text: Decision trees for classification and regression
