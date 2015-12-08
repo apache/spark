@@ -90,11 +90,11 @@ class IncompleteSparkUISuite extends AbstractHistoryIntegrationTests {
       // root web UI declares it complete
       awaitURLDoesNotContainText(connector, webUI,
         no_completed_applications, TEST_STARTUP_DELAY,
-        s"expecting application listed as completed")
+        s"expecting application listed as completed in $historyService")
 
       // final view has no incomplete applications
       assertContains(listIncompleteApps, no_incomplete_applications,
-        "incomplete applications still in list view")
+        s"incomplete applications still in list view in $historyService")
 
       // the underlying timeline entity
       val entity = provider.getTimelineEntity(yarnAttemptId)

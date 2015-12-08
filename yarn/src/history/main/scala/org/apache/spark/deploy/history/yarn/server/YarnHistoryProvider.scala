@@ -267,12 +267,15 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       logInfo(KEY_SERVICE_URL + ": " + timelineEndpoint)
       logDebug(sparkConf.toDebugString)
       // get the thread time
-      logInfo(s"refresh interval $manualRefreshInterval milliseconds")
+      logInfo(s"Manual refresh interval $manualRefreshInterval milliseconds")
       validateInterval(OPTION_MANUAL_REFRESH_INTERVAL, manualRefreshInterval, 0)
       // check the background refresh interval if there is one
       if (backgroundRefreshInterval > 0) {
         validateInterval(OPTION_BACKGROUND_REFRESH_INTERVAL, backgroundRefreshInterval,
           MIN_BACKGROUND_REFRESH_INTERVAL)
+        logInfo(s"Background refresh interval $backgroundRefreshInterval milliseconds")
+      } else {
+        logInfo(s"Background refresh interval=0: manual refreshes only")
       }
       initYarnClient()
       startRefreshThread()
@@ -289,7 +292,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private def validateInterval(prop: String, interval: Long, min: Long): Unit = {
     if (interval < min) {
       throw new IllegalArgumentException(TEXT_INVALID_UPDATE_INTERVAL +
-          prop + s": ${interval / 1000}; minimum allowed = ${min/1000}")
+          prop + s": ${interval / 1000}; minimum allowed = ${min / 1000}")
     }
   }
 
