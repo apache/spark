@@ -230,6 +230,10 @@ def initdb():
         models.Connection(
             conn_id='webhdfs_default', conn_type='hdfs',
             host='localhost', port=50070))
+    merge_conn(
+        models.Connection(
+            conn_id='ssh_default', conn_type='ssh',
+            host='localhost'))
 
     # Known event types
     KET = models.KnownEventType

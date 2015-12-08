@@ -1,4 +1,5 @@
-import copy
+from __future__ import print_function
+
 from datetime import datetime, time, timedelta
 import doctest
 import json
@@ -8,6 +9,8 @@ from time import sleep
 import unittest
 
 from airflow import configuration
+from airflow.models import Variable
+
 configuration.test_mode()
 from airflow import jobs, models, DAG, utils, operators, hooks, macros, settings
 from airflow.hooks import BaseHook
@@ -31,9 +34,9 @@ except ImportError:
     import pickle
 
 
-def reset():
+def reset(dag_id=TEST_DAG_ID):
     session = Session()
-    tis = session.query(models.TaskInstance).filter_by(dag_id=TEST_DAG_ID)
+    tis = session.query(models.TaskInstance).filter_by(dag_id=dag_id)
     tis.delete()
     session.commit()
     session.close()
@@ -355,6 +358,40 @@ class CoreTest(unittest.TestCase):
             failed, tests = doctest.testmod(mod)
             if failed:
                 raise Exception("Failed a doctest")
+
+    def test_variable_set_get_round_trip(self):
+        Variable.set("tested_var_set_id", "Monday morning breakfast")
+        assert "Monday morning breakfast" == Variable.get("tested_var_set_id")
+
+    def test_variable_set_get_round_trip_json(self):
+        value = {"a": 17, "b": 47}
+        Variable.set("tested_var_set_id", value, serialize_json=True)
+        assert value == Variable.get("tested_var_set_id", deserialize_json=True)
+
+    def test_get_non_existing_var_should_return_default(self):
+        default_value = "some default val"
+        assert default_value == Variable.get("thisIdDoesNotExist",
+                                             default_var=default_value)
+
+    def test_get_non_existing_var_should_not_deserialize_json_default(self):
+        default_value = "}{ this is a non JSON default }{"
+        assert default_value == Variable.get("thisIdDoesNotExist",
+                                             default_var=default_value,
+                                             deserialize_json=True)
+
+    def test_parameterized_config_gen(self):
+
+        cfg = configuration.parameterized_config(configuration.DEFAULT_CONFIG)
+
+        # making sure some basic building blocks are present:
+        assert "[core]" in cfg
+        assert "dags_folder" in cfg
+        assert "sql_alchemy_conn" in cfg
+        assert "fernet_key" in cfg
+
+        # making sure replacement actually happened
+        assert "{AIRFLOW_HOME}" not in cfg
+        assert "{FERNET_KEY}" not in cfg
 
 
 class CliTests(unittest.TestCase):
@@ -907,6 +944,57 @@ class S3HookTest(unittest.TestCase):
         self.assertEqual(parsed,
                          ("test", "this/is/not/a-real-key.txt"),
                          "Incorrect parsing of the s3 url")
+
+HELLO_SERVER_CMD = """
+import socket, sys
+listener = socket.socket()
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(('localhost', 2134))
+listener.listen(1)
+sys.stdout.write('ready')
+sys.stdout.flush()
+conn = listener.accept()[0]
+conn.sendall(b'hello')
+"""
+
+
+class SSHHookTest(unittest.TestCase):
+    def setUp(self):
+        configuration.test_mode()
+        from airflow.contrib.hooks.ssh_hook import SSHHook
+        self.hook = SSHHook()
+        self.hook.no_host_key_check = True
+
+    def test_remote_cmd(self):
+        output = self.hook.check_output(["echo", "-n", "airflow"])
+        self.assertEqual(output, b"airflow")
+
+    def test_tunnel(self):
+        print("Setting up remote listener")
+        import subprocess
+        import socket
+
+        self.handle = self.hook.Popen([
+            "python", "-c", '"{0}"'.format(HELLO_SERVER_CMD)
+        ], stdout=subprocess.PIPE)
+
+        print("Setting up tunnel")
+        with self.hook.tunnel(2135, 2134):
+            print("Tunnel up")
+            server_output = self.handle.stdout.read(5)
+            self.assertEqual(server_output, b"ready")
+            print("Connecting to server via tunnel")
+            s = socket.socket()
+            s.connect(("localhost", 2135))
+            print("Receiving...",)
+            response = s.recv(5)
+            self.assertEqual(response, b"hello")
+            print("Closing connection")
+            s.close()
+            print("Waiting for listener...")
+            output, _ = self.handle.communicate()
+            self.assertEqual(self.handle.returncode, 0)
+            print("Closing tunnel")
 
 
 if 'AIRFLOW_RUNALL_TESTS' in os.environ:

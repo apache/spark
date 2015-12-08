@@ -135,6 +135,12 @@ class DagBag(object):
         if sync_to_db:
             self.deactivate_inactive_dags()
 
+    def size(self):
+        """
+        :return: the amount of dags contained in this dagbag
+        """
+        return len(self.dags)
+
     def get_dag(self, dag_id):
         """
         Gets the DAG out of the dictionary, and refreshes it if expired
@@ -152,8 +158,9 @@ class DagBag(object):
                 dag = self.dags[dag_id]
         else:
             orm_dag = DagModel.get_current(dag_id)
-            self.process_file(
-                filepath=orm_dag.fileloc, only_if_updated=False)
+            if orm_dag:
+                self.process_file(filepath=orm_dag.fileloc,
+                                  only_if_updated=False)
             if dag_id in self.dags:
                 dag = self.dags[dag_id]
             else:
@@ -806,7 +813,8 @@ class TaskInstance(Base):
             )
             successes, skipped, failed, upstream_failed, done = qry.first()
             if flag_upstream_failed:
-                if skipped >= len(task._upstream_list):
+                if (skipped >= len(task._upstream_list) or
+                      (task.trigger_rule == TR.ALL_SUCCESS and skipped > 0)):
                     self.state = State.SKIPPED
                     self.start_date = datetime.now()
                     self.end_date = datetime.now()
@@ -2523,14 +2531,28 @@ class Variable(Base):
         obj = session.query(cls).filter(cls.key == key).first()
         if obj is None:
             if default_var is not None:
-                v = default_var
+                return default_var
             else:
                 raise ValueError('Variable {} does not exist'.format(key))
         else:
-            v = obj.val
-        if deserialize_json and v:
-            v = json.loads(v)
-        return v
+            if deserialize_json:
+                return json.loads(obj.val)
+            else:
+                return obj.val
+
+    @classmethod
+    @provide_session
+    def set(cls, key, value, serialize_json=False, session=None):
+
+        if serialize_json:
+            stored_value = json.dumps(value)
+        else:
+            stored_value = value
+
+        session.query(cls).filter(cls.key == key).delete()
+        session.add(Variable(key=key, val=stored_value))
+        session.flush()
+
 
 
 class XCom(Base):
