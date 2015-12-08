@@ -1290,7 +1290,7 @@ private[spark] object YarnHistoryProvider {
   /**
    * Minimum allowed refresh interval in milliseconds.
    */
-  val MIN_BACKGROUND_REFRESH_INTERVAL = 10000
+  val MIN_BACKGROUND_REFRESH_INTERVAL = 1000
 
   /**
    * Option for the number of events to retrieve.
