@@ -84,15 +84,15 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     }
   }
 
-//  test("End-to-end event logging") {
-//    testApplicationEventLogging()
-//  }
-//
-//  test("End-to-end event logging with compression") {
-//    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
-//      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
-//    }
-//  }
+  test("End-to-end event logging") {
+    testApplicationEventLogging()
+  }
+
+  test("End-to-end event logging with compression") {
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
+      testApplicationEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
+    }
+  }
 
   test("Log overwriting") {
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
@@ -201,7 +201,6 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
       // Following is an integration test with [[org.apache.spark.ui.memory.MemoryListener]], make
       // sure the events logged in history file can work correctly.
-      System.out.println(memoryListener)
       val mapForStage1 = memoryListener.completedStagesToMem((1, 0))
       val transMetrics1 = mapForStage1(execId).transportInfo.get
       MemoryListenerSuite.assertTransMetrics(
