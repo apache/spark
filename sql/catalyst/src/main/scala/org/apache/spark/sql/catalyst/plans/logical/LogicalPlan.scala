@@ -138,7 +138,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
   }
 
   /** Clean an expression so that differences in expression id should not affect equality */
-  def cleanExpression(e: Expression, input: Seq[Attribute]) = e match {
+  def cleanExpression(e: Expression, input: Seq[Attribute]): Expression = e match {
     case a: Alias =>
       // As the root of the expression, Alias will always take an arbitrary exprId, we need
       // to erase that for equality testing.
