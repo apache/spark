@@ -55,6 +55,13 @@ class TaskMetrics extends Serializable {
   def executorDeserializeTime: Long = _executorDeserializeTime
   private[spark] def setExecutorDeserializeTime(value: Long) = _executorDeserializeTime = value
 
+  /**
+   * CPU Time taken on the executor to deserialize this task in nanoseconds
+   */
+  private var _executorDeserializeCpuTime: Long = _
+  def executorDeserializeCpuTime: Long = _executorDeserializeCpuTime
+  private[spark] def setExecutorDeserializeCpuTime(value: Long) = _executorDeserializeCpuTime = value
+
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
@@ -62,6 +69,13 @@ class TaskMetrics extends Serializable {
   private var _executorRunTime: Long = _
   def executorRunTime: Long = _executorRunTime
   private[spark] def setExecutorRunTime(value: Long) = _executorRunTime = value
+
+  /**
+   * CPU Time the executor spends actually running the task (including fetching shuffle data) in nanoseconds
+   */
+  private var _executorCpuTime: Long = _
+  def executorCpuTime: Long = _executorCpuTime
+  private[spark] def setExecutorCpuTime(value: Long) = _executorCpuTime = value
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult

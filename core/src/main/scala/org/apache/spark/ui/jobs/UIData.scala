@@ -76,6 +76,7 @@ private[spark] object UIData {
     var numFailedTasks: Int = _
 
     var executorRunTime: Long = _
+    var executorCpuTime: Long = _
 
     var inputBytes: Long = _
     var inputRecords: Long = _

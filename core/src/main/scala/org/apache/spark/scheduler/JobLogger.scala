@@ -153,6 +153,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
                " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
                " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
+    val executorCpuTime = " EXECUTOR_CPU_TIME=" + taskMetrics.executorCpuTime
     val gcTime = " GC_TIME=" + taskMetrics.jvmGCTime
     val inputMetrics = taskMetrics.inputMetrics match {
       case Some(metrics) =>
@@ -181,7 +182,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
       case None => ""
     }
-    stageLogInfo(stageId, status + info + executorRunTime + gcTime + inputMetrics + outputMetrics +
+    stageLogInfo(stageId, status + info + executorRunTime + executorCpuTime + gcTime + inputMetrics + outputMetrics +
       shuffleReadMetrics + writeMetrics)
   }
 

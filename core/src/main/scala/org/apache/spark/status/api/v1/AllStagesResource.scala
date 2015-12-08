@@ -101,6 +101,7 @@ private[v1] object AllStagesResource {
       numCompleteTasks = stageUiData.numCompleteTasks,
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
+      executorCpuTime = stageUiData.executorCpuTime,
       submissionTime = stageInfo.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime,
       completionTime = stageInfo.completionTime.map(new Date(_)),
@@ -244,6 +245,7 @@ private[v1] object AllStagesResource {
     new TaskMetrics(
       executorDeserializeTime = internal.executorDeserializeTime,
       executorRunTime = internal.executorRunTime,
+      executorCpuTime = internal.executorCpuTime,
       resultSize = internal.resultSize,
       jvmGcTime = internal.jvmGCTime,
       resultSerializationTime = internal.resultSerializationTime,
