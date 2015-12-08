@@ -106,4 +106,21 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
       PMMLModelExportFactory.createPMMLModelExport(invalidModel)
     }
   }
+
+  test("PMMLModelExportFactory throw IllegalArgumentException "
+    + "when passing a Multinomial Naive Bayes") {
+    val label = Array(0.0, 1.0, 2.0)
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    val nbModel = new NaiveBayesModel(label, pi, theta, NaiveBayes.Multinomial)
+
+    intercept[IllegalArgumentException] {
+      PMMLModelExportFactory.createPMMLModelExport(nbModel)
+    }
+  }
 }

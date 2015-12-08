@@ -57,33 +57,34 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     if (model.modelType == NaiveBayes.Bernoulli) {
       for (i <- featureIndices) {
         fields(i) = FieldName.create("field_" + i)
-        dataDictionary.withDataFields(new DataField(fields(i), OpType.CATEGORICAL, DataType.DOUBLE)
-          .withValues(new Value("0.0"), new Value("1.0")))
+        dataDictionary
+          .addDataFields(new DataField(fields(i), OpType.CATEGORICAL, DataType.DOUBLE)
+          .addValues(new Value("0.0"), new Value("1.0")))
         miningSchema
-          .withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
+          .addMiningFields(new MiningField(fields(i)).setUsageType(FieldUsageType.ACTIVE))
 
         val pairsExist = labelIndices.map { label =>
           new TargetValueCount()
-            .withValue(label.toDouble.toString).withCount(math.exp(model.theta(label)(i)))
+            .setValue(label.toDouble.toString).setCount(math.exp(model.theta(label)(i)))
         }
 
         val pairCountsExist = new PairCounts()
-          .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairsExist: _*))
-          .withValue("1.0")
+          .setTargetValueCounts(new TargetValueCounts().addTargetValueCounts(pairsExist: _*))
+          .setValue("1.0")
 
         val pairsAbsent = labelIndices.map { label =>
           new TargetValueCount()
-            .withValue(label.toDouble.toString).withCount(1.0 - math.exp(model.theta(label)(i)))
+            .setValue(label.toDouble.toString).setCount(1.0 - math.exp(model.theta(label)(i)))
         }
 
         val pairCountsAbsent = new PairCounts()
-          .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(pairsAbsent: _*))
-          .withValue("0.0")
+          .setTargetValueCounts(new TargetValueCounts().addTargetValueCounts(pairsAbsent: _*))
+          .setValue("0.0")
 
         val bayesInput = new BayesInput()
 
-        bayesInput.withFieldName(fields(i)).withPairCounts(pairCountsExist, pairCountsAbsent)
-        bayesInputs.withBayesInputs(bayesInput)
+        bayesInput.setFieldName(fields(i)).addPairCounts(pairCountsExist, pairCountsAbsent)
+        bayesInputs.addBayesInputs(bayesInput)
       }
     } else {
       throw new IllegalArgumentException(
@@ -92,31 +93,32 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
 
     // add target field
     val targetField = FieldName.create("class")
-    dataDictionary.withDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.DOUBLE)
-      .withValues(labelIndices.map { x => new Value().withValue(x.toDouble.toString)}: _*))
+    dataDictionary
+      .addDataFields(new DataField(targetField, OpType.CATEGORICAL, DataType.DOUBLE)
+      .addValues(labelIndices.map { x => new Value().setValue(x.toDouble.toString)}: _*))
     miningSchema
-      .withMiningFields(new MiningField(targetField).withUsageType(FieldUsageType.PREDICTED))
+      .addMiningFields(new MiningField(targetField).setUsageType(FieldUsageType.PREDICTED))
 
     // add Bayes output
     val targetValueCounts = model.pi.zipWithIndex.map { case (x, i) =>
-      new TargetValueCount().withValue(i.toDouble.toString).withCount(math.exp(x)) }
+      new TargetValueCount().setValue(i.toDouble.toString).setCount(math.exp(x)) }
     bayesOutput
-      .withTargetValueCounts(new TargetValueCounts().withTargetValueCounts(targetValueCounts: _*))
-      .withFieldName(targetField)
+      .setTargetValueCounts(new TargetValueCounts().addTargetValueCounts(targetValueCounts: _*))
+      .setFieldName(targetField)
 
     // add output
     val output = new Output()
-    output.withOutputFields(
+    output.addOutputFields(
       new OutputField()
-        .withName(FieldName.create("Predicted_class"))
-        .withFeature(ResultFeatureType.PREDICTED_VALUE))
-    output.withOutputFields(labelIndices.map { label =>
+        .setName(FieldName.create("Predicted_class"))
+        .setFeature(FeatureType.PREDICTED_VALUE))
+    output.addOutputFields(labelIndices.map { label =>
       new OutputField()
-        .withName(FieldName.create(s"Probability_${label.toDouble}"))
-        .withOpType(OpType.CONTINUOUS)
-        .withDataType(DataType.DOUBLE)
-        .withFeature(ResultFeatureType.PROBABILITY)
-        .withValue(s"${label.toDouble}")
+        .setName(FieldName.create(s"Probability_${label.toDouble}"))
+        .setOpType(OpType.CONTINUOUS)
+        .setDataType(DataType.DOUBLE)
+        .setFeature(FeatureType.PROBABILITY)
+        .setValue(s"${label.toDouble}")
       }: _*)
 
     nbModel.setMiningSchema(miningSchema)
@@ -124,9 +126,9 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     nbModel.setBayesOutput(bayesOutput)
     nbModel.setOutput(output)
 
-    dataDictionary.withNumberOfFields(dataDictionary.getDataFields.size)
+    dataDictionary.setNumberOfFields(dataDictionary.getDataFields.size)
 
     pmml.setDataDictionary(dataDictionary)
-    pmml.withModels(nbModel)
+    pmml.addModels(nbModel)
   }
 }
