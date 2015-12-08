@@ -76,7 +76,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
     val predictionColName = $(predictionCol)
     val predictionType = schema($(predictionCol)).dataType
     require(predictionType == FloatType || predictionType == DoubleType,
-      s"Prediction column $predictionColName must be of type float or double, but not $predictionType")
+      s"Prediction column $predictionColName must be of type float or double, " +
+        s" but not $predictionType")
     val labelColName = $(labelCol)
     val labelType = schema($(labelCol)).dataType
     require(labelType == FloatType || labelType == DoubleType,
