@@ -18,6 +18,9 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.util.*;
 
 import scala.Tuple2;
@@ -383,6 +386,20 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<Tuple2<Integer, Tuple2<Tuple2<String, Long>, String>>> ds3 =
       context.createDataset(data3, encoder3);
     Assert.assertEquals(data3, ds3.collectAsList());
+  }
+
+  @Test
+  public void testTypeEncoder() {
+    Encoder<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> encoder =
+      Encoders.tuple(Encoders.DOUBLE(), Encoders.DECIMAL(), Encoders.DATE(), Encoders.TIMESTAMP(),
+        Encoders.FLOAT());
+    List<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> data =
+      Arrays.asList(new Tuple5<Double, BigDecimal, Date, Timestamp, Float>
+        (1.7976931348623157E308, new BigDecimal("0.922337203685477589").stripTrailingZeros(),
+          Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
+    Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
+      context.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
   }
 
   @Test
