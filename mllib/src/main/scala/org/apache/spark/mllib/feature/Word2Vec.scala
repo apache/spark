@@ -588,7 +588,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
 
       val dataArray = dataFrame.select("word", "vector").collect()
@@ -602,7 +602,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
 
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val vectorSize = model.values.head.size
