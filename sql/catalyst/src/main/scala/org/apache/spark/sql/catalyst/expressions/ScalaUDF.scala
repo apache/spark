@@ -172,80 +172,20 @@ case class ScalaUDF(
 
   lazy val reflectedFunc = runtimeMirror(function.getClass.getClassLoader).reflect(function)
   lazy val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
-      .asTerm.alternatives
-  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod)
+    .asTerm.alternatives
+  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod).apply _
 
   override def eval(input: InternalRow): Any = {
     val projected = InternalRow.fromSeq(children.map(_.eval(input)))
     val cRow: Row = inputEncoder.fromRow(projected)
 
-    var callRet: Any = null
     try {
-      callRet = children.size match {
-        case 0 => invokeMethod()
-        case 1 => invokeMethod(cRow(0))
-        case 2 => invokeMethod(cRow(0), cRow(1))
-        case 3 => invokeMethod(cRow(0), cRow(1), cRow(2))
-        case 4 => invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3))
-        case 5 => invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4))
-        case 6 => invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5))
-        case 7 => invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6))
-        case 8 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7))
-        case 9 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8))
-        case 10 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9))
-        case 11 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10))
-        case 12 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11))
-        case 13 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12))
-        case 14 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13))
-        case 15 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14))
-        case 16 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15))
-        case 17 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16))
-        case 18 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16),
-            cRow(17))
-        case 19 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16),
-            cRow(17), cRow(18))
-        case 20 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16),
-            cRow(17), cRow(18), cRow(19))
-        case 21 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16),
-            cRow(17), cRow(18), cRow(19), cRow(20))
-        case 22 =>
-          invokeMethod(cRow(0), cRow(1), cRow(2), cRow(3), cRow(4), cRow(5), cRow(6), cRow(7),
-            cRow(8), cRow(9), cRow(10), cRow(11), cRow(12), cRow(13), cRow(14), cRow(15), cRow(16),
-            cRow(17), cRow(18), cRow(19), cRow(20), cRow(21))
-      }
+      val callRet = invokeMethod(cRow.toSeq)
+      outputEncoder.toRow(Row(callRet)).copy().asInstanceOf[InternalRow].get(0, dataType)
     } catch {
       // When exception is thrown in UDF, an InvocationTargetException will be thrown.
       // We get and re-throw the cause exception.
       case e: InvocationTargetException => throw e.getTargetException
     }
-
-    outputEncoder.toRow(Row(callRet)).copy().asInstanceOf[InternalRow].get(0, dataType)
   }
 }
