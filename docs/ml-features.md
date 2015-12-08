@@ -997,30 +997,8 @@ labels (they will be inferred from the columns' metadata):
 Refer to the [IndexToString Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IndexToString)
 for more details on the API.
 
-{% highlight scala %}
-import org.apache.spark.ml.feature.{IndexToString, StringIndexer}
+{% include_example scala/org/apache/spark/examples/ml/IndexToStringExample.scala %}
 
-val df = sqlContext.createDataFrame(Seq(
-  (0, "a"),
-  (1, "b"),
-  (2, "c"),
-  (3, "a"),
-  (4, "a"),
-  (5, "c")
-)).toDF("id", "category")
-
-val indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-  .fit(df)
-val indexed = indexer.transform(df)
-
-val converter = new IndexToString()
-  .setInputCol("categoryIndex")
-  .setOutputCol("originalCategory")
-val converted = converter.transform(indexed)
-converted.select("id", "originalCategory").show()
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -1028,46 +1006,8 @@ converted.select("id", "originalCategory").show()
 Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
 for more details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
+{% include_example java/org/apache/spark/examples/ml/JavaIndexToStringExample.java %}
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.feature.IndexToString;
-import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.ml.feature.StringIndexerModel;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
-
-JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-    RowFactory.create(0, "a"),
-    RowFactory.create(1, "b"),
-    RowFactory.create(2, "c"),
-    RowFactory.create(3, "a"),
-    RowFactory.create(4, "a"),
-    RowFactory.create(5, "c")
-));
-StructType schema = new StructType(new StructField[]{
-    new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-    new StructField("category", DataTypes.StringType, false, Metadata.empty())
-});
-DataFrame df = sqlContext.createDataFrame(jrdd, schema);
-StringIndexerModel indexer = new StringIndexer()
-  .setInputCol("category")
-  .setOutputCol("categoryIndex")
-  .fit(df);
-DataFrame indexed = indexer.transform(df);
-
-IndexToString converter = new IndexToString()
-  .setInputCol("categoryIndex")
-  .setOutputCol("originalCategory");
-DataFrame converted = converter.transform(indexed);
-converted.select("id", "originalCategory").show();
-{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -1075,25 +1015,8 @@ converted.select("id", "originalCategory").show();
 Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
 for more details on the API.
 
-{% highlight python %}
-from pyspark.ml.feature import IndexToString, StringIndexer
+{% include_example python/ml/index_to_string_example.py %}
 
-df = sqlContext.createDataFrame([
-  (0, "a"),
-  (1, "b"),
-  (2, "c"),
-  (3, "a"),
-  (4, "a"),
-  (5, "c")
-], ["id", "category"])
-
-stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
-model = stringIndexer.fit(df)
-indexed = model.transform(df)
-converter = IndexToString(inputCol="categoryIndex", outputCol="originalCategory")
-converted = converter.transform(indexed)
-converted.select("id", "originalCategory").show()
-{% endhighlight %}
 </div>
 </div>
 
