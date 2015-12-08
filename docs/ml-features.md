@@ -835,10 +835,10 @@ dctDf.select("featuresDCT").show(3);
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies.
 So the most frequent label gets index `0`.
-If the input column is numeric, we cast it to string and index the string 
-values. When downstream pipeline components such as `Estimator` or 
-`Transformer` make use of this string-indexed label, you must set the input 
-column of the component to this string-indexed column name. In many cases, 
+If the input column is numeric, we cast it to string and index the string
+values. When downstream pipeline components such as `Estimator` or
+`Transformer` make use of this string-indexed label, you must set the input
+column of the component to this string-indexed column name. In many cases,
 you can set the input column with `setInputCol`.
 
 **Examples**
@@ -951,9 +951,78 @@ indexed.show()
 </div>
 </div>
 
+
+## IndexToString
+
+Symmetrically to `StringIndexer`, `IndexToString` maps a column of label indices
+back to a column containing the original labels as strings. The common use case
+is to produce indices from labels with `StringIndexer`, train a model with those
+indices and retrieve the original labels from the column of predicted indices
+with `IndexToString`. However, you are free to supply your own labels.
+
+**Examples**
+
+Building on the `StringIndexer` example, let's assume we have the following
+DataFrame with columns `id` and `categoryIndex`:
+
+~~~~
+ id | categoryIndex
+----|---------------
+ 0  | 0.0
+ 1  | 2.0
+ 2  | 1.0
+ 3  | 0.0
+ 4  | 0.0
+ 5  | 1.0
+~~~~
+
+Applying `IndexToString` with `categoryIndex` as the input column,
+`originalCategory` as the output column, we are able to retrieve our original
+labels (they will be inferred from the columns' metadata):
+
+~~~~
+ id | categoryIndex | originalCategory
+----|---------------|-----------------
+ 0  | 0.0           | a
+ 1  | 2.0           | b
+ 2  | 1.0           | c
+ 3  | 0.0           | a
+ 4  | 0.0           | a
+ 5  | 1.0           | c
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [IndexToString Scala docs](api/scala/index.html#org.apache.spark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/IndexToStringExample.scala %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [IndexToString Java docs](api/java/org/apache/spark/ml/feature/IndexToString.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaIndexToStringExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
+for more details on the API.
+
+{% include_example python/ml/index_to_string_example.py %}
+
+</div>
+</div>
+
 ## OneHotEncoder
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features 
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -979,10 +1048,11 @@ val indexer = new StringIndexer()
   .fit(df)
 val indexed = indexer.transform(df)
 
-val encoder = new OneHotEncoder().setInputCol("categoryIndex").
-  setOutputCol("categoryVec")
+val encoder = new OneHotEncoder()
+  .setInputCol("categoryIndex")
+  .setOutputCol("categoryVec")
 val encoded = encoder.transform(indexed)
-encoded.select("id", "categoryVec").foreach(println)
+encoded.select("id", "categoryVec").show()
 {% endhighlight %}
 </div>
 
@@ -1015,7 +1085,7 @@ JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
     RowFactory.create(5, "c")
 ));
 StructType schema = new StructType(new StructField[]{
-    new StructField("id", DataTypes.DoubleType, false, Metadata.empty()),
+    new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
     new StructField("category", DataTypes.StringType, false, Metadata.empty())
 });
 DataFrame df = sqlContext.createDataFrame(jrdd, schema);
@@ -1029,6 +1099,7 @@ OneHotEncoder encoder = new OneHotEncoder()
   .setInputCol("categoryIndex")
   .setOutputCol("categoryVec");
 DataFrame encoded = encoder.transform(indexed);
+encoded.select("id", "categoryVec").show();
 {% endhighlight %}
 </div>
 
@@ -1054,6 +1125,7 @@ model = stringIndexer.fit(df)
 indexed = model.transform(df)
 encoder = OneHotEncoder(includeFirst=False, inputCol="categoryIndex", outputCol="categoryVec")
 encoded = encoder.transform(indexed)
+encoded.select("id", "categoryVec").show()
 {% endhighlight %}
 </div>
 </div>
@@ -1582,13 +1654,72 @@ from pyspark.mllib.linalg import Vectors
 
 data = [(Vectors.dense([1.0, 2.0, 3.0]),), (Vectors.dense([4.0, 5.0, 6.0]),)]
 df = sqlContext.createDataFrame(data, ["vector"])
-transformer = ElementwiseProduct(scalingVec=Vectors.dense([0.0, 1.0, 2.0]), 
+transformer = ElementwiseProduct(scalingVec=Vectors.dense([0.0, 1.0, 2.0]),
                                  inputCol="vector", outputCol="transformedVector")
 transformer.transform(df).show()
 
 {% endhighlight %}
 </div>
 
+</div>
+
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+* `SELECT a, a + b AS a_b FROM __THIS__`
+* `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
+* `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id`, `v1` and `v2`:
+
+~~~~
+ id |  v1 |  v2
+----|-----|-----
+ 0  | 1.0 | 3.0  
+ 2  | 2.0 | 5.0
+~~~~
+
+This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__"`:
+
+~~~~
+ id |  v1 |  v2 |  v3 |  v4
+----|-----|-----|-----|-----
+ 0  | 1.0 | 3.0 | 4.0 | 3.0
+ 2  | 2.0 | 5.0 | 7.0 |10.0
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [SQLTransformer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.SQLTransformer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/SQLTransformerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [SQLTransformer Java docs](api/java/org/apache/spark/ml/feature/SQLTransformer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaSQLTransformerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.SQLTransformer) for more details on the API.
+
+{% include_example python/ml/sql_transformer.py %}
+</div>
 </div>
 
 ## VectorAssembler
@@ -1705,6 +1836,71 @@ print(output.select("features", "clicked").first())
 </div>
 </div>
 
+## QuantileDiscretizer
+
+`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+categorical features.
+The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
+This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
+find fewer depending on the data sample values.
+
+Note that the result may be different every time you run it, since the sample strategy behind it is
+non-deterministic.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `hour`:
+
+~~~
+ id | hour
+----|------
+ 0  | 18.0
+----|------
+ 1  | 19.0
+----|------
+ 2  | 8.0
+----|------
+ 3  | 5.0
+----|------
+ 4  | 2.2
+~~~
+
+`hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
+categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+
+~~~
+ id | hour | result
+----|------|------
+ 0  | 18.0 | 2.0
+----|------|------
+ 1  | 19.0 | 2.0
+----|------|------
+ 2  | 8.0  | 1.0
+----|------|------
+ 3  | 5.0  | 1.0
+----|------|------
+ 4  | 2.2  | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/feature/QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
+</div>
+</div>
+
 # Feature Selectors
 
 ## VectorSlicer
@@ -1713,15 +1909,15 @@ print(output.select("features", "clicked").first())
 sub-array of the original features. It is useful for extracting features from a vector column.
 
 `VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
-whose values are selected via those indices. There are two types of indices, 
+whose values are selected via those indices. There are two types of indices,
 
  1. Integer indices that represents the indices into the vector, `setIndices()`;
 
- 2. String indices that represents the names of features into the vector, `setNames()`. 
+ 2. String indices that represents the names of features into the vector, `setNames()`.
  *This requires the vector column to have an `AttributeGroup` since the implementation matches on
  the name field of an `Attribute`.*
 
-Specification by integer and string are both acceptable. Moreover, you can use integer index and 
+Specification by integer and string are both acceptable. Moreover, you can use integer index and
 string name simultaneously. At least one feature must be selected. Duplicate features are not
 allowed, so there can be no overlap between selected indices and names. Note that if names of
 features are selected, an exception will be threw out when encountering with empty input attributes.
@@ -1734,9 +1930,9 @@ followed by the selected names (in the order given).
 Suppose that we have a DataFrame with the column `userFeatures`:
 
 ~~~
- userFeatures     
+ userFeatures
 ------------------
- [0.0, 10.0, 0.5] 
+ [0.0, 10.0, 0.5]
 ~~~
 
 `userFeatures` is a vector column that contains three user features. Assuming that the first column
@@ -1750,7 +1946,7 @@ column named `features`:
  [0.0, 10.0, 0.5] | [10.0, 0.5]
 ~~~
 
-Suppose also that we have a potential input attributes for the `userFeatures`, i.e. 
+Suppose also that we have a potential input attributes for the `userFeatures`, i.e.
 `["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
 
 ~~~

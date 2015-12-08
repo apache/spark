@@ -14,11 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+context("include an external JAR in SparkContext")
 
-library(testthat)
-library(SparkR)
+runScript <- function() {
+  sparkHome <- Sys.getenv("SPARK_HOME")
+  sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
+  jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
+  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
+  submitPath <- file.path(sparkHome, "bin/spark-submit")
+  res <- system2(command = submitPath,
+                 args = c(jarPath, scriptPath),
+                 stdout = TRUE)
+  tail(res, 2)
+}
 
-# Turn all warnings into errors
-options("warn" = 2)
-
-test_package("SparkR")
+test_that("sparkJars tag in SparkContext", {
+  testOutput <- runScript()
+  helloTest <- testOutput[1]
+  expect_equal(helloTest, "Hello, Dave")
+  basicFunction <- testOutput[2]
+  expect_equal(basicFunction, "4")
+})

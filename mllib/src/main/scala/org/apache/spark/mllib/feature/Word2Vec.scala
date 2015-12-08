@@ -587,7 +587,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
@@ -599,7 +599,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
 
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val vectorSize = model.values.head.size
