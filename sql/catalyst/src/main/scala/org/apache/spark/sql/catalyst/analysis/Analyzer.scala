@@ -259,7 +259,7 @@ class Analyzer(
 
   object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Pivot if !p.childrenResolved => p
+      case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved) => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
