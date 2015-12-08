@@ -366,9 +366,9 @@ case class MapObjects(
     function(AttributeReference("loopVar", elementType)())
   }
 
-  lazy val loopAttribute = completeFunction.collectFirst {
+  lazy val loopAttribute = completeFunction.collect {
     case a: AttributeReference if a.name == "loopVar" => a
-  }.get
+  }.last
 
   override protected def otherCopyArgs: Seq[AnyRef] = completeFunctionCopy :: Nil
 
