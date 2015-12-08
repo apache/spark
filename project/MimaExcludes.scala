@@ -132,7 +132,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.jdbc.NoopDialect$")
       ) ++ Seq (
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ApplicationInfo.this")
+          "org.apache.spark.status.api.v1.ApplicationInfo.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.StageData.this")
       ) ++ Seq(
         // SPARK-11766 add toJson to Vector
         ProblemFilters.exclude[MissingMethodProblem](
@@ -155,7 +157,14 @@ object MimaExcludes {
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
-      )
+      ) ++ Seq(
+        // SPARK-3580 Add getNumPartitions method to JavaRDD
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
