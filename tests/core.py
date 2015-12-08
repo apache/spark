@@ -1,14 +1,18 @@
 from __future__ import print_function
 
-from datetime import datetime, time, timedelta
 import doctest
 import json
+import logging
 import os
 import re
-from time import sleep
 import unittest
+from datetime import datetime, time, timedelta
+from time import sleep
+
+from dateutil.relativedelta import relativedelta
 
 from airflow import configuration
+from airflow.executors import SequentialExecutor, LocalExecutor
 from airflow.models import Variable
 
 configuration.test_mode()
@@ -17,6 +21,7 @@ from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
+from airflow.utils import LoggingMixin, round_time
 from lxml import html
 
 NUM_EXAMPLE_DAGS = 7
@@ -392,6 +397,81 @@ class CoreTest(unittest.TestCase):
         # making sure replacement actually happened
         assert "{AIRFLOW_HOME}" not in cfg
         assert "{FERNET_KEY}" not in cfg
+
+    def test_calling_log_to_stdout_should_add_one_stream_handler(self):
+
+        # first resetting the logger
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            root_logger.removeHandler(handler)
+
+        root_logger.setLevel(logging.NOTSET)
+        assert root_logger.level == logging.NOTSET
+
+        utils.log_to_stdout()
+        stream_handlers = [h for h in root_logger.handlers
+                           if isinstance(h, logging.StreamHandler)]
+
+        assert len(stream_handlers) == 1
+        assert root_logger.level == utils.LOGGING_LEVEL
+
+    def test_calling_log_to_stdout_2X_should_add_only_one_stream_handler(self):
+
+        utils.log_to_stdout()
+        utils.log_to_stdout()
+        root_logger = logging.getLogger()
+
+        stream_handlers = [h for h in root_logger.handlers
+                           if isinstance(h, logging.StreamHandler)]
+
+        assert len(stream_handlers) == 1
+
+    def test_setting_log_level_then_calling_log_should_keep_the_old_value(self):
+
+        # if the log level is set externally, i.e. either through
+        # --logging-level or anything, then its value should not be overridden
+        # by the default "INFO" in log_to_stdout
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+        utils.log_to_stdout()
+
+        assert root_logger.level == logging.DEBUG
+
+    def test_class_with_logger_should_have_logger_with_correct_name(self):
+
+        # each class should automatically receive a logger with a correct name
+
+        class Blah(LoggingMixin):
+            pass
+
+        assert Blah().logger.name == "Blah"
+        assert SequentialExecutor().logger.name == "SequentialExecutor"
+        assert LocalExecutor().logger.name == "LocalExecutor"
+
+    def test_round_time(self):
+
+        rt1 = round_time(datetime(2015, 1, 1, 6), timedelta(days=1))
+        assert rt1 == datetime(2015, 1, 1, 0, 0)
+
+        rt2 = round_time(datetime(2015, 1, 2), relativedelta(months=1))
+        assert rt2 == datetime(2015, 1, 1, 0, 0)
+
+        rt3 = round_time(datetime(2015, 9, 16, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt3 == datetime(2015, 9, 16, 0, 0)
+
+        rt4 = round_time(datetime(2015, 9, 15, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt4 == datetime(2015, 9, 15, 0, 0)
+
+        rt5 = round_time(datetime(2015, 9, 14, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt5 == datetime(2015, 9, 14, 0, 0)
+
+        rt6 = round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt6 == datetime(2015, 9, 14, 0, 0)
 
 
 class CliTests(unittest.TestCase):

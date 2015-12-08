@@ -4,6 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from future.standard_library import install_aliases
+
 install_aliases()
 from builtins import str
 from builtins import object, bytes
@@ -39,7 +40,7 @@ from airflow.executors import DEFAULT_EXECUTOR, LocalExecutor
 from airflow import configuration
 from airflow.utils import (
     AirflowException, State, apply_defaults, provide_session,
-    is_container, as_tuple, TriggerRule)
+    is_container, as_tuple, TriggerRule, LoggingMixin)
 
 Base = declarative_base()
 ID_LEN = 250
@@ -89,7 +90,7 @@ def clear_task_instances(tis, session, activate_dag_runs=True):
             dr.state = State.RUNNING
 
 
-class DagBag(object):
+class DagBag(LoggingMixin):
     """
     A dagbag is a collection of dags, parsed out of a folder tree and has high
     level configuration settings, like what database to use as a backend and
@@ -119,7 +120,7 @@ class DagBag(object):
             sync_to_db=False):
 
         dag_folder = dag_folder or DAGS_FOLDER
-        logging.info("Filling up the DagBag from " + dag_folder)
+        self.logger.info("Filling up the DagBag from {}".format(dag_folder))
         self.dag_folder = dag_folder
         self.dags = {}
         self.sync_to_db = sync_to_db
@@ -188,20 +189,18 @@ class DagBag(object):
                 if not all([s in content for s in ('DAG', 'airflow')]):
                     return
 
-        if (
-                not only_if_updated or
-                filepath not in self.file_last_changed or
-                dttm != self.file_last_changed[filepath]):
+        if (not only_if_updated or
+                    filepath not in self.file_last_changed or
+                    dttm != self.file_last_changed[filepath]):
             try:
-                logging.info("Importing " + filepath)
+                self.logger.info("Importing " + filepath)
                 if mod_name in sys.modules:
                     del sys.modules[mod_name]
                 with utils.timeout(30):
                     m = imp.load_source(mod_name, filepath)
             except Exception as e:
-                logging.error("Failed to import: " + filepath)
+                self.logger.exception("Failed to import: " + filepath)
                 self.import_errors[filepath] = str(e)
-                logging.exception(e)
                 self.file_last_changed[filepath] = dttm
                 return
 
@@ -219,11 +218,11 @@ class DagBag(object):
         Fails tasks that haven't had a heartbeat in too long
         """
         from airflow.jobs import LocalTaskJob as LJ
-        logging.info("Finding 'running' jobs without a recent heartbeat")
+        self.logger.info("Finding 'running' jobs without a recent heartbeat")
         secs = (
             configuration.getint('scheduler', 'job_heartbeat_sec') * 3) + 120
         limit_dttm = datetime.now() - timedelta(seconds=secs)
-        logging.info(
+        self.logger.info(
             "Failing jobs without heartbeat after {}".format(limit_dttm))
         jobs = (
             session
@@ -236,14 +235,14 @@ class DagBag(object):
         for job in jobs:
             ti = session.query(TaskInstance).filter_by(
                 job_id=job.id, state=State.RUNNING).first()
-            logging.info("Failing job_id '{}'".format(job.id))
+            self.logger.info("Failing job_id '{}'".format(job.id))
             if ti and ti.dag_id in self.dags:
                 dag = self.dags[ti.dag_id]
                 if ti.task_id in dag.task_ids:
                     task = dag.get_task(ti.task_id)
                     ti.task = task
                     ti.handle_failure("{} killed as zombie".format(ti))
-                    logging.info('Marked zombie job {} as failed'.format(ti))
+                    self.logger.info('Marked zombie job {} as failed'.format(ti))
             else:
                 job.state = State.FAILED
         session.commit()
@@ -279,7 +278,7 @@ class DagBag(object):
             subdag.fileloc = root_dag.full_filepath
             subdag.is_subdag = True
             self.bag_dag(subdag, parent_dag=dag, root_dag=root_dag)
-        logging.info('Loaded DAG {dag}'.format(**locals()))
+        self.logger.info('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
             self,
@@ -1026,7 +1025,6 @@ class TaskInstance(Base):
 
         self.render_templates()
         task_copy.dry_run()
-
 
     def handle_failure(self, error, test_mode=False, context=None):
         logging.exception(error)
@@ -1902,7 +1900,7 @@ class DagModel(Base):
 
 
 @functools.total_ordering
-class DAG(object):
+class DAG(LoggingMixin):
     """
     A dag (directed acyclic graph) is a collection of tasks with directional
     dependencies. A dag also has a schedule, a start end an end date
@@ -2128,7 +2126,7 @@ class DAG(object):
         Maintains and returns the currently active runs as a list of dates
         """
         TI = TaskInstance
-        session =  settings.Session()
+        session = settings.Session()
         active_dates = []
         active_runs = (
             session.query(DagRun)
@@ -2138,7 +2136,7 @@ class DAG(object):
             .all()
         )
         for run in active_runs:
-            logging.info("Checking state for {}".format(run))
+            self.logger.info("Checking state for {}".format(run))
             task_instances = session.query(TI).filter(
                 TI.dag_id == run.dag_id,
                 TI.task_id.in_(self.task_ids),
@@ -2147,13 +2145,13 @@ class DAG(object):
             if len(task_instances) == len(self.tasks):
                 task_states = [ti.state for ti in task_instances]
                 if State.FAILED in task_states:
-                    logging.info('Marking run {} failed'.format(run))
+                    self.logger.info('Marking run {} failed'.format(run))
                     run.state = State.FAILED
                 elif len(
                     set(task_states) |
                     set([State.SUCCESS, State.SKIPPED])
                 ) == 2:
-                    logging.info('Marking run {} successful'.format(run))
+                    self.logger.info('Marking run {} successful'.format(run))
                     run.state = State.SUCCESS
                 else:
                     active_dates.append(run.execution_date)
@@ -2215,8 +2213,7 @@ class DAG(object):
         if not start_date:
             start_date = (datetime.today()-timedelta(30)).date()
             start_date = datetime.combine(start_date, datetime.min.time())
-        if not end_date:
-            end_date = datetime.now()
+        end_date = end_date or datetime.now()
         tis = session.query(TI).filter(
             TI.dag_id == self.dag_id,
             TI.execution_date >= start_date,
@@ -2320,9 +2317,8 @@ class DAG(object):
         result.params = self.params
         return result
 
-    def sub_dag(
-            self, task_regex,
-            include_downstream=False, include_upstream=True):
+    def sub_dag(self, task_regex, include_downstream=False,
+                include_upstream=True):
         """
         Returns a subset of the current dag as a deep copy of the current dag
         based on a regex that should match one or many tasks, and includes
