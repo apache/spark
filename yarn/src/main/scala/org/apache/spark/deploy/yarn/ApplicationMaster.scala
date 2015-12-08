@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
@@ -371,15 +370,16 @@ private[spark] class ApplicationMaster(
             failureCount = 0
           } catch {
             case i: InterruptedException =>
-            case a: ApplicationAttemptNotFoundException => {
-              val message = "ApplicationAttemptNotFoundException was thrown from Reporter thread.";
-              logError(message, a)
-              finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
-                message)
-            }
             case e: Throwable => {
               failureCount += 1
-              if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
+              if ("org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException".equals(
+                e.getClass().getName())) {
+                val message = "ApplicationAttemptNotFoundException was thrown " +
+                  "from Reporter thread."
+                logError(message, e)
+                finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+                  message)
+              } else if (!NonFatal(e) || failureCount >= reporterMaxFailures) {
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_REPORTER_FAILURE, "Exception was thrown " +
                     s"$failureCount time(s) from Reporter thread.")
