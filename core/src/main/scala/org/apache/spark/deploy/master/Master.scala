@@ -257,8 +257,9 @@ private[deploy] class Master(
           exec.state = state
 
           if (state == ExecutorState.RUNNING) {
-            assert(oldState == ExecutorState.LAUNCHING,
-              s"executor $execId state transfer from $oldState to RUNNING is illegal")
+            if (oldState != ExecutorState.LAUNCHING) {
+              logWarning(s"Executor $execId state transfer from $oldState to RUNNING is unexpected")
+            }
             appInfo.resetRetryCount()
           }
 

@@ -214,7 +214,7 @@ class BisectingKMeans private (
   }
 
   /**
-   * Java-friendly version of [[run(RDD[Vector])*]]
+   * Java-friendly version of [[run()]].
    */
   def run(data: JavaRDD[Vector]): BisectingKMeansModel = run(data.rdd)
 }

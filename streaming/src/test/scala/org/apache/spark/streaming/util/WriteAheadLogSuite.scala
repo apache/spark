@@ -480,7 +480,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     p
   }
 
-  test("BatchedWriteAheadLog - name log with aggregated entries with the timestamp of last entry") {
+  test("BatchedWriteAheadLog - name log with the highest timestamp of aggregated entries") {
     val blockingWal = new BlockingWriteAheadLog(wal, walHandle)
     val batchedWal = new BatchedWriteAheadLog(blockingWal, sparkConf)
 
@@ -500,8 +500,14 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
     writeAsync(batchedWal, event3, 8L)
-    writeAsync(batchedWal, event4, 12L)
-    writeAsync(batchedWal, event5, 10L)
+    // we would like event 5 to be written before event 4 in order to test that they get
+    // sorted before being aggregated
+    writeAsync(batchedWal, event5, 12L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 3)
+    }
+    writeAsync(batchedWal, event4, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
       assert(batchedWal.invokePrivate(queueLength()) === 4)
@@ -517,7 +523,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
       val bufferCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
-      verify(wal, times(1)).write(bufferCaptor.capture(), meq(10L))
+      verify(wal, times(1)).write(bufferCaptor.capture(), meq(12L))
       val records = BatchedWriteAheadLog.deaggregate(bufferCaptor.getValue).map(byteBufferToString)
       assert(records.toSet === queuedEvents)
     }
