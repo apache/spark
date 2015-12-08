@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
-case class Count(child: Expression) extends DeclarativeAggregate {
-  override def children: Seq[Expression] = child :: Nil
+case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   override def nullable: Boolean = false
 
@@ -30,25 +29,29 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = LongType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(AnyDataType)
 
-  private val count = AttributeReference("count", LongType)()
+  private lazy val count = AttributeReference("count", LongType)()
 
-  override val aggBufferAttributes = count :: Nil
+  override lazy val aggBufferAttributes = count :: Nil
 
-  override val initialValues = Seq(
+  override lazy val initialValues = Seq(
     /* count = */ Literal(0L)
   )
 
-  override val updateExpressions = Seq(
-    /* count = */ If(IsNull(child), count, count + 1L)
+  override lazy val updateExpressions = Seq(
+    /* count = */ If(children.map(IsNull).reduce(Or), count, count + 1L)
   )
 
-  override val mergeExpressions = Seq(
+  override lazy val mergeExpressions = Seq(
     /* count = */ count.left + count.right
   )
 
-  override val evaluateExpression = Cast(count, LongType)
+  override lazy val evaluateExpression = Cast(count, LongType)
 
   override def defaultResult: Option[Literal] = Option(Literal(0L))
+}
+
+object Count {
+  def apply(child: Expression): Count = Count(child :: Nil)
 }
