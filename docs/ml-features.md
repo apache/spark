@@ -815,6 +815,65 @@ Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.
 </div>
 </div>
 
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+* `SELECT a, a + b AS a_b FROM __THIS__`
+* `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
+* `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id`, `v1` and `v2`:
+
+~~~~
+ id |  v1 |  v2
+----|-----|-----
+ 0  | 1.0 | 3.0  
+ 2  | 2.0 | 5.0
+~~~~
+
+This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__"`:
+
+~~~~
+ id |  v1 |  v2 |  v3 |  v4
+----|-----|-----|-----|-----
+ 0  | 1.0 | 3.0 | 4.0 | 3.0
+ 2  | 2.0 | 5.0 | 7.0 |10.0
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [SQLTransformer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.SQLTransformer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/SQLTransformerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [SQLTransformer Java docs](api/java/org/apache/spark/ml/feature/SQLTransformer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaSQLTransformerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.SQLTransformer) for more details on the API.
+
+{% include_example python/ml/sql_transformer.py %}
+</div>
+</div>
+
 ## VectorAssembler
 
 `VectorAssembler` is a transformer that combines a given list of columns into a single vector
