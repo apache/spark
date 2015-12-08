@@ -422,7 +422,14 @@ private[sql] class JDBCRDD(
             case IntegerConversion => mutableRow.setInt(i, rs.getInt(pos))
             case LongConversion => mutableRow.setLong(i, rs.getLong(pos))
             // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
-            case StringConversion => mutableRow.update(i, UTF8String.fromString(rs.getString(pos)))
+            case StringConversion =>
+              val s = rs.getString(pos)
+              if (s != null) {
+                mutableRow.update(i, UTF8String.fromString(rs.getString(pos).trim))
+              }
+              else {
+                mutableRow.update(i, null)
+              }
             case TimestampConversion =>
               val t = rs.getTimestamp(pos)
               if (t != null) {
