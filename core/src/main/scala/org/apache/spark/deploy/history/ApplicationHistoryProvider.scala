@@ -54,13 +54,13 @@ private[spark] case class ApplicationHistoryInfo(
 private[history] case class HistoryProviderUpdateState()
 
 /**
- * All the information returned from a call to getAppUI
+ * All the information returned from a call to `getAppUI()`: the new UI
+ * and any required update state.
  * @param ui Spark UI
- * @param timestamp timestamp of the loaded data
  * @param updateState any provider-specific update state
  */
-private[history] case class LoadedAppUI(ui: SparkUI,
-    timestamp: Long,
+private[history] case class LoadedAppUI(
+    ui: SparkUI,
     updateState: Option[HistoryProviderUpdateState])
 
 private[history] abstract class ApplicationHistoryProvider {
@@ -77,7 +77,8 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @param appId The application ID.
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
-   * @return The application's UI, or None if application is not found.
+   * @return a [[LoadedAppUI]] instance containing the application's UI and any state information
+   *         for update probes, or `None` if the application/attempt is not found.
    */
   def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI]
 
@@ -105,12 +106,13 @@ private[history] abstract class ApplicationHistoryProvider {
    * Probe for an update to an (incompleted) application
    * @param appId application ID
    * @param attemptId optional attempt ID
-   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
-   * @param data any other data the operations implementation can use to determine age
-   * @return true if the application was updated since `updateTimeMillis`
+   * @param updateState state information needed by the provider to determine age
+   * @return true if the application has been updated
    */
-  def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
-      data: Option[HistoryProviderUpdateState]): Boolean = {
+  def isUpdated(
+      appId: String,
+      attemptId: Option[String],
+      updateState: Option[HistoryProviderUpdateState]): Boolean = {
     false
   }
 

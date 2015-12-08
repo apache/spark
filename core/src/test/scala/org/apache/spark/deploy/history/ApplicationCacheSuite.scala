@@ -56,7 +56,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
   }
 
   /**
-   * cache operations
+   * Stub cache operations.
+   * The state is kept in a map of [[CacheKey]] to [[CacheEntry]],
+   * the `probeTime` field in the cache entry setting the timestamp of the entry
    */
   class StubCacheOperations extends ApplicationCacheOperations with Logging {
 
@@ -80,7 +82,8 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
-      instances.get(CacheKey(appId, attemptId)).map( e => LoadedAppUI(e.ui, 0L, None))
+      instances.get(CacheKey(appId, attemptId)).map( e =>
+        LoadedAppUI(e.ui, Some(new StubHistoryProviderUpdateState(e.probeTime))))
     }
 
     override def attachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI,
@@ -107,7 +110,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     def putInstance(appId: String, attemptId: Option[String], ui: SparkUI, completed: Boolean,
         timestamp: Long): Unit = {
       instances += (CacheKey(appId, attemptId) ->
-          new CacheEntry(ui, completed, None, timestamp, timestamp))
+          new CacheEntry(ui, completed, None, timestamp))
     }
 
     /**
@@ -125,11 +128,18 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
 
     /**
-     * @return true if the timestamp on a cached instance is greater than `updateTimeMillis`.
+     * Update state probe.
+     * @param appId application ID
+     * @param attemptId optional attempt ID
+     * @param updateState state containing the timestamp of the data previously loaded.
+     * @return true if the application has been updated
      */
-    override def isUpdated(appId: String, attemptId: Option[String], updateTimeMillis: Long,
-        data: Option[HistoryProviderUpdateState]): Boolean = {
+    override def isUpdated(
+        appId: String,
+        attemptId: Option[String],
+        updateState: Option[HistoryProviderUpdateState]): Boolean = {
       updateProbeCount += 1
+      val updateTimeMillis = updateState.get.asInstanceOf[StubHistoryProviderUpdateState].updateTime
       logDebug(s"isUpdated($appId, $attemptId, $updateTimeMillis)")
       val entry = instances.get(CacheKey(appId, attemptId)).get
       val updated = entry.probeTime > updateTimeMillis
@@ -145,6 +155,13 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     }
 
   }
+
+  /**
+   * The update state for the [[StubCacheOperations]]
+   * @param updateTime a timestamp
+   */
+  private[history] class StubHistoryProviderUpdateState(val updateTime: Long)
+      extends HistoryProviderUpdateState
 
   /**
    * Create a new UI. The info/attempt info classes here are from the package

@@ -257,8 +257,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
           val status = fs.getFileStatus(new Path(logDir, attempt.logPath))
-          val appAttemptInfo = replay(status,
-            replayBus)
+          val appAttemptInfo = replay(status, replayBus)
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -267,7 +266,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             ui.getSecurityManager.setViewAcls(attempt.sparkUser,
               appListener.viewAcls.getOrElse(""))
             LoadedAppUI(ui,
-              Math.max(attempt.version, status.getModificationTime),
               Some(new FsHistoryProviderUpdateState(attempt.version)))
           }
         }
@@ -520,22 +518,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * operation.
    */
   private[history] def scanAndUpdateIncompleteAttemptInfo(): Unit = {
-    val now = System.currentTimeMillis();
     val newAttempts: Iterable[FsApplicationAttemptInfo] = applications
         .filter( e => !e._2.completed)
         .flatMap { e =>
           // build list of (false, attempt) or (true, attempt') values
-          e._2.attempts.flatMap { attempt: FsApplicationAttemptInfo =>
-            val path = new Path(logDir, attempt.logPath)
+          e._2.attempts.flatMap { prevInfo: FsApplicationAttemptInfo =>
+            val path = new Path(logDir, prevInfo.logPath)
             try {
               val status = fs.getFileStatus(path)
               val size = getLogSize(status).getOrElse(-1L)
-              val aS = attempt.fileSize
+              val aS = prevInfo.fileSize
               if (size > aS) {
-                logDebug(s"Attempt ${attempt.name}/${attempt.appId} size => $size")
-                Some(new FsApplicationAttemptInfo(attempt.logPath, attempt.name, attempt.appId,
-                  attempt.attemptId, attempt.startTime, attempt.endTime, attempt.lastUpdated,
-                  attempt.sparkUser, attempt.completed, size, attemptCounter.incrementAndGet()))
+                logDebug(s"Attempt ${prevInfo.name}/${prevInfo.appId} size => $size")
+                Some(new FsApplicationAttemptInfo(prevInfo.logPath, prevInfo.name, prevInfo.appId,
+                  prevInfo.attemptId, prevInfo.startTime, prevInfo.endTime, prevInfo.lastUpdated,
+                  prevInfo.sparkUser, prevInfo.completed, size, attemptCounter.incrementAndGet()))
               } else {
                 None
               }
@@ -717,14 +714,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * String description for diagnostics
-   * @return a summary of the component staet
+   * @return a summary of the component state
    */
   override def toString: String = {
     val header = s"""
       | FsHistoryProvider: logdir=$logDir,
       | last scan time=$lastScanTime
       | Cached application count =${applications.size}}
-      |
     """.stripMargin
     val sb = new StringBuilder(header)
     applications.foreach(entry => sb.append(entry._2).append("\n"))
@@ -736,15 +732,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    *
    * @param appId application ID
    * @param attemptId optional attempt ID
-   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
-   * @param data an [[FsHistoryProviderUpdateState]]
+   * @param state an [[FsHistoryProviderUpdateState]] instance
    * @return true if the attempt has been updated.
    */
-  override def isUpdated(appId: String,
+  override def isUpdated(
+      appId: String,
       attemptId: Option[String],
-      updateTimeMillis: Long,
-      data: Option[HistoryProviderUpdateState]): Boolean = {
-    val updateState = data.get.asInstanceOf[FsHistoryProviderUpdateState]
+      state: Option[HistoryProviderUpdateState]): Boolean = {
+    val updateState = state.get.asInstanceOf[FsHistoryProviderUpdateState]
     lookup(appId, attemptId) match {
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")

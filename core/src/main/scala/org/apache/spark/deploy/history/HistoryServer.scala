@@ -144,7 +144,8 @@ class HistoryServer(
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  override def attachSparkUI(appId: String,
+  override def attachSparkUI(
+      appId: String,
       attemptId: Option[String],
       ui: SparkUI,
       completed: Boolean) {
@@ -170,18 +171,17 @@ class HistoryServer(
   }
 
   /**
-   * Relay checks for the update to the history provider.
+   * Relay checks for the update to the history provider, passing down the update state
+   * returned by the provider's `getAppUI` call previously.
    * @param appId application ID
    * @param attemptId optional attempt ID
-   * @param updateTimeMillis time in milliseconds to use as the threshold for an update.
-   * @param data any other data the operations implementation can use to determine age
-   * @return true if the application was updated since `updateTimeMillis`
+   * @param updateState state information needed by the provider to determine age
+   * @return true if the application was updated
    */
   override def isUpdated(appId: String,
       attemptId: Option[String],
-      updateTimeMillis: Long,
-      data: Option[HistoryProviderUpdateState]): Boolean = {
-    provider.isUpdated(appId, attemptId, updateTimeMillis, data)
+      updateState: Option[HistoryProviderUpdateState]): Boolean = {
+    provider.isUpdated(appId, attemptId, updateState)
   }
 
   /**

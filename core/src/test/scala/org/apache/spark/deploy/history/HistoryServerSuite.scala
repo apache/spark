@@ -325,7 +325,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val actual = counter.getCount
         if (actual != expected) {
           // this is here because Scalatest loses stack depth
-          throw new scala.Exception(s"Wrong $name value - expected $expected but got $actual" +
+          fail(s"Wrong $name value - expected $expected but got $actual" +
               s" in metrics\n$metrics")
         }
       }
@@ -424,23 +424,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         assert(4 === getNumJobs("/jobs"),
           s"two jobs back-to-back not updated, server=$server\n")
       }
-      val startcount = getNumJobs("/jobs")
-      // do a series with different sleep times to see if that can create trouble
-      val limit = 10
-      for (i <- 1 to limit) {
-        d.count()
-        Thread.sleep(i * 100)
-        eventually(stdTimeout, stdInterval) {
-          assert(startcount + i === getNumJobs("/jobs"),
-            s"jobs iteration $i not updated, server=$server\n")
-        }
-      }
-      val endcount = startcount + limit
+      val jobcount = getNumJobs("/jobs")
       assert(!provider.getListing().head.completed)
 
       // stop the server
       sc.stop()
-      // TODO: check the app is now found as completed
+      // check the app is now found as completed
       eventually(stdTimeout, stdInterval) {
         assert(provider.getListing().head.completed,
           s"application never completed, server=$server\n")
@@ -454,7 +443,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       // the root UI must pick this up too
       HistoryServerSuite.getUrl(historyServerIncompleted) should not contain (appId)
 
-      assert(endcount === getNumJobs("/jobs"))
+      assert(jobcount === getNumJobs("/jobs"))
 
     } finally {
       sc.stop()
