@@ -977,8 +977,8 @@ DataFrame with columns `id` and `categoryIndex`:
 ~~~~
 
 Applying `IndexToString` with `categoryIndex` as the input column,
-`originalCategory` as the output column and the previous `StringIndexer`'s
-labels as labels, we are able to retrieve our original labels:
+`originalCategory` as the output column, we are able to retrieve our original
+labels (they will be inferred from the columns' metadata):
 
 ~~~~
  id | categoryIndex | originalCategory
