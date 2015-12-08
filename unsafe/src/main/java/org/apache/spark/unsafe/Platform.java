@@ -42,7 +42,7 @@ public final class Platform {
       unalignedField.setAccessible(true);
       unaligned = (boolean) unalignedField.get(null);
     } catch (Throwable t) {
-      unaligned = false
+      unaligned = false;
     }
   }
 
