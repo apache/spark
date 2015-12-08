@@ -203,19 +203,19 @@ private[spark] object YarnProviderUtils extends Logging {
   }
 
   /**
-   * Compare two entries of information about the same application attempt —and decide which
+   * Compare two entries of information about the same application attempt -and decide which
    * is the most recent one.
    *
-   * @param attemp1 attempt 1
+   * @param attempt1 attempt 1
    * @param attempt2 attempt 2
    * @return the preferred outcome
    */
-  def mostRecentAttempt(attemp1: TimelineApplicationAttemptInfo,
+  def mostRecentAttempt(attempt1: TimelineApplicationAttemptInfo,
       attempt2: TimelineApplicationAttemptInfo): TimelineApplicationAttemptInfo = {
-    (attemp1, attempt2) match {
+    (attempt1, attempt2) match {
       case (a1, a2) if a1.version > 0 && a2.version > 0 =>
         // use the version field if set
-        if (a2.version > a2.version) a2 else a1
+        if (a2.version > a1.version) a2 else a1
       case (a1, a2) if a1.completed => a1
       case (a1, a2) if a2.completed => a2
       case (a1, a2) if a2.lastUpdated >= a1.lastUpdated => a2

@@ -57,14 +57,14 @@ private[spark] class TimelineApplicationAttemptInfo(
    */
   override def toString: String = {
     val never = "-"
-    s"""attemptId $attemptId,
+    s"""TimelineApplicationAttemptInfo: attemptId $attemptId,
        | completed = $completed,
        | sparkAttemptId $sparkAttemptId,
        | started ${timeShort(startTime, never)},
        | ended ${timeShort(endTime, never)},
        | updated ${timeShort(lastUpdated, never)},
        | sparkUser = $sparkUser,
-       | version = $version",
+       | version = $version,
      """.stripMargin
   }
 
