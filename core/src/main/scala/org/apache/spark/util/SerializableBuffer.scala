@@ -45,8 +45,9 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
   }
 
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    out.writeInt(buffer.limit())
-    if (Channels.newChannel(out).write(buffer) != buffer.limit()) {
+    val readableBytes = buffer.remaining()
+    out.writeInt(readableBytes)
+    if (Channels.newChannel(out).write(buffer) != readableBytes) {
       throw new IOException("Could not fully write buffer to output stream")
     }
     buffer.rewind() // Allow us to write it again later

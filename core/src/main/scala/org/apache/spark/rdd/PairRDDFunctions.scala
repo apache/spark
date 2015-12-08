@@ -166,7 +166,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
-    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    val zeroArray = new Array[Byte](zeroBuffer.remaining())
     zeroBuffer.get(zeroArray)
 
     lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
@@ -216,7 +216,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
     val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
-    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    val zeroArray = new Array[Byte](zeroBuffer.remaining())
     zeroBuffer.get(zeroArray)
 
     // When deserializing, use a lazy val to create just one instance of the serializer per task
