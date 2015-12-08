@@ -907,6 +907,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.storage.hierarchyStore</code></td>
+  <td>(none)</td>
+  <td>
+    Put blocks in storage medias as hierarchy way.<br />
+    For example:<br />
+    <code>nvm 50GB, ssd 80GB</code><br />
+    You also need configure "nvm" and "ssd" location in local dirs.<br />
+    For example: <br />
+    <code>spark.local.dir=/mnt/nvm1;/mnt/ssd1;/mnt/ssd2;/mnt/others</code><br />
+  </td>
+</tr>
+<tr>
   <td><code>spark.externalBlockStore.blockManager</code></td>
   <td>org.apache.spark.storage.TachyonBlockManager</td>
   <td>
