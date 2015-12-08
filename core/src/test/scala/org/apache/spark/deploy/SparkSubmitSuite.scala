@@ -136,6 +136,47 @@ class SparkSubmitSuite
     appArgs.childArgs should be (Seq("--master", "local", "some", "--weird", "args"))
   }
 
+  test("specify deploy mode through configuration") {
+    val clArgs = Seq(
+      "--master", "yarn",
+      "--conf", "spark.deployMode=client",
+      "--class", "org.SomeClass",
+      "thejar.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sysProps, _) = prepareSubmitEnvironment(appArgs)
+
+    appArgs.deployMode should be ("client")
+    sysProps("spark.submit.deployMode") should be ("client")
+
+    // Both cmd line and configuration are specified, cmdline option takes the priority
+    val clArgs1 = Seq(
+      "--master", "yarn",
+      "--deploy-mode", "cluster",
+      "--conf", "spark.deployMode=client",
+      "-class", "org.SomeClass",
+      "thejar.jar"
+    )
+    val appArgs1 = new SparkSubmitArguments(clArgs1)
+    val (_, _, sysProps1, _) = prepareSubmitEnvironment(appArgs1)
+
+    appArgs1.deployMode should be ("cluster")
+    sysProps1("spark.submit.deployMode") should be ("cluster")
+
+    // Neither cmdline nor configuration are specified, client mode is the default choice
+    val clArgs2 = Seq(
+      "--master", "yarn",
+      "--class", "org.SomeClass",
+      "thejar.jar"
+    )
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    appArgs2.deployMode should be (null)
+
+    val (_, _, sysProps2, _) = prepareSubmitEnvironment(appArgs2)
+    appArgs2.deployMode should be ("client")
+    sysProps2("spark.submit.deployMode") should be ("client")
+  }
+
   test("handles YARN cluster mode") {
     val clArgs = Seq(
       "--deploy-mode", "cluster",

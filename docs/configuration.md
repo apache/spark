@@ -48,7 +48,7 @@ The following format is accepted:
     1y (years)
 
 
-Properties that specify a byte size should be configured with a unit of size.  
+Properties that specify a byte size should be configured with a unit of size.
 The following format is accepted:
 
     1b (bytes)
@@ -114,6 +114,15 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     The name of your application. This will appear in the UI and in log data.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.deployMode</code></td>
+  <td>(none)</td>
+  <td>
+    The deploy mode of Spark driver program, either "client" or "cluster",
+    Which means to launch driver program locally ("client")
+    or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
 </tr>
 <tr>
@@ -1087,7 +1096,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rpc.lookupTimeout</code></td>
   <td>120s</td>
   <td>
-    Duration for an RPC remote endpoint lookup operation to wait before timing out.  
+    Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
 </tr>
 </table>
@@ -1551,7 +1560,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.stopGracefullyOnShutdown</code></td>
   <td>false</td>
   <td>
-    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM 
+    If <code>true</code>, Spark shuts down the <code>StreamingContext</code> gracefully on JVM
     shutdown rather than immediately.
   </td>
 </tr>
