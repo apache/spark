@@ -398,6 +398,23 @@ class CoreTest(unittest.TestCase):
         assert "{AIRFLOW_HOME}" not in cfg
         assert "{FERNET_KEY}" not in cfg
 
+    def test_calling_log_to_stdout_should_add_one_stream_handler(self):
+
+        # first resetting the logger
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers:
+            root_logger.removeHandler(handler)
+
+        root_logger.setLevel(logging.NOTSET)
+        assert root_logger.level == logging.NOTSET
+
+        utils.log_to_stdout()
+        stream_handlers = [h for h in root_logger.handlers
+                           if isinstance(h, logging.StreamHandler)]
+
+        assert len(stream_handlers) == 1
+        assert root_logger.level == utils.LOGGING_LEVEL
+
     def test_calling_log_to_stdout_2X_should_add_only_one_stream_handler(self):
 
         utils.log_to_stdout()
