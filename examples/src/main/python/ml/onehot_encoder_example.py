@@ -36,7 +36,7 @@ if __name__ == "__main__":
         (4, "a"),
         (5, "c")
     ], ["id", "category"])
-    
+
     stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
     model = stringIndexer.fit(df)
     indexed = model.transform(df)
