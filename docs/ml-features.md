@@ -1232,7 +1232,7 @@ lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
 * `withStd`: True by default. Scales the data to unit standard deviation.
 * `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
 
-`StandardScaler` is a `Model` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
+`StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
 
@@ -1702,6 +1702,71 @@ assembler = VectorAssembler(
 output = assembler.transform(dataset)
 print(output.select("features", "clicked").first())
 {% endhighlight %}
+</div>
+</div>
+
+## QuantileDiscretizer
+
+`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+categorical features.
+The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
+This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
+find fewer depending on the data sample values.
+
+Note that the result may be different every time you run it, since the sample strategy behind it is
+non-deterministic.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `hour`:
+
+~~~
+ id | hour
+----|------
+ 0  | 18.0
+----|------
+ 1  | 19.0
+----|------
+ 2  | 8.0
+----|------
+ 3  | 5.0
+----|------
+ 4  | 2.2
+~~~
+
+`hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
+categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+
+~~~
+ id | hour | result
+----|------|------
+ 0  | 18.0 | 2.0
+----|------|------
+ 1  | 19.0 | 2.0
+----|------|------
+ 2  | 8.0  | 1.0
+----|------|------
+ 3  | 5.0  | 1.0
+----|------|------
+ 4  | 2.2  | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/feature/QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
 </div>
 
