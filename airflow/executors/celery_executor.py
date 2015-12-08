@@ -58,14 +58,14 @@ class CeleryExecutor(BaseExecutor):
         self.last_state = {}
 
     def execute_async(self, key, command, queue=DEFAULT_QUEUE):
-        self.log_info( "[celery] queuing {key} through celery, "
+        self.logger.info( "[celery] queuing {key} through celery, "
                        "queue={queue}".format(**locals()))
         self.tasks[key] = execute_command.apply_async(
             args=[command], queue=queue)
         self.last_state[key] = celery_states.PENDING
 
     def sync(self):
-        self.log_debug(
+        self.logger.debug(
             "Inquiring about {} celery task(s)".format(len(self.tasks)))
         for key, async in list(self.tasks.items()):
             state = async.state
@@ -83,7 +83,7 @@ class CeleryExecutor(BaseExecutor):
                     del self.tasks[key]
                     del self.last_state[key]
                 else:
-                    self.log_info("Unexpected state: " + async.state)
+                    self.logger.info("Unexpected state: " + async.state)
                 self.last_state[key] = async.state
 
     def end(self, synchronous=False):

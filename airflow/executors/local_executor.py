@@ -6,13 +6,12 @@ from builtins import range
 
 from airflow import configuration
 from airflow.executors.base_executor import BaseExecutor
-from airflow.utils import State
-from airflow.settings import WithLogger
+from airflow.utils import State, LoggingMixin
 
 PARALLELISM = configuration.get('core', 'PARALLELISM')
 
 
-class LocalWorker(multiprocessing.Process, WithLogger):
+class LocalWorker(multiprocessing.Process, LoggingMixin):
 
     def __init__(self, task_queue, result_queue):
         multiprocessing.Process.__init__(self)
@@ -26,7 +25,7 @@ class LocalWorker(multiprocessing.Process, WithLogger):
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
-            self.log_info("{} running {}".format(
+            self.logger.info("{} running {}".format(
                 self.__class__.__name__, command))
             command = "exec bash -c '{0}'".format(command)
             try:
@@ -34,7 +33,7 @@ class LocalWorker(multiprocessing.Process, WithLogger):
                 state = State.SUCCESS
             except Exception as e:
                 state = State.FAILED
-                self.log_error("failed to execute task {}:".format(str(e)))
+                self.logger.error("failed to execute task {}:".format(str(e)))
                 # raise e
             self.result_queue.put((key, state))
             self.task_queue.task_done()

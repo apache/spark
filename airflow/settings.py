@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import logging
 import os
-import sys
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -40,48 +39,6 @@ Session = scoped_session(
 LOG_FORMAT = (
     '[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
 SIMPLE_LOG_FORMAT = '%(asctime)s %(levelname)s - %(message)s'
-
-
-def log_to_stdout():
-
-    root_logger = logging.getLogger()
-
-    # default log level if not set externally (e.g. with --logging-level=DEBUG)
-    if root_logger.level == logging.NOTSET:
-        root_logger.setLevel(LOGGING_LEVEL)
-
-    for handler in root_logger.handlers:
-        if isinstance(handler, logging.StreamHandler):
-            root_logger.warn("not adding a stream handler: already present")
-            return
-
-    logformat = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(logformat)
-    root_logger.addHandler(ch)
-
-
-class WithLogger(object):
-    """
-    Convenience super-class to have a logger configured with the class name
-    """
-
-    def logger(self):
-        return logging.getLogger(self.__class__.__name__)
-
-    def log_debug(self, *arg, **kwargs):
-        self.logger().debug(*arg, **kwargs)
-
-    def log_info(self, *arg, **kwargs):
-        self.logger().info(*arg, **kwargs)
-
-    def log_error(self, *arg, **kwargs):
-        self.logger().error(*arg, **kwargs)
-
-    def log_exception(self, *arg, **kwargs):
-        self.logger().exception(*arg, **kwargs)
 
 
 def policy(task_instance):

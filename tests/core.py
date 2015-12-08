@@ -1,13 +1,13 @@
 from __future__ import print_function
 
-from datetime import datetime, time, timedelta
 import doctest
 import json
+import logging
 import os
 import re
-from time import sleep
 import unittest
-import logging
+from datetime import datetime, time, timedelta
+from time import sleep
 
 from airflow import configuration
 from airflow.executors import SequentialExecutor, LocalExecutor
@@ -18,7 +18,8 @@ from airflow import jobs, models, DAG, utils, operators, hooks, macros, settings
 from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
-from airflow.settings import Session, WithLogger
+from airflow.settings import Session
+from airflow.utils import LoggingMixin
 from lxml import html
 
 NUM_EXAMPLE_DAGS = 7
@@ -397,8 +398,8 @@ class CoreTest(unittest.TestCase):
 
     def test_calling_log_to_stdout_2X_should_add_only_one_stream_handler(self):
 
-        settings.log_to_stdout()
-        settings.log_to_stdout()
+        utils.log_to_stdout()
+        utils.log_to_stdout()
         root_logger = logging.getLogger()
 
         stream_handlers = [h for h in root_logger.handlers
@@ -414,7 +415,7 @@ class CoreTest(unittest.TestCase):
 
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.DEBUG)
-        settings.log_to_stdout()
+        utils.log_to_stdout()
 
         assert root_logger.level == logging.DEBUG
 
@@ -422,12 +423,12 @@ class CoreTest(unittest.TestCase):
 
         # each class should automatically receive a logger with a correct name
 
-        class Blah(WithLogger):
+        class Blah(LoggingMixin):
             pass
 
-        assert Blah().logger().name == "Blah"
-        assert SequentialExecutor().logger().name == "SequentialExecutor"
-        assert LocalExecutor().logger().name == "LocalExecutor"
+        assert Blah().logger.name == "Blah"
+        assert SequentialExecutor().logger.name == "SequentialExecutor"
+        assert LocalExecutor().logger.name == "LocalExecutor"
 
 
 class CliTests(unittest.TestCase):
