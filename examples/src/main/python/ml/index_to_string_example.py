@@ -28,14 +28,9 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    df = sqlContext.createDataFrame([
-      (0, "a"),
-      (1, "b"),
-      (2, "c"),
-      (3, "a"),
-      (4, "a"),
-      (5, "c")
-    ], ["id", "category"])
+    df = sqlContext.createDataFrame(
+        [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c") ],
+        ["id", "category"])
 
     stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
     model = stringIndexer.fit(df)
