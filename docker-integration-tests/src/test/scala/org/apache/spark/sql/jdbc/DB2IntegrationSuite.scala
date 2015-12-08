@@ -28,7 +28,8 @@ class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "ibmcom/db2express-c:10.5.0.5-3.10.0"
     override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+      "DB2INST1_PASSWORD" -> "db2inst1-pwd",
+      "LICENSE" -> "accept ibmcom/db2express-c:latest"
     )
     override val jdbcPort: Int = 50000
     override def getJdbcUrl(ip: String, port: Int): String =
