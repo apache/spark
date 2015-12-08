@@ -29,7 +29,6 @@ import com.amazonaws.internal.StaticCredentialsProvider
 import com.amazonaws.services.s3.AmazonS3Client
 import com.amazonaws.services.s3.model.{ListObjectsRequest, ObjectListing, S3ObjectSummary}
 
-import com.google.common.annotations.VisibleForTesting
 import com.google.common.base.{Preconditions, Strings}
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.collect.AbstractSequentialIterator
@@ -272,8 +271,8 @@ object SparkS3Util extends Logging {
 
   /**
    * Return whether the given file is splittable or not.
+   * Exposed for testing.
    */
-  @VisibleForTesting
   def isSplitable(jobConf: JobConf, file: Path): Boolean = {
     val compressionCodecs = new CompressionCodecFactory(jobConf)
     val codec = compressionCodecs.getCodec(file)
@@ -286,8 +285,8 @@ object SparkS3Util extends Logging {
 
   /**
    * Compute input splits for the given files. Borrowed code from `FileInputFormat.getSplits`.
+   * Exposed for testing.
    */
-  @VisibleForTesting
   def computeSplits(
     jobConf: JobConf,
     files: Array[FileStatus],
