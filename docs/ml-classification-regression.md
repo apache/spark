@@ -52,111 +52,15 @@ regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
 We implement Pipelines API for both linear regression and logistic
 regression with elastic net regularization.
 
-# Regression
-
-## Linear regression
-
-The interface for working with linear regression models and model
-summaries is similar to the logistic regression case. The following
-example demonstrates training an elastic net regularized linear
-regression model and extracting model summary statistics.
-
-<div class="codetabs">
-
-<div data-lang="scala" markdown="1">
-{% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-{% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-<!--- TODO: Add python model summaries once implemented -->
-{% include_example python/ml/linear_regression_with_elastic_net.py %}
-</div>
-
-</div>
-
-## Survival regression
-
-
-In `spark.ml`, we implement the [Accelerated failure time (AFT)](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) 
-model which is a parametric survival regression model for censored data. 
-It describes a model for the log of survival time, so it's often called 
-log-linear model for survival analysis. Different from 
-[Proportional hazards](https://en.wikipedia.org/wiki/Proportional_hazards_model) model
-designed for the same purpose, the AFT model is more easily to parallelize 
-because each instance contribute to the objective function independently.
-
-Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of 
-subjects i = 1, ..., n, with possible right-censoring, 
-the likelihood function under the AFT model is given as:
-`\[
-L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}(\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}(\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
-\]`
-Where $\delta_{i}$ is the indicator of the event has occurred i.e. uncensored or not.
-Using $\epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}$, the log-likelihood function
-assumes the form:
-`\[
-\iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+\delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
-\]`
-Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
-and $f_{0}(\epsilon_{i})$ is corresponding density function.
-
-The most commonly used AFT model is based on the Weibull distribution of the survival time. 
-The Weibull distribution for lifetime corresponding to extreme value distribution for 
-log of the lifetime, and the $S_{0}(\epsilon)$ function is:
-`\[   
-S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
-\]`
-the $f_{0}(\epsilon_{i})$ function is:
-`\[
-f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
-\]`
-The log-likelihood function for AFT model with Weibull distribution of lifetime is:
-`\[
-\iota(\beta,\sigma)= -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
-\]`
-Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
-the loss function we use to optimize is $-\iota(\beta,\sigma)$.
-The gradient functions for $\beta$ and $\log\sigma$ respectively are:
-`\[   
-\frac{\partial (-\iota)}{\partial \beta}=\sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
-\]`
-`\[ 
-\frac{\partial (-\iota)}{\partial (\log\sigma)}=\sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
-\]`
-
-The AFT model can be formulated as a convex optimization problem, 
-i.e. the task of finding a minimizer of a convex function $-\iota(\beta,\sigma)$ 
-that depends coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
-The optimization algorithm underlying the implementation is L-BFGS.
-The implementation matches the result from R's survival function 
-[survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
-
-## Example:
-
-<div class="codetabs">
-
-<div data-lang="scala" markdown="1">
-{% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-{% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-{% include_example python/ml/aft_survival_regression.py %}
-</div>
-
-</div>
-
 
 # Classification
 
 ## Logistic regression
+
+Logistic regression is a popular method to predict a binary response. It is a special case of [Generalized Linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) that predicts the probability of the outcome.
+For more background and more details about the implementation, refer to the documentation of the [logistic regression in `spark.mllib`](mllib-linear-methods.html#logistic-regression). 
+
+  > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
 
 The following example shows how to train a logistic regression model
 with elastic net regularization. `elasticNetParam` corresponds to
@@ -222,6 +126,103 @@ Logistic regression model summary is not yet supported in Python.
 
 </div>
 
+
+## Classification with decision trees
+
+Decision trees are a popular family of classification and regression methods.
+More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.DecisionTreeClassifier).
+
+{% include_example scala/org/apache/spark/examples/ml/DecisionTreeClassificationExample.scala %}
+
+</div>
+
+<div data-lang="java" markdown="1">
+
+More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
+
+{% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeClassificationExample.java %}
+
+</div>
+
+<div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.DecisionTreeClassifier).
+
+{% include_example python/ml/decision_tree_classification_example.py %}
+
+</div>
+
+</div>
+
+## Classification with random forests
+
+Random forests are a popular family of classification and regression methods.
+More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.RandomForestClassifier) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/RandomForestClassifierExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaRandomForestClassifierExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.RandomForestClassifier) for more details.
+
+{% include_example python/ml/random_forest_classifier_example.py %}
+</div>
+</div>
+
+## Classification with gradient-boosted trees
+
+Gradient-boosted trees (GBTs) are a popular classification and regression method using ensembles of decision trees. 
+More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.GBTClassifier) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeClassifierExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeClassifierExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.GBTClassifier) for more details.
+
+{% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
+</div>
+</div>
 
 ## Multilayer perceptron classifier
 
@@ -291,6 +292,205 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 {% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
 </div>
+</div>
+
+
+# Regression
+
+## Linear regression
+
+The interface for working with linear regression models and model
+summaries is similar to the logistic regression case. The following
+example demonstrates training an elastic net regularized linear
+regression model and extracting model summary statistics.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+<!--- TODO: Add python model summaries once implemented -->
+{% include_example python/ml/linear_regression_with_elastic_net.py %}
+</div>
+
+</div>
+
+
+## Regression with decision trees
+
+Decision trees are a popular family of classification and regression methods.
+More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.DecisionTreeRegressor).
+
+{% include_example scala/org/apache/spark/examples/ml/DecisionTreeRegressionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
+
+{% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeRegressionExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.DecisionTreeRegressor).
+
+{% include_example python/ml/decision_tree_regression_example.py %}
+</div>
+
+</div>
+
+
+## Regression with random forests
+
+Random forests are a popular family of classification and regression methods.
+More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
+
+The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
+We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.RandomForestRegressor) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/RandomForestRegressorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/RandomForestRegressor.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaRandomForestRegressorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.RandomForestRegressor) for more details.
+
+{% include_example python/ml/random_forest_regressor_example.py %}
+</div>
+</div>
+
+## Regression with gradient-boosted trees
+
+Gradient-boosted trees (GBTs) are a popular regression method using ensembles of decision trees. 
+More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
+
+Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
+be true in general.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GBTRegressor) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeRegressorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeRegressorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GBTRegressor) for more details.
+
+{% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
+</div>
+</div>
+
+
+## Survival regression
+
+
+In `spark.ml`, we implement the [Accelerated failure time (AFT)](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) 
+model which is a parametric survival regression model for censored data. 
+It describes a model for the log of survival time, so it's often called 
+log-linear model for survival analysis. Different from 
+[Proportional hazards](https://en.wikipedia.org/wiki/Proportional_hazards_model) model
+designed for the same purpose, the AFT model is more easily to parallelize 
+because each instance contribute to the objective function independently.
+
+Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of 
+subjects i = 1, ..., n, with possible right-censoring, 
+the likelihood function under the AFT model is given as:
+`\[
+L(\beta,\sigma)=\prod_{i=1}^n[\frac{1}{\sigma}f_{0}(\frac{\log{t_{i}}-x^{'}\beta}{\sigma})]^{\delta_{i}}S_{0}(\frac{\log{t_{i}}-x^{'}\beta}{\sigma})^{1-\delta_{i}}
+\]`
+Where $\delta_{i}$ is the indicator of the event has occurred i.e. uncensored or not.
+Using $\epsilon_{i}=\frac{\log{t_{i}}-x^{'}\beta}{\sigma}$, the log-likelihood function
+assumes the form:
+`\[
+\iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+\delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
+\]`
+Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
+and $f_{0}(\epsilon_{i})$ is corresponding density function.
+
+The most commonly used AFT model is based on the Weibull distribution of the survival time. 
+The Weibull distribution for lifetime corresponding to extreme value distribution for 
+log of the lifetime, and the $S_{0}(\epsilon)$ function is:
+`\[   
+S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
+\]`
+the $f_{0}(\epsilon_{i})$ function is:
+`\[
+f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
+\]`
+The log-likelihood function for AFT model with Weibull distribution of lifetime is:
+`\[
+\iota(\beta,\sigma)= -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
+\]`
+Due to minimizing the negative log-likelihood equivalent to maximum a posteriori probability,
+the loss function we use to optimize is $-\iota(\beta,\sigma)$.
+The gradient functions for $\beta$ and $\log\sigma$ respectively are:
+`\[   
+\frac{\partial (-\iota)}{\partial \beta}=\sum_{1=1}^{n}[\delta_{i}-e^{\epsilon_{i}}]\frac{x_{i}}{\sigma}
+\]`
+`\[ 
+\frac{\partial (-\iota)}{\partial (\log\sigma)}=\sum_{i=1}^{n}[\delta_{i}+(\delta_{i}-e^{\epsilon_{i}})\epsilon_{i}]
+\]`
+
+The AFT model can be formulated as a convex optimization problem, 
+i.e. the task of finding a minimizer of a convex function $-\iota(\beta,\sigma)$ 
+that depends coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
+The optimization algorithm underlying the implementation is L-BFGS.
+The implementation matches the result from R's survival function 
+[survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
+
+### Survival regression example
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% include_example scala/org/apache/spark/examples/ml/AFTSurvivalRegressionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaAFTSurvivalRegressionExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% include_example python/ml/aft_survival_regression.py %}
+</div>
+
 </div>
 
 
@@ -393,67 +593,6 @@ The below examples demonstrate the Pipelines API for Decision Trees. The main di
 * use of DataFrame metadata to distinguish continuous and categorical features
 
 
-### Classification with decision trees
-
-The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
-We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.classification.DecisionTreeClassifier).
-
-{% include_example scala/org/apache/spark/examples/ml/DecisionTreeClassificationExample.scala %}
-
-</div>
-
-<div data-lang="java" markdown="1">
-
-More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/classification/DecisionTreeClassifier.html).
-
-{% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeClassificationExample.java %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.classification.DecisionTreeClassifier).
-
-{% include_example python/ml/decision_tree_classification_example.py %}
-
-</div>
-
-</div>
-
-
-### Regression with decision trees
-
-The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
-We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-More details on parameters can be found in the [Scala API documentation](api/scala/index.html#org.apache.spark.ml.regression.DecisionTreeRegressor).
-
-{% include_example scala/org/apache/spark/examples/ml/DecisionTreeRegressionExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-More details on parameters can be found in the [Java API documentation](api/java/org/apache/spark/ml/regression/DecisionTreeRegressor.html).
-
-{% include_example java/org/apache/spark/examples/ml/JavaDecisionTreeRegressionExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-More details on parameters can be found in the [Python API documentation](api/python/pyspark.ml.html#pyspark.ml.regression.DecisionTreeRegressor).
-
-{% include_example python/ml/decision_tree_regression_example.py %}
-</div>
-
-</div>
 
 # Tree Ensembles
 
@@ -549,61 +688,7 @@ All output columns are optional; to exclude an output column, set its correspond
   </tbody>
 </table>
 
-### Example: Classification
 
-The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
-We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.RandomForestClassifier) for more details.
-
-{% include_example scala/org/apache/spark/examples/ml/RandomForestClassifierExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/RandomForestClassifier.html) for more details.
-
-{% include_example java/org/apache/spark/examples/ml/JavaRandomForestClassifierExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.RandomForestClassifier) for more details.
-
-{% include_example python/ml/random_forest_classifier_example.py %}
-</div>
-</div>
-
-### Example: Regression
-
-The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
-We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.RandomForestRegressor) for more details.
-
-{% include_example scala/org/apache/spark/examples/ml/RandomForestRegressorExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/RandomForestRegressor.html) for more details.
-
-{% include_example java/org/apache/spark/examples/ml/JavaRandomForestRegressorExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.RandomForestRegressor) for more details.
-
-{% include_example python/ml/random_forest_regressor_example.py %}
-</div>
-</div>
 
 ## Gradient-Boosted Trees (GBTs)
 
@@ -674,60 +759,4 @@ Note that `GBTClassifier` currently only supports binary labels.
 </table>
 
 In the future, `GBTClassifier` will also output columns for `rawPrediction` and `probability`, just as `RandomForestClassifier` does.
-
-## Example: Classification
-
-The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
-We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.GBTClassifier) for more details.
-
-{% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeClassifierExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/GBTClassifier.html) for more details.
-
-{% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeClassifierExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.GBTClassifier) for more details.
-
-{% include_example python/ml/gradient_boosted_tree_classifier_example.py %}
-</div>
-</div>
-
-### Example: Regression
-
-Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
-be true in general.
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GBTRegressor) for more details.
-
-{% include_example scala/org/apache/spark/examples/ml/GradientBoostedTreeRegressorExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GBTRegressor.html) for more details.
-
-{% include_example java/org/apache/spark/examples/ml/JavaGradientBoostedTreeRegressorExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GBTRegressor) for more details.
-
-{% include_example python/ml/gradient_boosted_tree_regressor_example.py %}
-</div>
-</div>
 

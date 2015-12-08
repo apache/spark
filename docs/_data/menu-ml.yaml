@@ -1,6 +1,6 @@
 - text: "Overview: estimators, transformers and pipelines"
   url: ml-intro.html
-- text: Building and transforming features
+- text: Extracting, transforming and selecting features
   url: ml-features.html
 - text: Classification and Regression
   url: ml-classification-regression.html
