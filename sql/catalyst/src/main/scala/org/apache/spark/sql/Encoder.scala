@@ -63,8 +63,8 @@ import org.apache.spark.sql.types._
  * }}}
  *
  * == Implementation ==
- *  - Encoders are not intended to be thread-safe and thus they are allowed to avoid internal
- *  locking and reuse internal buffers to improve performance.
+ *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
+ *    against concurrent access if they reuse internal buffers to improve performance.
  *
  * @since 1.6.0
  */
