@@ -24,10 +24,11 @@ import org.dmg.pmml._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel => SNaiveBayesModel}
+import org.apache.spark.mllib.util.TestingUtils._
 
 class NaiveBayesPMMLModelExportSuite extends SparkFunSuite {
 
-  test("Naive Bayes PMML export") {
+  test("Naive Bayes PMML export: Bernoulli model type") {
     val label = SArray(0.0, 1.0, 2.0)
     val pi = SArray(0.5, 0.1, 0.4).map(math.log)
     val theta = SArray(
@@ -36,7 +37,7 @@ class NaiveBayesPMMLModelExportSuite extends SparkFunSuite {
       SArray(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
 
-    val nbModel = new SNaiveBayesModel(label, pi, theta, NaiveBayes.Multinomial)
+    val nbModel = new SNaiveBayesModel(label, pi, theta, NaiveBayes.Bernoulli)
     val nbModelExport = PMMLModelExportFactory.createPMMLModelExport(nbModel)
     val pmml = nbModelExport.getPmml
 
@@ -53,6 +54,10 @@ class NaiveBayesPMMLModelExportSuite extends SparkFunSuite {
     while (bIter.hasNext) {
       val bayesInput = bIter.next()
       assert(bayesInput.getFieldName.getValue === "field_" + i)
+      val pairCounts = bayesInput.getPairCounts
+      assert(pairCounts.size() === 2,
+        "Only two values in one variables is allowed in Bernoulli model type.")
+      var k = 0
       val pIter = bayesInput.getPairCounts.iterator()
       while (pIter.hasNext) {
         val pairs = pIter.next()
@@ -60,9 +65,16 @@ class NaiveBayesPMMLModelExportSuite extends SparkFunSuite {
         var j = 0
         while (tIter.hasNext) {
           val targetValueCount = tIter.next()
-          assert(targetValueCount.getCount === theta(j)(i))
+          if (k == 0) {
+            // test values of pairsExist
+            assert(math.log(targetValueCount.getCount) ~== theta(j)(i) relTol 1e-5)
+          } else {
+            // test values of pairsAbsent
+            assert(math.log(1 - targetValueCount.getCount) ~== theta(j)(i) relTol 1e-5)
+          }
           j += 1
         }
+        k += 1
       }
       i += 1
     }

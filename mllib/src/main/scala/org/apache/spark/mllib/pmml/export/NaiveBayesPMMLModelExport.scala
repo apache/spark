@@ -54,27 +54,7 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
     val featureIndices = model.theta.head.indices
 
     // add Bayes input
-    if (model.modelType == NaiveBayes.Multinomial) {
-      for (i <- featureIndices) {
-        fields(i) = FieldName.create("field_" + i)
-        dataDictionary.withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
-        miningSchema
-          .withMiningFields(new MiningField(fields(i)).withUsageType(FieldUsageType.ACTIVE))
-
-        val stats = labelIndices.map { label =>
-          new TargetValueStat().withValue(label.toDouble.toString)
-            .withContinuousDistribution(
-              new GaussianDistribution()
-                .withMean(math.exp(model.theta(label)(i))).withVariance(1.0))
-        }
-
-        val targetValueStats = new TargetValueStats().withTargetValueStats(stats: _*)
-
-        val bayesInput = new BayesInput()
-        bayesInput.withFieldName(fields(i)).withTargetValueStats(targetValueStats)
-        bayesInputs.withBayesInputs(bayesInput)
-      }
-    } else if (model.modelType == NaiveBayes.Bernoulli) {
+    if (model.modelType == NaiveBayes.Bernoulli) {
       for (i <- featureIndices) {
         fields(i) = FieldName.create("field_" + i)
         dataDictionary.withDataFields(new DataField(fields(i), OpType.CATEGORICAL, DataType.DOUBLE)
@@ -106,7 +86,8 @@ private[mllib] class NaiveBayesPMMLModelExport(model: SNaiveBayesModel, descript
         bayesInputs.withBayesInputs(bayesInput)
       }
     } else {
-      throw new Exception("Unsupported model type.")
+      throw new IllegalArgumentException(
+        "Naive Bayes model PMML export only supports Bernoulli model type for now.")
     }
 
     // add target field

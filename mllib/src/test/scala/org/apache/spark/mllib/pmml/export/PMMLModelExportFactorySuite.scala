@@ -47,7 +47,7 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
       Array(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
 
-    val nbModel = new NaiveBayesModel(label, pi, theta, NaiveBayes.Multinomial)
+    val nbModel = new NaiveBayesModel(label, pi, theta, NaiveBayes.Bernoulli)
     val modelExport = PMMLModelExportFactory.createPMMLModelExport(nbModel)
 
     assert(modelExport.isInstanceOf[NaiveBayesPMMLModelExport])
