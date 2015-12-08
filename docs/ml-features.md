@@ -63,7 +63,7 @@ the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for mor
 `Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
 transforms each document into a vector using the average of all words in the document; this vector
 can then be used for as features for prediction, document similarity calculations, etc.
-Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#Word2Vec) for more
+Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2Vec) for more
 details.
 
 In the following code segment, we start with a set of documents, each of which is represented as a sequence of words. For each document, we transform it into a feature vector. This feature vector could then be passed to a learning algorithm.
@@ -411,7 +411,7 @@ for more details on the API.
 Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}}
+{% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
 </div>
 </div>
 
@@ -564,7 +564,7 @@ for more details on the API.
 The following example demonstrates how to load a dataset in libsvm format and then normalize each row to have unit $L^2$ norm and unit $L^\infty$ norm.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [Normalizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Normalizer)
 for more details on the API.
@@ -572,7 +572,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/NormalizerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [Normalizer Java docs](api/java/org/apache/spark/ml/feature/Normalizer.html)
 for more details on the API.
@@ -580,7 +580,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaNormalizerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [Normalizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Normalizer)
 for more details on the API.
@@ -604,7 +604,7 @@ Note that if the standard deviation of a feature is zero, it will return default
 The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [StandardScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.StandardScaler)
 for more details on the API.
@@ -612,7 +612,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/StandardScalerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [StandardScaler Java docs](api/java/org/apache/spark/ml/feature/StandardScaler.html)
 for more details on the API.
@@ -620,7 +620,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaStandardScalerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [StandardScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StandardScaler)
 for more details on the API.
@@ -683,7 +683,7 @@ More details can be found in the API docs for [Bucketizer](api/scala/index.html#
 The following example demonstrates how to bucketize a column of `Double`s into another index-wised column.
 
 <div class="codetabs">
-<div data-lang="scala">
+<div data-lang="scala" markdown="1">
 
 Refer to the [Bucketizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Bucketizer)
 for more details on the API.
@@ -691,7 +691,7 @@ for more details on the API.
 {% include_example scala/org/apache/spark/examples/ml/BucketizerExample.scala %}
 </div>
 
-<div data-lang="java">
+<div data-lang="java" markdown="1">
 
 Refer to the [Bucketizer Java docs](api/java/org/apache/spark/ml/feature/Bucketizer.html)
 for more details on the API.
@@ -699,7 +699,7 @@ for more details on the API.
 {% include_example java/org/apache/spark/examples/ml/JavaBucketizerExample.java %}
 </div>
 
-<div data-lang="python">
+<div data-lang="python" markdown="1">
 
 Refer to the [Bucketizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Bucketizer)
 for more details on the API.
