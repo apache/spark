@@ -43,13 +43,13 @@ The DataFrame API is available in [Scala](api/scala/index.html#org.apache.spark.
 ## Datasets
 
 A Dataset is a new experimental interface added in Spark 1.6 that tries to provide the benefits of
-RDDs (strong typing, ability to use powerful lambda functions) with the benifits of Spark SQL's
+RDDs (strong typing, ability to use powerful lambda functions) with the benefits of Spark SQL's
 optimized execution engine.  A Dataset can be [constructed](#creating-datasets) from JVM objects and then manipulated
 using functional transformations (map, flatMap, filter, etc.).
 
 The unified Dataset API can be used both in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset) and
 [Java](api/java/index.html?org/apache/spark/sql/Dataset.html).  Python does not yet have support for
-the Dataset API, but due to its dynamic nature many of the benifits are already available (i.e. you can
+the Dataset API, but due to its dynamic nature many of the benefits are already available (i.e. you can
 access the field of a row by name naturally `row.columnName`).  Full python support will be added
 in a future release.
 

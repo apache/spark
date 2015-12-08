@@ -19,11 +19,10 @@ package org.apache.spark.sql
 
 import java.lang.reflect.Modifier
 
-import org.apache.spark.annotation.Experimental
-
 import scala.annotation.implicitNotFound
 import scala.reflect.{ClassTag, classTag}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.{DecodeUsingSerializer, BoundReference, EncodeUsingSerializer}
 import org.apache.spark.sql.types._

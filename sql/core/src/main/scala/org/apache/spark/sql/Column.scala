@@ -84,6 +84,7 @@ class TypedColumn[-T, U](
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
  *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
+ *   lit("1")                    // A column that produces a literal (constant) value.
  * }}}
  *
  * [[Column]] objects can be composed to form complex expressions:
