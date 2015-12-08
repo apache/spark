@@ -18,19 +18,16 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.ml.Pipeline
-import org.apache.spark.ml.feature.{CountVectorizerModel, CountVectorizer, StopWordsRemover, RegexTokenizer}
-import org.apache.spark.sql.{Row, SQLContext}
-
 import scopt.OptionParser
 
 import org.apache.log4j.{Level, Logger}
-
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.clustering.{EMLDAOptimizer, OnlineLDAOptimizer, DistributedLDAModel, LDA}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, RegexTokenizer, StopWordsRemover}
+import org.apache.spark.mllib.clustering.{DistributedLDAModel, EMLDAOptimizer, LDA, OnlineLDAOptimizer}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * An example Latent Dirichlet Allocation (LDA) app. Run with
@@ -216,14 +213,14 @@ object LDAExample {
     val countVectorizer = new CountVectorizer()
       .setVocabSize(vocabSize)
       .setInputCol("tokens")
-      .setOutputCol("vectors")
+      .setOutputCol("features")
 
     val pipeline = new Pipeline()
       .setStages(Array(tokenizer, stopWordsRemover, countVectorizer))
 
     val model = pipeline.fit(df)
     val documents = model.transform(df)
-      .select("vectors")
+      .select("features")
       .map { case Row(features: Vector) => features }
       .zipWithIndex()
       .map(_.swap)
@@ -233,4 +230,4 @@ object LDAExample {
       documents.map(_._2.numActives).sum().toLong) // total token count
   }
 }
-
+// scalastyle:on println
