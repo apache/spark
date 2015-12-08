@@ -509,13 +509,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
 
   /**
-   * Scan through all incomplete applications, and check for any that have changed.
+   * Scan through all known incomplete applications, and check for any that have been updated.
    *
    * After the scan, if there were any updated attempts, [[applications]] is updated
    * with the new values.
    *
    * 1. No attempt to replay the application is made; this scan is a low cost operation.
    * 2. As this overwrites [[applications]] with a new value, it must not run concurrently
+   * with the main scan for new applications. That is: it must be in the [[checkForLogs()]]
+   * operation.
    */
   private[history] def scanAndUpdateIncompleteAttemptInfo(): Unit = {
     val now = System.currentTimeMillis();

@@ -51,7 +51,8 @@ import org.apache.spark.util.Clock
  * @param retainedApplications number of retained applications
  * @param clock time source
  */
-private[history] class ApplicationCache(val operations: ApplicationCacheOperations,
+private[history] class ApplicationCache(
+    val operations: ApplicationCacheOperations,
     val refreshInterval: Long,
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
@@ -90,10 +91,12 @@ private[history] class ApplicationCache(val operations: ApplicationCacheOperatio
    *
    * Tagged as `protected` so as to allow subclasses in tests to accesss it directly
    */
-  protected val appCache: LoadingCache[CacheKey, CacheEntry] = CacheBuilder.newBuilder()
-      .maximumSize(retainedApplications)
-      .removalListener(removalListener)
-      .build(appLoader)
+  protected val appCache: LoadingCache[CacheKey, CacheEntry] = {
+    CacheBuilder.newBuilder()
+        .maximumSize(retainedApplications)
+        .removalListener(removalListener)
+        .build(appLoader)
+  }
 
   /**
    * The metrics which are updated as the cache is used
@@ -396,7 +399,7 @@ private[history] class CacheMetrics(prefix: String) extends Source {
    */
   override val sourceName = "ApplicationCache"
 
-  override def metricRegistry: MetricRegistry = new MetricRegistry
+  override val metricRegistry: MetricRegistry = new MetricRegistry
 
   /**
    * Startup actions.
