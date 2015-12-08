@@ -308,7 +308,7 @@ parquetFile <- function(sqlContext, ...) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' new_df <- sql(sqlContext, "SELECT * FROM table")
 #' }
@@ -332,7 +332,7 @@ sql <- function(sqlContext, sqlQuery) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' new_df <- table(sqlContext, "table")
 #' }
@@ -405,7 +405,7 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' cacheTable(sqlContext, "table")
 #' }
@@ -427,7 +427,7 @@ cacheTable <- function(sqlContext, tableName) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' uncacheTable(sqlContext, "table")
 #' }
