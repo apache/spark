@@ -491,7 +491,10 @@ setMethod("cache",
 #'
 #' Persist this DataFrame with the specified storage level. For details of the
 #' supported storage levels, refer to
-#' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
+#' \url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}. \cr
+#' The following four storage level constants are deprecated in 2.0,
+#' since the records will always be serialized in R: \cr
+#' MEMORY_ONLY_SER, MEMORY_ONLY_SER_2, MEMORY_AND_DISK_SER, MEMORY_AND_DISK_SER_2
 #'
 #' @param x The DataFrame to persist
 #'
