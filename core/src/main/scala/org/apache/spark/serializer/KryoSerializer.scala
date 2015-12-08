@@ -78,7 +78,6 @@ class KryoSerializer(conf: SparkConf)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
-  private val avroSchemaRepo = conf.getOption(SchemaRepo.SCHEMA_REPO_KEY)
 
   def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
 
