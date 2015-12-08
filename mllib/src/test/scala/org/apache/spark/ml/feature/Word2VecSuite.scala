@@ -35,7 +35,6 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Word2Vec") {
-    val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10

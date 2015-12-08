@@ -49,14 +49,14 @@ private[feature] trait Word2VecBase extends Params
   def getVectorSize: Int = $(vectorSize)
 
   /**
-   * The window size (context words from [-window, window]).
-   * @group param
+   * The window size (context words from [-window, window]) default 5.
+   * @group expertParam
    */
   final val windowSize = new IntParam(
     this, "windowSize", "the window size (context words from [-window, window])")
   setDefault(windowSize -> 5)
 
-  /** @group getParam */
+  /** @group expertGetParam */
   def getWindowSize: Int = $(windowSize)
 
   /**
@@ -113,7 +113,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
-  /** @group setParam */
+  /** @group expertSetParam */
   def setWindowSize(value: Int): this.type = set(windowSize, value)
 
   /** @group setParam */
