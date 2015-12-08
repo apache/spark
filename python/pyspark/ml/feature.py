@@ -2116,7 +2116,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     >>> model.transform(df).collect()[2].selectedFeatures
     DenseVector([0.1])
 
-    .. versionadded:: 1.7.0
+    .. versionadded:: 1.6.0
     """
 
     # a placeholder to make it appear in the generated doc
@@ -2142,7 +2142,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("1.7.0")
+    @since("1.6.0")
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
                   labelCol="labels"):
         """
@@ -2153,7 +2153,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
-    @since("1.7.0")
+    @since("1.6.0")
     def setNumTopFeatures(self, value):
         """
         Sets the value of :py:attr:`numTopFeatures`.
@@ -2161,7 +2161,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         self._paramMap[self.numTopFeatures] = value
         return self
 
-    @since("1.7.0")
+    @since("1.6.0")
     def getNumTopFeatures(self):
         """
         Gets the value of numTopFeatures or its default value.
@@ -2178,7 +2178,7 @@ class ChiSqSelectorModel(JavaModel):
 
     Model fitted by ChiSqSelector.
 
-    .. versionadded:: 1.7.0
+    .. versionadded:: 1.6.0
     """
 
 
