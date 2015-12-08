@@ -173,7 +173,8 @@ case class ScalaUDF(
   lazy val reflectedFunc = runtimeMirror(function.getClass.getClassLoader).reflect(function)
   lazy val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
     .asTerm.alternatives
-  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod).apply _
+  lazy val invokeMethod = (reflectedFunc.reflectMethod(applyMethods(0).asMethod).apply _)
+    .asInstanceOf[Seq[Any] => Any]
 
   override def eval(input: InternalRow): Any = {
     val projected = InternalRow.fromSeq(children.map(_.eval(input)))
