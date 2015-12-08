@@ -259,7 +259,8 @@ class KafkaDirectReceiver[
 
       while(true) {
         try {
-          val untilOffsets = clamp(currentOffset, latestLeaderOffsets(kc, Set(partition), maxRetries))
+          val untilOffsets =
+            clamp(currentOffset, latestLeaderOffsets(kc, Set(partition), maxRetries))
           if (currentOffset != untilOffsets(partition).offset) {
             val iter =
               new KafkaDirectIterator(kc, partition, currentOffset, untilOffsets(partition).offset)
