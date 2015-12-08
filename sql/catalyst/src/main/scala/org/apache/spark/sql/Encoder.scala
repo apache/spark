@@ -98,6 +98,24 @@ object Encoders {
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
 
   /**
+    * An encoder for nullable decimal type.
+    * @since 1.6.0
+    */
+  def DECIMAL: Encoder[java.math.BigDecimal] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable date type.
+    * @since 1.6.0
+    */
+  def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable timestamp type.
+    * @since 1.6.0
+    */
+  def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
    * Creates an encoder for Java Bean of type T.
    *
    * T must be publicly accessible.
