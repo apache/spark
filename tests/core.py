@@ -9,6 +9,8 @@ import unittest
 from datetime import datetime, time, timedelta
 from time import sleep
 
+from dateutil.relativedelta import relativedelta
+
 from airflow import configuration
 from airflow.executors import SequentialExecutor, LocalExecutor
 from airflow.models import Variable
@@ -19,7 +21,7 @@ from airflow.hooks import BaseHook
 from airflow.bin import cli
 from airflow.www import app as application
 from airflow.settings import Session
-from airflow.utils import LoggingMixin
+from airflow.utils import LoggingMixin, round_time
 from lxml import html
 
 NUM_EXAMPLE_DAGS = 7
@@ -429,6 +431,30 @@ class CoreTest(unittest.TestCase):
         assert Blah().logger.name == "Blah"
         assert SequentialExecutor().logger.name == "SequentialExecutor"
         assert LocalExecutor().logger.name == "LocalExecutor"
+
+    def test_round_time(self):
+
+        rt1 = round_time(datetime(2015, 1, 1, 6), timedelta(days=1))
+        assert rt1 == datetime(2015, 1, 1, 0, 0)
+
+        rt2 = round_time(datetime(2015, 1, 2), relativedelta(months=1))
+        assert rt2 == datetime(2015, 1, 1, 0, 0)
+
+        rt3 = round_time(datetime(2015, 9, 16, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt3 == datetime(2015, 9, 16, 0, 0)
+
+        rt4 = round_time(datetime(2015, 9, 15, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt4 == datetime(2015, 9, 15, 0, 0)
+
+        rt5 = round_time(datetime(2015, 9, 14, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt5 == datetime(2015, 9, 14, 0, 0)
+
+        rt6 = round_time(datetime(2015, 9, 13, 0, 0), timedelta(1), datetime(
+            2015, 9, 14, 0, 0))
+        assert rt6 == datetime(2015, 9, 14, 0, 0)
 
 
 class CliTests(unittest.TestCase):
