@@ -394,8 +394,8 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.DOUBLE(), Encoders.DECIMAL(), Encoders.DATE(), Encoders.TIMESTAMP(),
         Encoders.FLOAT());
     List<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> data =
-      Arrays.asList(new Tuple5<Double, BigDecimal, Date, Timestamp, Float>
-        (1.7976931348623157E308, new BigDecimal("0.922337203685477589").stripTrailingZeros(),
+      Arrays.asList(new Tuple5<Double, BigDecimal, Date, Timestamp, Float>(
+        1.7976931348623157E308, new BigDecimal("0.922337203685477589"),
           Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
       context.createDataset(data, encoder);
