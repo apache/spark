@@ -131,8 +131,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     // Execution wants 200 bytes but only 150 are free, so storage is evicted
     assert(mm.acquireExecutionMemory(200L, taskAttemptId, MemoryMode.ON_HEAP) === 200L)
     assert(mm.executionMemoryUsed === 300L)
+    assert(mm.storageMemoryUsed === 700L)
     assertEvictBlocksToFreeSpaceCalled(ms, 50L)
-    assert(mm.executionMemoryUsed === 300L)
     assert(evictedBlocks.nonEmpty)
     mm.releaseAllStorageMemory()
     evictedBlocks.clear()
@@ -152,18 +152,21 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(evictedBlocks.isEmpty)
   }
 
-  test("execution can evict storage blocks when storage memory is below max mem (SPARK-12165)") {
+  test("execution memory requests smaller than free memory should evict storage (SPARK-12165)") {
     val maxMemory = 1000L
     val taskAttemptId = 0L
     val (mm, ms) = makeThings(maxMemory)
     // Acquire enough storage memory to exceed the storage region size
-    assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
+    assert(mm.acquireStorageMemory(dummyBlock, 700L, evictedBlocks))
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.executionMemoryUsed === 0L)
-    assert(mm.storageMemoryUsed === 750L)
-    // Should now be able to require up to 500 bytes of memory
+    assert(mm.storageMemoryUsed === 700L)
+    // SPARK-12165: previously, MemoryStore would not evict anything because it would
+    // mistakenly think that the 300 bytes of free space was still available even after
+    // using it to expand the execution pool. Consequently, no storage memory was released
+    // and the following call granted only 300 bytes to execution.
     assert(mm.acquireExecutionMemory(500L, taskAttemptId, MemoryMode.ON_HEAP) === 500L)
-    assertEvictBlocksToFreeSpaceCalled(ms, 250L)
+    assertEvictBlocksToFreeSpaceCalled(ms, 200L)
     assert(mm.storageMemoryUsed === 500L)
     assert(mm.executionMemoryUsed === 500L)
     assert(evictedBlocks.nonEmpty)
