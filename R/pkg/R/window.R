@@ -22,6 +22,7 @@
 #' Creates a WindowSpec with the partitioning defined.
 #'
 #' @rdname Window.partitionBy
+#' @name Window.partitionBy
 #' @export
 #' @examples
 #' \dontrun{
@@ -39,6 +40,7 @@ setMethod("Window.partitionBy",
           })
 
 #' @rdname Window.partitionBy
+#' @name Window.partitionBy
 #' @export
 setMethod("Window.partitionBy",
           signature(col = "Column"),
@@ -57,6 +59,7 @@ setMethod("Window.partitionBy",
 #' Creates a WindowSpec with the ordering defined.
 #'
 #' @rdname Window.orderBy
+#' @name Window.orderBy
 #' @export
 #' @examples
 #' \dontrun{
@@ -74,6 +77,7 @@ setMethod("Window.orderBy",
           })
 
 #' @rdname Window.orderBy
+#' @name Window.orderBy
 #' @export
 setMethod("Window.orderBy",
           signature(col = "Column"),

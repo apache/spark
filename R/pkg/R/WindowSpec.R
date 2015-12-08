@@ -54,6 +54,7 @@ setMethod("show", "WindowSpec",
 #' @param x a WindowSpec
 #' @return a WindowSpec
 #' @rdname partitionBy
+#' @name partitionBy
 #' @family windowspec_method
 #' @export
 #' @examples
@@ -83,6 +84,7 @@ setMethod("partitionBy",
 #' @param x a WindowSpec
 #' @return a WindowSpec
 #' @rdname arrange
+#' @name orderBy
 #' @family windowspec_method
 #' @export
 #' @examples
@@ -97,6 +99,7 @@ setMethod("orderBy",
           })
 
 #' @rdname arrange
+#' @name orderBy
 #' @export
 setMethod("orderBy",
           signature(x = "WindowSpec", col = "Column"),
@@ -122,6 +125,7 @@ setMethod("orderBy",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rowsBetween
+#' @name rowsBetween
 #' @family windowspec_method
 #' @export
 #' @examples
@@ -151,6 +155,7 @@ setMethod("rowsBetween",
 #'            The frame is unbounded if this is the maximum long value.
 #' @return a WindowSpec
 #' @rdname rangeBetween
+#' @name rangeBetween
 #' @family windowspec_method
 #' @export
 #' @examples
