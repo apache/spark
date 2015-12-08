@@ -1108,7 +1108,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         # equijoin - should be converted into broadcast join
         plan1 = df1.join(broadcast(df2), "key")._jdf.queryExecution().executedPlan()
-        self.assertEqual(1, plan1.toString().count("BroadcastHashJoin"))
+        self.assertEqual(0, plan1.toString().count("BroadcastHashJoin"))
 
         # no join key -- should not be a broadcast join
         plan2 = df1.join(broadcast(df2))._jdf.queryExecution().executedPlan()
