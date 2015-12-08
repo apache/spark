@@ -1180,6 +1180,10 @@ class Row(tuple):
     ('Alice', 11)
     >>> row.name, row.age
     ('Alice', 11)
+    >>> 'name' in row
+    True
+    >>> 'wrong_key' in row
+    False
 
     Row also can be used to create another Row like class, then it
     could be used to create Row objects, such as
@@ -1187,6 +1191,10 @@ class Row(tuple):
     >>> Person = Row("name", "age")
     >>> Person
     <Row(name, age)>
+    >>> 'name' in Person
+    True
+    >>> 'wrong_key' in Person
+    False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
     """
@@ -1239,6 +1247,12 @@ class Row(tuple):
             return dict(zip(self.__fields__, (conv(o) for o in self)))
         else:
             return dict(zip(self.__fields__, self))
+
+    def __contains__(self, item):
+        if hasattr(self, "__fields__"):
+            return item in self.__fields__
+        else:
+            return super(Row, self).__contains__(item)
 
     # let object acts like class
     def __call__(self, *args):
