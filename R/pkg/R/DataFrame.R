@@ -2243,6 +2243,7 @@ setMethod("str",
           function(object) {
 
             # TODO: These could be made global parameters, though in R it's not the case
+            MAX_CHAR_PER_ROW <- 120
             MAX_COLS <- 100
 
             # Get the column names and types of the DataFrame
