@@ -207,3 +207,4 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(newInstance.getVectors.collect() === instance.getVectors.collect())
   }
 }
+
