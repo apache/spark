@@ -21,9 +21,11 @@ import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeoutException, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -56,6 +58,10 @@ private[deploy] class Master(
   private val forwardMessageThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread")
 
+  private val rebuildUIThread =
+    ThreadUtils.newDaemonSingleThreadExecutor("master-rebuild-ui-thread")
+  private val rebuildUIContext = ExecutionContext.fromExecutor(rebuildUIThread)
+
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
 
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss") // For application IDs
@@ -78,7 +84,7 @@ private[deploy] class Master(
   private val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   private val completedApps = new ArrayBuffer[ApplicationInfo]
   private var nextAppNumber = 0
-  private val appIdToUI = new HashMap[String, SparkUI]
+  private val appIdToUI = new ConcurrentHashMap[String, SparkUI]
 
   private val drivers = new HashSet[DriverInfo]
   private val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -368,6 +374,10 @@ private[deploy] class Master(
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
     }
+
+    case AttachCompletedRebuildUI(appId) =>
+      // An asyncRebuildSparkUI has completed, so need to attach to master webUi
+      Option(appIdToUI.get(appId)).foreach { ui => webUi.attachSparkUI(ui) }
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -810,7 +820,7 @@ private[deploy] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
-          appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
+          Option(appIdToUI.remove(a.id)).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)
@@ -819,7 +829,7 @@ private[deploy] class Master(
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      rebuildSparkUI(app)
+      asyncRebuildSparkUI(app)
 
       for (exec <- app.executors.values) {
         killExecutor(exec)
@@ -924,18 +934,36 @@ private[deploy] class Master(
    * Return the UI if successful, else None
    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
+    val futureUI = asyncRebuildSparkUI(app)
+
+    // Wait until the UI is rebuilt or a failure, log status occasionally for apps with many events
+    var waitSec = 2
+    do {
+      try {
+        val ui = Await.result(futureUI, Duration(waitSec, TimeUnit.SECONDS))
+        return Some(ui)
+      } catch {
+        case te: TimeoutException =>
+          waitSec += waitSec
+          logInfo(s"Application UI is rebuilding, will continue to wait $waitSec seconds")
+        case e: Exception =>
+          waitSec = 0
+      }
+    } while (waitSec > 0)
+    None
+  }
+
+  /** Rebuild a new SparkUI asynchronously to not block RPC event loop */
+  private[master] def asyncRebuildSparkUI(app: ApplicationInfo): Future[SparkUI] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    try {
-      val eventLogDir = app.desc.eventLogDir
-        .getOrElse {
-          // Event logging is not enabled for this application
-          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
-          return None
-        }
+    val futureUI = Future {
+
+      // Fail the future immediately if event logging is not enabled for this application
+      val eventLogDir = app.desc.eventLogDir.getOrElse(throw new RebuildUINoEventLogException)
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
+        eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
@@ -961,12 +989,24 @@ private[deploy] class Master(
       } finally {
         logInput.close()
       }
-      appIdToUI(app.id) = ui
-      webUi.attachSparkUI(ui)
+      Thread.sleep(20)
+
+      ui
+    }(rebuildUIContext)
+
+    futureUI.onSuccess { case ui =>
+      appIdToUI.put(app.id, ui)
+      self.send(AttachCompletedRebuildUI(app.id))
       // Application UI is successfully rebuilt, so link the Master UI to it
+      // NOTE - app.appUIUrlAtHistoryServer is volatile
       app.appUIUrlAtHistoryServer = Some(ui.basePath)
-      Some(ui)
-    } catch {
+    }(ThreadUtils.sameThread)
+
+    futureUI.onFailure {
+      case nev: RebuildUINoEventLogException =>
+        // Event logging is disabled for this application
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
+
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
@@ -975,7 +1015,7 @@ private[deploy] class Master(
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
         app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
-        None
+
       case e: Exception =>
         // Relay exception message to application UI page
         val title = s"Application history load error (${app.id})"
@@ -985,8 +1025,9 @@ private[deploy] class Master(
         msg = URLEncoder.encode(msg, "UTF-8")
         app.appUIUrlAtHistoryServer =
             Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
-        None
-    }
+    }(ThreadUtils.sameThread)
+
+    futureUI
   }
 
   /** Generate a new app ID given a app's submission date */
@@ -1089,3 +1130,6 @@ private[deploy] object Master extends Logging {
     (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
   }
 }
+
+/** Exception thrown when trying to rebuild UI and event log is disabled */
+private[master] class RebuildUINoEventLogException extends Exception
