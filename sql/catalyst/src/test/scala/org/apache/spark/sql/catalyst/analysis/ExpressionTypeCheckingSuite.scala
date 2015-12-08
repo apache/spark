@@ -32,6 +32,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     'intField.int,
     'stringField.string,
     'booleanField.boolean,
+    'decimalField.decimal(8, 0),
     'arrayField.array(StringType),
     'mapField.map(StringType, LongType))
 
@@ -188,5 +189,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertError(Round('intField, 'booleanField), "requires int type")
     assertError(Round('intField, 'mapField), "requires int type")
     assertError(Round('booleanField, 'intField), "requires numeric type")
+  }
+
+  test("check types for Greatest/Least") {
+    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+      assertError(operator(Seq('booleanField)), "requires at least 2 arguments")
+      assertError(operator(Seq('intField, 'stringField)), "should all have the same type")
+      assertError(operator(Seq('intField, 'decimalField)), "should all have the same type")
+      assertError(operator(Seq('mapField, 'mapField)), "does not support ordering")
+    }
   }
 }

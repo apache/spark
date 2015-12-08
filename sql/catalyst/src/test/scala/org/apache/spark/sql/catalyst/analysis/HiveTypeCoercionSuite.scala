@@ -251,6 +251,29 @@ class HiveTypeCoercionSuite extends PlanTest {
         :: Nil))
   }
 
+  test("greatest/least cast") {
+    for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1.0)
+          :: Literal(1)
+          :: Literal.create(1.0, FloatType)
+          :: Nil),
+        operator(Cast(Literal(1.0), DoubleType)
+          :: Cast(Literal(1), DoubleType)
+          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Nil))
+      ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+        operator(Literal(1L)
+          :: Literal(1)
+          :: Literal(new java.math.BigDecimal("1000000000000000000000"))
+          :: Nil),
+        operator(Cast(Literal(1L), DecimalType(22, 0))
+          :: Cast(Literal(1), DecimalType(22, 0))
+          :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+          :: Nil))
+    }
+  }
+
   test("nanvl casts") {
     ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
       NaNvl(Literal.create(1.0, FloatType), Literal.create(1.0, DoubleType)),
