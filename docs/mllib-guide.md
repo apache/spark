@@ -73,9 +73,10 @@ We list major functionality from both below, with links to detailed guides.
 * [Advanced topics](ml-advanced.html)
 
 Some techniques are not available yet in spark.ml, most notably:
- - clustering
- - collaborative filtering
- - dimensionality reduction
+
+ * clustering
+ * collaborative filtering
+ * dimensionality reduction
 
 Users can seemlessly combine the implementation of these techniques found in `spark.mllib` with the rest of the algorithms found in `spark.ml`.
 
