@@ -197,6 +197,7 @@ private[deploy] class Master(
       checkForWorkerTimeOutTask.cancel(true)
     }
     forwardMessageThread.shutdownNow()
+    rebuildUIThread.shutdownNow()
     webUi.stop()
     restServer.foreach(_.stop())
     masterMetricsSystem.stop()
