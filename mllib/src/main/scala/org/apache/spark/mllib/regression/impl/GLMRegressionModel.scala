@@ -47,7 +47,7 @@ private[regression] object GLMRegressionModel {
         modelClass: String,
         weights: Vector,
         intercept: Double): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // Create JSON metadata.
@@ -71,7 +71,7 @@ private[regression] object GLMRegressionModel {
      */
     def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
       val dataArray = dataRDD.select("weights", "intercept").take(1)
       assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
