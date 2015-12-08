@@ -386,7 +386,6 @@ class YarnProviderUtilsSuite extends SparkFunSuite with Logging
     val finalAppDescription = describeApplicationHistoryInfo(finalApp)
     val finalAttempt = finalApp.attempts.head
     assert(finalAttempt.completed, s"not completed $finalAppDescription")
-    //val a2_attempt_1_1 = historyInfo("app2", Some("attempt_1_1"),)
     assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
         === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
   }
