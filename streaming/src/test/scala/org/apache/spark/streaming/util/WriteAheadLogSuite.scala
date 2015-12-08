@@ -20,7 +20,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{TimeUnit, CountDownLatch, ThreadPoolExecutor}
+import java.util.concurrent.{RejectedExecutionException, TimeUnit, CountDownLatch, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -30,6 +30,7 @@ import scala.language.{implicitConversions, postfixOps}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{eq => meq}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -189,6 +190,28 @@ abstract class CommonWriteAheadLogTests(
       wal.read(writtenSegment.head)
     }
     assert(!nonexistentTempPath.exists(), "Directory created just by attempting to read segment")
+  }
+
+  test(testPrefix + "parallel recovery not enabled if closeFileAfterWrite = false") {
+    // write some data
+    val writtenData = (1 to 10).map { i =>
+      val data = generateRandomData()
+      val file = testDir + s"/log-$i-$i"
+      writeDataManually(data, file, allowBatching)
+      data
+    }.flatten
+
+    val wal = createWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
+    // create iterator but don't materialize it
+    val readData = wal.readAll().asScala.map(byteBufferToString)
+    wal.close()
+    if (closeFileAfterWrite) {
+      // the threadpool is shutdown by the wal.close call above, therefore we shouldn't be able
+      // to materialize the iterator with parallel recovery
+      intercept[RejectedExecutionException](readData.toArray)
+    } else {
+      assert(readData.toSeq === writtenData)
+    }
   }
 }
 
@@ -457,7 +480,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     p
   }
 
-  test("BatchedWriteAheadLog - name log with aggregated entries with the timestamp of last entry") {
+  test("BatchedWriteAheadLog - name log with the highest timestamp of aggregated entries") {
     val blockingWal = new BlockingWriteAheadLog(wal, walHandle)
     val batchedWal = new BatchedWriteAheadLog(blockingWal, sparkConf)
 
@@ -477,23 +500,32 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
     writeAsync(batchedWal, event3, 8L)
-    writeAsync(batchedWal, event4, 12L)
-    writeAsync(batchedWal, event5, 10L)
+    // we would like event 5 to be written before event 4 in order to test that they get
+    // sorted before being aggregated
+    writeAsync(batchedWal, event5, 12L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 3)
+    }
+    writeAsync(batchedWal, event4, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
       assert(batchedWal.invokePrivate(queueLength()) === 4)
     }
     blockingWal.allowWrite()
 
-    val buffer1 = wrapArrayArrayByte(Array(event1))
-    val buffer2 = wrapArrayArrayByte(Array(event2, event3, event4, event5))
+    val buffer = wrapArrayArrayByte(Array(event1))
+    val queuedEvents = Set(event2, event3, event4, event5)
 
     eventually(timeout(1 second)) {
       assert(batchedWal.invokePrivate(queueLength()) === 0)
-      verify(wal, times(1)).write(meq(buffer1), meq(3L))
+      verify(wal, times(1)).write(meq(buffer), meq(3L))
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
-      verify(wal, times(1)).write(meq(buffer2), meq(10L))
+      val bufferCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+      verify(wal, times(1)).write(bufferCaptor.capture(), meq(12L))
+      val records = BatchedWriteAheadLog.deaggregate(bufferCaptor.getValue).map(byteBufferToString)
+      assert(records.toSet === queuedEvents)
     }
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.xml.Node
+import scala.xml.{Unparsed, Node}
 
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData
@@ -52,7 +52,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
 
     <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
-        <th>Executor ID</th>
+        <th id="executorid">Executor ID</th>
         <th>Address</th>
         <th>Task Time</th>
         <th>Total Tasks</th>
@@ -89,6 +89,15 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         {createExecutorTable()}
       </tbody>
     </table>
+    <script>
+      {Unparsed {
+        """
+          |      window.onload = function() {
+          |        sorttable.innerSortFunction.apply(document.getElementById('executorid'), [])
+          |      };
+        """.stripMargin
+      }}
+    </script>
   }
 
   private def createExecutorTable() : Seq[Node] = {

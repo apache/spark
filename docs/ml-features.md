@@ -1109,7 +1109,7 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame data = sqlContext.read.format("libsvm")
+DataFrame data = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 VectorIndexer indexer = new VectorIndexer()
   .setInputCol("features")
@@ -1187,7 +1187,7 @@ for more details on the API.
 import org.apache.spark.ml.feature.Normalizer;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 
 // Normalize each Vector using $L^1$ norm.
@@ -1232,7 +1232,7 @@ lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
 * `withStd`: True by default. Scales the data to unit standard deviation.
 * `withMean`: False by default. Centers the data with mean before scaling. It will build a dense output, so this does not work on sparse input and will raise an exception.
 
-`StandardScaler` is a `Model` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
+`StandardScaler` is an `Estimator` which can be `fit` on a dataset to produce a `StandardScalerModel`; this amounts to computing summary statistics.  The model can then transform a `Vector` column in a dataset to have unit standard deviation and/or zero mean features.
 
 Note that if the standard deviation of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
 
@@ -1273,7 +1273,7 @@ import org.apache.spark.ml.feature.StandardScaler;
 import org.apache.spark.ml.feature.StandardScalerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 StandardScaler scaler = new StandardScaler()
   .setInputCol("features")
@@ -1366,7 +1366,7 @@ import org.apache.spark.ml.feature.MinMaxScaler;
 import org.apache.spark.ml.feature.MinMaxScalerModel;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame dataFrame = sqlContext.read.format("libsvm")
+DataFrame dataFrame = sqlContext.read().format("libsvm")
   .load("data/mllib/sample_libsvm_data.txt");
 MinMaxScaler scaler = new MinMaxScaler()
   .setInputCol("features")
@@ -1591,6 +1591,65 @@ transformer.transform(df).show()
 
 </div>
 
+## SQLTransformer
+
+`SQLTransformer` implements the transformations which are defined by SQL statement.
+Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
+where `"__THIS__"` represents the underlying table of the input dataset.
+The select clause specifies the fields, constants, and expressions to display in
+the output, it can be any select clause that Spark SQL supports. Users can also
+use Spark SQL built-in function and UDFs to operate on these selected columns.
+For example, `SQLTransformer` supports statements like:
+
+* `SELECT a, a + b AS a_b FROM __THIS__`
+* `SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5`
+* `SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b`
+
+**Examples**
+
+Assume that we have the following DataFrame with columns `id`, `v1` and `v2`:
+
+~~~~
+ id |  v1 |  v2
+----|-----|-----
+ 0  | 1.0 | 3.0  
+ 2  | 2.0 | 5.0
+~~~~
+
+This is the output of the `SQLTransformer` with statement `"SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__"`:
+
+~~~~
+ id |  v1 |  v2 |  v3 |  v4
+----|-----|-----|-----|-----
+ 0  | 1.0 | 3.0 | 4.0 | 3.0
+ 2  | 2.0 | 5.0 | 7.0 |10.0
+~~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [SQLTransformer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.SQLTransformer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/SQLTransformerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [SQLTransformer Java docs](api/java/org/apache/spark/ml/feature/SQLTransformer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaSQLTransformerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.SQLTransformer) for more details on the API.
+
+{% include_example python/ml/sql_transformer.py %}
+</div>
+</div>
+
 ## VectorAssembler
 
 `VectorAssembler` is a transformer that combines a given list of columns into a single vector
@@ -1702,6 +1761,71 @@ assembler = VectorAssembler(
 output = assembler.transform(dataset)
 print(output.select("features", "clicked").first())
 {% endhighlight %}
+</div>
+</div>
+
+## QuantileDiscretizer
+
+`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+categorical features.
+The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
+This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
+find fewer depending on the data sample values.
+
+Note that the result may be different every time you run it, since the sample strategy behind it is
+non-deterministic.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `hour`:
+
+~~~
+ id | hour
+----|------
+ 0  | 18.0
+----|------
+ 1  | 19.0
+----|------
+ 2  | 8.0
+----|------
+ 3  | 5.0
+----|------
+ 4  | 2.2
+~~~
+
+`hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
+categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+
+~~~
+ id | hour | result
+----|------|------
+ 0  | 18.0 | 2.0
+----|------|------
+ 1  | 19.0 | 2.0
+----|------|------
+ 2  | 8.0  | 1.0
+----|------|------
+ 3  | 5.0  | 1.0
+----|------|------
+ 4  | 2.2  | 0.0
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [QuantileDiscretizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/QuantileDiscretizerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [QuantileDiscretizer Java docs](api/java/org/apache/spark/ml/feature/QuantileDiscretizer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
 </div>
 
@@ -1947,5 +2071,55 @@ formula = RFormula(
 output = formula.fit(dataset).transform(dataset)
 output.select("features", "label").show()
 {% endhighlight %}
+</div>
+</div>
+
+## ChiSqSelector
+
+`ChiSqSelector` stands for Chi-Squared feature selection. It operates on labeled data with
+categorical features. ChiSqSelector orders features based on a
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test)
+from the class, and then filters (selects) the top features which the class label depends on the
+most. This is akin to yielding the features with the most predictive power.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `features`, and `clicked`, which is used as
+our target to be predicted:
+
+~~~
+id | features              | clicked
+---|-----------------------|---------
+ 7 | [0.0, 0.0, 18.0, 1.0] | 1.0
+ 8 | [0.0, 1.0, 12.0, 0.0] | 0.0
+ 9 | [1.0, 0.0, 15.0, 0.1] | 0.0
+~~~
+
+If we use `ChiSqSelector` with a `numTopFeatures = 1`, then according to our label `clicked` the
+last column in our `features` chosen as the most useful feature:
+
+~~~
+id | features              | clicked | selectedFeatures
+---|-----------------------|---------|------------------
+ 7 | [0.0, 0.0, 18.0, 1.0] | 1.0     | [1.0]
+ 8 | [0.0, 1.0, 12.0, 0.0] | 0.0     | [0.0]
+ 9 | [1.0, 0.0, 15.0, 0.1] | 0.0     | [0.1]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [ChiSqSelector Scala docs](api/scala/index.html#org.apache.spark.ml.feature.ChiSqSelector)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ChiSqSelectorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [ChiSqSelector Java docs](api/java/org/apache/spark/ml/feature/ChiSqSelector.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaChiSqSelectorExample.java %}
 </div>
 </div>

@@ -1614,7 +1614,8 @@ This command builds a new assembly jar that includes Hive. Note that this Hive a
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. Please note when running
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
+ `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
 the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory
 and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
 YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
@@ -1820,6 +1821,7 @@ the Data Sources API.  The following options are supported:
       register itself with the JDBC subsystem.
     </td>
   </tr>
+  
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
     <td>
@@ -1829,6 +1831,13 @@ the Data Sources API.  The following options are supported:
       that <code>lowerBound</code> and <code>upperBound</code> are just used to decide the
       partition stride, not for filtering the rows in table. So all rows in the table will be
       partitioned and returned.
+    </td>
+  </tr>
+  
+  <tr>
+    <td><code>fetchSize</code></td>
+    <td>
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
     </td>
   </tr>
 </table>
@@ -2020,7 +2029,7 @@ Beeline will ask you for a username and password. In non-secure mode, simply ent
 your machine and a blank password. For secure mode, please follow the instructions given in the
 [beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients).
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
 
 You may also use the beeline script that comes with Hive.
 
@@ -2045,11 +2054,25 @@ To start the Spark SQL CLI, run the following in the Spark directory:
 
     ./bin/spark-sql
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 1.5 to 1.6
+
+ - From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
+   connection owns a copy of their own SQL configuration and temporary function registry.  Cached
+   tables are still shared though.  If you prefer to run the Thrift server in the old single-session
+   mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
+   this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
+
+   {% highlight bash %}
+   ./sbin/start-thriftserver.sh \
+     --conf spark.sql.hive.thriftServer.singleSession=true \
+     ...
+   {% endhighlight %}
 
 ## Upgrading From Spark SQL 1.4 to 1.5
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.trees
 
+import scala.collection.Map
+
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.types.{StructType, DataType}
 
@@ -191,6 +193,19 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case nonChild: AnyRef => nonChild
         case null => null
       }
+      case m: Map[_, _] => m.mapValues {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          val newChild = remainingNewChildren.remove(0)
+          val oldChild = remainingOldChildren.remove(0)
+          if (newChild fastEquals oldChild) {
+            oldChild
+          } else {
+            changed = true
+            newChild
+          }
+        case nonChild: AnyRef => nonChild
+        case null => null
+      }.view.force // `mapValues` is lazy and we need to force it to materialize
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
@@ -262,7 +277,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         } else {
           Some(arg)
         }
-      case m: Map[_, _] => m
+      case m: Map[_, _] => m.mapValues {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
+          if (!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case other => other
+      }.view.force // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if containsChild(arg) =>
@@ -355,7 +380,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if containsChild(tn) => Nil
-    case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
+    case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
     case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
@@ -368,7 +393,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString: String = generateTreeString(0, new StringBuilder).toString
+  def treeString: String = generateTreeString(0, Nil, new StringBuilder).toString
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
@@ -394,12 +419,33 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  /** Appends the string represent of this node and its children to the given StringBuilder. */
-  protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
-    builder.append(" " * depth)
+  /**
+   * Appends the string represent of this node and its children to the given StringBuilder.
+   *
+   * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
+   * depth `i + 1` is the last child of its own parent node.  The depth of the root node is 0, and
+   * `lastChildren` for the root node should be empty.
+   */
+  protected def generateTreeString(
+      depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
+    if (depth > 0) {
+      lastChildren.init.foreach { isLast =>
+        val prefixFragment = if (isLast) "   " else ":  "
+        builder.append(prefixFragment)
+      }
+
+      val branch = if (lastChildren.last) "+- " else ":- "
+      builder.append(branch)
+    }
+
     builder.append(simpleString)
     builder.append("\n")
-    children.foreach(_.generateTreeString(depth + 1, builder))
+
+    if (children.nonEmpty) {
+      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+    }
+
     builder
   }
 
