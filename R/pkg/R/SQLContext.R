@@ -220,7 +220,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' }
 read.json <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  paths <- as.list(suppressWarnings(normalizePath(splitString(path))))
+  paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)

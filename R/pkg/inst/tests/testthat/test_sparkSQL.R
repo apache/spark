@@ -375,7 +375,7 @@ test_that("read.json()/jsonFile() on a local file returns a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
-  # read.json works with multiple input paths
+  # read.json()/jsonFile() works with multiple input paths
   jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
   write.df(df, jsonPath2, "json", mode="overwrite")
   jsonDF1 <- read.json(sqlContext, c(jsonPath, jsonPath2))
