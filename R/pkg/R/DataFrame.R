@@ -2223,3 +2223,96 @@ setMethod("with",
             newEnv <- assignNewEnv(data)
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
+
+#' Display the structure of a DataFrame, including column names, column types, as well as a
+#' a small sample of rows.
+#' @name str
+#' @title Compactly display the structure of a dataset
+#' @rdname str
+#' @family DataFrame functions
+#' @param object a DataFrame
+#' @examples \dontrun{
+#' # Create a DataFrame from the Iris dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Show the structure of the DataFrame
+#' str(irisDF)
+#' }
+setMethod("str",
+          signature(object = "DataFrame"),
+          function(object) {
+
+            # TODO: These could be made global parameters, though in R it's not the case
+            MAX_COLS <- 100
+
+            # Get the column names and types of the DataFrame
+            names <- names(object)
+            types <- coltypes(object)
+
+            # Get the number of rows.
+            # TODO: Ideally, this should be cached
+            cachedCount <- nrow(object)
+
+            # Get the first elements of the dataset. Limit number of columns accordingly
+            localDF <- if (ncol(object) > MAX_COLS) {
+              head(object[, c(1:MAX_COLS)])
+            } else {
+              head(object)
+            }
+
+            # The number of observations will be displayed only if the number
+            # of rows of the dataset has already been cached.
+            if (!is.null(cachedCount)) {
+              cat(paste0("'", class(object), "': ", cachedCount, " obs. of ",
+                         length(names), " variables:\n"))
+            } else {
+              cat(paste0("'", class(object), "': ", length(names), " variables:\n"))
+            }
+
+            # Whether the ... should be printed at the end of each row
+            ellipsis <- FALSE
+
+            # Add ellipsis (i.e., "...") if there are more rows than shown
+            if (!is.null(cachedCount) && (cachedCount > 6)) {
+              ellipsis <- TRUE
+            }
+
+            if (nrow(localDF) > 0) {
+              for (i in 1 : ncol(localDF)) {
+                firstElements <- ""
+
+                # Get the first elements for each column
+                if (types[i] == "character") {
+                  firstElements <- paste(paste0("\"", localDF[,i], "\""), collapse = " ")
+                } else {
+                  firstElements <- paste(localDF[,i], collapse = " ")
+                }
+
+                # Add the corresponding number of spaces for alignment
+                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
+
+                # Get the short type. For 'character', it would be 'chr';
+                # 'for numeric', it's 'num', etc.
+                dataType <- SHORT_TYPES[[types[i]]]
+                if (is.null(dataType)) {
+                  dataType <- substring(types[i], 1, 3)
+                }
+
+                # Concatenate the colnames, coltypes, and first
+                # elements of each column
+                line <- paste0(" $ ", names[i], spaces, ": ",
+                               dataType, " ",firstElements)
+
+                # Chop off extra characters if this is too long
+                cat(substr(line, 1, MAX_CHAR_PER_ROW))
+                if (ellipsis) {
+                  cat(" ...")
+                }
+                cat("\n")
+              }
+
+              if (ncol(localDF) < ncol(object)) {
+                cat(paste0("\nDisplaying first ", ncol(localDF), " columns only."))
+              }
+            }
+          })
