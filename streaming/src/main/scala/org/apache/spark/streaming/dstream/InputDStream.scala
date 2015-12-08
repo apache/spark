@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
  *
  * @param ssc_ Streaming context that will execute this input stream
  */
-abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
+abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
   extends DStream[T](ssc_) {
 
   private[streaming] var lastValidTime: Time = null

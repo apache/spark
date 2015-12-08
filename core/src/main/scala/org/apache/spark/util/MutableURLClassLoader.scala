@@ -21,6 +21,8 @@ import java.net.{URLClassLoader, URL}
 import java.util.Enumeration
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
  */
@@ -82,14 +84,9 @@ private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoa
   }
 
   override def getResources(name: String): Enumeration[URL] = {
-    val urls = super.findResources(name)
-    val res =
-      if (urls != null && urls.hasMoreElements()) {
-        urls
-      } else {
-        parentClassLoader.getResources(name)
-      }
-    res
+    val childUrls = super.findResources(name).asScala
+    val parentUrls = parentClassLoader.getResources(name).asScala
+    (childUrls ++ parentUrls).asJavaEnumeration
   }
 
   override def addURL(url: URL) {

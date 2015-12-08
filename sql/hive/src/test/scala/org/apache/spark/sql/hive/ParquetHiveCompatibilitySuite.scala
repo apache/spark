@@ -18,37 +18,19 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
-import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
+import org.apache.spark.sql.{Row, SQLConf}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
-
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
    * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
    */
   private val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
-
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
-
-  protected override def beforeAll(): Unit = {
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    Locale.setDefault(Locale.US)
-  }
-
-  override protected def afterAll(): Unit = {
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-  }
 
   override protected def logParquetSchema(path: String): Unit = {
     val schema = readParquetSchema(path, { path =>

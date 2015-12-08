@@ -21,10 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 
 private[json] trait TestJsonData {
-  protected def _sqlContext: SQLContext
+  protected def sqlContext: SQLContext
 
   def primitiveFieldAndType: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"string":"this is a simple string.",
           "integer":10,
           "long":21474836470,
@@ -35,7 +35,7 @@ private[json] trait TestJsonData {
       }"""  :: Nil)
 
   def primitiveFieldValueTypeConflict: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1,
           "num_bool":true, "num_str":13.1, "str_bool":"str1"}""" ::
       """{"num_num_1":null, "num_num_2":21474836470.9, "num_num_3": null,
@@ -46,14 +46,14 @@ private[json] trait TestJsonData {
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
   def jsonNullStruct: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"nullstr":"","ip":"27.31.100.29","headers":{"Host":"1.abc.com","Charset":"UTF-8"}}""" ::
         """{"nullstr":"","ip":"27.31.100.29","headers":{}}""" ::
         """{"nullstr":"","ip":"27.31.100.29","headers":""}""" ::
         """{"nullstr":null,"ip":"27.31.100.29","headers":null}""" :: Nil)
 
   def complexFieldValueTypeConflict: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"num_struct":11, "str_array":[1, 2, 3],
           "array":[], "struct_array":[], "struct": {}}""" ::
       """{"num_struct":{"field":false}, "str_array":null,
@@ -64,14 +64,14 @@ private[json] trait TestJsonData {
           "array":[7], "struct_array":{"field": true}, "struct": {"field": "str"}}""" :: Nil)
 
   def arrayElementTypeConflict: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
           "array2": [{"field":214748364700}, {"field":1}]}""" ::
       """{"array3": [{"field":"str"}, {"field":1}]}""" ::
       """{"array3": [1, 2, 3]}""" :: Nil)
 
   def missingFields: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"a":true}""" ::
       """{"b":21474836470}""" ::
       """{"c":[33, 44]}""" ::
@@ -79,7 +79,7 @@ private[json] trait TestJsonData {
       """{"e":"str"}""" :: Nil)
 
   def complexFieldAndType1: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"struct":{"field1": true, "field2": 92233720368547758070},
           "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
           "arrayOfString":["str1", "str2"],
@@ -95,7 +95,7 @@ private[json] trait TestJsonData {
          }"""  :: Nil)
 
   def complexFieldAndType2: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
           "complexArrayOfStruct": [
           {
@@ -149,7 +149,7 @@ private[json] trait TestJsonData {
       }""" :: Nil)
 
   def mapType1: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"map": {"a": 1}}""" ::
       """{"map": {"b": 2}}""" ::
       """{"map": {"c": 3}}""" ::
@@ -157,7 +157,7 @@ private[json] trait TestJsonData {
       """{"map": {"e": null}}""" :: Nil)
 
   def mapType2: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"map": {"a": {"field1": [1, 2, 3, null]}}}""" ::
       """{"map": {"b": {"field2": 2}}}""" ::
       """{"map": {"c": {"field1": [], "field2": 4}}}""" ::
@@ -166,21 +166,21 @@ private[json] trait TestJsonData {
       """{"map": {"f": {"field1": null}}}""" :: Nil)
 
   def nullsInArrays: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{"field1":[[null], [[["Test"]]]]}""" ::
       """{"field2":[null, [{"Test":1}]]}""" ::
       """{"field3":[[null], [{"Test":"2"}]]}""" ::
       """{"field4":[[null, [1,2,3]]]}""" :: Nil)
 
   def jsonArray: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """[{"a":"str_a_1"}]""" ::
       """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """[]""" :: Nil)
 
   def corruptRecords: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{""" ::
       """""" ::
       """{"a":1, b:2}""" ::
@@ -189,7 +189,7 @@ private[json] trait TestJsonData {
       """]""" :: Nil)
 
   def emptyRecords: RDD[String] =
-    _sqlContext.sparkContext.parallelize(
+    sqlContext.sparkContext.parallelize(
       """{""" ::
         """""" ::
         """{"a": {}}""" ::
@@ -198,7 +198,7 @@ private[json] trait TestJsonData {
         """]""" :: Nil)
 
 
-  lazy val singleRow: RDD[String] = _sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
+  lazy val singleRow: RDD[String] = sqlContext.sparkContext.parallelize("""{"a":123}""" :: Nil)
 
-  def empty: RDD[String] = _sqlContext.sparkContext.parallelize(Seq[String]())
+  def empty: RDD[String] = sqlContext.sparkContext.parallelize(Seq[String]())
 }

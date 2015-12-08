@@ -91,7 +91,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 	- Kinesis data processing is ordered per partition and occurs at-least once per message.
 
-	- Multiple applications can read from the same Kinesis stream.  Kinesis will maintain the application-specific shard and checkpoint info in DynamodDB.
+	- Multiple applications can read from the same Kinesis stream.  Kinesis will maintain the application-specific shard and checkpoint info in DynamoDB.
 
 	- A single Kinesis stream shard is processed by one input DStream at a time.
 

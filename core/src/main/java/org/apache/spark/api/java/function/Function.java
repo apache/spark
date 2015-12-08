@@ -25,5 +25,5 @@ import java.io.Serializable;
  * when mapping RDDs of other types.
  */
 public interface Function<T1, R> extends Serializable {
-  public R call(T1 v1) throws Exception;
+  R call(T1 v1) throws Exception;
 }

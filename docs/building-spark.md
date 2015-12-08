@@ -38,7 +38,7 @@ To create a Spark distribution like those distributed by the
 to be runnable, use `make-distribution.sh` in the project root directory. It can be configured 
 with Maven profile settings and so on like the direct Maven build. Example:
 
-    ./make-distribution.sh --name custom-spark --tgz -Phadoop-2.4 -Pyarn
+    ./make-distribution.sh --name custom-spark --tgz -Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn
     
 For more information on usage, run `./make-distribution.sh --help`
 
@@ -61,12 +61,13 @@ If you don't run this, you may see errors like the following:
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
-* *For Java 8 and above this step is not required.*
-* *If using `build/mvn` and `MAVEN_OPTS` were not already set, the script will automate this for you.*
+
+* For Java 8 and above this step is not required.
+* If using `build/mvn` with no `MAVEN_OPTS` set, the script will automate this for you.
 
 # Specifying the Hadoop Version
 
-Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 2.2.0 by default. Note that certain build profiles are required for particular Hadoop versions:
+Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the `hadoop.version` property. If unset, Spark will build against Hadoop 2.2.0 by default. Note that certain build profiles are required for particular Hadoop versions:
 
 <table class="table">
   <thead>
@@ -91,7 +92,7 @@ mvn -Dhadoop.version=1.2.1 -Phadoop-1 -DskipTests clean package
 mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -Phadoop-1 -DskipTests clean package
 {% endhighlight %}
 
-You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.
+You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different from `hadoop.version`. Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
@@ -125,7 +126,7 @@ mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -Dskip
 # Building for Scala 2.11
 To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
 
-    dev/change-scala-version.sh 2.11
+    ./dev/change-scala-version.sh 2.11
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
 
 Spark does not yet support its JDBC component for Scala 2.11.
@@ -143,6 +144,17 @@ The ScalaTest plugin also supports running only a specific test suite as follows
 
     mvn -Dhadoop.version=... -DwildcardSuites=org.apache.spark.repl.ReplSuite test
 
+# Building submodules individually
+
+It's possible to build Spark sub-modules using the `mvn -pl` option.
+
+For instance, you can build the Spark Streaming module using:
+
+{% highlight bash %}
+mvn -pl :spark-streaming_2.10 clean install
+{% endhighlight %}
+
+where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 
@@ -163,11 +175,9 @@ the `spark-parent` module).
 
 Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
 
-```
- $ mvn install
- $ cd core
- $ mvn scala:cc
-```
+    $ mvn install
+    $ cd core
+    $ mvn scala:cc
 
 # Building Spark with IntelliJ IDEA or Eclipse
 
@@ -179,6 +189,10 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 Running only Java 8 tests and nothing else.
 
     mvn install -DskipTests -Pjava8-tests
+
+or
+
+    sbt -Pjava8-tests java8-tests/test
 
 Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
 For these tests to run your system must have a JDK 8 installation.
@@ -193,11 +207,11 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 # Packaging without Hadoop Dependencies for YARN
 
-The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
+The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with `yarn.application.classpath`.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
 
 # Building with SBT
 
-Maven is the official recommendation for packaging Spark, and is the "build of reference".
+Maven is the official build tool recommended for packaging Spark, and is the *build of reference*.
 But SBT is supported for day-to-day development since it can provide much faster iterative
 compilation. More advanced developers may wish to use SBT.
 
@@ -205,6 +219,11 @@ The SBT build is derived from the Maven POM files, and so the same Maven profile
 can be set to control the SBT build. For example:
 
     build/sbt -Pyarn -Phadoop-2.3 assembly
+
+To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
+in interactive mode by running `build/sbt`, and then run all build commands at the command
+prompt. For more recommendations on reducing build time, refer to the
+[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
 
 # Testing with SBT
 

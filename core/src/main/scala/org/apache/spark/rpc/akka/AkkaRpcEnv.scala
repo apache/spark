@@ -17,6 +17,8 @@
 
 package org.apache.spark.rpc.akka
 
+import java.io.File
+import java.nio.channels.ReadableByteChannel
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
@@ -30,7 +32,7 @@ import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
 import akka.serialization.JavaSerializer
 
-import org.apache.spark.{SparkException, Logging, SparkConf}
+import org.apache.spark.{HttpFileServer, Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
 
@@ -39,13 +41,12 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
  *
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
- *
- * @param actorSystem
- * @param conf
- * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
-    val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
+    val actorSystem: ActorSystem,
+    val securityManager: SecurityManager,
+    conf: SparkConf,
+    boundPort: Int)
   extends RpcEnv(conf) with Logging {
 
   private val defaultAddress: RpcAddress = {
@@ -68,6 +69,8 @@ private[spark] class AkkaRpcEnv private[akka] (
    */
   private val refToEndpoint = new ConcurrentHashMap[RpcEndpointRef, RpcEndpoint]()
 
+  private val _fileServer = new AkkaFileServer(conf, securityManager)
+
   private def registerEndpoint(endpoint: RpcEndpoint, endpointRef: RpcEndpointRef): Unit = {
     endpointToRef.put(endpoint, endpointRef)
     refToEndpoint.put(endpointRef, endpoint)
@@ -87,9 +90,9 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
-    // Use lazy because the Actor needs to use `endpointRef`.
+    // Use defered function because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.
-    lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
+    val actorRef = () => actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
       assert(endpointRef != null)
 
@@ -166,9 +169,9 @@ private[spark] class AkkaRpcEnv private[akka] (
             _sender ! AkkaMessage(response, false)
           }
 
-          // Some RpcEndpoints need to know the sender's address
-          override val sender: RpcEndpointRef =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+          override lazy val senderAddress: RpcAddress =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
         })
       } else {
         endpoint.receive
@@ -227,6 +230,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def shutdown(): Unit = {
     actorSystem.shutdown()
+    _fileServer.shutdown()
   }
 
   override def stop(endpoint: RpcEndpointRef): Unit = {
@@ -245,6 +249,52 @@ private[spark] class AkkaRpcEnv private[akka] (
       deserializationAction()
     }
   }
+
+  override def openChannel(uri: String): ReadableByteChannel = {
+    throw new UnsupportedOperationException(
+      "AkkaRpcEnv's files should be retrieved using an HTTP client.")
+  }
+
+  override def fileServer: RpcEnvFileServer = _fileServer
+
+}
+
+private[akka] class AkkaFileServer(
+    conf: SparkConf,
+    securityManager: SecurityManager) extends RpcEnvFileServer {
+
+  @volatile private var httpFileServer: HttpFileServer = _
+
+  override def addFile(file: File): String = {
+    getFileServer().addFile(file)
+  }
+
+  override def addJar(file: File): String = {
+    getFileServer().addJar(file)
+  }
+
+  def shutdown(): Unit = {
+    if (httpFileServer != null) {
+      httpFileServer.stop()
+    }
+  }
+
+  private def getFileServer(): HttpFileServer = {
+    if (httpFileServer == null) synchronized {
+      if (httpFileServer == null) {
+        httpFileServer = startFileServer()
+      }
+    }
+    httpFileServer
+  }
+
+  private def startFileServer(): HttpFileServer = {
+    val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+    val server = new HttpFileServer(conf, securityManager, fileServerPort)
+    server.initialize()
+    server
+  }
+
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -253,7 +303,7 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       config.name, config.host, config.port, config.conf, config.securityManager)
     actorSystem.actorOf(Props(classOf[ErrorMonitor]), "ErrorMonitor")
-    new AkkaRpcEnv(actorSystem, config.conf, boundPort)
+    new AkkaRpcEnv(actorSystem, config.securityManager, config.conf, boundPort)
   }
 }
 
@@ -267,18 +317,25 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 
   override def receiveWithLogging: Actor.Receive = {
-    case Error(cause: Throwable, _, _, message: String) => logError(message, cause)
+    case Error(cause: Throwable, _, _, message: String) => logDebug(message, cause)
   }
 }
 
 private[akka] class AkkaRpcEndpointRef(
-    @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
-    @transient conf: SparkConf,
-    @transient initInConstructor: Boolean = true)
+    @transient private val defaultAddress: RpcAddress,
+    @transient private val _actorRef: () => ActorRef,
+    conf: SparkConf,
+    initInConstructor: Boolean)
   extends RpcEndpointRef(conf) with Logging {
 
-  lazy val actorRef = _actorRef
+  def this(
+      defaultAddress: RpcAddress,
+      _actorRef: ActorRef,
+      conf: SparkConf) = {
+    this(defaultAddress, () => _actorRef, conf, true)
+  }
+
+  lazy val actorRef = _actorRef()
 
   override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address

@@ -150,6 +150,13 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
+  <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
+    <customMessage><![CDATA[
+      @VisibleForTesting auses classpath issues. Please note this in the java doc instead (SPARK-11615).
+    ]]></customMessage>
+  </check>
+
   <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Class\.forName</parameter></parameters>
     <customMessage><![CDATA[
@@ -166,6 +173,14 @@ This file is divided into 3 sections:
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
     scala.collection.JavaConverters._ and use .asScala / .asJava methods</customMessage>
+  </check>
+
+  <!-- As of SPARK-10330 JobContext methods should not be called directly -->
+  <check customId="jobcontext" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
+    <parameters><parameter name="regex">^getConfiguration$|^getTaskAttemptID$</parameter></parameters>
+    <customMessage>Instead of calling .getConfiguration() or .getTaskAttemptID() directly,
+    use SparkHadoopUtil's getConfigurationFromJobContext() and getTaskAttemptIDFromTaskAttemptContext() methods.
+    </customMessage>
   </check>
 
   <!-- ================================================================================ -->

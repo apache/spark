@@ -23,107 +23,126 @@ displayTitle: <a href="ml-guide.html">ML</a> - Linear Methods
 \]`
 
 
-In MLlib, we implement popular linear methods such as logistic regression and linear least squares with L1 or L2 regularization. Refer to [the linear methods in mllib](mllib-linear-methods.html) for details. In `spark.ml`, we also include Pipelines API for [Elastic net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid of L1 and L2 regularization proposed in [this paper](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf). Mathematically it is defined as a linear combination of the L1-norm and the L2-norm:
+In MLlib, we implement popular linear methods such as logistic
+regression and linear least squares with $L_1$ or $L_2$ regularization.
+Refer to [the linear methods in mllib](mllib-linear-methods.html) for
+details.  In `spark.ml`, we also include Pipelines API for [Elastic
+net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
+of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
+and variable selection via the elastic
+net](http://users.stat.umn.edu/~zouxx019/Papers/elasticnet.pdf).
+Mathematically, it is defined as a convex combination of the $L_1$ and
+the $L_2$ regularization terms:
 `\[
-\alpha \|\wv\|_1 + (1-\alpha) \frac{1}{2}\|\wv\|_2^2, \alpha \in [0, 1].
+\alpha \left( \lambda \|\wv\|_1 \right) + (1-\alpha) \left( \frac{\lambda}{2}\|\wv\|_2^2 \right) , \alpha \in [0, 1], \lambda \geq 0
 \]`
-By setting $\alpha$ properly, it contains both L1 and L2 regularization as special cases. For example, if a [linear regression](https://en.wikipedia.org/wiki/Linear_regression) model is trained with the elastic net parameter $\alpha$ set to $1$, it is equivalent to a [Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model. On the other hand, if $\alpha$ is set to $0$, the trained model reduces to a [ridge regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model. We implement Pipelines API for both linear regression and logistic regression with elastic net regularization.
+By setting $\alpha$ properly, elastic net contains both $L_1$ and $L_2$
+regularization as special cases. For example, if a [linear
+regression](https://en.wikipedia.org/wiki/Linear_regression) model is
+trained with the elastic net parameter $\alpha$ set to $1$, it is
+equivalent to a
+[Lasso](http://en.wikipedia.org/wiki/Least_squares#Lasso_method) model.
+On the other hand, if $\alpha$ is set to $0$, the trained model reduces
+to a [ridge
+regression](http://en.wikipedia.org/wiki/Tikhonov_regularization) model.
+We implement Pipelines API for both linear regression and logistic
+regression with elastic net regularization.
 
-**Examples**
+## Example: Logistic Regression
+
+The following example shows how to train a logistic regression model
+with elastic net regularization. `elasticNetParam` corresponds to
+$\alpha$ and `regParam` corresponds to $\lambda$.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+{% include_example scala/org/apache/spark/examples/ml/LogisticRegressionWithElasticNetExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionWithElasticNetExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+{% include_example python/ml/logistic_regression_with_elastic_net.py %}
+</div>
+
+</div>
+
+The `spark.ml` implementation of logistic regression also supports
+extracting a summary of the model over the training set. Note that the
+predictions and metrics which are stored as `Dataframe` in
+`BinaryLogisticRegressionSummary` are annotated `@transient` and hence
+only available on the driver.
 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
 
-{% highlight scala %}
+[`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
+provides a summary for a
+[`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
+Currently, only binary classification is supported and the
+summary must be explicitly cast to
+[`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
+This will likely change when multiclass classification is supported.
 
-import org.apache.spark.ml.classification.LogisticRegression
-import org.apache.spark.mllib.util.MLUtils
+Continuing the earlier example:
 
-// Load training data
-val training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
-
-val lr = new LogisticRegression()
-  .setMaxIter(10)
-  .setRegParam(0.3)
-  .setElasticNetParam(0.8)
-
-// Fit the model
-val lrModel = lr.fit(training)
-
-// Print the weights and intercept for logistic regression
-println(s"Weights: ${lrModel.weights} Intercept: ${lrModel.intercept}")
-
-{% endhighlight %}
-
+{% include_example scala/org/apache/spark/examples/ml/LogisticRegressionSummaryExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+[`LogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
+provides a summary for a
+[`LogisticRegressionModel`](api/java/org/apache/spark/ml/classification/LogisticRegressionModel.html).
+Currently, only binary classification is supported and the
+summary must be explicitly cast to
+[`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
+This will likely change when multiclass classification is supported.
 
-{% highlight java %}
+Continuing the earlier example:
 
-import org.apache.spark.ml.classification.LogisticRegression;
-import org.apache.spark.ml.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+{% include_example java/org/apache/spark/examples/ml/JavaLogisticRegressionSummaryExample.java %}
+</div>
 
-public class LogisticRegressionWithElasticNetExample {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("Logistic Regression with Elastic Net Example");
+<!--- TODO: Add python model summaries once implemented -->
+<div data-lang="python" markdown="1">
+Logistic regression model summary is not yet supported in Python.
+</div>
 
-    SparkContext sc = new SparkContext(conf);
-    SQLContext sql = new SQLContext(sc);
-    String path = "sample_libsvm_data.txt";
+</div>
 
-    // Load training data
-    DataFrame training = sql.createDataFrame(MLUtils.loadLibSVMFile(sc, path).toJavaRDD(), LabeledPoint.class);
+## Example: Linear Regression
 
-    LogisticRegression lr = new LogisticRegression()
-      .setMaxIter(10)
-      .setRegParam(0.3)
-      .setElasticNetParam(0.8)
+The interface for working with linear regression models and model
+summaries is similar to the logistic regression case. The following
+example demonstrates training an elastic net regularized linear
+regression model and extracting model summary statistics.
 
-    // Fit the model
-    LogisticRegressionModel lrModel = lr.fit(training);
+<div class="codetabs">
 
-    // Print the weights and intercept for logistic regression
-    System.out.println("Weights: " + lrModel.weights() + " Intercept: " + lrModel.intercept());
-  }
-}
-{% endhighlight %}
+<div data-lang="scala" markdown="1">
+{% include_example scala/org/apache/spark/examples/ml/LinearRegressionWithElasticNetExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% include_example java/org/apache/spark/examples/ml/JavaLinearRegressionWithElasticNetExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-
-{% highlight python %}
-
-from pyspark.ml.classification import LogisticRegression
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.util import MLUtils
-
-# Load training data
-training = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
-
-lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
-
-# Fit the model
-lrModel = lr.fit(training)
-
-# Print the weights and intercept for logistic regression
-print("Weights: " + str(lrModel.weights))
-print("Intercept: " + str(lrModel.intercept))
-{% endhighlight %}
-
+<!--- TODO: Add python model summaries once implemented -->
+{% include_example python/ml/linear_regression_with_elastic_net.py %}
 </div>
 
 </div>
 
-### Optimization
+# Optimization
 
-The optimization algorithm underlies the implementation is called [Orthant-Wise Limited-memory QuasiNewton](http://research-srv.microsoft.com/en-us/um/people/jfgao/paper/icml07scalable.pdf)
-(OWL-QN). It is an extension of L-BFGS that can effectively handle L1 regularization and elastic net.
+The optimization algorithm underlying the implementation is called
+[Orthant-Wise Limited-memory
+QuasiNewton](http://research-srv.microsoft.com/en-us/um/people/jfgao/paper/icml07scalable.pdf)
+(OWL-QN). It is an extension of L-BFGS that can effectively handle L1
+regularization and elastic net.
+

@@ -34,12 +34,27 @@ class AccumulableInfo private[spark] (
   override def equals(other: Any): Boolean = other match {
     case acc: AccumulableInfo =>
       this.id == acc.id && this.name == acc.name &&
-        this.update == acc.update && this.value == acc.value
+        this.update == acc.update && this.value == acc.value &&
+        this.internal == acc.internal
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(id, name, update, value, internal)
+    state.map(_.hashCode).reduceLeft(31 * _ + _)
   }
 }
 
 object AccumulableInfo {
+  def apply(
+      id: Long,
+      name: String,
+      update: Option[String],
+      value: String,
+      internal: Boolean): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, value, internal)
+  }
+
   def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
     new AccumulableInfo(id, name, update, value, internal = false)
   }

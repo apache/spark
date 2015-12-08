@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -138,13 +137,17 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /** Returns all of the expressions present in this query plan operator. */
   def expressions: Seq[Expression] = {
+    // Recursively find all expressions from a traversable.
+    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+      case e: Expression => e :: Nil
+      case s: Traversable[_] => seqToExpressions(s)
+      case other => Nil
+    }
+
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
-      case seq: Traversable[_] => seq.flatMap {
-        case e: Expression => e :: Nil
-        case other => Nil
-      }
+      case seq: Traversable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }

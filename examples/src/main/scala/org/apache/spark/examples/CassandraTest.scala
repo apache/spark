@@ -16,6 +16,7 @@
  */
 
 // scalastyle:off println
+// scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -130,6 +131,7 @@ object CassandraTest {
   }
 }
 // scalastyle:on println
+// scalastyle:on jobcontext
 
 /*
 create keyspace casDemo;

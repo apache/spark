@@ -47,13 +47,17 @@ abstract class AbstractCommandBuilder {
   String javaHome;
   String mainClass;
   String master;
-  String propertiesFile;
+  protected String propertiesFile;
   final List<String> appArgs;
   final List<String> jars;
   final List<String> files;
   final List<String> pyFiles;
   final Map<String, String> childEnv;
   final Map<String, String> conf;
+
+  // The merged configuration for the application. Cached to avoid having to read / parse
+  // properties files multiple times.
+  private Map<String, String> effectiveConfig;
 
   public AbstractCommandBuilder() {
     this.appArgs = new ArrayList<String>();
@@ -116,29 +120,6 @@ abstract class AbstractCommandBuilder {
     return cmd;
   }
 
-  /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
-      return;
-    }
-
-    for (String arg : cmd) {
-      if (arg.startsWith("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
-  }
-
   void addOptionString(List<String> cmd, String options) {
     if (!isEmpty(options)) {
       for (String opt : parseOptionString(options)) {
@@ -167,11 +148,13 @@ abstract class AbstractCommandBuilder {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher");
+        "yarn", "launcher", "network/common", "network/shuffle", "network/yarn");
       if (prependClasses) {
-        System.err.println(
-          "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
-          "assembly.");
+        if (!isTesting) {
+          System.err.println(
+            "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
+            "assembly.");
+        }
         for (String project : projects) {
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));
@@ -200,7 +183,7 @@ abstract class AbstractCommandBuilder {
     // For the user code case, we fall back to looking for the Spark assembly under SPARK_HOME.
     // That duplicates some of the code in the shell scripts that look for the assembly, though.
     String assembly = getenv(ENV_SPARK_ASSEMBLY);
-    if (assembly == null && isEmpty(getenv("SPARK_TESTING"))) {
+    if (assembly == null && !isTesting) {
       assembly = findAssembly();
     }
     addToClassPath(cp, assembly);
@@ -215,12 +198,14 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, "lib_managed/jars");
     }
 
-    checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-      libdir.getAbsolutePath());
-    for (File jar : libdir.listFiles()) {
-      if (jar.getName().startsWith("datanucleus-")) {
-        addToClassPath(cp, jar.getAbsolutePath());
+    if (libdir.isDirectory()) {
+      for (File jar : libdir.listFiles()) {
+        if (jar.getName().startsWith("datanucleus-")) {
+          addToClassPath(cp, jar.getAbsolutePath());
+        }
       }
+    } else {
+      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -256,15 +241,15 @@ abstract class AbstractCommandBuilder {
       return scala;
     }
     String sparkHome = getSparkHome();
-    File scala210 = new File(sparkHome, "assembly/target/scala-2.10");
-    File scala211 = new File(sparkHome, "assembly/target/scala-2.11");
+    File scala210 = new File(sparkHome, "launcher/target/scala-2.10");
+    File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
     checkState(!scala210.isDirectory() || !scala211.isDirectory(),
       "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
     if (scala210.isDirectory()) {
       return "2.10";
     } else {
-      checkState(scala211.isDirectory(), "Cannot find any assembly build directories.");
+      checkState(scala211.isDirectory(), "Cannot find any build directories.");
       return "2.11";
     }
   }
@@ -276,12 +261,34 @@ abstract class AbstractCommandBuilder {
     return path;
   }
 
+  String getenv(String key) {
+    return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
+  void setPropertiesFile(String path) {
+    effectiveConfig = null;
+    this.propertiesFile = path;
+  }
+
+  Map<String, String> getEffectiveConfig() throws IOException {
+    if (effectiveConfig == null) {
+      effectiveConfig = new HashMap<>(conf);
+      Properties p = loadPropertiesFile();
+      for (String key : p.stringPropertyNames()) {
+        if (!effectiveConfig.containsKey(key)) {
+          effectiveConfig.put(key, p.getProperty(key));
+        }
+      }
+    }
+    return effectiveConfig;
+  }
+
   /**
    * Loads the configuration file for the application, if it exists. This is either the
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
    */
-  Properties loadPropertiesFile() throws IOException {
+  private Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
     if (propertiesFile != null) {
@@ -311,10 +318,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  String getenv(String key) {
-    return firstNonEmpty(childEnv.get(key), System.getenv(key));
   }
 
   private String findAssembly() {

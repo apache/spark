@@ -17,12 +17,15 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes, NaiveBayesModel => OldNaiveBayesModel}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
+import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
@@ -69,11 +72,14 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
  * ([[http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html]]).
  * The input feature values must be nonnegative.
  */
+@Since("1.5.0")
 @Experimental
-class NaiveBayes(override val uid: String)
+class NaiveBayes @Since("1.5.0") (
+    @Since("1.5.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, NaiveBayes, NaiveBayesModel]
-  with NaiveBayesParams {
+  with NaiveBayesParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("nb"))
 
   /**
@@ -81,6 +87,7 @@ class NaiveBayes(override val uid: String)
    * Default is 1.0.
    * @group setParam
    */
+  @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
   setDefault(smoothing -> 1.0)
 
@@ -90,6 +97,7 @@ class NaiveBayes(override val uid: String)
    * Default is "multinomial"
    * @group setParam
    */
+  @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
@@ -99,7 +107,15 @@ class NaiveBayes(override val uid: String)
     NaiveBayesModel.fromOld(oldModel, this)
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayes = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
+
+  @Since("1.6.0")
+  override def load(path: String): NaiveBayes = super.load(path)
 }
 
 /**
@@ -109,12 +125,14 @@ class NaiveBayes(override val uid: String)
  * @param theta log of class conditional probabilities, whose dimension is C (number of classes)
  *              by D (number of features)
  */
+@Since("1.5.0")
 @Experimental
 class NaiveBayesModel private[ml] (
-    override val uid: String,
-    val pi: Vector,
-    val theta: Matrix)
-  extends ProbabilisticClassificationModel[Vector, NaiveBayesModel] with NaiveBayesParams {
+    @Since("1.5.0") override val uid: String,
+    @Since("1.5.0") val pi: Vector,
+    @Since("1.5.0") val theta: Matrix)
+  extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
+  with NaiveBayesParams with MLWritable {
 
   import OldNaiveBayes.{Bernoulli, Multinomial}
 
@@ -137,6 +155,10 @@ class NaiveBayesModel private[ml] (
       throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
   }
 
+  @Since("1.6.0")
+  override val numFeatures: Int = theta.numCols
+
+  @Since("1.5.0")
   override val numClasses: Int = pi.size
 
   private def multinomialCalculation(features: Vector) = {
@@ -193,20 +215,25 @@ class NaiveBayesModel private[ml] (
     }
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
     copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
   }
 
+  @Since("1.5.0")
   override def toString: String = {
-    s"NaiveBayesModel with ${pi.size} classes"
+    s"NaiveBayesModel (uid=$uid) with ${pi.size} classes"
   }
 
+  @Since("1.6.0")
+  override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
 }
 
-private[ml] object NaiveBayesModel {
+@Since("1.6.0")
+object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
   /** Convert a model from the old API */
-  def fromOld(
+  private[ml] def fromOld(
       oldModel: OldNaiveBayesModel,
       parent: NaiveBayes): NaiveBayesModel = {
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
@@ -215,5 +242,45 @@ private[ml] object NaiveBayesModel {
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)
     new NaiveBayesModel(uid, pi, theta)
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[NaiveBayesModel] = new NaiveBayesModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): NaiveBayesModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[NaiveBayesModel]] */
+  private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
+
+    private case class Data(pi: Vector, theta: Matrix)
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Save model data: pi, theta
+      val data = Data(instance.pi, instance.theta)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class NaiveBayesModelReader extends MLReader[NaiveBayesModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[NaiveBayesModel].getName
+
+    override def load(path: String): NaiveBayesModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath).select("pi", "theta").head()
+      val pi = data.getAs[Vector](0)
+      val theta = data.getAs[Matrix](1)
+      val model = new NaiveBayesModel(metadata.uid, pi, theta)
+
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }

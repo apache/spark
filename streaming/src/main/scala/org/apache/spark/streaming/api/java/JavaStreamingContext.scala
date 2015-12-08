@@ -222,8 +222,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files with fixed record lengths,
    * yielding byte arrays
@@ -234,7 +232,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @param directory HDFS directory to monitor for new files
    * @param recordLength The length at which to split the records
    */
-  @Experimental
   def binaryRecordsStream(directory: String, recordLength: Int): JavaDStream[Array[Byte]] = {
     ssc.binaryRecordsStream(directory, recordLength)
   }

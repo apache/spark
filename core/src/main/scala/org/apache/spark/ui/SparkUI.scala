@@ -17,10 +17,13 @@
 
 package org.apache.spark.ui
 
-import java.util.Date
+import java.util.{Date, ServiceLoader}
+
+import scala.collection.JavaConverters._
 
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
@@ -56,6 +59,8 @@ private[spark] class SparkUI private (
 
   val stagesTab = new StagesTab(this)
 
+  var appId: String = _
+
   /** Initialize all components of the server. */
   def initialize() {
     attachTab(new JobsTab(this))
@@ -75,9 +80,8 @@ private[spark] class SparkUI private (
 
   def getAppName: String = appName
 
-  /** Set the app name for this UI. */
-  def setAppName(name: String) {
-    appName = name
+  def setAppId(id: String): Unit = {
+    appId = id
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
@@ -94,13 +98,17 @@ private[spark] class SparkUI private (
   private[spark] def appUIAddress = s"http://$appUIHostPort"
 
   def getSparkUI(appId: String): Option[SparkUI] = {
-    if (appId == appName) Some(this) else None
+    if (appId == this.appId) Some(this) else None
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
-      id = appName,
+      id = appId,
       name = appName,
+      coresGranted = None,
+      maxCores = None,
+      coresPerExecutor = None,
+      memoryPerExecutorMB = None,
       attempts = Seq(new ApplicationAttemptInfo(
         attemptId = None,
         startTime = new Date(startTime),
@@ -149,7 +157,16 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    val sparkUI = create(
+      None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+
+    val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
+      Utils.getContextOrSparkClassLoader).asScala
+    listenerFactories.foreach { listenerFactory =>
+      val listeners = listenerFactory.createListeners(conf, sparkUI)
+      listeners.foreach(listenerBus.addListener)
+    }
+    sparkUI
   }
 
   /**

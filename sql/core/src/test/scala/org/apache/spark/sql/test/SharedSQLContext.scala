@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.{ColumnName, SQLContext}
+import org.apache.spark.sql.SQLContext
 
 
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
  */
-private[sql] trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils {
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -36,14 +36,13 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected def ctx: TestSQLContext = _ctx
-  protected def sqlContext: TestSQLContext = _ctx
-  protected override def _sqlContext: SQLContext = _ctx
+  protected def sqlContext: SQLContext = _ctx
 
   /**
    * Initialize the [[TestSQLContext]].
    */
   protected override def beforeAll(): Unit = {
+    SQLContext.clearSqlListener()
     if (_ctx == null) {
       _ctx = new TestSQLContext
     }
@@ -62,17 +61,6 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
       }
     } finally {
       super.afterAll()
-    }
-  }
-
-  /**
-   * Converts $"col name" into an [[Column]].
-   * @since 1.3.0
-   */
-  // This must be duplicated here to preserve binary compatibility with Spark < 1.5.
-  implicit class StringToColumn(val sc: StringContext) {
-    def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args: _*))
     }
   }
 }

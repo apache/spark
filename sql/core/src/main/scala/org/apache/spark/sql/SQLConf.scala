@@ -186,6 +186,16 @@ private[spark] object SQLConf {
 
   import SQLConfEntry._
 
+  val ALLOW_MULTIPLE_CONTEXTS = booleanConf("spark.sql.allowMultipleContexts",
+    defaultValue = Some(true),
+    doc = "When set to true, creating multiple SQLContexts/HiveContexts is allowed." +
+      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
+      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
+      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once" +
+      "a SQLContext/HiveContext has been created, changing the value of this conf will not" +
+      "have effect.",
+    isPublic = true)
+
   val COMPRESS_CACHED = booleanConf("spark.sql.inMemoryColumnarStorage.compressed",
     defaultValue = Some(true),
     doc = "When set to true Spark SQL will automatically select a compression codec for each " +
@@ -223,20 +233,28 @@ private[spark] object SQLConf {
     defaultValue = Some(200),
     doc = "The default number of partitions to use when shuffling data for joins or aggregations.")
 
-  val TUNGSTEN_ENABLED = booleanConf("spark.sql.tungsten.enabled",
+  val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
+    longConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+      defaultValue = Some(64 * 1024 * 1024),
+      doc = "The target post-shuffle input size in bytes of a task.")
+
+  val ADAPTIVE_EXECUTION_ENABLED = booleanConf("spark.sql.adaptive.enabled",
+    defaultValue = Some(false),
+    doc = "When true, enable adaptive query execution.")
+
+  val SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS =
+    intConf("spark.sql.adaptive.minNumPostShufflePartitions",
+      defaultValue = Some(-1),
+      doc = "The advisory minimal number of post-shuffle partitions provided to " +
+        "ExchangeCoordinator. This setting is used in our test to make sure we " +
+        "have enough parallelism to expose issues that will not be exposed with a " +
+        "single partition. When the value is a non-positive value, this setting will" +
+        "not be provided to ExchangeCoordinator.",
+      isPublic = false)
+
+  val SUBEXPRESSION_ELIMINATION_ENABLED = booleanConf("spark.sql.subexpressionElimination.enabled",
     defaultValue = Some(true),
-    doc = "When true, use the optimized Tungsten physical execution backend which explicitly " +
-          "manages memory and dynamically generates bytecode for expression evaluation.")
-
-  val CODEGEN_ENABLED = booleanConf("spark.sql.codegen",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, code will be dynamically generated at runtime for expression evaluation in" +
-      " a specific query.",
-    isPublic = false)
-
-  val UNSAFE_ENABLED = booleanConf("spark.sql.unsafe.enabled",
-    defaultValue = Some(true),  // use TUNGSTEN_ENABLED as default
-    doc = "When true, use the new optimized Tungsten physical execution backend.",
+    doc = "When true, common subexpressions will be eliminated.",
     isPublic = false)
 
   val DIALECT = stringConf(
@@ -290,12 +308,11 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Enables Parquet filter push-down optimization when set to true.")
 
-  val PARQUET_FOLLOW_PARQUET_FORMAT_SPEC = booleanConf(
-    key = "spark.sql.parquet.followParquetFormatSpec",
+  val PARQUET_WRITE_LEGACY_FORMAT = booleanConf(
+    key = "spark.sql.parquet.writeLegacyFormat",
     defaultValue = Some(false),
     doc = "Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.",
-    isPublic = false)
+      "Spark SQL schema and vice versa.")
 
   val PARQUET_OUTPUT_COMMITTER_CLASS = stringConf(
     key = "spark.sql.parquet.output.committer.class",
@@ -304,8 +321,12 @@ private[spark] object SQLConf {
       "subclass of org.apache.hadoop.mapreduce.OutputCommitter.  Typically, it's also a subclass " +
       "of org.apache.parquet.hadoop.ParquetOutputCommitter.  NOTE: 1. Instead of SQLConf, this " +
       "option must be set in Hadoop Configuration.  2. This option overrides " +
-      "\"spark.sql.sources.outputCommitterClass\"."
-  )
+      "\"spark.sql.sources.outputCommitterClass\".")
+
+  val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = booleanConf(
+    key = "spark.sql.parquet.enableUnsafeRowRecordReader",
+    defaultValue = Some(true),
+    doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
@@ -320,6 +341,15 @@ private[spark] object SQLConf {
     doc = "When true, some predicates will be pushed down into the Hive metastore so that " +
           "unmatching partitions can be eliminated earlier.")
 
+  val NATIVE_VIEW = booleanConf("spark.sql.nativeView",
+    defaultValue = Some(false),
+    doc = "When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
+          "Note that this function is experimental and should ony be used when you are using " +
+          "non-hive-compatible tables written by Spark SQL.  The SQL string used to create " +
+          "view should be fully qualified, i.e. use `tbl1`.`col1` instead of `*` whenever " +
+          "possible, or you may get wrong result.",
+    isPublic = false)
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "<TODO>")
@@ -327,17 +357,6 @@ private[spark] object SQLConf {
   val BROADCAST_TIMEOUT = intConf("spark.sql.broadcastTimeout",
     defaultValue = Some(5 * 60),
     doc = "Timeout in seconds for the broadcast wait time in broadcast joins.")
-
-  // Options that control which operators can be chosen by the query planner.  These should be
-  // considered hints and may be ignored by future versions of Spark SQL.
-  val EXTERNAL_SORT = booleanConf("spark.sql.planner.externalSort",
-    defaultValue = Some(true),
-    doc = "When true, performs sorts spilling to disk as needed otherwise sort each partition in" +
-      " memory.")
-
-  val SORTMERGE_JOIN = booleanConf("spark.sql.planner.sortMergeJoin",
-    defaultValue = Some(true),
-    doc = "When true, use sort merge join (as opposed to hash join) by default for large joins.")
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = stringConf("spark.sql.thriftserver.scheduler.pool",
@@ -368,7 +387,7 @@ private[spark] object SQLConf {
 
   val PARTITION_DISCOVERY_ENABLED = booleanConf("spark.sql.sources.partitionDiscovery.enabled",
     defaultValue = Some(true),
-    doc = "When true, automtically discover data partitions.")
+    doc = "When true, automatically discover data partitions.")
 
   val PARTITION_COLUMN_TYPE_INFERENCE =
     booleanConf("spark.sql.sources.partitionColumnTypeInference.enabled",
@@ -378,7 +397,7 @@ private[spark] object SQLConf {
   val PARTITION_MAX_FILES =
     intConf("spark.sql.sources.maxConcurrentWrites",
       defaultValue = Some(5),
-      doc = "The maximum number of concurent files to open before falling back on sorting when " +
+      doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 
   // The output committer class used by HadoopFsRelation. The specified class needs to be a
@@ -417,11 +436,39 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     isPublic = false)
 
-  val USE_SQL_AGGREGATE2 = booleanConf("spark.sql.useAggregate2",
-    defaultValue = Some(true), doc = "<TODO>")
+  val DATAFRAME_PIVOT_MAX_VALUES = intConf(
+    "spark.sql.pivotMaxValues",
+    defaultValue = Some(10000),
+    doc = "When doing a pivot without specifying values for the pivot column this is the maximum " +
+      "number of (distinct) values that will be collected without error."
+  )
+
+  val RUN_SQL_ON_FILES = booleanConf("spark.sql.runSQLOnFiles",
+    defaultValue = Some(true),
+    isPublic = false,
+    doc = "When true, we could use `datasource`.`path` as table in SQL query"
+  )
+
+  val SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING =
+    booleanConf("spark.sql.specializeSingleDistinctAggPlanning",
+      defaultValue = Some(false),
+      isPublic = false,
+      doc = "When true, if a query only has a single distinct column and it has " +
+        "grouping expressions, we will use our planner rule to handle this distinct " +
+        "column (other cases are handled by DistinctAggregationRewriter). " +
+        "When false, we will always use DistinctAggregationRewriter to plan " +
+        "aggregation queries with DISTINCT keyword. This is an internal flag that is " +
+        "used to benchmark the performance impact of using DistinctAggregationRewriter to " +
+        "plan aggregation queries with a single distinct column.")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
+    val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
+    val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
+    val CODEGEN_ENABLED = "spark.sql.codegen"
+    val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
+    val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
   }
 }
 
@@ -468,6 +515,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
+  private[spark] def targetPostShuffleInputSize: Long =
+    getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
+
+  private[spark] def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  private[spark] def minNumPostShufflePartitions: Int =
+    getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
+
   private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
   private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
@@ -476,17 +531,12 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT)
-
-  private[spark] def sortMergeJoinEnabled: Boolean = getConf(SORTMERGE_JOIN)
-
-  private[spark] def codegenEnabled: Boolean = getConf(CODEGEN_ENABLED, getConf(TUNGSTEN_ENABLED))
+  private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def unsafeEnabled: Boolean = getConf(UNSAFE_ENABLED, getConf(TUNGSTEN_ENABLED))
-
-  private[spark] def useSqlAggregate2: Boolean = getConf(USE_SQL_AGGREGATE2)
+  private[spark] def subexpressionEliminationEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -497,7 +547,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
 
   private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
-  private[spark] def followParquetFormatSpec: Boolean = getConf(PARQUET_FOLLOW_PARQUET_FORMAT_SPEC)
+  private[spark] def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
@@ -526,6 +576,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf {
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
   private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+
+  private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  protected[spark] override def specializeSingleDistinctAggPlanning: Boolean =
+    getConf(SPECIALIZE_SINGLE_DISTINCT_AGG_PLANNING)
 
   /** ********************** SQLConf functionality methods ************ */
 

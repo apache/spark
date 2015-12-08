@@ -36,13 +36,11 @@ setMethod("initialize", "Column", function(.Object, jc) {
   .Object
 })
 
-column <- function(jc) {
-  new("Column", jc)
-}
-
-col <- function(x) {
-  column(callJStatic("org.apache.spark.sql.functions", "col", x))
-}
+setMethod("column",
+          signature(x = "jobj"),
+          function(x) {
+            new("Column", x)
+          })
 
 #' @rdname show
 #' @name show
@@ -58,7 +56,7 @@ operators <- list(
   "&" = "and", "|" = "or", #, "!" = "unary_$bang"
   "^" = "pow"
 )
-column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
+column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
@@ -211,8 +209,7 @@ setMethod("cast",
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            table <- listToSeq(as.list(table))
-            jc <- callJMethod(x@jc, "in", table)
+            jc <- callJMethod(x@jc, "in", as.list(table))
             return(column(jc))
           })
 

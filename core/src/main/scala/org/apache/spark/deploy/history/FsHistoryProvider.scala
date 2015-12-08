@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
+import java.util.UUID
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -26,7 +27,8 @@ import scala.collection.mutable
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.apache.hadoop.fs.permission.AccessControlException
+import org.apache.hadoop.hdfs.DistributedFileSystem
+import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -51,6 +53,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val NOT_STARTED = "<Not Started>"
 
+  // Interval between safemode checks.
+  private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
+    "spark.history.fs.safemodeCheck.interval", "5s")
+
   // Interval between each check for event log updates
   private val UPDATE_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.update.interval", "10s")
 
@@ -73,7 +79,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // The modification time of the newest log detected during the last scan. This is used
   // to ignore logs that are older during subsequent scans, to avoid processing data that
   // is already known.
-  private var lastModifiedTime = -1L
+  private var lastScanTime = -1L
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
@@ -106,9 +112,52 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  initialize()
+  // Conf option used for testing the initialization code.
+  val initThread = initialize()
 
-  private def initialize(): Unit = {
+  private[history] def initialize(): Thread = {
+    if (!isFsInSafeMode()) {
+      startPolling()
+      null
+    } else {
+      startSafeModeCheckThread(None)
+    }
+  }
+
+  private[history] def startSafeModeCheckThread(
+      errorHandler: Option[Thread.UncaughtExceptionHandler]): Thread = {
+    // Cannot probe anything while the FS is in safe mode, so spawn a new thread that will wait
+    // for the FS to leave safe mode before enabling polling. This allows the main history server
+    // UI to be shown (so that the user can see the HDFS status).
+    val initThread = new Thread(new Runnable() {
+      override def run(): Unit = {
+        try {
+          while (isFsInSafeMode()) {
+            logInfo("HDFS is still in safe mode. Waiting...")
+            val deadline = clock.getTimeMillis() +
+              TimeUnit.SECONDS.toMillis(SAFEMODE_CHECK_INTERVAL_S)
+            clock.waitTillTime(deadline)
+          }
+          startPolling()
+        } catch {
+          case _: InterruptedException =>
+        }
+      }
+    })
+    initThread.setDaemon(true)
+    initThread.setName(s"${getClass().getSimpleName()}-init")
+    initThread.setUncaughtExceptionHandler(errorHandler.getOrElse(
+      new Thread.UncaughtExceptionHandler() {
+        override def uncaughtException(t: Thread, e: Throwable): Unit = {
+          logError("Error initializing FsHistoryProvider.", e)
+          System.exit(1)
+        }
+      }))
+    initThread.start()
+    initThread
+  }
+
+  private def startPolling(): Unit = {
     // Validate the log directory.
     val path = new Path(logDir)
     if (!fs.exists(path)) {
@@ -145,16 +194,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId,
+            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
           val appListener = new ApplicationEventListener()
           replayBus.addListener(appListener)
-          val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
-          appInfo.map { info =>
-            ui.setAppName(s"${info.name} ($appId)")
-
+          val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
+            replayBus)
+          appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
             // make sure to set admin acls before view acls so they are properly picked up
@@ -170,7 +218,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getConfig(): Map[String, String] = Map("Event log directory" -> logDir.toString)
+  override def getConfig(): Map[String, String] = {
+    val safeMode = if (isFsInSafeMode()) {
+      Map("HDFS State" -> "In safe mode, application logs not available.")
+    } else {
+      Map()
+    }
+    Map("Event log directory" -> logDir.toString) ++ safeMode
+  }
+
+  override def stop(): Unit = {
+    if (initThread != null && initThread.isAlive()) {
+      initThread.interrupt()
+      initThread.join()
+    }
+  }
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -179,15 +241,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def checkForLogs(): Unit = {
     try {
+      val newLastScanTime = getNewLastScanTime()
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq[FileStatus]())
-      var newLastModifiedTime = lastModifiedTime
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
             getModificationTime(entry).map { time =>
-              newLastModifiedTime = math.max(newLastModifiedTime, time)
-              time >= lastModifiedTime
+              time >= lastScanTime
             }.getOrElse(false)
           } catch {
             case e: AccessControlException =>
@@ -224,9 +285,28 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-      lastModifiedTime = newLastModifiedTime
+      lastScanTime = newLastScanTime
     } catch {
       case e: Exception => logError("Exception in checking for event log updates", e)
+    }
+  }
+
+  private def getNewLastScanTime(): Long = {
+    val fileName = "." + UUID.randomUUID().toString
+    val path = new Path(logDir, fileName)
+    val fos = fs.create(path)
+
+    try {
+      fos.close()
+      fs.getFileStatus(path).getModificationTime
+    } catch {
+      case e: Exception =>
+        logError("Exception encountered when attempting to update last scan time", e)
+        lastScanTime
+    } finally {
+      if (!fs.delete(path)) {
+        logWarning(s"Error deleting ${path}")
+      }
     }
   }
 
@@ -389,7 +469,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         try {
           val path = new Path(logDir, attempt.logPath)
           if (fs.exists(path)) {
-            fs.delete(path, true)
+            if (!fs.delete(path, true)) {
+              logWarning(s"Error deleting ${path}")
+            }
           }
         } catch {
           case e: AccessControlException =>
@@ -563,6 +645,37 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       true
     }
+  }
+
+  /**
+   * Checks whether HDFS is in safe mode. The API is slightly different between hadoop 1 and 2,
+   * so we have to resort to ugly reflection (as usual...).
+   *
+   * Note that DistributedFileSystem is a `@LimitedPrivate` class, which for all practical reasons
+   * makes it more public than not.
+   */
+  private[history] def isFsInSafeMode(): Boolean = fs match {
+    case dfs: DistributedFileSystem =>
+      isFsInSafeMode(dfs)
+    case _ =>
+      false
+  }
+
+  // For testing.
+  private[history] def isFsInSafeMode(dfs: DistributedFileSystem): Boolean = {
+    val hadoop1Class = "org.apache.hadoop.hdfs.protocol.FSConstants$SafeModeAction"
+    val hadoop2Class = "org.apache.hadoop.hdfs.protocol.HdfsConstants$SafeModeAction"
+    val actionClass: Class[_] =
+      try {
+        getClass().getClassLoader().loadClass(hadoop2Class)
+      } catch {
+        case _: ClassNotFoundException =>
+          getClass().getClassLoader().loadClass(hadoop1Class)
+      }
+
+    val action = actionClass.getField("SAFEMODE_GET").get(null)
+    val method = dfs.getClass().getMethod("setSafeMode", action.getClass())
+    method.invoke(dfs, action).asInstanceOf[Boolean]
   }
 
 }

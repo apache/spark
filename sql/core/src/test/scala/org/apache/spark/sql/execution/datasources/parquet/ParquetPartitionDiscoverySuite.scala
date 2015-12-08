@@ -58,14 +58,101 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     check(defaultPartitionName, Literal.create(null, NullType))
   }
 
+  test("parse invalid partitioned directories") {
+    // Invalid
+    var paths = Seq(
+      "hdfs://host:9000/invalidPath",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/a=10.5/b=hello")
+
+    var exception = intercept[AssertionError] {
+      parsePartitions(paths.map(new Path(_)), defaultPartitionName, true, Set.empty[Path])
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/_temporary/path")
+
+    parsePartitions(
+      paths.map(new Path(_)),
+      defaultPartitionName,
+      true,
+      Set(new Path("hdfs://host:9000/path/")))
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/something=true/table/",
+      "hdfs://host:9000/path/something=true/table/_temporary",
+      "hdfs://host:9000/path/something=true/table/a=10/b=20",
+      "hdfs://host:9000/path/something=true/table/_temporary/path")
+
+    parsePartitions(
+      paths.map(new Path(_)),
+      defaultPartitionName,
+      true,
+      Set(new Path("hdfs://host:9000/path/something=true/table")))
+
+    // Valid
+    paths = Seq(
+      "hdfs://host:9000/path/table=true/",
+      "hdfs://host:9000/path/table=true/_temporary",
+      "hdfs://host:9000/path/table=true/a=10/b=20",
+      "hdfs://host:9000/path/table=true/_temporary/path")
+
+    parsePartitions(
+      paths.map(new Path(_)),
+      defaultPartitionName,
+      true,
+      Set(new Path("hdfs://host:9000/path/table=true")))
+
+    // Invalid
+    paths = Seq(
+      "hdfs://host:9000/path/_temporary",
+      "hdfs://host:9000/path/a=10/b=20",
+      "hdfs://host:9000/path/path1")
+
+    exception = intercept[AssertionError] {
+      parsePartitions(
+        paths.map(new Path(_)),
+        defaultPartitionName,
+        true,
+        Set(new Path("hdfs://host:9000/path/")))
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+
+    // Invalid
+    // Conflicting directory structure:
+    // "hdfs://host:9000/tmp/tables/partitionedTable"
+    // "hdfs://host:9000/tmp/tables/nonPartitionedTable1"
+    // "hdfs://host:9000/tmp/tables/nonPartitionedTable2"
+    paths = Seq(
+      "hdfs://host:9000/tmp/tables/partitionedTable",
+      "hdfs://host:9000/tmp/tables/partitionedTable/p=1/",
+      "hdfs://host:9000/tmp/tables/nonPartitionedTable1",
+      "hdfs://host:9000/tmp/tables/nonPartitionedTable2")
+
+    exception = intercept[AssertionError] {
+      parsePartitions(
+        paths.map(new Path(_)),
+        defaultPartitionName,
+        true,
+        Set(new Path("hdfs://host:9000/tmp/tables/")))
+    }
+    assert(exception.getMessage().contains("Conflicting directory structures detected"))
+  }
+
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
-      assert(expected === parsePartition(new Path(path), defaultPartitionName, true))
+      val actual = parsePartition(new Path(path), defaultPartitionName, true, Set.empty[Path])._1
+      assert(expected === actual)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), defaultPartitionName, true).get
+        parsePartition(new Path(path), defaultPartitionName, true, Set.empty[Path])
       }.getMessage
 
       assert(message.contains(expected))
@@ -104,8 +191,17 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   }
 
   test("parse partitions") {
-    def check(paths: Seq[String], spec: PartitionSpec): Unit = {
-      assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName, true) === spec)
+    def check(
+        paths: Seq[String],
+        spec: PartitionSpec,
+        rootPaths: Set[Path] = Set.empty[Path]): Unit = {
+      val actualSpec =
+        parsePartitions(
+          paths.map(new Path(_)),
+          defaultPartitionName,
+          true,
+          rootPaths)
+      assert(actualSpec === spec)
     }
 
     check(Seq(
@@ -184,7 +280,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("parse partitions with type inference disabled") {
     def check(paths: Seq[String], spec: PartitionSpec): Unit = {
-      assert(parsePartitions(paths.map(new Path(_)), defaultPartitionName, false) === spec)
+      val actualSpec =
+        parsePartitions(paths.map(new Path(_)), defaultPartitionName, false, Set.empty[Path])
+      assert(actualSpec === spec)
     }
 
     check(Seq(
@@ -465,7 +563,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: ParquetRelation) =>
+        case LogicalRelation(relation: ParquetRelation, _) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
@@ -517,7 +615,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
-    val df = sqlContext.createDataFrame(sqlContext.sparkContext.parallelize(row :: Nil), schema)
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
@@ -539,6 +637,70 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df)
+    }
+  }
+
+  test("SPARK-11678: Partition discovery stops at the root path of the dataset") {
+    withTempPath { dir =>
+      val tablePath = new File(dir, "key=value")
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(tablePath.getCanonicalPath)
+
+      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+
+      checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+    }
+
+    withTempPath { dir =>
+      val path = new File(dir, "key=value")
+      val tablePath = new File(path, "table")
+
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(tablePath.getCanonicalPath)
+
+      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+
+      checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+    }
+  }
+
+  test("use basePath to specify the root dir of a partitioned table.") {
+    withTempPath { dir =>
+      val tablePath = new File(dir, "table")
+      val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+      df.write
+        .format("parquet")
+        .partitionBy("b", "c", "d")
+        .save(tablePath.getCanonicalPath)
+
+      val twoPartitionsDF =
+        sqlContext
+          .read
+          .option("basePath", tablePath.getCanonicalPath)
+          .parquet(
+            s"${tablePath.getCanonicalPath}/b=1",
+            s"${tablePath.getCanonicalPath}/b=2")
+
+      checkAnswer(twoPartitionsDF, df.filter("b != 3"))
+
+      intercept[AssertionError] {
+        sqlContext
+          .read
+          .parquet(
+            s"${tablePath.getCanonicalPath}/b=1",
+            s"${tablePath.getCanonicalPath}/b=2")
+      }
     }
   }
 

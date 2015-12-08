@@ -109,7 +109,9 @@ private[spark] class EventLoggingListener(
 
     if (shouldOverwrite && fileSystem.exists(path)) {
       logWarning(s"Event log $path already exists. Overwriting...")
-      fileSystem.delete(path, true)
+      if (!fileSystem.delete(path, true)) {
+        logWarning(s"Error deleting $path")
+      }
     }
 
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
@@ -205,6 +207,10 @@ private[spark] class EventLoggingListener(
   // No-op because logging every update would be overkill
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
+  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
   /**
    * Stop logging events. The event log file will be renamed so that it loses the
    * ".inprogress" suffix.
@@ -216,7 +222,9 @@ private[spark] class EventLoggingListener(
     if (fileSystem.exists(target)) {
       if (shouldOverwrite) {
         logWarning(s"Event log $target already exists. Overwriting...")
-        fileSystem.delete(target, true)
+        if (!fileSystem.delete(target, true)) {
+          logWarning(s"Error deleting $target")
+        }
       } else {
         throw new IOException("Target log file already exists (%s)".format(logPath))
       }

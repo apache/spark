@@ -11,7 +11,7 @@ title: Spark SQL and DataFrames
 
 Spark SQL is a Spark module for structured data processing. It provides a programming abstraction called DataFrames and can also act as distributed SQL query engine.
 
-For how to enable Hive support, please refer to the [Hive Tables](#hive-tables) section.
+Spark SQL can also be used to read data from an existing Hive installation.  For more on how to configure this feature, please refer to the [Hive Tables](#hive-tables) section.
 
 # DataFrames
 
@@ -160,7 +160,7 @@ showDF(df)
 
 ## DataFrame Operations
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), and [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.DataFrame), [Java](api/java/index.html?org/apache/spark/sql/DataFrame.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
 
 Here we include some basic examples of structured data processing using DataFrames:
 
@@ -213,6 +213,11 @@ df.groupBy("age").count().show()
 // 30   1
 {% endhighlight %}
 
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/scala/index.html#org.apache.spark.sql.DataFrame).
+
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more.  The complete list is available in the [DataFrame Function Reference](api/scala/index.html#org.apache.spark.sql.functions$).
+
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -262,6 +267,10 @@ df.groupBy("age").count().show();
 // 19   1
 // 30   1
 {% endhighlight %}
+
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/java/org/apache/spark/sql/DataFrame.html).
+
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more.  The complete list is available in the [DataFrame Function Reference](api/java/org/apache/spark/sql/functions.html).
 
 </div>
 
@@ -320,6 +329,10 @@ df.groupBy("age").count().show()
 
 {% endhighlight %}
 
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more.  The complete list is available in the [DataFrame Function Reference](api/python/pyspark.sql.html#module-pyspark.sql.functions).
+
 </div>
 
 <div data-lang="r"  markdown="1">
@@ -370,10 +383,13 @@ showDF(count(groupBy(df, "age")))
 
 {% endhighlight %}
 
-</div>
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/R/index.html).
+
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more.  The complete list is available in the [DataFrame Function Reference](api/R/index.html).
 
 </div>
 
+</div>
 
 ## Running SQL Queries Programmatically
 
@@ -866,16 +882,53 @@ saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 </div>
 </div>
 
+### Run SQL on files directly
+
+Instead of using read API to load a file into DataFrame and query it, you can also query that
+file directly with SQL.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+DataFrame df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`");
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+df = sqlContext.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+df <- sql(sqlContext, "SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
+{% endhighlight %}
+
+</div>
+</div>
+
 ### Save Modes
 
 Save operations can optionally take a `SaveMode`, that specifies how to handle existing data if
 present.  It is important to realize that these save modes do not utilize any locking and are not
-atomic.  Thus, it is not safe to have multiple writers attempting to write to the same location.
-Additionally, when performing a `Overwrite`, the data will be deleted before writing out the
+atomic.  Additionally, when performing a `Overwrite`, the data will be deleted before writing out the
 new data.
 
 <table class="table">
-<tr><th>Scala/Java</th><th>Python</th><th>Meaning</th></tr>
+<tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
   <td><code>"error"</code> (default)</td>
@@ -929,7 +982,8 @@ when a table is dropped.
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.
+of the original data. When writing Parquet files, all columns are automatically converted to be nullable for 
+compatibility reasons.
 
 ### Loading Data Programmatically
 
@@ -1036,15 +1090,6 @@ for (teenName in collect(teenNames)) {
 
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.sql("REFRESH TABLE my_table")
-{% endhighlight %}
-
-</div>
-
 <div data-lang="sql"  markdown="1">
 
 {% highlight sql %}
@@ -1124,6 +1169,13 @@ a simple schema, and gradually add more columns to the schema as needed.  In thi
 up with multiple Parquet files with different but mutually compatible schemas.  The Parquet data
 source is now able to automatically detect this case and merge schemas of all these files.
 
+Since schema merging is a relatively expensive operation, and is not a necessity in most cases, we
+turned it off by default starting from 1.5.0.  You may enable it by
+
+1. setting data source option `mergeSchema` to `true` when reading Parquet files (as shown in the
+   examples below), or
+2. setting the global SQL option `spark.sql.parquet.mergeSchema` to `true`.
+
 <div class="codetabs">
 
 <div data-lang="scala"  markdown="1">
@@ -1143,7 +1195,7 @@ val df2 = sc.makeRDD(6 to 10).map(i => (i, i * 3)).toDF("single", "triple")
 df2.write.parquet("data/test_table/key=2")
 
 // Read the partitioned table
-val df3 = sqlContext.read.parquet("data/test_table")
+val df3 = sqlContext.read.option("mergeSchema", "true").parquet("data/test_table")
 df3.printSchema()
 
 // The final schema consists of all 3 columns in the Parquet files together
@@ -1165,16 +1217,16 @@ df3.printSchema()
 # Create a simple DataFrame, stored into a partition directory
 df1 = sqlContext.createDataFrame(sc.parallelize(range(1, 6))\
                                    .map(lambda i: Row(single=i, double=i * 2)))
-df1.save("data/test_table/key=1", "parquet")
+df1.write.parquet("data/test_table/key=1")
 
 # Create another DataFrame in a new partition directory,
 # adding a new column and dropping an existing column
 df2 = sqlContext.createDataFrame(sc.parallelize(range(6, 11))
                                    .map(lambda i: Row(single=i, triple=i * 3)))
-df2.save("data/test_table/key=2", "parquet")
+df2.write.parquet("data/test_table/key=2")
 
 # Read the partitioned table
-df3 = sqlContext.load("data/test_table", "parquet")
+df3 = sqlContext.read.option("mergeSchema", "true").parquet("data/test_table")
 df3.printSchema()
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1201,7 +1253,7 @@ saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
 saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
-df3 <- loadDF(sqlContext, "data/test_table", "parquet")
+df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema="true")
 printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1301,7 +1353,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
-    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
+    Some other Parquet-producing systems, in particular Impala, Hive, and older versions of Spark SQL, do
     not differentiate between binary data and strings when writing out the Parquet schema. This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
@@ -1310,8 +1362,7 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
   <td>true</td>
   <td>
-    Some Parquet-producing systems, in particular Impala, store Timestamp into INT96. Spark would also
-    store Timestamp as INT96 because we need to avoid precision lost of the nanoseconds field. This
+    Some Parquet-producing systems, in particular Impala and Hive, store Timestamp into INT96.  This
     flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
   </td>
 </tr>
@@ -1356,6 +1407,9 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
       <b>Note:</b>
       <ul>
         <li>
+          This option is automatically ignored if <code>spark.speculation</code> is turned on.
+        </li>
+        <li>
           This option must be set via Hadoop <code>Configuration</code> rather than Spark
           <code>SQLConf</code>.
         </li>
@@ -1368,6 +1422,16 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
       Spark SQL comes with a builtin
       <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
       efficient then the default Parquet output committer when writing data to S3.
+    </p>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.mergeSchema</code></td>
+  <td><code>false</code></td>
+  <td>
+    <p>
+      When true, the Parquet data source merges schemas collected from all data files, otherwise the
+      schema is picked from the summary file or a random data file if no summary file is available.
     </p>
   </td>
 </tr>
@@ -1550,8 +1614,9 @@ This command builds a new assembly jar that includes Hive. Note that this Hive a
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`. Please note when running
-the query on a YARN cluster (`yarn-cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
+ `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
+the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory
 and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
 YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
 `spark-submit` command.
@@ -1564,8 +1629,10 @@ YARN cluster. The convenient way to do this is adding them through the `--jars` 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a `HiveContext`.  When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
-directory.
+hive-site.xml, the context automatically creates `metastore_db` in the current directory and
+creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
+Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
+the spark application.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -1642,21 +1709,21 @@ results <- collect(sql(sqlContext, "FROM src SELECT key, value"))
 ### Interacting with Different Versions of Hive Metastore
 
 One of the most important pieces of Spark SQL's Hive support is interaction with Hive metastore,
-which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
+which enables Spark SQL to access metadata of Hive tables. Starting from Spark 1.4.0, a single binary
+build of Spark SQL can be used to query different versions of Hive metastores, using the configuration described below.
+Note that independent of the version of Hive that is being used to talk to the metastore, internally Spark SQL
+will compile against Hive 1.2.1 and use those classes for internal execution (serdes, UDFs, UDAFs, etc).
 
-Internally, Spark SQL uses two Hive clients, one for executing native Hive commands like `SET`
-and `DESCRIBE`, the other dedicated for communicating with Hive metastore. The former uses Hive
-jars of version 0.13.1, which are bundled with Spark 1.4.0. The latter uses Hive jars of the
-version specified by users. An isolated classloader is used here to avoid dependency conflicts.
+The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
-    <td><code>0.13.1</code></td>
+    <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> and <code>0.13.1</code>. Support for more versions is coming in the future.
+      options are <code>0.12.0</code> through <code>1.2.1</code>.
     </td>
   </tr>
   <tr>
@@ -1667,12 +1734,16 @@ version specified by users. An isolated classloader is used here to avoid depend
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 0.13.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        Use Hive 1.2.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
-        either <code>0.13.1</code> or not defined.
+        either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>
-        Use Hive jars of specified version downloaded from Maven repositories.
-        <li>A classpath in the standard format for both Hive and Hadoop.</li>
+        Use Hive jars of specified version downloaded from Maven repositories.  This configuration
+        is not generally recommended for production deployments.
+        <li>A classpath in the standard format for the JVM.  This classpath must include all of Hive
+        and its dependencies, including the correct version of Hadoop.  These jars only need to be
+        present on the driver, but if you are running in yarn cluster mode then you must ensure
+        they are packaged with you application.</li>
       </ol>
     </td>
   </tr>
@@ -1750,6 +1821,7 @@ the Data Sources API.  The following options are supported:
       register itself with the JDBC subsystem.
     </td>
   </tr>
+  
   <tr>
     <td><code>partitionColumn, lowerBound, upperBound, numPartitions</code></td>
     <td>
@@ -1761,6 +1833,13 @@ the Data Sources API.  The following options are supported:
       partitioned and returned.
     </td>
   </tr>
+  
+  <tr>
+    <td><code>fetchSize</code></td>
+    <td>
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows).
+    </td>
+  </tr>
 </table>
 
 <div class="codetabs">
@@ -1768,7 +1847,7 @@ the Data Sources API.  The following options are supported:
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-val jdbcDF = sqlContext.read.format("jdbc").options( 
+val jdbcDF = sqlContext.read.format("jdbc").options(
   Map("url" -> "jdbc:postgresql:dbserver",
   "dbtable" -> "schema.tablename")).load()
 {% endhighlight %}
@@ -1898,13 +1977,6 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
   </tr>
-  <tr>
-    <td><code>spark.sql.planner.externalSort</code></td>
-    <td>true</td>
-    <td>
-      When true, performs sorts spilling to disk as needed otherwise sort each partition in memory.
-    </td>
-  </tr>
 </table>
 
 # Distributed SQL Engine
@@ -1916,7 +1988,7 @@ without the need to write any code.
 ## Running the Thrift JDBC/ODBC server
 
 The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
-in Hive 0.13. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.13.
+in Hive 1.2.1 You can test the JDBC server with the beeline script that comes with either Spark or Hive 1.2.1.
 
 To start the JDBC/ODBC server, run the following in the Spark directory:
 
@@ -1957,7 +2029,7 @@ Beeline will ask you for a username and password. In non-secure mode, simply ent
 your machine and a blank password. For secure mode, please follow the instructions given in the
 [beeline documentation](https://cwiki.apache.org/confluence/display/Hive/HiveServer2+Clients).
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
 
 You may also use the beeline script that comes with Hive.
 
@@ -1982,11 +2054,53 @@ To start the Spark SQL CLI, run the following in the Spark directory:
 
     ./bin/spark-sql
 
-Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
+Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` files in `conf/`.
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 1.5 to 1.6
+
+ - From Spark 1.6, by default the Thrift server runs in multi-session mode.  Which means each JDBC/ODBC
+   connection owns a copy of their own SQL configuration and temporary function registry.  Cached
+   tables are still shared though.  If you prefer to run the Thrift server in the old single-session
+   mode, please set option `spark.sql.hive.thriftServer.singleSession` to `true`.  You may either add
+   this option to `spark-defaults.conf`, or pass it to `start-thriftserver.sh` via `--conf`:
+
+   {% highlight bash %}
+   ./sbin/start-thriftserver.sh \
+     --conf spark.sql.hive.thriftServer.singleSession=true \
+     ...
+   {% endhighlight %}
+
+## Upgrading From Spark SQL 1.4 to 1.5
+
+ - Optimized execution using manually managed memory (Tungsten) is now enabled by default, along with
+   code generation for expression evaluation.  These features can both be disabled by setting
+   `spark.sql.tungsten.enabled` to `false`.
+ - Parquet schema merging is no longer enabled by default.  It can be re-enabled by setting
+   `spark.sql.parquet.mergeSchema` to `true`.
+ - Resolution of strings to columns in python now supports using dots (`.`) to qualify the column or
+   access nested values.  For example `df['table.column.nestedField']`.  However, this means that if
+   your column name contains any dots you must now escape them using backticks (e.g., ``table.`column.with.dots`.nested``).   
+ - In-memory columnar storage partition pruning is on by default. It can be disabled by setting
+   `spark.sql.inMemoryColumnarStorage.partitionPruning` to `false`.
+ - Unlimited precision decimal columns are no longer supported, instead Spark SQL enforces a maximum
+   precision of 38.  When inferring schema from `BigDecimal` objects, a precision of (38, 18) is now
+   used. When no precision is specified in DDL then the default remains `Decimal(10, 0)`.
+ - Timestamps are now stored at a precision of 1us, rather than 1ns
+ - In the `sql` dialect, floating point numbers are now parsed as decimal.  HiveQL parsing remains
+   unchanged.
+ - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
+ - It has been determined that using the DirectOutputCommitter when speculation is enabled is unsafe
+   and thus this output committer will not be used when speculation is on, independent of configuration.
+ - JSON data source will not automatically load new files that are created by other applications
+   (i.e. files that are not inserted to the dataset through Spark SQL).
+   For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),
+   users can use `REFRESH TABLE` SQL command or `HiveContext`'s `refreshTable` method
+   to include those new files to the table. For a DataFrame representing a JSON dataset, users need to recreate
+   the DataFrame and the new DataFrame will include new files.
 
 ## Upgrading from Spark SQL 1.3 to 1.4
 
@@ -2009,7 +2123,8 @@ See the API docs for `SQLContext.read` (
 
 #### DataFrame.groupBy retains grouping columns
 
-Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
+Based on user feedback, we changed the default behavior of `DataFrame.groupBy().agg()` to retain the
+grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -2146,7 +2261,7 @@ Python UDF registration is unchanged.
 When using DataTypes in Python you will need to construct them (i.e. `StringType()`) instead of
 referencing a singleton.
 
-## Migration Guide for Shark User
+## Migration Guide for Shark Users
 
 ### Scheduling
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
@@ -2193,8 +2308,10 @@ Several caching related features are not supported yet:
 
 ## Compatibility with Apache Hive
 
-Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0 and 0.13.1.
+Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
+Currently Hive SerDes and UDFs are based on Hive 1.2.1,
+and Spark SQL can be connected to different versions of Hive Metastore
+(from 0.12.0 to 1.2.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 
@@ -2222,6 +2339,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * User defined functions (UDF)
 * User defined aggregation functions (UDAF)
 * User defined serialization formats (SerDes)
+* Window functions
 * Joins
   * `JOIN`
   * `{LEFT|RIGHT|FULL} OUTER JOIN`
@@ -2232,7 +2350,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `SELECT col FROM ( SELECT a + b AS col from t1) t2`
 * Sampling
 * Explain
-* Partitioned tables
+* Partitioned tables including dynamic partition insertion
 * View
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
@@ -2294,8 +2412,9 @@ releases of Spark SQL.
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
 
+# Reference
 
-# Data Types
+## Data Types
 
 Spark SQL and DataFrames support the following data types:
 
@@ -2908,3 +3027,13 @@ from pyspark.sql.types import *
 
 </div>
 
+## NaN Semantics
+
+There is specially handling for not-a-number (NaN) when dealing with `float` or `double` types that
+does not exactly match standard floating point semantics.
+Specifically:
+
+ - NaN = NaN returns true.
+ - In aggregations all NaN values are grouped together.
+ - NaN is treated as a normal value in join keys.
+ - NaN values go last when in ascending order, larger than any other numeric value.

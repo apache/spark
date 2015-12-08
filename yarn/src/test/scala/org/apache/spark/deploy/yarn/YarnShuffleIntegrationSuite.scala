@@ -28,13 +28,15 @@ import org.scalatest.Matchers
 import org.apache.spark._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
+import org.apache.spark.tags.ExtendedYarnTest
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
+@ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
-  override def yarnConfig: YarnConfiguration = {
+  override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
@@ -51,7 +53,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
     logInfo("Shuffle service port = " + shuffleServicePort)
     val result = File.createTempFile("result", null, tempDir)
-    runSpark(
+    val finalState = runSpark(
       false,
       mainClassName(YarnExternalShuffleDriver.getClass),
       appArgs = Seq(result.getAbsolutePath(), registeredExecFile.getAbsolutePath),
@@ -60,7 +62,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
         "spark.shuffle.service.port" -> shuffleServicePort.toString
       )
     )
-    checkResult(result)
+    checkResult(finalState, result)
     assert(YarnTestAccessor.getRegisteredExecutorFile(shuffleService).exists())
   }
 }

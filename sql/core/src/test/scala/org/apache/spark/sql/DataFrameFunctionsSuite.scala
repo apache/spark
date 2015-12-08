@@ -308,10 +308,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Row(null, null))
     )
 
-    val df2 = Seq((Array[Array[Int]](Array(2)), "x")).toDF("a", "b")
-    assert(intercept[AnalysisException] {
-      df2.selectExpr("sort_array(a)").collect()
-    }.getMessage().contains("does not support sorting array of type array<int>"))
+    val df2 = Seq((Array[Array[Int]](Array(2), Array(1), Array(2, 4), null), "x")).toDF("a", "b")
+    checkAnswer(
+      df2.selectExpr("sort_array(a, true)", "sort_array(a, false)"),
+      Seq(
+        Row(
+          Seq[Seq[Int]](null, Seq(1), Seq(2), Seq(2, 4)),
+          Seq[Seq[Int]](Seq(2, 4), Seq(2), Seq(1), null)))
+    )
 
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
@@ -366,10 +370,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(a, 1)"),
       Seq(Row(true), Row(false))
     )
-    checkAnswer(
-      df.select(array_contains(array(lit(2), lit(null)), 1)),
-      Seq(Row(false), Row(false))
-    )
 
     // In hive, this errors because null has no type information
     intercept[AnalysisException] {
@@ -382,15 +382,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(null, 1)")
     }
 
-    // In hive, if either argument has a matching type has a null value, return false, even if
-    // the first argument array contains a null and the second argument is null
     checkAnswer(
-      df.selectExpr("array_contains(array(array(1), null)[1], 1)"),
-      Seq(Row(false), Row(false))
+      df.selectExpr("array_contains(array(array(1), null)[0], 1)"),
+      Seq(Row(true), Row(true))
     )
     checkAnswer(
-      df.selectExpr("array_contains(array(0, null), array(1, null)[1])"),
-      Seq(Row(false), Row(false))
+      df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
+      Seq(Row(true), Row(true))
     )
   }
 }

@@ -26,15 +26,14 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{SQLConf, SQLContext, QueryTest}
 
 /**
- * Test various broadcast join operators with unsafe enabled.
+ * Test various broadcast join operators.
  *
  * Tests in this suite we need to run Spark in local-cluster mode. In particular, the use of
  * unsafe map in [[org.apache.spark.sql.execution.joins.UnsafeHashedRelation]] is not triggered
  * without serializing the hashed relation, which does not happen in local mode.
  */
 class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
-  private var sc: SparkContext = null
-  private var sqlContext: SQLContext = null
+  protected var sqlContext: SQLContext = null
 
   /**
    * Create a new [[SQLContext]] running in local-cluster mode with unsafe and codegen enabled.
@@ -44,15 +43,12 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
     val conf = new SparkConf()
       .setMaster("local-cluster[2,1,1024]")
       .setAppName("testing")
-    sc = new SparkContext(conf)
+    val sc = new SparkContext(conf)
     sqlContext = new SQLContext(sc)
-    sqlContext.setConf(SQLConf.UNSAFE_ENABLED, true)
-    sqlContext.setConf(SQLConf.CODEGEN_ENABLED, true)
   }
 
   override def afterAll(): Unit = {
-    sc.stop()
-    sc = null
+    sqlContext.sparkContext.stop()
     sqlContext = null
   }
 
@@ -60,7 +56,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
    * Test whether the specified broadcast join updates the peak execution memory accumulator.
    */
   private def testBroadcastJoin[T: ClassTag](name: String, joinType: String): Unit = {
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sc, name) {
+    AccumulatorSuite.verifyPeakExecutionMemorySet(sqlContext.sparkContext, name) {
       val df1 = sqlContext.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
       val df2 = sqlContext.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
       // Comparison at the end is for broadcast left semi join

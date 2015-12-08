@@ -45,7 +45,7 @@ frameworks.  You can install Mesos either from source or using prebuilt packages
 To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
-   [mirror](http://www.apache.org/dyn/closer.cgi/mesos/{{site.MESOS_VERSION}}/)
+   [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
 2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
    installing Mesos
 
@@ -157,23 +157,19 @@ From the client, you can submit a job to Mesos cluster by running `spark-submit`
 to the url of the MesosClusterDispatcher (e.g: mesos://dispatcher:7077). You can view driver statuses on the
 Spark cluster Web UI.
 
+Note that jars or python files that are passed to spark-submit should be URIs reachable by Mesos slaves.
+
 # Mesos Run Modes
 
-Spark can run over Mesos in two modes: "fine-grained" (default) and "coarse-grained".
+Spark can run over Mesos in two modes: "coarse-grained" (default) and "fine-grained".
 
-In "fine-grained" mode (default), each Spark task runs as a separate Mesos task. This allows
-multiple instances of Spark (and other frameworks) to share machines at a very fine granularity,
-where each application gets more or fewer machines as it ramps up and down, but it comes with an
-additional overhead in launching each task. This mode may be inappropriate for low-latency
-requirements like interactive queries or serving web requests.
-
-The "coarse-grained" mode will instead launch only *one* long-running Spark task on each Mesos
+The "coarse-grained" mode will launch only *one* long-running Spark task on each Mesos
 machine, and dynamically schedule its own "mini-tasks" within it. The benefit is much lower startup
 overhead, but at the cost of reserving the Mesos resources for the complete duration of the
 application.
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property in your
-[SparkConf](configuration.html#spark-properties):
+Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
+to turn it on explictly in [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
@@ -184,13 +180,26 @@ acquire. By default, it will acquire *all* cores in the cluster (that get offere
 only makes sense if you run just one application at a time. You can cap the maximum number of cores
 using `conf.set("spark.cores.max", "10")` (for example).
 
+In "fine-grained" mode, each Spark task runs as a separate Mesos task. This allows
+multiple instances of Spark (and other frameworks) to share machines at a very fine granularity,
+where each application gets more or fewer machines as it ramps up and down, but it comes with an
+additional overhead in launching each task. This mode may be inappropriate for low-latency
+requirements like interactive queries or serving web requests.
+
+To run in coarse-grained mode, set the `spark.mesos.coarse` property to false in your
+[SparkConf](configuration.html#spark-properties):
+
+{% highlight scala %}
+conf.set("spark.mesos.coarse", "false")
+{% endhighlight %}
+
 You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
 
 {% highlight scala %}
-conf.set("spark.mesos.constraints", "tachyon=true;us-east-1=false")
+conf.set("spark.mesos.constraints", "tachyon:true;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `tachyon=true;us-east-1=false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `tachyon:true;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
 
 # Mesos Docker Support
 
@@ -243,7 +252,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.coarse</code></td>
   <td>false</td>
   <td>
-    If set to "true", runs over Mesos clusters in
+    If set to <code>true</code>, runs over Mesos clusters in
     <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
     where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
     Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
@@ -252,16 +261,16 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.extra.cores</code></td>
-  <td>0</td>
+  <td><code>0</code></td>
   <td>
     Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
     The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
+    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.mesosExecutor.cores</code></td>
-  <td>1.0</td>
+  <td><code>1.0</code></td>
   <td>
     (Fine-grained mode only) Number of cores to give each Mesos executor. This does not
     include the cores used to run the Spark tasks. In other words, even if no Spark task
@@ -276,7 +285,7 @@ See the [configuration page](configuration.html) for information on Spark config
     Set the name of the docker image that the Spark executors will run in. The selected
     image must have Spark installed, as well as a compatible version of the Mesos library.
     The installed path of Spark in the image can be specified with <code>spark.mesos.executor.home</code>;
-    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_LIBRARY</code>.
+    the installed path of the Mesos library can be specified with <code>spark.executorEnv.MESOS_NATIVE_JAVA_LIBRARY</code>.
   </td>
 </tr>
 <tr>
@@ -285,7 +294,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Set the list of volumes which will be mounted into the Docker image, which was set using
     <code>spark.mesos.executor.docker.image</code>. The format of this property is a comma-separated list of
-    mappings following the form passed to <tt>docker run -v</tt>. That is they take the form:
+    mappings following the form passed to <code>docker run -v</code>. That is they take the form:
 
     <pre>[host_path:]container_path[:ro|:rw]</pre>
   </td>
@@ -316,7 +325,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>executor memory * 0.10, with minimum of 384</td>
   <td>
     The amount of additional memory, specified in MB, to be allocated per executor. By default,
-    the overhead will be larger of either 384 or 10% of `spark.executor.memory`. If it's set,
+    the overhead will be larger of either 384 or 10% of <code>spark.executor.memory</code>. If set,
     the final overhead will be this value.
   </td>
 </tr>
@@ -330,21 +339,21 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.principal</code></td>
-  <td>Framework principal to authenticate to Mesos</td>
+  <td>(none)</td>
   <td>
     Set the principal with which Spark framework will use to authenticate with Mesos.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.secret</code></td>
-  <td>Framework secret to authenticate to Mesos</td>
+  <td>(none)</td>
   <td>
     Set the secret with which Spark framework will use to authenticate with Mesos.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.role</code></td>
-  <td>Role for the Spark framework</td>
+  <td><code>*</code></td>
   <td>
     Set the role of this Spark framework for Mesos. Roles are used in Mesos for reservations
     and resource weight sharing.
@@ -352,7 +361,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.mesos.constraints</code></td>
-  <td>Attribute based constraints to be matched against when accepting resource offers.</td>
+  <td>(none)</td>
   <td>
     Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
     <ul>

@@ -310,8 +310,14 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       val _sc =
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test", broadcastConf)
       // Wait until all salves are up
-      _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 10000)
-      _sc
+      try {
+        _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
+        _sc
+      } catch {
+        case e: Throwable =>
+          _sc.stop()
+          throw e
+      }
     } else {
       new SparkContext("local", "test", broadcastConf)
     }

@@ -233,31 +233,6 @@ private[deploy] class Master(
       System.exit(0)
     }
 
-    case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
-      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == RecoveryState.STANDBY) {
-        // ignore, don't send response
-      } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
-      } else {
-        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerUiPort, publicAddress)
-        if (registerWorker(worker)) {
-          persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl))
-          schedule()
-        } else {
-          val workerAddress = worker.endpoint.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same " +
-            "address: " + workerAddress)
-          workerRef.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress))
-        }
-      }
-    }
-
     case RegisterApplication(description, driver) => {
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
@@ -278,9 +253,18 @@ private[deploy] class Master(
       execOption match {
         case Some(exec) => {
           val appInfo = idToApp(appId)
+          val oldState = exec.state
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
+
+          if (state == ExecutorState.RUNNING) {
+            if (oldState != ExecutorState.LAUNCHING) {
+              logWarning(s"Executor $execId state transfer from $oldState to RUNNING is unexpected")
+            }
+            appInfo.resetRetryCount()
+          }
+
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
+
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
@@ -387,6 +371,31 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case RegisterWorker(
+        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+      logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      if (state == RecoveryState.STANDBY) {
+        context.reply(MasterInStandby)
+      } else if (idToWorker.contains(id)) {
+        context.reply(RegisterWorkerFailed("Duplicate worker ID"))
+      } else {
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          workerRef, workerUiPort, publicAddress)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          context.reply(RegisteredWorker(self, masterWebUiUrl))
+          schedule()
+        } else {
+          val workerAddress = worker.endpoint.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          context.reply(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
+        }
+      }
+    }
+
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -702,8 +711,8 @@ private[deploy] class Master(
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
-    exec.application.driver.send(ExecutorAdded(
-      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
+    exec.application.driver.send(
+      ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   private def registerWorker(worker: WorkerInfo): Boolean = {
@@ -768,7 +777,8 @@ private[deploy] class Master(
       ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
+    val appId = newApplicationId(date)
+    new ApplicationInfo(now, appId, desc, date, driver, defaultCores)
   }
 
   private def registerApplication(app: ApplicationInfo): Unit = {
@@ -920,12 +930,12 @@ private[deploy] class Master(
       val eventLogDir = app.desc.eventLogDir
         .getOrElse {
           // Event logging is not enabled for this application
-          app.desc.appUiUrl = notFoundBasePath
+          app.appUIUrlAtHistoryServer = Some(notFoundBasePath)
           return None
         }
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+          eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
@@ -944,7 +954,7 @@ private[deploy] class Master(
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+        appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
@@ -954,7 +964,7 @@ private[deploy] class Master(
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
-      app.desc.appUiUrl = ui.basePath
+      app.appUIUrlAtHistoryServer = Some(ui.basePath)
       Some(ui)
     } catch {
       case fnf: FileNotFoundException =>
@@ -964,7 +974,7 @@ private[deploy] class Master(
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        app.appUIUrlAtHistoryServer = Some(notFoundBasePath + s"?msg=$msg&title=$title")
         None
       case e: Exception =>
         // Relay exception message to application UI page
@@ -973,7 +983,8 @@ private[deploy] class Master(
         var msg = s"Exception in replaying log for application $appName!"
         logError(msg, e)
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
+        app.appUIUrlAtHistoryServer =
+            Some(notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title")
         None
     }
   }

@@ -17,41 +17,43 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{SaveMode, Strategy, execution, sources, _}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.{Logging, TaskContext}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
 private[sql] object DataSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
         filters,
-        (a, f) => toCatalystRDD(l, a, t.buildScan(a, f))) :: Nil
+        (requestedColumns, allPredicates, _) =>
+          toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _)) =>
       pruneFilterProject(
         l,
         projects,
@@ -59,9 +61,22 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
     // Scanning partitioned HadoopFsRelation
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation))
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _))
         if t.partitionSpec.partitionColumns.nonEmpty =>
-      val selectedPartitions = prunePartitions(filters, t.partitionSpec).toArray
+      // We divide the filter expressions into 3 parts
+      val partitionColumns = AttributeSet(
+        t.partitionColumns.map(c => l.output.find(_.name == c.name).get))
+
+      // Only pruning the partition keys
+      val partitionFilters = filters.filter(_.references.subsetOf(partitionColumns))
+
+      // Only pushes down predicates that do not reference partition keys.
+      val pushedFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
+
+      // Predicates with both partition keys and attributes
+      val combineFilters = filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
+
+      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
       logInfo {
         val total = t.partitionSpec.partitions.length
@@ -70,24 +85,19 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
       }
 
-      // Only pushes down predicates that do not reference partition columns.
-      val pushedFilters = {
-        val partitionColumnNames = t.partitionSpec.partitionColumns.map(_.name).toSet
-        filters.filter { f =>
-          val referencedColumnNames = f.references.map(_.name).toSet
-          referencedColumnNames.intersect(partitionColumnNames).isEmpty
-        }
-      }
-
-      buildPartitionedTableScan(
+      val scan = buildPartitionedTableScan(
         l,
         projects,
         pushedFilters,
         t.partitionSpec.partitionColumns,
-        selectedPartitions) :: Nil
+        selectedPartitions)
+
+      combineFilters
+        .reduceLeftOption(expressions.And)
+        .map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _)) =>
       // See buildPartitionedTableScan for the reason that we need to create a shard
       // broadcast HadoopConf.
       val sharedHadoopConf = SparkHadoopUtil.get.conf
@@ -97,19 +107,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l,
         projects,
         filters,
-        (a, f) =>
-          toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f, t.paths, confBroadcast))) :: Nil
+        (a, f) => t.buildInternalScan(a.map(_.name).toArray, f, t.paths, confBroadcast)) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan) =>
+    case l @ LogicalRelation(baseRelation: TableScan, _) =>
       execution.PhysicalRDD.createFromDataSource(
         l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
-    case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: InsertableRelation), part, query, overwrite, false) if part.isEmpty =>
+    case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _),
+      part, query, overwrite, false) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: HadoopFsRelation), part, query, overwrite, false) =>
+      l @ LogicalRelation(t: HadoopFsRelation, _), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
@@ -121,7 +130,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       projections: Seq[NamedExpression],
       filters: Seq[Expression],
       partitionColumns: StructType,
-      partitions: Array[Partition]) = {
+      partitions: Array[Partition]): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
 
     // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
@@ -129,97 +138,84 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     val sharedHadoopConf = SparkHadoopUtil.get.conf
     val confBroadcast =
       relation.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
+    val partitionColumnNames = partitionColumns.fieldNames.toSet
 
-    // Builds RDD[Row]s for each selected partition.
-    val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
-      // The table scan operator (PhysicalRDD) which retrieves required columns from data files.
-      // Notice that the schema of data files, represented by `relation.dataSchema`, may contain
-      // some partition column(s).
-      val scan =
-        pruneFilterProject(
-          logicalRelation,
-          projections,
-          filters,
-          (columns: Seq[Attribute], filters) => {
-            val partitionColNames = partitionColumns.fieldNames
+    // Now, we create a scan builder, which will be used by pruneFilterProject. This scan builder
+    // will union all partitions and attach partition values if needed.
+    val scanBuilder = {
+      (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
+        val requiredDataColumns =
+          requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
-            // Don't scan any partition columns to save I/O.  Here we are being optimistic and
-            // assuming partition columns data stored in data files are always consistent with those
-            // partition values encoded in partition directory paths.
-            val needed = columns.filterNot(a => partitionColNames.contains(a.name))
-            val dataRows =
-              relation.buildScan(needed.map(_.name).toArray, filters, Array(dir), confBroadcast)
+        // Builds RDD[Row]s for each selected partition.
+        val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
+          // Don't scan any partition columns to save I/O.  Here we are being optimistic and
+          // assuming partition columns data stored in data files are always consistent with those
+          // partition values encoded in partition directory paths.
+          val dataRows = relation.buildInternalScan(
+            requiredDataColumns.map(_.name).toArray, filters, Array(dir), confBroadcast)
 
-            // Merges data values with partition values.
-            mergeWithPartitionValues(
-              relation.schema,
-              columns.map(_.name).toArray,
-              partitionColNames,
-              partitionValues,
-              toCatalystRDD(logicalRelation, needed, dataRows))
-          })
+          // Merges data values with partition values.
+          mergeWithPartitionValues(
+            requiredColumns,
+            requiredDataColumns,
+            partitionColumns,
+            partitionValues,
+            dataRows)
+        }
 
-      scan.execute()
+        val unionedRows =
+          if (perPartitionRows.length == 0) {
+            relation.sqlContext.emptyResult
+          } else {
+            new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
+          }
+
+        unionedRows
+      }
     }
 
-    val unionedRows =
-      if (perPartitionRows.length == 0) {
-        relation.sqlContext.emptyResult
-      } else {
-        new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
-      }
+    // Create the scan operator. If needed, add Filter and/or Project on top of the scan.
+    // The added Filter/Project is on top of the unioned RDD. We do not want to create
+    // one Filter/Project for every partition.
+    val sparkPlan = pruneFilterProject(
+      logicalRelation,
+      projections,
+      filters,
+      scanBuilder)
 
-    execution.PhysicalRDD.createFromDataSource(
-      projections.map(_.toAttribute),
-      unionedRows,
-      logicalRelation.relation)
+    sparkPlan
   }
 
-  // TODO: refactor this thing. It is very complicated because it does projection internally.
-  // We should just put a project on top of this.
   private def mergeWithPartitionValues(
-      schema: StructType,
-      requiredColumns: Array[String],
-      partitionColumns: Array[String],
+      requiredColumns: Seq[Attribute],
+      dataColumns: Seq[Attribute],
+      partitionColumnSchema: StructType,
       partitionValues: InternalRow,
       dataRows: RDD[InternalRow]): RDD[InternalRow] = {
-    val nonPartitionColumns = requiredColumns.filterNot(partitionColumns.contains)
-
     // If output columns contain any partition column(s), we need to merge scanned data
     // columns and requested partition columns to form the final result.
-    if (!requiredColumns.sameElements(nonPartitionColumns)) {
-      val mergers = requiredColumns.zipWithIndex.map { case (name, index) =>
-        // To see whether the `index`-th column is a partition column...
-        val i = partitionColumns.indexOf(name)
-        if (i != -1) {
-          val dt = schema(partitionColumns(i)).dataType
-          // If yes, gets column value from partition values.
-          (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = partitionValues.get(i, dt)
-          }
-        } else {
-          // Otherwise, inherits the value from scanned data.
-          val i = nonPartitionColumns.indexOf(name)
-          val dt = schema(nonPartitionColumns(i)).dataType
-          (mutableRow: MutableRow, dataRow: InternalRow, ordinal: Int) => {
-            mutableRow(ordinal) = dataRow.get(i, dt)
-          }
+    if (requiredColumns != dataColumns) {
+      // Builds `AttributeReference`s for all partition columns so that we can use them to project
+      // required partition columns.  Note that if a partition column appears in `requiredColumns`,
+      // we should use the `AttributeReference` in `requiredColumns`.
+      val partitionColumns = {
+        val requiredColumnMap = requiredColumns.map(a => a.name -> a).toMap
+        partitionColumnSchema.toAttributes.map { a =>
+          requiredColumnMap.getOrElse(a.name, a)
         }
       }
 
-      // Since we know for sure that this closure is serializable, we can avoid the overhead
-      // of cleaning a closure for each RDD by creating our own MapPartitionsRDD. Functionally
-      // this is equivalent to calling `dataRows.mapPartitions(mapPartitionsFunc)` (SPARK-7718).
       val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
-        val dataTypes = requiredColumns.map(schema(_).dataType)
-        val mutableRow = new SpecificMutableRow(dataTypes)
-        iterator.map { dataRow =>
-          var i = 0
-          while (i < mutableRow.numFields) {
-            mergers(i)(mutableRow, dataRow, i)
-            i += 1
-          }
-          mutableRow.asInstanceOf[InternalRow]
+        // Note that we can't use an `UnsafeRowJoiner` to replace the following `JoinedRow` and
+        // `UnsafeProjection`.  Because the projection may also adjust column order.
+        val mutableJoinedRow = new JoinedRow()
+        val unsafePartitionValues = UnsafeProjection.create(partitionColumnSchema)(partitionValues)
+        val unsafeProjection =
+          UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
+
+        iterator.map { unsafeDataRow =>
+          unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
         }
       }
 
@@ -229,7 +225,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       Utils.withDummyCallSite(dataRows.sparkContext) {
         new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
       }
-
     } else {
       dataRows
     }
@@ -272,25 +267,55 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       relation,
       projects,
       filterPredicates,
-      (requestedColumns, pushedFilters) => {
-        scanBuilder(requestedColumns, selectFilters(pushedFilters).toArray)
+      (requestedColumns, _, pushedFilters) => {
+        scanBuilder(requestedColumns, pushedFilters.toArray)
       })
   }
 
-  // Based on Catalyst expressions.
+  // Based on Catalyst expressions. The `scanBuilder` function accepts three arguments:
+  //
+  //  1. A `Seq[Attribute]`, containing all required column attributes. Used to handle relation
+  //     traits that support column pruning (e.g. `PrunedScan` and `PrunedFilteredScan`).
+  //
+  //  2. A `Seq[Expression]`, containing all gathered Catalyst filter expressions, only used for
+  //     `CatalystScan`.
+  //
+  //  3. A `Seq[Filter]`, containing all data source `Filter`s that are converted from (possibly a
+  //     subset of) Catalyst filter expressions and can be handled by `relation`.  Used to handle
+  //     relation traits (`CatalystScan` excluded) that support filter push-down (e.g.
+  //     `PrunedFilteredScan` and `HadoopFsRelation`).
+  //
+  // Note that 2 and 3 shouldn't be used together.
   protected def pruneFilterProjectRaw(
-      relation: LogicalRelation,
-      projects: Seq[NamedExpression],
-      filterPredicates: Seq[Expression],
-      scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[InternalRow]) = {
+    relation: LogicalRelation,
+    projects: Seq[NamedExpression],
+    filterPredicates: Seq[Expression],
+    scanBuilder: (Seq[Attribute], Seq[Expression], Seq[Filter]) => RDD[InternalRow]) = {
 
     val projectSet = AttributeSet(projects.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
-    val filterCondition = filterPredicates.reduceLeftOption(expressions.And)
 
-    val pushedFilters = filterPredicates.map { _ transform {
+    val candidatePredicates = filterPredicates.map { _ transform {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
     }}
+
+    val (unhandledPredicates, pushedFilters) =
+      selectFilters(relation.relation, candidatePredicates)
+
+    // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
+    // them from requested columns.
+    val handledSet = {
+      val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
+      val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
+      AttributeSet(handledPredicates.flatMap(_.references)) --
+        (projectSet ++ unhandledSet).map(relation.attributeMap)
+    }
+
+    // Combines all Catalyst filter `Expression`s that are either not convertible to data source
+    // `Filter`s or cannot be handled by `relation`.
+    val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
+
+    val pushedFiltersString = pushedFilters.mkString(" PushedFilter: [", ",", "] ")
 
     if (projects.map(_.toAttribute) == projects &&
         projectSet.size == projects.size &&
@@ -298,23 +323,30 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // When it is possible to just use column pruning to get the right projection and
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
-      val requestedColumns =
-        projects.asInstanceOf[Seq[Attribute]] // Safe due to if above.
-          .map(relation.attributeMap)            // Match original case of attributes.
+      val requestedColumns = projects
+        // Safe due to if above.
+        .asInstanceOf[Seq[Attribute]]
+        // Match original case of attributes.
+        .map(relation.attributeMap)
+        // Don't request columns that are only referenced by pushed filters.
+        .filterNot(handledSet.contains)
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         projects.map(_.toAttribute),
-        scanBuilder(requestedColumns, pushedFilters),
-        relation.relation)
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
+        relation.relation, pushedFiltersString)
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
-      val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
+      // Don't request columns that are only referenced by pushed filters.
+      val requestedColumns =
+        (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = execution.PhysicalRDD.createFromDataSource(
         requestedColumns,
-        scanBuilder(requestedColumns, pushedFilters),
-        relation.relation)
-      execution.Project(projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
+        scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
+        relation.relation, pushedFiltersString)
+      execution.Project(
+        projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
 
@@ -340,11 +372,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
   }
 
   /**
-   * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s,
-   * and convert them.
+   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   *
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
-  protected[sql] def selectFilters(filters: Seq[Expression]) = {
-    def translate(predicate: Expression): Option[Filter] = predicate match {
+  protected[sql] def translateFilter(predicate: Expression): Option[Filter] = {
+    predicate match {
       case expressions.EqualTo(a: Attribute, Literal(v, t)) =>
         Some(sources.EqualTo(a.name, convertToScala(v, t)))
       case expressions.EqualTo(Literal(v, t), a: Attribute) =>
@@ -393,16 +426,16 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translate(left) ++ translate(right)).reduceOption(sources.And)
+        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
 
       case expressions.Or(left, right) =>
         for {
-          leftFilter <- translate(left)
-          rightFilter <- translate(right)
+          leftFilter <- translateFilter(left)
+          rightFilter <- translateFilter(right)
         } yield sources.Or(leftFilter, rightFilter)
 
       case expressions.Not(child) =>
-        translate(child).map(sources.Not)
+        translateFilter(child).map(sources.Not)
 
       case expressions.StartsWith(a: Attribute, Literal(v: UTF8String, StringType)) =>
         Some(sources.StringStartsWith(a.name, v.toString))
@@ -415,7 +448,59 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       case _ => None
     }
+  }
 
-    filters.flatMap(translate)
+  /**
+   * Selects Catalyst predicate [[Expression]]s which are convertible into data source [[Filter]]s
+   * and can be handled by `relation`.
+   *
+   * @return A pair of `Seq[Expression]` and `Seq[Filter]`. The first element contains all Catalyst
+   *         predicate [[Expression]]s that are either not convertible or cannot be handled by
+   *         `relation`. The second element contains all converted data source [[Filter]]s that
+   *         will be pushed down to the data source.
+   */
+  protected[sql] def selectFilters(
+    relation: BaseRelation,
+    predicates: Seq[Expression]): (Seq[Expression], Seq[Filter]) = {
+
+    // For conciseness, all Catalyst filter expressions of type `expressions.Expression` below are
+    // called `predicate`s, while all data source filters of type `sources.Filter` are simply called
+    // `filter`s.
+
+    val translated: Seq[(Expression, Filter)] =
+      for {
+        predicate <- predicates
+        filter <- translateFilter(predicate)
+      } yield predicate -> filter
+
+    // A map from original Catalyst expressions to corresponding translated data source filters.
+    val translatedMap: Map[Expression, Filter] = translated.toMap
+
+    // Catalyst predicate expressions that cannot be translated to data source filters.
+    val unrecognizedPredicates = predicates.filterNot(translatedMap.contains)
+
+    // Data source filters that cannot be handled by `relation`. The semantic of a unhandled filter
+    // at here is that a data source may not be able to apply this filter to every row
+    // of the underlying dataset.
+    val unhandledFilters = relation.unhandledFilters(translatedMap.values.toArray).toSet
+
+    val (unhandled, handled) = translated.partition {
+      case (predicate, filter) =>
+        unhandledFilters.contains(filter)
+    }
+
+    // Catalyst predicate expressions that can be translated to data source filters, but cannot be
+    // handled by `relation`.
+    val (unhandledPredicates, _) = unhandled.unzip
+
+    // Translated data source filters that can be handled by `relation`
+    val (_, handledFilters) = handled.unzip
+
+    // translated contains all filters that have been converted to the public Filter interface.
+    // We should always push them to the data source no matter whether the data source can apply
+    // a filter to every row or not.
+    val (_, translatedFilters) = translated.unzip
+
+    (unrecognizedPredicates ++ unhandledPredicates, translatedFilters)
   }
 }

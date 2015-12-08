@@ -43,7 +43,7 @@ import org.jboss.netty.handler.codec.compression._
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
-  @transient ssc_ : StreamingContext,
+  ssc_ : StreamingContext,
   host: String,
   port: Int,
   storageLevel: StorageLevel,
@@ -93,9 +93,9 @@ class SparkFlumeEvent() extends Externalizable {
 
   /* Serialize to bytes. */
   def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-    val body = event.getBody.array()
-    out.writeInt(body.length)
-    out.write(body)
+    val body = event.getBody
+    out.writeInt(body.remaining())
+    Utils.writeByteBuffer(body, out)
 
     val numHeaders = event.getHeaders.size()
     out.writeInt(numHeaders)

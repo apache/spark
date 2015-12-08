@@ -26,9 +26,9 @@ else:
 
 from py4j.protocol import Py4JError
 
+from pyspark import since
 from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql import since
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter
 from pyspark.sql.dataframe import DataFrame
@@ -75,6 +75,8 @@ class SQLContext(object):
         SQLContext in the JVM, instead we make all calls to this object.
     """
 
+    _instantiatedContext = None
+
     @ignore_unicode_prefix
     def __init__(self, sparkContext, sqlContext=None):
         """Creates a new SQLContext.
@@ -99,6 +101,8 @@ class SQLContext(object):
         self._scala_SQLContext = sqlContext
         _monkey_patch_RDD(self)
         install_exception_handler()
+        if SQLContext._instantiatedContext is None:
+            SQLContext._instantiatedContext = self
 
     @property
     def _ssql_ctx(self):
@@ -110,6 +114,29 @@ class SQLContext(object):
         if self._scala_SQLContext is None:
             self._scala_SQLContext = self._jvm.SQLContext(self._jsc.sc())
         return self._scala_SQLContext
+
+    @classmethod
+    @since(1.6)
+    def getOrCreate(cls, sc):
+        """
+        Get the existing SQLContext or create a new one with given SparkContext.
+
+        :param sc: SparkContext
+        """
+        if cls._instantiatedContext is None:
+            jsqlContext = sc._jvm.SQLContext.getOrCreate(sc._jsc.sc())
+            cls(sc, jsqlContext)
+        return cls._instantiatedContext
+
+    @since(1.6)
+    def newSession(self):
+        """
+        Returns a new SQLContext as new session, that has separate SQLConf,
+        registered temporary tables and UDFs, but shared SparkContext and
+        table cache.
+        """
+        jsqlContext = self._ssql_ctx.newSession()
+        return self.__class__(self._sc, jsqlContext)
 
     @since(1.3)
     def setConf(self, key, value):
@@ -168,14 +195,15 @@ class SQLContext(object):
     @ignore_unicode_prefix
     @since(1.2)
     def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a lambda function as a UDF so it can be used in SQL statements.
+        """Registers a python function (including lambda function) as a UDF
+        so it can be used in SQL statements.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not given it default to a string and conversion will automatically
         be done.  For any other return type, the produced object must match the specified type.
 
         :param name: name of the UDF
-        :param samplingRatio: lambda function
+        :param f: python function
         :param returnType: a :class:`DataType` object
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
@@ -291,13 +319,7 @@ class SQLContext(object):
                     struct.names[i] = name
             schema = struct
 
-        elif isinstance(schema, StructType):
-            # take the first few rows to verify schema
-            rows = rdd.take(10)
-            for row in rows:
-                _verify_type(row, schema)
-
-        else:
+        elif not isinstance(schema, StructType):
             raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
 
         # convert python objects to sql data
@@ -394,7 +416,7 @@ class SQLContext(object):
 
         >>> sqlContext.createDataFrame(df.toPandas()).collect()  # doctest: +SKIP
         [Row(name=u'Alice', age=1)]
-        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]]).collect())  # doctest: +SKIP
+        >>> sqlContext.createDataFrame(pandas.DataFrame([[1, 2]])).collect()  # doctest: +SKIP
         [Row(0=1, 1=2)]
         """
         if isinstance(data, DataFrame):
@@ -422,6 +444,15 @@ class SQLContext(object):
             self._ssql_ctx.registerDataFrameAsTable(df._jdf, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
+
+    @since(1.6)
+    def dropTempTable(self, tableName):
+        """ Remove the temp table from catalog.
+
+        >>> sqlContext.registerDataFrameAsTable(df, "table1")
+        >>> sqlContext.dropTempTable("table1")
+        """
+        self._ssql_ctx.dropTempTable(tableName)
 
     def parquetFile(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.

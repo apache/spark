@@ -105,9 +105,9 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
-      |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --properties-file FILE Path to a custom Spark properties file.
       """.stripMargin)
     // scalastyle:on println
     System.exit(exitCode)

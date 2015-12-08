@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.classification;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -60,16 +60,16 @@ public class JavaStreamingLogisticRegressionSuite implements Serializable {
   @Test
   @SuppressWarnings("unchecked")
   public void javaAPI() {
-    List<LabeledPoint> trainingBatch = Lists.newArrayList(
+    List<LabeledPoint> trainingBatch = Arrays.asList(
       new LabeledPoint(1.0, Vectors.dense(1.0)),
       new LabeledPoint(0.0, Vectors.dense(0.0)));
     JavaDStream<LabeledPoint> training =
-      attachTestInputStream(ssc, Lists.newArrayList(trainingBatch, trainingBatch), 2);
-    List<Tuple2<Integer, Vector>> testBatch = Lists.newArrayList(
+      attachTestInputStream(ssc, Arrays.asList(trainingBatch, trainingBatch), 2);
+    List<Tuple2<Integer, Vector>> testBatch = Arrays.asList(
       new Tuple2<Integer, Vector>(10, Vectors.dense(1.0)),
       new Tuple2<Integer, Vector>(11, Vectors.dense(0.0)));
     JavaPairDStream<Integer, Vector> test = JavaPairDStream.fromJavaDStream(
-      attachTestInputStream(ssc, Lists.newArrayList(testBatch, testBatch), 2));
+      attachTestInputStream(ssc, Arrays.asList(testBatch, testBatch), 2));
     StreamingLogisticRegressionWithSGD slr = new StreamingLogisticRegressionWithSGD()
       .setNumIterations(2)
       .setInitialWeights(Vectors.dense(0.0));

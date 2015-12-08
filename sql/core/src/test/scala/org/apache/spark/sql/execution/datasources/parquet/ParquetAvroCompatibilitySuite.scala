@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.{List => JList, Map => JMap}
 

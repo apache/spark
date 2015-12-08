@@ -18,24 +18,17 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
-import java.nio.ByteBuffer
 
-import com.google.common.io.BaseEncoding
-import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.OriginalType
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
 private[sql] object ParquetFilters {
-  val PARQUET_FILTER_DATA = "org.apache.spark.sql.parquet.row.filter"
-
   case class SetInFilter[T <: Comparable[T]](
     valueSet: Set[T]) extends UserDefinedPredicate[T] with Serializable {
 
@@ -60,6 +53,8 @@ private[sql] object ParquetFilters {
     case DoubleType =>
       (n: String, v: Any) => FilterApi.eq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
 
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     // Binary.fromString and Binary.fromByteArray don't accept null values
     case StringType =>
       (n: String, v: Any) => FilterApi.eq(
@@ -69,6 +64,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+     */
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -82,6 +78,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.notEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
@@ -90,6 +89,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromByteArray(v.asInstanceOf[Array[Byte]])).orNull)
+     */
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -101,6 +101,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.lt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n),
@@ -108,6 +111,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -119,6 +123,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.ltEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.ltEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n),
@@ -126,6 +133,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -137,6 +145,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n),
@@ -144,6 +155,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -155,6 +167,9 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gtEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gtEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n),
@@ -162,6 +177,7 @@ private[sql] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromByteArray(v.asInstanceOf[Array[Byte]]))
+     */
   }
 
   private val makeInSet: PartialFunction[DataType, (String, Set[Any]) => FilterPredicate] = {
@@ -177,6 +193,9 @@ private[sql] object ParquetFilters {
     case DoubleType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(doubleColumn(n), SetInFilter(v.asInstanceOf[Set[java.lang.Double]]))
+
+    // See https://issues.apache.org/jira/browse/SPARK-11153
+    /*
     case StringType =>
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
@@ -185,6 +204,7 @@ private[sql] object ParquetFilters {
       (n: String, v: Set[Any]) =>
         FilterApi.userDefined(binaryColumn(n),
           SetInFilter(v.map(e => Binary.fromByteArray(e.asInstanceOf[Array[Byte]]))))
+     */
   }
 
   /**
@@ -281,34 +301,5 @@ private[sql] object ParquetFilters {
     val addMethod = classOf[ValidTypeMap].getDeclaredMethods.find(_.getName == "add").get
     addMethod.setAccessible(true)
     addMethod.invoke(null, classOf[Binary], enumTypeDescriptor)
-  }
-
-  /**
-   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
-   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
-   * the actual filter predicate.
-   */
-  def serializeFilterExpressions(filters: Seq[Expression], conf: Configuration): Unit = {
-    if (filters.nonEmpty) {
-      val serialized: Array[Byte] =
-        SparkEnv.get.closureSerializer.newInstance().serialize(filters).array()
-      val encoded: String = BaseEncoding.base64().encode(serialized)
-      conf.set(PARQUET_FILTER_DATA, encoded)
-    }
-  }
-
-  /**
-   * Note: Inside the Hadoop API we only have access to `Configuration`, not to
-   * [[org.apache.spark.SparkContext]], so we cannot use broadcasts to convey
-   * the actual filter predicate.
-   */
-  def deserializeFilterExpressions(conf: Configuration): Seq[Expression] = {
-    val data = conf.get(PARQUET_FILTER_DATA)
-    if (data != null) {
-      val decoded: Array[Byte] = BaseEncoding.base64().decode(data)
-      SparkEnv.get.closureSerializer.newInstance().deserialize(ByteBuffer.wrap(decoded))
-    } else {
-      Seq()
-    }
   }
 }
