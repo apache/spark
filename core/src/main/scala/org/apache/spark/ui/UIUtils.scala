@@ -210,10 +210,10 @@ private[spark] object UIUtils extends Logging {
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
-            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            <ul class="nav">{header}</ul>
           </div>
         </div>
         <div class="container-fluid">

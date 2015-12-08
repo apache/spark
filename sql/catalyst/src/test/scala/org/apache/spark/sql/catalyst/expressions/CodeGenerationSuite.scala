@@ -98,4 +98,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     unsafeRow.getStruct(3, 1).getStruct(0, 2).setInt(1, 4)
     assert(internalRow === internalRow2)
   }
+
+  test("*/ in the data") {
+    // When */ appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape */ to \*\/.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("*/", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("*/")))
+  }
+
+  test("\\u in the data") {
+    // When \ u appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape \ u to \\u.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("\\u")))
+  }
 }
