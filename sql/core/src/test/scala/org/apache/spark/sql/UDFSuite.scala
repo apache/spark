@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.ScalaUDF
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -194,106 +192,59 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
   }
 
-  private def checkNumUDFs(df: DataFrame, expectedNumUDFs: Int): Unit = {
-    val udfs = df.queryExecution.optimizedPlan.collect {
-      case p: logical.Project => p.projectList.flatMap {
-        case e => e.collect {
-          case udf: ScalaUDF => udf
-        }
-      }
-    }.flatten
-    assert(udfs.length === expectedNumUDFs)
+  test("udf in different types") {
+    sqlContext.udf.register("testDataFunc", (n: Int, s: String) => { (n, s) })
+    sqlContext.udf.register("decimalDataFunc",
+      (a: java.math.BigDecimal, b: java.math.BigDecimal) => { (a, b) })
+    sqlContext.udf.register("binaryDataFunc", (a: Array[Byte], b: Int) => { (a, b) })
+    sqlContext.udf.register("arrayDataFunc",
+      (data: Seq[Int], nestedData: Seq[Seq[Int]]) => { (data, nestedData) })
+    sqlContext.udf.register("mapDataFunc",
+      (data: scala.collection.Map[Int, String]) => { data })
+    sqlContext.udf.register("complexDataFunc",
+      (m: Map[String, Int], a: Seq[Int], b: Boolean) => { (m, a, b) } )
+
+    checkAnswer(
+      sql("SELECT tmp.t.* FROM (SELECT testDataFunc(key, value) AS t from testData) tmp").toDF(),
+      testData)
+    checkAnswer(
+      sql("""
+           | SELECT tmp.t.* FROM
+           | (SELECT decimalDataFunc(a, b) AS t FROM decimalData) tmp
+          """.stripMargin).toDF(), decimalData)
+    checkAnswer(
+      sql("""
+           | SELECT tmp.t.* FROM
+           | (SELECT binaryDataFunc(a, b) AS t FROM binaryData) tmp
+          """.stripMargin).toDF(), binaryData)
+    checkAnswer(
+      sql("""
+           | SELECT tmp.t.* FROM
+           | (SELECT arrayDataFunc(data, nestedData) AS t FROM arrayData) tmp
+          """.stripMargin).toDF(), arrayData.toDF())
+    checkAnswer(
+      sql("""
+           | SELECT mapDataFunc(data) AS t FROM mapData
+          """.stripMargin).toDF(), mapData.toDF())
+    checkAnswer(
+      sql("""
+           | SELECT tmp.t.* FROM
+           | (SELECT complexDataFunc(m, a, b) AS t FROM complexData) tmp
+          """.stripMargin).toDF(), complexData.select("m", "a", "b"))
   }
 
-  test("foldable udf") {
-    import org.apache.spark.sql.functions._
+  test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {
+    val myUDF = sqlContext.udf.register("testDataFunc", (n: Int, s: String) => { (n, s.toInt) })
 
-    val myUDF = udf((x: Int) => x + 1)
+    // Without the fix, this will fail because we fail to cast data type of b to string
+    // because myUDF does not know its input data type. With the fix, this query should not
+    // fail.
+    checkAnswer(
+      testData2.select(myUDF($"a", $"b").as("t")),
+      testData2.selectExpr("struct(a, b)"))
 
-    {
-      val df = sql("SELECT 1 as a")
-        .select(col("a"), myUDF(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF(col("b")).as("c"))
-      checkNumUDFs(df, 0)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-  }
-
-  test("nondeterministic udf: using UDFRegistration") {
-    import org.apache.spark.sql.functions._
-
-    val myUDF = sqlContext.udf.register("plusOne1", (x: Int) => x + 1)
-    sqlContext.udf.register("plusOne2", myUDF.nondeterministic)
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), myUDF(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF(col("b")).as("c"))
-      checkNumUDFs(df, 3)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), callUDF("plusOne1", col("a")).as("b"))
-        .select(col("a"), col("b"), callUDF("plusOne1", col("b")).as("c"))
-      checkNumUDFs(df, 3)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), myUDF.nondeterministic(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF.nondeterministic(col("b")).as("c"))
-      checkNumUDFs(df, 2)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), callUDF("plusOne2", col("a")).as("b"))
-        .select(col("a"), col("b"), callUDF("plusOne2", col("b")).as("c"))
-      checkNumUDFs(df, 2)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-  }
-
-  test("nondeterministic udf: using udf function") {
-    import org.apache.spark.sql.functions._
-
-    val myUDF = udf((x: Int) => x + 1)
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), myUDF(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF(col("b")).as("c"))
-      checkNumUDFs(df, 3)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-
-    {
-      val df = sqlContext.range(1, 2).select(col("id").as("a"))
-        .select(col("a"), myUDF.nondeterministic(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF.nondeterministic(col("b")).as("c"))
-      checkNumUDFs(df, 2)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-
-    {
-      // nondeterministicUDF will not be foldable.
-      val df = sql("SELECT 1 as a")
-        .select(col("a"), myUDF.nondeterministic(col("a")).as("b"))
-        .select(col("a"), col("b"), myUDF.nondeterministic(col("b")).as("c"))
-      checkNumUDFs(df, 2)
-      checkAnswer(df, Row(1, 2, 3))
-    }
-  }
-
-  test("override a registered udf") {
-    sqlContext.udf.register("intExpected", (x: Int) => x)
-    assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
-
-    sqlContext.udf.register("intExpected", (x: Int) => x + 1)
-    assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 2)
+    checkAnswer(
+      sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
+      testData2)
   }
 }

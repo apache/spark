@@ -25,31 +25,31 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
  * access to the intermediate phases of query execution for developers.
+ *
+ * While this is not a public class, we should avoid changing the function names for the sake of
+ * changing them, because a lot of developers use the feature for debugging.
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
-  val analyzer = sqlContext.analyzer
-  val optimizer = sqlContext.optimizer
-  val planner = sqlContext.planner
-  val cacheManager = sqlContext.cacheManager
-  val prepareForExecution = sqlContext.prepareForExecution
 
-  def assertAnalyzed(): Unit = analyzer.checkAnalysis(analyzed)
+  def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
 
-  lazy val analyzed: LogicalPlan = analyzer.execute(logical)
+  lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
+
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
-    cacheManager.useCachedData(analyzed)
+    sqlContext.cacheManager.useCachedData(analyzed)
   }
-  lazy val optimizedPlan: LogicalPlan = optimizer.execute(withCachedData)
 
-  // TODO: Don't just pick the first one...
+  lazy val optimizedPlan: LogicalPlan = sqlContext.optimizer.execute(withCachedData)
+
   lazy val sparkPlan: SparkPlan = {
-    SparkPlan.currentContext.set(sqlContext)
-    planner.plan(optimizedPlan).next()
+    SQLContext.setActive(sqlContext)
+    sqlContext.planner.plan(optimizedPlan).next()
   }
+
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = prepareForExecution.execute(sparkPlan)
+  lazy val executedPlan: SparkPlan = sqlContext.prepareForExecution.execute(sparkPlan)
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
@@ -57,11 +57,11 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }
 
-  def simpleString: String =
+  def simpleString: String = {
     s"""== Physical Plan ==
        |${stringOrError(executedPlan)}
       """.stripMargin.trim
-
+  }
 
   override def toString: String = {
     def output =
@@ -76,7 +76,6 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |${stringOrError(optimizedPlan)}
        |== Physical Plan ==
        |${stringOrError(executedPlan)}
-       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
     """.stripMargin.trim
   }
 }

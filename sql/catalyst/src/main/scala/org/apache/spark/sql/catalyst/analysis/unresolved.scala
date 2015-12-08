@@ -141,6 +141,10 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
+  override def prettyString: String = {
+    s"${name}(${children.map(_.prettyString).mkString(",")})"
+  }
+
   override def toString: String = s"'$name(${children.mkString(",")})"
 }
 
@@ -183,38 +187,26 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
       case None => input.output
       // If there is a table, pick out attributes that are part of this table.
       case Some(t) => if (t.size == 1) {
-        input.output.filter(_.qualifiers.filter(resolver(_, t.head)).nonEmpty)
+        input.output.filter(_.qualifiers.exists(resolver(_, t.head)))
       } else {
         List()
       }
     }
-    if (!expandedAttributes.isEmpty) {
-      if (expandedAttributes.forall(_.isInstanceOf[NamedExpression])) {
-        return expandedAttributes
-      } else {
-        require(expandedAttributes.size == input.output.size)
-        expandedAttributes.zip(input.output).map {
-          case (e, originalAttribute) =>
-            Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
-        }
-      }
-      return expandedAttributes
-    }
-
-    require(target.isDefined)
+    if (expandedAttributes.nonEmpty) return expandedAttributes
 
     // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
     // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
+    require(target.isDefined)
     val attribute = input.resolve(target.get, resolver)
     if (attribute.isDefined) {
       // This target resolved to an attribute in child. It must be a struct. Expand it.
       attribute.get.dataType match {
-        case s: StructType => {
-          s.fields.map( f => {
-            val extract = GetStructField(attribute.get, f, s.getFieldIndex(f.name).get)
-            Alias(extract, target.get + "." + f.name)()
-          })
+        case s: StructType => s.zipWithIndex.map {
+          case (f, i) =>
+            val extract = GetStructField(attribute.get, i)
+            Alias(extract, f.name)()
         }
+
         case _ => {
           throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
             target.get + "`")

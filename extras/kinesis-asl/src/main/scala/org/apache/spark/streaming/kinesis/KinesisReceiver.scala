@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessorCheckpointer, IRecordProcessor, IRecordProcessorFactory}
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
 import com.amazonaws.services.kinesis.model.Record
 
@@ -31,8 +31,7 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkEnv}
-
+import org.apache.spark.Logging
 
 private[kinesis]
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
@@ -47,17 +46,18 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  * https://github.com/awslabs/amazon-kinesis-client
  *
  * The way this Receiver works is as follows:
- * - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
- *   KinesisRecordProcessor
- * - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
- *   inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
- * - When the block generator defines a block, then the recorded sequence number ranges that were
- *   inserted into the block are recorded separately for being used later.
- * - When the block is ready to be pushed, the block is pushed and the ranges are reported as
- *   metadata of the block. In addition, the ranges are used to find out the latest sequence
- *   number for each shard that can be checkpointed through the DynamoDB.
- * - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
- *   number for it own shard.
+ *
+ *  - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
+ *    KinesisRecordProcessor
+ *  - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
+ *    inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
+ *  - When the block generator defines a block, then the recorded sequence number ranges that were
+ *    inserted into the block are recorded separately for being used later.
+ *  - When the block is ready to be pushed, the block is pushed and the ranges are reported as
+ *    metadata of the block. In addition, the ranges are used to find out the latest sequence
+ *    number for each shard that can be checkpointed through the DynamoDB.
+ *  - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
+ *    number for it own shard.
  *
  * @param streamName   Kinesis stream name
  * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
@@ -128,6 +128,11 @@ private[kinesis] class KinesisReceiver[T](
     with mutable.SynchronizedMap[StreamBlockId, SequenceNumberRanges]
 
   /**
+   * The centralized kinesisCheckpointer that checkpoints based on the given checkpointInterval.
+   */
+  @volatile private var kinesisCheckpointer: KinesisCheckpointer = null
+
+  /**
    * Latest sequence number ranges that have been stored successfully.
    * This is used for checkpointing through KCL */
   private val shardIdToLatestStoredSeqNum = new mutable.HashMap[String, String]
@@ -141,6 +146,7 @@ private[kinesis] class KinesisReceiver[T](
 
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
+    kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
     // KCL config instance
     val awsCredProvider = resolveAWSCredentialsProvider()
     val kinesisClientLibConfiguration =
@@ -157,8 +163,8 @@ private[kinesis] class KinesisReceiver[T](
     *  We're using our custom KinesisRecordProcessor in this case.
     */
     val recordProcessorFactory = new IRecordProcessorFactory {
-      override def createProcessor: IRecordProcessor = new KinesisRecordProcessor(receiver,
-        workerId, new KinesisCheckpointState(checkpointInterval))
+      override def createProcessor: IRecordProcessor =
+        new KinesisRecordProcessor(receiver, workerId)
     }
 
     worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
@@ -198,6 +204,10 @@ private[kinesis] class KinesisReceiver[T](
       logInfo(s"Stopped receiver for workerId $workerId")
     }
     workerId = null
+    if (kinesisCheckpointer != null) {
+      kinesisCheckpointer.shutdown()
+      kinesisCheckpointer = null
+    }
   }
 
   /** Add records of the given shard to the current block being generated */
@@ -207,13 +217,31 @@ private[kinesis] class KinesisReceiver[T](
       val metadata = SequenceNumberRange(streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
-
     }
   }
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
   private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
     shardIdToLatestStoredSeqNum.get(shardId)
+  }
+
+  /**
+   * Set the checkpointer that will be used to checkpoint sequence numbers to DynamoDB for the
+   * given shardId.
+   */
+  def setCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.setCheckpointer(shardId, checkpointer)
+  }
+
+  /**
+   * Remove the checkpointer for the given shardId. The provided checkpointer will be used to
+   * checkpoint one last time for the given shard. If `checkpointer` is `null`, then we will not
+   * checkpoint.
+   */
+  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+    assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
+    kinesisCheckpointer.removeCheckpointer(shardId, checkpointer)
   }
 
   /**

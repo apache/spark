@@ -23,7 +23,7 @@ module Jekyll
 
     FileOnly = /^(\S+\.\S+)$/
     FileTag = /^(\S+\.\S+)\s+(\S+)$/
-    
+
     def initialize(tag_name, markup, tokens)
       super
       clean_markup = markup.strip
@@ -37,10 +37,10 @@ module Jekyll
         raise "Invalid syntax. Use {% include_example path/to/file [label] %}."
       end
     end
- 
+
     def render(context)
       site = context.registers[:site]
-      config_dir = (site.config['code_dir'] || '../examples/src/main').sub(/^\//,'')
+      config_dir = '../examples/src/main'
       @code_dir = File.join(site.source, config_dir)
 
       @file = File.join(@code_dir, @markup)
@@ -48,10 +48,15 @@ module Jekyll
 
       code = File.open(@file).read.encode("UTF-8")
       code = select_lines(code)
- 
-      Pygments.highlight(code, :lexer => @lang)
+
+      rendered_code = Pygments.highlight(code, :lexer => @lang)
+
+      hint = "<div><small>Find full example code at " \
+        "\"examples/src/main/#{clean_markup}\" in the Spark repo.</small></div>"
+
+      rendered_code + hint
     end
- 
+
     # Trim the code block so as to have the same indention, regardless of their positions in the
     # code file.
     def trim_codeblock(lines)
@@ -61,7 +66,7 @@ module Jekyll
         .map { |l| l[/\A */].size }
         .min
 
-      lines.map { |l| l[min_start_spaces .. -1] }
+      lines.map { |l| l.strip.size == 0 ? l : l[min_start_spaces .. -1] }
     end
 
     # Select lines according to labels in code. Currently we use "$example on$" and "$example off$"
@@ -81,10 +86,10 @@ module Jekyll
         .select { |l, i| l.include? "$example off#{@label}$" }
         .map { |l, i| i }
 
-      raise "Start indices amount is not equal to end indices amount, please check the code." \
+      raise "Start indices amount is not equal to end indices amount, see #{@file}." \
         unless startIndices.size == endIndices.size
 
-      raise "No code is selected by include_example, please check the code." \
+      raise "No code is selected by include_example, see #{@file}." \
         if startIndices.size == 0
 
       # Select and join code blocks together, with a space line between each of two continuous
@@ -92,8 +97,10 @@ module Jekyll
       lastIndex = -1
       result = ""
       startIndices.zip(endIndices).each do |start, endline|
-        raise "Overlapping between two example code blocks are not allowed." if start <= lastIndex
-        raise "$example on$ should not be in the same line with $example off$." if start == endline
+        raise "Overlapping between two example code blocks are not allowed, see #{@file}." \
+            if start <= lastIndex
+        raise "$example on$ should not be in the same line with $example off$, see #{@file}." \
+            if start == endline
         lastIndex = endline
         range = Range.new(start + 1, endline - 1)
         result += trim_codeblock(lines[range]).join
