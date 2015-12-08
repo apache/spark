@@ -378,6 +378,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
+  test("drop columns using drop") {
+    val src = Seq((0, 2, 3)).toDF("a", "b", "c")
+    val df = src.drop("a", "b")
+    checkAnswer(df, Row(3))
+    assert(df.schema.map(_.name) === Seq("c"))
+  }
+
   test("drop unknown column (no-op)") {
     val df = testData.drop("random")
     checkAnswer(
@@ -897,7 +904,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val dir2 = new File(dir, "dir2").getCanonicalPath
       df2.write.format("json").save(dir2)
 
-      checkAnswer(sqlContext.read.format("json").load(Array(dir1, dir2)),
+      checkAnswer(sqlContext.read.format("json").load(dir1, dir2),
         Row(1, 22) :: Row(2, 23) :: Nil)
 
       checkAnswer(sqlContext.read.format("json").load(dir1),

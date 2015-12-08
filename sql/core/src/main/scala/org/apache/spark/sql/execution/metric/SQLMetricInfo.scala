@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.sql.execution.metric
 
-import java.io.Serializable;
-import java.util.Iterator;
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * A function that returns zero or more output records from each grouping key and its values.
+ * :: DeveloperApi ::
+ * Stores information about a SQL Metric.
  */
-public interface FlatMapGroupFunction<K, V, R> extends Serializable {
-  Iterable<R> call(K key, Iterator<V> values) throws Exception;
-}
+@DeveloperApi
+class SQLMetricInfo(
+    val name: String,
+    val accumulatorId: Long,
+    val metricParam: String)

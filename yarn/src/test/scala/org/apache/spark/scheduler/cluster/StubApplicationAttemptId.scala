@@ -15,14 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.scheduler.cluster
 
-import java.io.Serializable;
-import java.util.Iterator;
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 /**
- * Base interface for a map function used in GroupedDataset's mapGroup function.
+ * A stub application ID; can be set in constructor and/or updated later.
+ * @param applicationId application ID
+ * @param attempt an attempt counter
  */
-public interface MapGroupFunction<K, V, R> extends Serializable {
-  R call(K key, Iterator<V> values) throws Exception;
+class StubApplicationAttemptId(var applicationId: ApplicationId, var attempt: Int)
+    extends ApplicationAttemptId {
+
+  override def setApplicationId(appID: ApplicationId): Unit = {
+    applicationId = appID
+  }
+
+  override def getAttemptId: Int = {
+    attempt
+  }
+
+  override def setAttemptId(attemptId: Int): Unit = {
+    attempt = attemptId
+  }
+
+  override def getApplicationId: ApplicationId = {
+    applicationId
+  }
+
+  override def build(): Unit = {
+  }
 }

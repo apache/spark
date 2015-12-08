@@ -240,6 +240,10 @@ private[spark] class EventLoggingListener(
     updateModifiedMetrics(eventWithoutTaskMetrics)
   }
 
+  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
   /**
    * Stop logging events. The event log file will be renamed so that it loses the
    * ".inprogress" suffix.
