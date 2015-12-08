@@ -113,6 +113,16 @@
 #   prefix    EMPTY STRING  Prefix to prepend to metric name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
 
+# org.apache.spark.metrics.sink.OpenTsdbSink
+#   Name:       Default:            Description:
+#   host        NONE                Hostname of OpenTsdb server
+#   port        NONE                Port of OpenTsdb server
+#   period      10                  Poll period
+#   unit        seconds             Units of poll period
+#   prefix      EMPTY STRING        Prefix to prepend to metric name
+#   tagName1    appId               Name of one required tag for OpenTsdb
+#   tagValue1   SPARK APP ID        Value of one required tag for OpenTsdb
+
 ## Examples
 # Enable JmxSink for all instances by class name
 #*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink

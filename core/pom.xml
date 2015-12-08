@@ -356,6 +356,17 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.github.sps.metrics</groupId>
+      <artifactId>metrics-opentsdb</artifactId>
+      <version>1.0.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
