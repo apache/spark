@@ -39,6 +39,15 @@ class Param(object):
         self.name = str(name)
         self.doc = str(doc)
 
+    def _copy_new_parent(self, parent):
+        """Copy the current param to a new parent, must be a dummy param."""
+        if self.parent == dummy:
+            param = copy.copy(self)
+            param.parent = parent
+            return param
+        else:
+            raise ValueError("Cannot copy from non-dummy parent %s." % parent)
+
     def __str__(self):
         return str(self.parent) + "__" + self.name
 

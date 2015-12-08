@@ -181,14 +181,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(IsotonicRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
-        self.isotonic = \
-            Param(self, "isotonic",
-                  "whether the output sequence should be isotonic/increasing (true) or" +
-                  "antitonic/decreasing (false).")
-        self.featureIndex = \
-            Param(self, "featureIndex",
-                  "The index of the feature if featuresCol is a vector column, no effect " +
-                  "otherwise.")
+        self.isotonic = IsotonicRegression.isotonic._copy_new_parent(self)
+        self.featureIndex = IsotonicRegression.featureIndex._copy_new_parent(self)
         self._setDefault(isotonic=True, featureIndex=0)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -269,8 +263,7 @@ class TreeEnsembleParams(DecisionTreeParams):
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
         #: param for Fraction of the training data, in range (0, 1].
-        self.subsamplingRate = Param(self, "subsamplingRate", "Fraction of the training data " +
-                                     "used for learning each decision tree, in range (0, 1].")
+        self.subsamplingRate = TreeEnsembleParams.subsamplingRate._copy_new_parent(self)
 
     @since("1.4.0")
     def setSubsamplingRate(self, value):
@@ -303,9 +296,7 @@ class TreeRegressorParams(Params):
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
         #: param for Criterion used for information gain calculation (case-insensitive).
-        self.impurity = Param(self, "impurity", "Criterion used for information " +
-                              "gain calculation (case-insensitive). Supported options: " +
-                              ", ".join(self.supportedImpurities))
+        self.impurity = TreeRegressorParams.impurity._copy_new_parent(self)
 
     @since("1.4.0")
     def setImpurity(self, value):
@@ -339,12 +330,9 @@ class RandomForestParams(TreeEnsembleParams):
     def __init__(self):
         super(RandomForestParams, self).__init__()
         #: param for Number of trees to train (>= 1).
-        self.numTrees = Param(self, "numTrees", "Number of trees to train (>= 1).")
+        self.numTrees = RandomForestParams.numTrees._copy_new_parent(self)
         #: param for The number of features to consider for splits at each tree node.
-        self.featureSubsetStrategy = \
-            Param(self, "featureSubsetStrategy",
-                  "The number of features to consider for splits at each tree node. Supported " +
-                  "options: " + ", ".join(self.supportedFeatureSubsetStrategies))
+        self.featureSubsetStrategy = RandomForestParams.featureSubsetStrategy._copy_new_parent(self)
 
     @since("1.4.0")
     def setNumTrees(self, value):
@@ -624,9 +612,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         #: param for Loss function which GBT tries to minimize (case-insensitive).
-        self.lossType = Param(self, "lossType",
-                              "Loss function which GBT tries to minimize (case-insensitive). " +
-                              "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
+        self.lossType = GBTRegressor._copy_new_parent(self)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1)
@@ -736,19 +722,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
         #: Param for censor column name
-        self.censorCol = Param(self,  "censorCol",
-                               "censor column name. The value of this column could be 0 or 1. " +
-                               "If the value is 1, it means the event has occurred i.e. " +
-                               "uncensored; otherwise censored.")
+        self.censorCol = AFTSurvivalRegression.censorCol._copy_new_parent(self)
         #: Param for quantile probabilities array
         self.quantileProbabilities = \
-            Param(self, "quantileProbabilities",
-                  "quantile probabilities array. Values of the quantile probabilities array " +
-                  "should be in the range (0, 1) and the array should be non-empty.")
+            AFTSurvivalRegression.quantileProbabilities._copy_new_parent(self)
         #: Param for quantiles column name
-        self.quantilesCol = Param(self, "quantilesCol",
-                                  "quantiles column name. This column will output quantiles of " +
-                                  "corresponding quantileProbabilities if it is set.")
+        self.quantilesCol = AFTSurvivalRegression.quantilesCol._copy_new_parent(self)
         self._setDefault(censorCol="censor",
                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
         kwargs = self.__init__._input_kwargs

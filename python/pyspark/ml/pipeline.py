@@ -158,7 +158,7 @@ class Pipeline(Estimator):
             stages = []
         super(Pipeline, self).__init__()
         #: Param for pipeline stages.
-        self.stages = Param(self, "stages", "pipeline stages")
+        self.stages = Pipeline.stages._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 

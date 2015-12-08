@@ -138,8 +138,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
         #: param for metric name in evaluation (areaUnderROC|areaUnderPR)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation (areaUnderROC|areaUnderPR)")
+        self.metricName = BinaryClassificationEvaluator.metricName._copy_new_parent(self)
         self._setDefault(rawPredictionCol="rawPrediction", labelCol="label",
                          metricName="areaUnderROC")
         kwargs = self.__init__._input_kwargs
@@ -210,8 +209,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
         #: param for metric name in evaluation (mse|rmse|r2|mae)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation (mse|rmse|r2|mae)")
+        self.metricName = RegressionEvaluator.metricName._copy_new_parent(self)
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="rmse")
         kwargs = self.__init__._input_kwargs
@@ -280,9 +278,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
         # param for metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation"
-                                " (f1|precision|recall|weightedPrecision|weightedRecall)")
+        self.metricName = MulticlassClassificationEvaluator.metricName._copy_new_parent(self)
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="f1")
         kwargs = self.__init__._input_kwargs
