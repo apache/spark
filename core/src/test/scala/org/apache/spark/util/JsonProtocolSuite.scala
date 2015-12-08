@@ -86,6 +86,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetrics = {
       val execMetrics = new ExecutorMetrics
       execMetrics.setHostname("host-1")
+      execMetrics.setPort(80)
       execMetrics.setTransportMetrics(TransportMetrics(0L, 10, 10))
       execMetrics
     }
@@ -385,6 +386,23 @@ class JsonProtocolSuite extends SparkFunSuite {
       .removeField({ _._1 == "Internal" })
     val oldInfo = JsonProtocol.accumulableInfoFromJson(oldJson)
     assert(false === oldInfo.internal)
+  }
+
+  test("ExecutorMetrics backward compatibility") {
+    // ExecutorMetrics is newly added
+    val executorMetricsUpdate = SparkListenerExecutorMetricsUpdate("exec3", new ExecutorMetrics,
+      Seq((1L, 2, 3, makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800,
+        hasHadoopInput = true, hasOutput = true))))
+    assert(executorMetricsUpdate.executorMetrics != null)
+    assert(executorMetricsUpdate.executorMetrics.transportMetrics != null)
+    val newJson = JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
+    val oldJson = newJson.removeField { case (field, _) => field == "Executor Metrics Updated"}
+    val newMetrics = JsonProtocol.executorMetricsUpdateFromJson(oldJson)
+    assert(newMetrics.executorMetrics.hostname === "")
+    assert(newMetrics.executorMetrics.port === 0)
+    assert(newMetrics.executorMetrics.transportMetrics.onHeapSize === 0L)
+    assert(newMetrics.executorMetrics.transportMetrics.offHeapSize === 0L)
+    assert(newMetrics.executorMetrics.transportMetrics.timeStamp != 0L)
   }
 
   /** -------------------------- *
@@ -1708,6 +1726,7 @@ class JsonProtocolSuite extends SparkFunSuite {
      |  "Executor ID": "exec3",
      |  "Executor Metrics Updated": {
      |    "Executor Hostname": "host-1",
+     |    "Executor Port": 80,
      |    "TransportMetrics": {
      |      "TimeStamp": 0,
      |      "OnHeapSize": 10,

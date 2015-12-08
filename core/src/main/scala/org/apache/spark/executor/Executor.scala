@@ -87,6 +87,7 @@ private[spark] class Executor(
 
   private val executorMetrics: ExecutorMetrics = new ExecutorMetrics
   executorMetrics.setHostname(Utils.localHostName)
+  executorMetrics.setPort(env.rpcEnv.address.port)
 
   // Create an RpcEndpoint for receiving RPCs from the driver
   private val executorEndpoint = env.rpcEnv.setupEndpoint(

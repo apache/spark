@@ -96,6 +96,7 @@ class MemoryListener extends SparkListener {
   }
 }
 
+@DeveloperApi
 class MemoryUIInfo {
   var executorAddress: String = _
   var transportInfo: Option[TransportMemSize] = None
@@ -110,11 +111,12 @@ class MemoryUIInfo {
       case Some(transportMemSize) => transportInfo
       case _ => Some(new TransportMemSize)
     }
-    executorAddress = execMetrics.hostname
+    executorAddress = execMetrics.hostPort
     transportInfo.get.updateTransport(execMetrics.transportMetrics)
   }
 }
 
+@DeveloperApi
 class TransportMemSize {
   var onHeapSize: Long = _
   var offHeapSize: Long = _
@@ -136,4 +138,5 @@ class TransportMemSize {
   }
 }
 
+@DeveloperApi
 case class MemTime(memorySize: Long = 0L, timeStamp: Long = System.currentTimeMillis)

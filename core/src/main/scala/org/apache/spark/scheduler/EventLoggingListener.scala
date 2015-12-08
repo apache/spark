@@ -230,14 +230,14 @@ private[spark] class EventLoggingListener(
   // No-op because logging every update would be overkill
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {}
 
-  // No-op because logging every update would be overkill
+  // Track executor metrics for logging on stage start and end
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
-    // In order to avoid the logged event consumes too much storage size, taskMetrics would not
-    // be logged into event log file currently
-    val lightEvent = SparkListenerExecutorMetricsUpdate(
+    // We only track the executor metrics in each stage, so we drop the task metrics as they are
+    // quite verbose
+    val eventWithoutTaskMetrics = SparkListenerExecutorMetricsUpdate(
       event.execId, event.executorMetrics, Seq.empty)
-    executorIdToLatestMetrics.update(lightEvent.execId, lightEvent)
-    updateModifiedMetrics(lightEvent.execId)
+    executorIdToLatestMetrics(eventWithoutTaskMetrics.execId) = eventWithoutTaskMetrics
+    updateModifiedMetrics(eventWithoutTaskMetrics)
   }
 
   /**
@@ -263,18 +263,17 @@ private[spark] class EventLoggingListener(
 
   /**
    * According to the updated event to modify the maintained event's metrics
-   * @param executorId  the executor whose metrics will be modified
+   * @param latestEvent  the latest event received that used to update the maintained metric
    */
-  private def updateModifiedMetrics(executorId: String): Unit = {
+  private def updateModifiedMetrics(latestEvent: SparkListenerExecutorMetricsUpdate): Unit = {
+    val executorId = latestEvent.execId
     val toBeModifiedEvent = executorIdToModifiedMaxMetrics.get(executorId)
-    val latestEvent = executorIdToLatestMetrics.get(executorId)
     toBeModifiedEvent match {
-      case None => if (latestEvent.isDefined) executorIdToModifiedMaxMetrics.update(
-        executorId, latestEvent.get)
+      case None =>
+        executorIdToModifiedMaxMetrics(executorId) = latestEvent
       case Some(toBeModifiedEvent) =>
         val toBeModifiedMetrics = toBeModifiedEvent.executorMetrics.transportMetrics
-        // latestEvent must has value
-        val latestTransMetrics = latestEvent.get.executorMetrics.transportMetrics
+        val latestTransMetrics = latestEvent.executorMetrics.transportMetrics
         val toBeModTransMetrics = toBeModifiedMetrics
         var timeStamp: Long = toBeModTransMetrics.timeStamp
         // the logic here should be the same with that for memoryListener
@@ -292,13 +291,12 @@ private[spark] class EventLoggingListener(
         }
 
         // We should maintain a new instance for each update to avoid side-effect
-        val modifiedExecMetrics = new ExecutorMetrics()
-        modifiedExecMetrics.setHostname(toBeModifiedEvent.executorMetrics.hostname)
-        modifiedExecMetrics.setTransportMetrics(TransportMetrics(
-          timeStamp, onHeapSize, offHeapSize))
+        val modifiedExecMetrics = ExecutorMetrics(toBeModifiedEvent.executorMetrics.hostname,
+          toBeModifiedEvent.executorMetrics.port,
+          TransportMetrics(timeStamp, onHeapSize, offHeapSize))
         val modifiedEvent = SparkListenerExecutorMetricsUpdate(
           toBeModifiedEvent.execId, modifiedExecMetrics, toBeModifiedEvent.taskMetrics)
-        executorIdToModifiedMaxMetrics.update(executorId, modifiedEvent)
+        executorIdToModifiedMaxMetrics(executorId) = modifiedEvent
     }
   }
 }

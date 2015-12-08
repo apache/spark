@@ -41,7 +41,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
   /**
    * Collect current executor memory metrics of transferService.
    */
-  def getMemMetrics(executorMetrics: ExecutorMetrics): Unit
+  private[spark] def getMemMetrics(executorMetrics: ExecutorMetrics): Unit
 
   /**
    * Tear down the transfer service.

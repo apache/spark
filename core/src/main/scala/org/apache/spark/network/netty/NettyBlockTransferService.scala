@@ -59,7 +59,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     clock = newClock
   }
 
-  override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {
+  private[spark] override def getMemMetrics(executorMetrics: ExecutorMetrics): Unit = {
     val currentTime = clock.getTimeMillis()
     val clientPooledAllocator = clientFactory.getPooledAllocator()
     val serverAllocator = server.getAllocator()
@@ -68,9 +68,9 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
     val clientOnHeapSize: Long = sumOfMetrics(clientPooledAllocator.heapArenas().asScala.toList)
     val serverOffHeapSize: Long = sumOfMetrics(serverAllocator.directArenas().asScala.toList)
     val serverOnHeapSize: Long = sumOfMetrics(serverAllocator.heapArenas().asScala.toList)
-    logDebug(s"Current Netty Client offHeapSize is $clientOffHeapSize, " +
-      s"Client HeapSize is $clientOnHeapSize, server directHeapsize is $serverOffHeapSize, " +
-      s"server heapsize is $serverOnHeapSize, executer id is " +
+    logDebug(s"Current Netty Client offheap size is $clientOffHeapSize, " +
+      s"Client heap size is $clientOnHeapSize, Server offheap size is $serverOffHeapSize, " +
+      s"server heap size is $serverOnHeapSize, executor id is " +
       s"${SparkEnv.get.blockManager.blockManagerId.executorId}")
     executorMetrics.setTransportMetrics(TransportMetrics(currentTime,
       clientOnHeapSize + serverOnHeapSize, clientOffHeapSize + serverOffHeapSize))
