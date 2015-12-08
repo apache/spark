@@ -76,7 +76,6 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("getVectors") {
 
-    val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
@@ -117,7 +116,6 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("findSynonyms") {
 
-    val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
     val sentence = "a b " * 100 + "a c " * 10
@@ -144,7 +142,6 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
   test("window size") {
 
-    val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
     val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
