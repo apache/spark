@@ -36,8 +36,9 @@ class YarnHistoryProviderWindowSuite
     extends AbstractHistoryIntegrationTests
     with HistoryServiceNotListeningToSparkContext
     with TimelineSingleEntryBatchSize {
-  val start1Time = 100
-  val start2Time = start1Time + 1
+  val minute = 60000
+  val start1Time = minute
+  val start2Time = start1Time + minute
   val appReport1 = stubApplicationReport(1, 0, 1, YarnApplicationState.RUNNING, start1Time, 0)
   val appReport2 = stubApplicationReport(2, 0, 1, YarnApplicationState.RUNNING, start2Time, 0)
 
@@ -72,7 +73,7 @@ class YarnHistoryProviderWindowSuite
 
       val start2 = appStartEvent(start2Time, appId2, user, Some("1"))
       history2.enqueue(start2)
-      val end2Time = start2Time + 1
+      val end2Time = start2Time + minute
       val end2 = appStopEvent(end2Time)
       history2.enqueue(end2)
       // stop the second application
@@ -82,10 +83,10 @@ class YarnHistoryProviderWindowSuite
 
       // here there is one incomplete application, and a completed one
       // which started and stopped after the incomplete one started
-      // the history provider needs the list of running applications to
-      // void
-      provider = new TimeManagedHistoryProvider(sc.conf, end2Time, 1)
+      provider = new TimeManagedHistoryProvider(sc.conf, end2Time, minute)
       provider.setRunningApplications(List(appReport1, appReport2))
+      addFailureAction(dumpProviderState(provider))
+      addFailureAction(dumpTimelineEntities(provider))
 
       // now read it in via history provider
       describe("read in listing")
@@ -105,13 +106,15 @@ class YarnHistoryProviderWindowSuite
       flushHistoryServiceToSuccess()
 
       // move time forwards
-      provider.incrementTime(5)
+      provider.incrementTime(5 * minute)
       // Now await a refresh
       describe("read in listing #2")
 
       awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
       awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
+      awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
 
+      logDebug("Refreshes executed; extracting application listing")
       val allApps = provider.listApplications()
       logInfo(s"allApps : ${allApps.applications}")
 
@@ -119,11 +122,15 @@ class YarnHistoryProviderWindowSuite
       val listing2 = provider.getListing()
       logInfo(s"Listing 2: $listing2")
       // which had better be updated or there are refresh problems
-      assert(listing1 !== listing2, "updated listing was unchanged")
+      assert(listing1 !== listing2, s"updated listing was unchanged from $provider")
       // get the updated value and expect it to be complete
       assertAppCompleted(lookupApplication(listing2, expectedAppId1), s"app1 in L2 $listing2")
       assertAppCompleted(lookupApplication(listing2, expectedAppId1), s"app2 in L2 $listing2")
       provider.stop()
+    } catch {
+      case ex: Exception =>
+        executeFailureActions()
+        throw ex
     } finally {
       describe("teardown")
       if (history2 != null) {

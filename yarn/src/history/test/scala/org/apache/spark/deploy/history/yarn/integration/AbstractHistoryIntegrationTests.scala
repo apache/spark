@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.net.URL
 
+import scala.collection.mutable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL.Token
 import org.apache.hadoop.service.ServiceOperations
@@ -70,6 +72,9 @@ abstract class AbstractHistoryIntegrationTests
 
   protected val no_completed_applications = "No completed applications found!"
   protected val no_incomplete_applications = "No incomplete applications found!"
+
+  // a list of actions to fail with
+  protected var failureActions: mutable.MutableList[() => Unit] = mutable.MutableList()
 
   def applicationHistoryServer: ApplicationHistoryServer = {
     _applicationHistoryServer
@@ -137,6 +142,68 @@ abstract class AbstractHistoryIntegrationTests
   }
 
   /**
+   * Add an action to execute on failures (if the test runs it
+   * @param action action to execute
+   */
+  def addFailureAction(action: () => Unit) : Unit = {
+    failureActions += action
+  }
+
+  /**
+   * Execute all the failure actions in order.
+   */
+  def executeFailureActions(): Unit = {
+    if (failureActions.nonEmpty) {
+      logError("== Executing failure actions ==")
+    }
+    failureActions.foreach{ action =>
+      try {
+        action()
+      } catch {
+        case _ : Exception =>
+      }
+    }
+  }
+
+  /**
+   * Failure action to log history service details at INFO
+   */
+  def dumpYarnHistoryService(): Unit = {
+    if (historyService != null) {
+      logError(s"-- History Service --\n$historyService")
+    }
+  }
+
+  /**
+   * Curryable Failure action to dump provider state
+   * @param provider the provider
+   */
+  def dumpProviderState(provider: YarnHistoryProvider)(): Unit = {
+    logError(s"-- Provider --\n$provider")
+    val results = provider.getApplications
+    results.applications.foreach{
+    app =>
+      logError(s" $app")
+    }
+    results.failureCause.foreach{ e =>
+      logError("Failed", e)
+    }
+  }
+
+  /**
+   * Curryable Failure action to log all timeline entities
+   * @param provider the provider bonded to the endpoint
+   */
+  def dumpTimelineEntities(provider: YarnHistoryProvider)(): Unit = {
+    logError("-- Dumping timeline entities --")
+    val entities = provider.getTimelineQueryClient
+        .listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    entities.foreach{ e =>
+      logError(describeEntity(e))
+    }
+  }
+
+  /**
    * Create a SPNEGO-enabled URL Connector.
    * Picks up the hadoop configuration from `sc`, so the context
    * must be live/non-null
@@ -149,12 +216,11 @@ abstract class AbstractHistoryIntegrationTests
 
   /**
    * Create a SPNEGO-enabled URL Connector.
-   * @param hadoopConfiguration the configuratin to use
+   * @param hadoopConfiguration the configuration to use
    * @return a URL connector for issuing HTTP requests
    */
   def createUrlConnector(hadoopConfiguration: Configuration): SpnegoUrlConnector = {
-    SpnegoUrlConnector.newInstance(hadoopConfiguration,
-      new Token)
+    SpnegoUrlConnector.newInstance(hadoopConfiguration, new Token)
   }
 
   /**
@@ -264,6 +330,10 @@ abstract class AbstractHistoryIntegrationTests
       server.bind()
       describe(name)
       probe(webUI, provider)
+    } catch {
+      case ex: Exception =>
+        executeFailureActions()
+        throw ex
     } finally {
       describe("stopping history service")
       Utils.tryLogNonFatalError {
@@ -345,21 +415,6 @@ abstract class AbstractHistoryIntegrationTests
   }
 
   /**
-   * Get the provider UI with an assertion failure if none came back
-   * @param provider provider
-   * @param appId app ID
-   * @param attemptId optional attempt ID
-   * @return the provider UI retrieved
-   */
-  def getAppUI(provider: YarnHistoryProvider,
-      appId: String,
-      attemptId: Option[String]): SparkUI = {
-    val ui = provider.getAppUI(appId, attemptId)
-    assertSome(ui, s"Failed to retrieve App UI under ID $appId attempt $attemptId")
-    ui.get
-  }
-
-  /**
    * closing context generates an application stop
    */
   def stopContextAndFlushHistoryService(): Unit = {
@@ -414,22 +469,17 @@ abstract class AbstractHistoryIntegrationTests
   }
 
   /**
-   * Get the spark UI or fail
+   * Get the provider UI with an assertion failure if none came back
    * @param provider provider
-   * @param appId app id
-   * @param attemptIdOption optional attempt ID
-   * @return the UI
+   * @param appId app ID
+   * @param attemptId optional attempt ID
+   * @return the provider UI retrieved
    */
-  def fetchSparkUI(provider: YarnHistoryProvider, appId: String,
-      attemptIdOption: Option[String]): SparkUI = {
-    val appUIwrapper = provider.getAppUI(appId, attemptIdOption)
-    val ui = appUIwrapper match {
-      case Some(yarnAppUI) =>
-        yarnAppUI
-      // success
-      case None => fail(s"Did not get a UI for $appId/$attemptIdOption")
-    }
-    ui
+  def getAppUI(provider: YarnHistoryProvider,
+      appId: String,
+      attemptId: Option[String]): SparkUI = {
+    val ui = provider.getAppUI(appId, attemptId)
+    assertSome(ui, s"Failed to retrieve App UI under ID $appId attempt $attemptId from $provider")
+    ui.get
   }
-
 }
