@@ -389,7 +389,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testTypeEncoder() {
+  public void testPrimitiveEncoder() {
     Encoder<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> encoder =
       Encoders.tuple(Encoders.DOUBLE(), Encoders.DECIMAL(), Encoders.DATE(), Encoders.TIMESTAMP(),
         Encoders.FLOAT());
