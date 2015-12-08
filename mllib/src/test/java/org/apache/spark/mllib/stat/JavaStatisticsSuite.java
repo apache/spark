@@ -18,17 +18,17 @@
 package org.apache.spark.mllib.stat;
 
 import java.io.Serializable;
-
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.apache.spark.streaming.JavaTestUtils.*;
 import static org.junit.Assert.assertEquals;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -41,9 +41,6 @@ import org.apache.spark.mllib.stat.test.StreamingTest;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import static org.apache.spark.streaming.JavaTestUtils.attachTestInputStream;
-import static org.apache.spark.streaming.JavaTestUtils.attachTestOutputStream;
-import static org.apache.spark.streaming.JavaTestUtils.runStreams;
 
 public class JavaStatisticsSuite implements Serializable {
   private transient JavaSparkContext sc;
