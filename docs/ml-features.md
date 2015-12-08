@@ -1018,7 +1018,6 @@ val indexed = indexer.transform(df)
 val converter = new IndexToString()
   .setInputCol("categoryIndex")
   .setOutputCol("originalCategory")
-  .setLabels(indexer.labels)
 val converted = converter.transform(indexed)
 converted.select("id", "originalCategory").show()
 {% endhighlight %}
@@ -1065,8 +1064,7 @@ DataFrame indexed = indexer.transform(df);
 
 IndexToString converter = new IndexToString()
   .setInputCol("categoryIndex")
-  .setOutputCol("originalCategory")
-  .setLabels(indexer.labels());
+  .setOutputCol("originalCategory");
 DataFrame converted = converter.transform(indexed);
 converted.select("id", "originalCategory").show();
 {% endhighlight %}
@@ -1092,7 +1090,7 @@ df = sqlContext.createDataFrame([
 stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
 model = stringIndexer.fit(df)
 indexed = model.transform(df)
-converter = IndexToString(inputCol="categoryIndex", outputCol="originalCategory", labels=model.labels())
+converter = IndexToString(inputCol="categoryIndex", outputCol="originalCategory")
 converted = converter.transform(indexed)
 converted.select("id", "originalCategory").show()
 {% endhighlight %}
