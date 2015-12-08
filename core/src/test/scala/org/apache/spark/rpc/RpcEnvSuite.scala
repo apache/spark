@@ -750,6 +750,13 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
     val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
 
+    // Try registering directories with invalid names.
+    Seq("/files", "/jars").foreach { uri =>
+      intercept[IllegalArgumentException] {
+        env.fileServer.addDirectory(uri, dir1)
+      }
+    }
+
     val destDir = Utils.createTempDir()
     val sm = new SecurityManager(conf)
     val hc = SparkHadoopUtil.get.conf

@@ -25,6 +25,15 @@ import org.apache.spark.rpc.RpcEnvFileServer
 
 /**
  * StreamManager implementation for serving files from a NettyRpcEnv.
+ *
+ * Three kinds of resources can be registered in this manager, all backed by actual files:
+ *
+ * - "/files": a flat list of files; used as the backend for [[SparkContext.addFile]].
+ * - "/jars": a flat list of files; used as the backend for [[SparkContext.addJar]].
+ * - arbitrary directories; all files under the directory become available through the manager,
+ *   respecting the directory's hierarchy.
+ *
+ * Only streaming (openStream) is supported.
  */
 private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
   extends StreamManager with RpcEnvFileServer {
@@ -42,7 +51,7 @@ private[netty] class NettyStreamManager(rpcEnv: NettyRpcEnv)
     val file = ftype match {
       case "files" => files.get(fname)
       case "jars" => jars.get(fname)
-      case  other =>
+      case other =>
         val dir = dirs.get(ftype)
         require(dir != null, s"Invalid stream URI: $ftype not found.")
         new File(dir, fname)

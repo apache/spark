@@ -54,7 +54,7 @@ class ExecutorClassLoader(
   private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
 
   private val fetchFn: (String) => InputStream = uri.getScheme() match {
-    case "spark" => getClassFileInputStreamFromSpark
+    case "spark" => getClassFileInputStreamFromSparkRPC
     case "http" | "https" | "ftp" => getClassFileInputStreamFromHttpServer
     case _ =>
       val fileSystem = FileSystem.get(uri, SparkHadoopUtil.get.newConfiguration(conf))
@@ -94,7 +94,7 @@ class ExecutorClassLoader(
     }
   }
 
-  private def getClassFileInputStreamFromSpark(path: String): InputStream = {
+  private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
     val channel = env.rpcEnv.openChannel(s"$classUri/$path")
     Channels.newInputStream(channel)
   }
