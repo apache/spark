@@ -39,7 +39,7 @@ import org.apache.spark.Logging
  * @param lock a [[MemoryManager]] instance to synchronize on
  * @param poolName a human-readable name for this pool, for use in log messages
  */
-class ExecutionMemoryPool(
+private[memory] class ExecutionMemoryPool(
     lock: Object,
     poolName: String
   ) extends MemoryPool(lock) with Logging {

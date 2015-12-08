@@ -49,7 +49,7 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
     val maxMemory: Long,
-    private val storageRegionSize: Long,
+    storageRegionSize: Long,
     numCores: Int)
   extends MemoryManager(
     conf,
