@@ -195,12 +195,12 @@ class KafkaDirectReceiver[
       s"Beginning offset ${fromOffset} is after the ending offset ${untilOffset} " +
         s"for topic ${part.topic} partition ${part.partition}. " +
         "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
-    
+
     private def errRanOutBeforeEnd(): String =
       s"Ran out of messages before reaching ending offset ${untilOffset} " +
       s"for topic ${part.topic} partition ${part.partition} start ${fromOffset}." +
       " This should not happen, and indicates that messages may have been lost"
-    
+
     private def errOvershotEnd(itemOffset: Long): String =
       s"Got ${itemOffset} > ending offset ${untilOffset} " +
       s"for topic ${part.topic} partition ${part.partition} start ${fromOffset}." +
@@ -247,7 +247,7 @@ class KafkaDirectReceiver[
         }
       }
     }
-  } 
+  }
 
   // Handles Kafka messages
   private class MessageHandler(partition: TopicAndPartition, fromOffset: Long)
