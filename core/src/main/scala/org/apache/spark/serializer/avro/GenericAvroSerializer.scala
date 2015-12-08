@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.serializer
+package org.apache.spark.serializer.avro
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
-import scala.collection.mutable
-
-import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import org.apache.avro.{Schema, SchemaNormalization}
+import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
+import org.apache.avro.Schema.Parser
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
+import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.commons.io.IOUtils
-
-import org.apache.spark.{SparkException, SparkEnv}
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.{SparkEnv, SparkException}
+
+import scala.collection.mutable
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -42,7 +42,8 @@ import org.apache.spark.io.CompressionCodec
  *                string representation of the Avro schema, used to decrease the amount of data
  *                that needs to be serialized.
  */
-private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
+private[serializer] class GenericAvroSerializer(schemas: Map[Long, String],
+                                                schemaRepo: SchemaRepo = EmptySchemaRepo)
   extends KSerializer[GenericRecord] {
 
   /** Used to reduce the amount of effort to compress the schema */
@@ -93,19 +94,8 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   def serializeDatum[R <: GenericRecord](datum: R, output: KryoOutput): Unit = {
     val encoder = EncoderFactory.get.binaryEncoder(output, null)
     val schema = datum.getSchema
-    val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
-      SchemaNormalization.parsingFingerprint64(schema)
-    })
-    schemas.get(fingerprint) match {
-      case Some(_) =>
-        output.writeBoolean(true)
-        output.writeLong(fingerprint)
-      case None =>
-        output.writeBoolean(false)
-        val compressedSchema = compress(schema)
-        output.writeInt(compressedSchema.length)
-        output.writeBytes(compressedSchema)
-    }
+
+    serializeSchema(datum, schema, output)
 
     writerCache.getOrElseUpdate(schema, GenericData.get.createDatumWriter(schema))
       .asInstanceOf[DatumWriter[R]]
@@ -118,17 +108,76 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    * state to keep a cache of already seen schemas and datum readers.
    */
   def deserializeDatum(input: KryoInput): GenericRecord = {
+    val schema: Schema = deserializeSchema(input)
+
+    val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
+    readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
+      .asInstanceOf[DatumReader[GenericRecord]]
+      .read(null, decoder)
+  }
+
+
+  /**
+   * Serialize schema
+   * Step 1: Calculate the schema's finger print using Avro's SchemaNormilization mechanism.
+   * Step 2: Use fingerprint to look for the schema in the pre-registered schemas, if found serialize the fingerprint, else step 3
+   * Step 3: Use SchemaRepo to find the schemaId of record, if found serialize the schemaId as fingerprint, else step 4
+   * Step 4: Serialize the entire schema with indicator of this behavior.
+   * @param datum - datum to extract id from
+   * @param schema - schema to serialize
+   * @param output - kryo output
+   */
+  private def serializeSchema[R <: GenericRecord](datum: R, schema: Schema, output: KryoOutput) = {
+    val fingerprint = fingerprintCache.getOrElseUpdate(schema, {
+      SchemaNormalization.parsingFingerprint64(schema)
+    })
+    schemas.get(fingerprint) match {
+      case Some(_) =>
+        output.writeBoolean(true)
+        output.writeLong(fingerprint)
+      case None =>
+        schemaRepo.extractSchemaId(datum) match {
+          case Some(schemaId) if schemaRepo.contains(schemaId) =>
+            output.writeBoolean(true)
+            output.writeLong(schemaId)
+          case _ =>
+            output.writeBoolean(false)
+            val compressedSchema = compress(schema)
+            output.writeInt(compressedSchema.length)
+            output.writeBytes(compressedSchema)
+        }
+    }
+  }
+
+
+  /**
+   * Deserialize schema
+   * If the indicator boolean of finger using is false:
+   * 1: Deserialize the schema itself from bytes.
+   * If the indicator boolean of fingerprint using is true:
+   * Step 1: Search for the schema in the explicitly registered schemas using the fingerprint. If schema was not found, move to step 2.
+   * Step 2: Search in the schema repository using the fingerprint. At that point if the schema was not found - throw exception.
+   * @param input KryoInput
+   * @return the deserialized schema
+   */
+  private def deserializeSchema(input: KryoInput): Schema = {
     val schema = {
       if (input.readBoolean()) {
         val fingerprint = input.readLong()
         schemaCache.getOrElseUpdate(fingerprint, {
           schemas.get(fingerprint) match {
-            case Some(s) => new Schema.Parser().parse(s)
+            case Some(s) => new Parser().parse(s)
             case None =>
-              throw new SparkException(
-                "Error reading attempting to read avro data -- encountered an unknown " +
-                  s"fingerprint: $fingerprint, not sure what schema to use.  This could happen " +
-                  "if you registered additional schemas after starting your spark context.")
+              schemaRepo.getSchema(fingerprint) match {
+                case Some(res_schema) => res_schema
+                case None =>
+                  throw new SparkException(
+                    s"""Error reading attempting to read avro data --
+                       |encountered an unknown fingerprint: $fingerprint, not sure what schema to use.
+                       |This could happen if you registered additional schemas after starting your
+                       |spark context.""".stripMargin)
+              }
+
           }
         })
       } else {
@@ -136,10 +185,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
         decompress(ByteBuffer.wrap(input.readBytes(length)))
       }
     }
-    val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
-    readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
-      .asInstanceOf[DatumReader[GenericRecord]]
-      .read(null, decoder)
+    schema
   }
 
   override def write(kryo: Kryo, output: KryoOutput, datum: GenericRecord): Unit =

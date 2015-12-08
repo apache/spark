@@ -657,6 +657,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryo.avro.schema.repo</code></td>
+  <td>(none)</td>
+  <td>
+    If you use Kryo serialization and Avro's GenericRecords, give a schema repository class implementation to improve shuffle performance. This
+    property is useful if you need to serialize GenericRecord and/or GenericData objects and don't know their schema ahead of time.
+    Otherwise <code>SparkConf.registerAvroSchemas</code> is simpler. It should be
+    set to classes that extend org.apache.spark.serializer.avro.SchemaRepo
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryoserializer.buffer.max</code></td>
   <td>64m</td>
   <td>
