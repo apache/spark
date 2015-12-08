@@ -549,6 +549,48 @@ object KafkaUtils {
       Set(topics.asScala.toSeq: _*)
     )
   }
+
+  /**
+   * Create an input stream that directly pulls messages from Kafka Brokers
+   * using any receiver. This stream can guarantee that each message
+   * from Kafka is included in transformations exactly once (see points below).
+   *
+   * Points to note:
+   *  - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+   *    by the stream itself. For interoperability with Kafka monitoring tools that depend on
+   *    Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application.
+   *    You can access the offsets used in each batch from the generated RDDs (see
+   *    [[org.apache.spark.streaming.kafka.HasOffsetRanges]]).
+   *  - End-to-end semantics: This stream ensures that every records is effectively received and
+   *    transformed exactly once, but gives no guarantees on whether the transformed data are
+   *    outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+   *    that the output operation is idempotent, or use transactions to output records atomically.
+   *    See the programming guide for more details.
+   *
+   * @param ssc StreamingContext object
+   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+   *   configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers"
+   *   to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+   *   host1:port1,host2:port2 form.
+   *   If not starting from a checkpoint, "auto.offset.reset" may be set to "largest" or "smallest"
+   *   to determine where the stream starts (defaults to "largest")
+   * @param topics Names of the topics to consume
+   */
+  def createDirectReceiverStream[
+    K: ClassTag,
+    V: ClassTag,
+    KD <: Decoder[K]: ClassTag,
+    VD <: Decoder[V]: ClassTag] (
+      ssc: StreamingContext,
+      kafkaParams: Map[String, String],
+      topics: Set[String],
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+  ): ReceiverInputDStream[(K, V)] = {
+    val kc = new KafkaCluster(kafkaParams)
+    val fromOffsets = getFromOffsets(kc, kafkaParams, topics)
+    new KafkaDirectInputDStream[K, V, KD, VD](
+      ssc, kafkaParams, fromOffsets, storageLevel)
+  }
 }
 
 /**
