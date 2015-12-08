@@ -231,9 +231,16 @@ object SparkS3Util extends Logging {
    * Find S3 block size from Hadoop conf. Try both s3 and s3n names.
    */
   private def getS3BlockSize(): Long = {
+    val minS3BlockSize = 10485760; // 10mb
+    val defaultS3BlockSize = 67108864; // 64mb
     val value = Option(conf.get("fs.s3.block.size"))
-      .getOrElse(conf.get("fs.s3n.block.size", "67108864"))
-    value.toLong
+      .getOrElse(conf.get("fs.s3n.block.size", defaultS3BlockSize.toString)).toLong
+    if (value < minS3BlockSize) {
+      logWarning("S3 block size is set too small: " + value + ". Overriding it to 10mb.");
+      minS3BlockSize
+    } else {
+      value
+    }
   }
 
   /**
