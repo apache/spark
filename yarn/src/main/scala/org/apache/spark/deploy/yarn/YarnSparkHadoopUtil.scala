@@ -33,7 +33,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.{Master, JobConf}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -216,6 +216,55 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       None
     }
   }
+
+  /**
+   * Obtain a security token for HBase.
+   *
+   * Requirements
+   *
+   * 1. `"hbase.security.authentication" == "kerberos"`
+   * 2. The HBase classes `HBaseConfiguration` and `TokenUtil` could be loaded
+   * and invoked.
+   *
+   * @param conf Hadoop configuration; an HBase configuration is created
+   *             from this.
+   * @return a token if the requirements were met, `None` if not.
+   */
+  def obtainTokenForHBase(conf: Configuration): Option[Token[TokenIdentifier]] = {
+    try {
+      obtainTokenForHBaseInner(conf)
+    } catch {
+      case e: ClassNotFoundException =>
+        logInfo(s"HBase class not found $e")
+        logDebug("HBase class not found", e)
+        None
+    }
+  }
+
+  /**
+   * Obtain a security token for HBase if `"hbase.security.authentication" == "kerberos"`
+   *
+   * @param conf Hadoop configuration; an HBase configuration is created
+   *             from this.
+   * @return a token if one was needed
+   */
+  def obtainTokenForHBaseInner(conf: Configuration): Option[Token[TokenIdentifier]] = {
+    val mirror = universe.runtimeMirror(getClass.getClassLoader)
+    val confCreate = mirror.classLoader.
+      loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
+      getMethod("create", classOf[Configuration])
+    val obtainToken = mirror.classLoader.
+      loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
+      getMethod("obtainToken", classOf[Configuration])
+    val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
+    if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
+      logDebug("Attempting to fetch HBase security token.")
+      Some(obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]])
+    } else {
+      None
+    }
+  }
+
 }
 
 object YarnSparkHadoopUtil {
