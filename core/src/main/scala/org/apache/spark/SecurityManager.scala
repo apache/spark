@@ -244,16 +244,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
-  // SSL configuration for different communication layers - they can override the default
-  // configuration at a specified namespace. The namespace *must* start with spark.ssl.
-  val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
-  val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
-  val webUISSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.ui", Some(defaultSSLOptions))
-
-  logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
-  logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
-  logDebug(s"SSLConfiguration for web UI: $webUISSLOptions")
-
+  // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
+  val fileServerSSLOptions = createSSLOptions("fs")
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- fileServerSSLOptions.trustStore) yield {
@@ -292,6 +284,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     (Some(sslContext.getSocketFactory), Some(hostVerifier))
   } else {
     (None, None)
+  }
+
+  def createSSLOptions(module: String): SSLOptions = {
+    val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
+    logDebug(s"Created SSL options for $module: $opts")
+    opts
   }
 
   /**

@@ -39,11 +39,11 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * @param keyStore            a path to the key-store file
  * @param keyStorePassword    a password to access the key-store file
  * @param keyPassword         a password to access the private key in the key-store
- * @param keyStoreType         the type of the key-store
+ * @param keyStoreType        the type of the key-store
  * @param needClientAuth      set true if SSL needs client authentication
  * @param trustStore          a path to the trust-store file
  * @param trustStorePassword  a password to access the trust-store file
- * @param trustStoreType     the type of the trust-store
+ * @param trustStoreType      the type of the trust-store
  * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
  * @param enabledAlgorithms   a set of encryption algorithms that may be used
  */
@@ -78,10 +78,9 @@ private[spark] case class SSLOptions(
         trustStoreType.foreach(sslContextFactory.setTrustStoreType)
       }
       protocol.foreach(sslContextFactory.setProtocol)
-      if (enabledAlgorithms.nonEmpty) {
-        sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
+      if (supportedAlgorithms.nonEmpty) {
+        sslContextFactory.setIncludeCipherSuites(supportedAlgorithms.toSeq: _*)
       }
-      sslContextFactory.setIncludeCipherSuites(supportedAlgorithms.toSeq: _*)
 
       Some(sslContextFactory)
     } else {

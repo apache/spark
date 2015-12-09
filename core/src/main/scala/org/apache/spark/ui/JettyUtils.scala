@@ -228,7 +228,7 @@ private[spark] object JettyUtils extends Logging {
   def startJettyServer(
       hostName: String,
       port: Int,
-      securityManager: SecurityManager,
+      sslOptions: SSLOptions,
       handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
@@ -251,10 +251,14 @@ private[spark] object JettyUtils extends Logging {
       httpConnector.setPort(currentPort)
       connectors += httpConnector
 
-      val sslContextFactory = securityManager.webUISSLOptions.createJettySslContextFactory()
-      sslContextFactory.foreach { factory =>
-        // If the new port wraps around, do not try a privilege port
-        val securePort = (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+      sslOptions.createJettySslContextFactory().foreach { factory =>
+        // If the new port wraps around, do not try a privileged port.
+        val securePort =
+          if (currentPort != 0) {
+            (currentPort + 400 - 1024) % (65536 - 1024) + 1024
+          } else {
+            0
+          }
         val scheme = "https"
         // Create a connector on port securePort to listen for HTTPS requests
         val connector = new SslSelectChannelConnector(factory)

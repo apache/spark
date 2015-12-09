@@ -50,7 +50,8 @@ private[spark] class SparkUI private (
     var appName: String,
     val basePath: String,
     val startTime: Long)
-  extends WebUI(securityManager, SparkUI.getUIPort(conf), conf, basePath, "SparkUI")
+  extends WebUI(securityManager, securityManager.createSSLOptions("ui"), SparkUI.getUIPort(conf),
+    conf, basePath, "SparkUI")
   with Logging
   with UIRoot {
 

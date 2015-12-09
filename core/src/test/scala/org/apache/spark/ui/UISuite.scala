@@ -26,8 +26,8 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 
 class UISuite extends SparkFunSuite {
 
@@ -43,6 +43,20 @@ class UISuite extends SparkFunSuite {
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
+  }
+
+  private def sslDisabledConf(): (SparkConf, SSLOptions) = {
+    val conf = new SparkConf
+    (conf, new SecurityManager(conf).createSSLOptions("ui"))
+  }
+
+  private def sslEnabledConf(): (SparkConf, SSLOptions) = {
+    val conf = new SparkConf()
+      .set("spark.ssl.ui.enabled", "true")
+      .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
+      .set("spark.ssl.ui.keyStorePassword", "123456")
+      .set("spark.ssl.ui.keyPassword", "123456")
+    (conf, new SecurityManager(conf).createSSLOptions("ui"))
   }
 
   ignore("basic ui visibility") {
@@ -73,15 +87,14 @@ class UISuite extends SparkFunSuite {
     var server: ServerSocket = null
     var serverInfo1: ServerInfo = null
     var serverInfo2: ServerInfo = null
-    val conf = new SparkConf
-    val securityManager = new SecurityManager(conf)
+    val (conf, sslOptions) = sslDisabledConf()
     try {
       server = new ServerSocket(0)
       val startPort = server.getLocalPort
       serverInfo1 = JettyUtils.startJettyServer(
-        "0.0.0.0", startPort, securityManager, Seq[ServletContextHandler](), conf)
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf)
       serverInfo2 = JettyUtils.startJettyServer(
-        "0.0.0.0", startPort, securityManager, Seq[ServletContextHandler](), conf)
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf)
       // Allow some wiggle room in case ports on the machine are under contention
       val boundPort1 = serverInfo1.boundPort
       val boundPort2 = serverInfo2.boundPort
@@ -89,9 +102,9 @@ class UISuite extends SparkFunSuite {
       assert(boundPort2 != startPort)
       assert(boundPort1 != boundPort2)
     } finally {
-      UISuite.stopServer(serverInfo1.server)
-      UISuite.stopServer(serverInfo2.server)
-      UISuite.closeSocket(server)
+      stopServer(serverInfo1)
+      stopServer(serverInfo2)
+      closeSocket(server)
     }
   }
 
@@ -102,17 +115,11 @@ class UISuite extends SparkFunSuite {
     try {
       server = new ServerSocket(0)
       val startPort = server.getLocalPort
-
-      val sparkConf = new SparkConf()
-        .set("spark.ssl.ui.enabled", "true")
-        .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
-        .set("spark.ssl.ui.keyStorePassword", "123456")
-        .set("spark.ssl.ui.keyPassword", "123456")
-      val securityManager = new SecurityManager(sparkConf)
+      val (conf, sslOptions) = sslEnabledConf()
       serverInfo1 = JettyUtils.startJettyServer(
-        "0.0.0.0", startPort, securityManager, Seq[ServletContextHandler](), sparkConf, "server1")
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf, "server1")
       serverInfo2 = JettyUtils.startJettyServer(
-        "0.0.0.0", startPort, securityManager, Seq[ServletContextHandler](), sparkConf, "server2")
+        "0.0.0.0", startPort, sslOptions, Seq[ServletContextHandler](), conf, "server2")
       // Allow some wiggle room in case ports on the machine are under contention
       val boundPort1 = serverInfo1.boundPort
       val boundPort2 = serverInfo2.boundPort
@@ -120,20 +127,19 @@ class UISuite extends SparkFunSuite {
       assert(boundPort2 != startPort)
       assert(boundPort1 != boundPort2)
     } finally {
-      UISuite.stopServer(serverInfo1.server)
-      UISuite.stopServer(serverInfo2.server)
-      UISuite.closeSocket(server)
+      stopServer(serverInfo1)
+      stopServer(serverInfo2)
+      closeSocket(server)
     }
   }
 
   test("jetty binds to port 0 correctly") {
     var socket: ServerSocket = null
     var serverInfo: ServerInfo = null
-    val conf = new SparkConf
-    val securityManager = new SecurityManager(conf)
+    val (conf, sslOptions) = sslDisabledConf()
     try {
       serverInfo = JettyUtils.startJettyServer(
-        "0.0.0.0", 0, securityManager, Seq[ServletContextHandler](), conf)
+        "0.0.0.0", 0, sslOptions, Seq[ServletContextHandler](), conf)
       val server = serverInfo.server
       val boundPort = serverInfo.boundPort
       assert(server.getState === "STARTED")
@@ -142,8 +148,8 @@ class UISuite extends SparkFunSuite {
         socket = new ServerSocket(boundPort)
       }
     } finally {
-      UISuite.stopServer(serverInfo.server)
-      UISuite.closeSocket(socket)
+      stopServer(serverInfo)
+      closeSocket(socket)
     }
   }
 
@@ -151,14 +157,9 @@ class UISuite extends SparkFunSuite {
     var socket: ServerSocket = null
     var serverInfo: ServerInfo = null
     try {
-      val sparkConf = new SparkConf()
-        .set("spark.ssl.ui.enabled", "false")
-        .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
-        .set("spark.ssl.ui.keyStorePassword", "123456")
-        .set("spark.ssl.ui.keyPassword", "123456")
-      val securityManager = new SecurityManager(sparkConf)
+      val (conf, sslOptions) = sslEnabledConf()
       serverInfo = JettyUtils.startJettyServer(
-        "0.0.0.0", 0, securityManager, Seq[ServletContextHandler](), sparkConf)
+        "0.0.0.0", 0, sslOptions, Seq[ServletContextHandler](), conf)
       val server = serverInfo.server
       val boundPort = serverInfo.boundPort
       assert(server.getState === "STARTED")
@@ -167,8 +168,8 @@ class UISuite extends SparkFunSuite {
         socket = new ServerSocket(boundPort)
       }
     } finally {
-      UISuite.stopServer(serverInfo.server)
-      UISuite.closeSocket(socket)
+      stopServer(serverInfo)
+      closeSocket(socket)
     }
   }
 
@@ -189,11 +190,9 @@ class UISuite extends SparkFunSuite {
       assert(splitUIAddress(2).toInt == boundPort)
     }
   }
-}
 
-object UISuite {
-  def stopServer(server: Server): Unit = {
-    if (server != null) server.stop
+  def stopServer(info: ServerInfo): Unit = {
+    if (info != null && info.server != null) info.server.stop
   }
 
   def closeSocket(socket: ServerSocket): Unit = {

@@ -186,7 +186,7 @@ private[deploy] class Worker(
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
-    workerWebUiUrl = "http://" + publicAddress + ":" + webUi.boundPort
+    workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)

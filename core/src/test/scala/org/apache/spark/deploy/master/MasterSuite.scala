@@ -90,8 +90,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
       cores = 0,
       memory = 0,
       endpoint = null,
-      webUiPort = 0,
-      publicAddress = ""
+      webUiAddress = "http://localhost:80"
     )
 
     val (rpcEnv, _, _) =
@@ -376,7 +375,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
 
   private def makeWorkerInfo(memoryMb: Int, cores: Int): WorkerInfo = {
     val workerId = System.currentTimeMillis.toString
-    new WorkerInfo(workerId, "host", 100, cores, memoryMb, null, 101, "address")
+    new WorkerInfo(workerId, "host", 100, cores, memoryMb, null, "http://localhost:80")
   }
 
   private def scheduleExecutorsOnWorkers(

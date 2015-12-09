@@ -27,8 +27,8 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP protocols. SASL encryption is
-supported for the block transfer service. Encryption is not yet supported for the WebUI.
+Spark supports SSL for Akka and HTTP protocols. SASL encryption is supported for the block transfer
+service.
 
 Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
 files, cached data, and other application files. If encrypting this data is desired, a workaround is
@@ -40,11 +40,37 @@ Configuration for SSL is organized hierarchically. The user can configure the de
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
 protocols without disabling the ability to configure each one individually. The common SSL settings
-are at `spark.ssl` namespace in Spark configuration, while Akka SSL configuration is at
-`spark.ssl.akka`, HTTP for broadcast and file server SSL configuration is at `spark.ssl.fs`,
-and HTTP for web UI configuration is at `spark.ssl.ui`. The full breakdown can be found on the
-[configuration page](configuration.html).
+are at `spark.ssl` namespace in Spark configuration. The following table describes the
+component-specific configuration namespaces used to override the default settings:
 
+<table class="table">
+  <tr>
+    <th>Config Namespace</th>
+    <th>Component</th>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.akka</code></td>
+    <td>Akka communication channels</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.fs</code></td>
+    <td>HTTP file server and broadcast server</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.ui</code></td>
+    <td>Spark application Web UI</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.standalone</code></td>
+    <td>Standalone Master / Worker Web UI</td>
+  </tr>
+  <tr>
+    <td><code>spark.ssl.historyServer</code></td>
+    <td>History Server Web UI</td>
+  </tr>
+</table>
+
+The full breakdown of available SSL options  can be found on the [configuration page](configuration.html).
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
 ### YARN mode

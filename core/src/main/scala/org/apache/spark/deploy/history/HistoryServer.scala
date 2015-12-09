@@ -48,7 +48,8 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+  extends WebUI(securityManager, securityManager.createSSLOptions("historyServer"), port, conf)
+  with Logging with UIRoot {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
@@ -220,7 +221,7 @@ object HistoryServer extends Logging {
 
   val UI_PATH_PREFIX = "/history"
 
-  def main(argStrings: Array[String]) {
+  def main(argStrings: Array[String]): Unit = try {
     SignalLogger.register(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
@@ -242,6 +243,8 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+  } catch {
+    case e: Throwable => e.printStackTrace()
   }
 
   def initSecurity() {
