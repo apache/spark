@@ -53,14 +53,11 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
 
   private val shutdownHook = addShutdownHook()
 
-  /** Looks up a file by hashing it into one of our local subdirectories. */
-  // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
-  def getFile(filename: String): File = {
+  private def _getFile(filename: String, storageDirs: Array[File]): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
-    val dirId = hash % localDirs.length
-    val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
+    val dirId = localDirs.indexOf(storageDirs(hash % storageDirs.length))
+    val subDirId = (hash / storageDirs.length) % subDirsPerLocalDir
 
     // Create the subdirectory if it doesn't already exist
     val subDir = subDirs(dirId).synchronized {
@@ -78,6 +75,65 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     }
 
     new File(subDir, filename)
+  }
+
+  def getFileDefault(filename: String): File = {
+    _getFile(filename, localDirs)
+  }
+  var getFile = getFileDefault _
+
+  private val hierarchyStore = conf.getOption("spark.storage.hierarchyStore")
+  if (hierarchyStore.isDefined) {
+    val HSLayers: Array[(String, Long)] =
+      hierarchyStore.get.trim.split(",").map {
+        s => val x = s.trim.split(" +")
+          (x(0), Utils.byteStringAsGb(x(1)))
+      }
+    val HSLayerDirs: Array[Array[File]] = HSLayers.map(
+      s => localDirs.filter(_.getPath().toLowerCase().containsSlice(s._1))
+    )
+    val lastLayer = localDirs.filter {
+      dir => var found = false
+        for(dirs <- HSLayerDirs if !found)
+          if (dirs.contains(dir)) found = true
+        !found
+    }
+    val (finalHSLayers, finalHSLayerDirs) = if (!lastLayer.isEmpty) {
+      (HSLayers :+ ("Backup Storage", 0.toLong), HSLayerDirs :+ lastLayer)
+    } else {
+      val len = HSLayers.length
+      (HSLayers.take(len-1) :+ (HSLayers(len-1)._1, -1.toLong), HSLayerDirs)
+    }
+    for (i <- 0 until finalHSLayers.length) {
+      val s = finalHSLayers(i)
+      logInfo("Layer: %s, Threshold: %dGB".format(s._1, s._2))
+      finalHSLayerDirs(i).foreach {
+        x => logInfo("\t%s".format(x.getPath()))
+      }
+    }
+
+    def getFileHierarchy(filename: String): File = {
+      // serach existing file in each layer
+      var candidateFiles = new scala.collection.immutable.HashMap[Int, File]
+      for ((dirs, i) <- finalHSLayerDirs.zipWithIndex if !dirs.isEmpty) {
+        val file = _getFile(filename, dirs)
+        if (file.exists())
+          return file
+        candidateFiles += (i -> file)
+      }
+
+      // if not found, return file from the upper layer with enough usable space 
+      for ((dirs, i) <- finalHSLayerDirs.zipWithIndex if !dirs.isEmpty) {
+        val dir = dirs(Utils.nonNegativeHash(filename) % dirs.length)
+        val usableSpace = dir.getUsableSpace() >> 30
+        if (usableSpace >= finalHSLayers(i)._2)
+          return candidateFiles(i)
+      }
+
+      null
+    }
+
+    getFile = getFileHierarchy
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
