@@ -50,4 +50,3 @@ object ElementwiseProductExample {
   }
 }
 // scalastyle:on println
-

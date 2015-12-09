@@ -49,5 +49,3 @@ object PolynomialExpansionExample {
   }
 }
 // scalastyle:on println
-
-

@@ -56,4 +56,3 @@ object OneHotEncoderExample {
   }
 }
 // scalastyle:on println
-
