@@ -135,6 +135,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   protected def assertEvictBlocksToFreeSpaceNotCalled[T](ms: MemoryStore): Unit = {
     assert(evictBlocksToFreeSpaceCalled.get() === DEFAULT_EVICT_BLOCKS_TO_FREE_SPACE_CALLED,
       "evictBlocksToFreeSpace() should not have been called!")
+    assert(evictedBlocks.isEmpty)
   }
 
   /**

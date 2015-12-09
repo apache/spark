@@ -98,6 +98,8 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 1000L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEvictBlocksToFreeSpaceCalled(ms, 1L)
+    assert(evictedBlocks.nonEmpty)
+    evictedBlocks.clear()
     // Note: We evicted 1 byte to put another 1-byte block in, so the storage memory used remains at
     // 1000 bytes. This is different from real behavior, where the 1-byte block would have evicted
     // the 1000-byte block entirely. This is set up differently so we can write finer-grained tests.
@@ -164,6 +166,8 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     // Since we already occupy 60 bytes, we will try to evict only 400 - 60 = 340 bytes.
     assert(!mm.acquireUnrollMemory(dummyBlock, 800L, evictedBlocks))
     assertEvictBlocksToFreeSpaceCalled(ms, 340L)
+    assert(evictedBlocks.nonEmpty)
+    evictedBlocks.clear()
     assert(mm.storageMemoryUsed === 520L)
     // Acquire more unroll memory to exceed our "max unroll space"
     assert(mm.acquireUnrollMemory(dummyBlock, 440L, evictedBlocks))

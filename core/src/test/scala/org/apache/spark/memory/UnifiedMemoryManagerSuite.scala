@@ -81,12 +81,10 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireStorageMemory(dummyBlock, 100L, evictedBlocks))
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
-    assert(evictedBlocks.isEmpty)
     // Acquire more than the max, not granted
     assert(!mm.acquireStorageMemory(dummyBlock, maxMemory + 1L, evictedBlocks))
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 110L)
-    assert(evictedBlocks.isEmpty)
     // Acquire up to the max, requests after this are still granted due to LRU eviction
     assert(mm.acquireStorageMemory(dummyBlock, maxMemory, evictedBlocks))
     assertEvictBlocksToFreeSpaceCalled(ms, 110L)
@@ -95,6 +93,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     evictedBlocks.clear()
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEvictBlocksToFreeSpaceCalled(ms, 1L)
+    assert(evictedBlocks.nonEmpty)
+    evictedBlocks.clear()
     // Note: We evicted 1 byte to put another 1-byte block in, so the storage memory used remains at
     // 1000 bytes. This is different from real behavior, where the 1-byte block would have evicted
     // the 1000-byte block entirely. This is set up differently so we can write finer-grained tests.
@@ -124,21 +124,19 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.executionMemoryUsed === 0L)
     assert(mm.storageMemoryUsed === 750L)
-    assert(evictedBlocks.isEmpty)
     // Execution needs to request 250 bytes to evict storage memory
     assert(mm.acquireExecutionMemory(100L, taskAttemptId, MemoryMode.ON_HEAP) === 100L)
     assert(mm.executionMemoryUsed === 100L)
     assert(mm.storageMemoryUsed === 750L)
     assertEvictBlocksToFreeSpaceNotCalled(ms)
-    assert(evictedBlocks.isEmpty)
     // Execution wants 200 bytes but only 150 are free, so storage is evicted
     assert(mm.acquireExecutionMemory(200L, taskAttemptId, MemoryMode.ON_HEAP) === 200L)
     assert(mm.executionMemoryUsed === 300L)
     assert(mm.storageMemoryUsed === 700L)
     assertEvictBlocksToFreeSpaceCalled(ms, 50L)
     assert(evictedBlocks.nonEmpty)
-    mm.releaseAllStorageMemory()
     evictedBlocks.clear()
+    mm.releaseAllStorageMemory()
     require(mm.executionMemoryUsed === 300L)
     require(mm.storageMemoryUsed === 0, "bad test: all storage memory should have been released")
     // Acquire some storage memory again, but this time keep it within the storage region
@@ -152,7 +150,6 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.executionMemoryUsed === 600L)
     assert(mm.storageMemoryUsed === 400L)
     assertEvictBlocksToFreeSpaceNotCalled(ms)
-    assert(evictedBlocks.isEmpty)
   }
 
   test("execution memory requests smaller than free memory should evict storage (SPARK-12165)") {
