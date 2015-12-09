@@ -314,9 +314,7 @@ setMethod("checkpoint",
 setMethod("getNumPartitions",
           signature(x = "RDD"),
           function(x) {
-            jrdd <- getJRDD(x)
-            partitions <- callJMethod(jrdd, "partitions")
-            callJMethod(partitions, "size")
+            callJMethod(getJRDD(x), "getNumPartitions")
           })
 
 #' Gets the number of partitions of an RDD, the same as getNumPartitions.
