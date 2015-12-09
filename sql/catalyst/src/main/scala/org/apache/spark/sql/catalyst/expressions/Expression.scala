@@ -162,7 +162,7 @@ abstract class Expression extends TreeNode[Expression]{
 
   /**
    * Returns a sequence of expressions by removing from q the first expression that is semantically
-   * equivalent to e.
+   * equivalent to e. If such an expression was not found, return seq.
    */
   def removeFirstSemanticEquivalent(seq: Seq[Expression], e: Expression): Seq[Expression] = {
     seq match {
