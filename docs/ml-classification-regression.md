@@ -27,10 +27,10 @@ displayTitle: Classification and regression in spark.ml
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
-In MLlib, we implement popular linear methods such as logistic
+In `spark.ml`, we implement popular linear methods such as logistic
 regression and linear least squares with $L_1$ or $L_2$ regularization.
 Refer to [the linear methods in mllib](mllib-linear-methods.html) for
-details.  In `spark.ml`, we also include Pipelines API for [Elastic
+details about implementation and tuning.  We also include a Dataframe API for [Elastic
 net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
 of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
 and variable selection via the elastic
@@ -523,7 +523,7 @@ feature scaling, and are able to capture non-linearities and feature interaction
 algorithms such as random forests and boosting are among the top performers for classification and
 regression tasks.
 
-MLlib supports decision trees for binary and multiclass classification and for regression,
+The `spark.ml` implementation supports decision trees for binary and multiclass classification and for regression,
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions or even billions of instances.
 
@@ -611,24 +611,25 @@ All output columns are optional; to exclude an output column, set its correspond
 
 # Tree Ensembles
 
-The Pipelines API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
-Both use [MLlib decision trees](ml-decision-tree.html) as their base models.
+The Dataframe API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
+Both use [`spark.ml` decision trees](ml-classification-regression.html#decision-trees) as their base models.
 
-Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  In this section, we demonstrate the Pipelines API for ensembles.
+Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  
+In this section, we demonstrate the Dataframe API for ensembles.
 
 The main differences between this API and the [original MLlib ensembles API](mllib-ensembles.html) are:
 
-* support for ML Pipelines
+* support for Dataframes and ML Pipelines
 * separation of classification vs. regression
 * use of DataFrame metadata to distinguish continuous and categorical features
-* a bit more functionality for random forests: estimates of feature importance, as well as the predicted probability of each class (a.k.a. class conditional probabilities) for classification.
+* more functionality for random forests: estimates of feature importance, as well as the predicted probability of each class (a.k.a. class conditional probabilities) for classification.
 
 ## Random Forests
 
 [Random forests](http://en.wikipedia.org/wiki/Random_forest)
 are ensembles of [decision trees](ml-decision-tree.html).
 Random forests combine many decision trees in order to reduce the risk of overfitting.
-MLlib supports random forests for binary and multiclass classification and for regression,
+The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
 
 For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html).
@@ -709,7 +710,7 @@ All output columns are optional; to exclude an output column, set its correspond
 [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
 are ensembles of [decision trees](ml-decision-tree.html).
 GBTs iteratively train decision trees in order to minimize a loss function.
-MLlib supports GBTs for binary classification and for regression,
+The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
 
 For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html).
