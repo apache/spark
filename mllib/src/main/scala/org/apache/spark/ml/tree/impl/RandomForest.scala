@@ -847,55 +847,6 @@ private[ml] object RandomForest extends Logging {
       input.sparkContext.emptyRDD[LabeledPoint]
     }
 
-//    val splits = new Array[Array[Split]](numFeatures)
-//
-//    // Find all splits.
-//    // Iterate over all features.
-//    var featureIndex = 0
-//    while (featureIndex < numFeatures) {
-//      if (metadata.isContinuous(featureIndex)) {
-//        val featureSamples = sampledInput.map(_.features(featureIndex))
-//        val featureSplits = findSplitsForContinuousFeature(featureSamples.toArray, metadata, featureIndex)
-//
-//        val numSplits = featureSplits.length
-//        logDebug(s"featureIndex = $featureIndex, numSplits = $numSplits")
-//        splits(featureIndex) = new Array[Split](numSplits)
-//
-//        var splitIndex = 0
-//        while (splitIndex < numSplits) {
-//          val threshold = featureSplits(splitIndex)
-//          splits(featureIndex)(splitIndex) = new ContinuousSplit(featureIndex, threshold)
-//          splitIndex += 1
-//        }
-//      } else {
-//        // Categorical feature
-//        if (metadata.isUnordered(featureIndex)) {
-//          val numSplits = metadata.numSplits(featureIndex)
-//          val featureArity = metadata.featureArity(featureIndex)
-//          // TODO: Use an implicit representation mapping each category to a subset of indices.
-//          //       I.e., track indices such that we can calculate the set of bins for which
-//          //       feature value x splits to the left.
-//          // Unordered features
-//          // 2^(maxFeatureValue - 1) - 1 combinations
-//          splits(featureIndex) = new Array[Split](numSplits)
-//          var splitIndex = 0
-//          while (splitIndex < numSplits) {
-//            val categories: List[Double] =
-//              extractMultiClassCategories(splitIndex + 1, featureArity)
-//            splits(featureIndex)(splitIndex) =
-//              new CategoricalSplit(featureIndex, categories.toArray, featureArity)
-//            splitIndex += 1
-//          }
-//        } else {
-//          // Ordered features
-//          //   Bins correspond to feature values, so we do not need to compute splits or bins
-//          //   beforehand.  Splits are constructed as needed during training.
-//          splits(featureIndex) = new Array[Split](0)
-//        }
-//      }
-//      featureIndex += 1
-//    }
-//    splits
     findSplitsBinsBySorting(sampledInput, metadata, continuousFeatures)
   }
 
@@ -903,21 +854,6 @@ private[ml] object RandomForest extends Logging {
       input: RDD[LabeledPoint],
       metadata: DecisionTreeMetadata,
       continuousFeatures: IndexedSeq[Int]): Array[Array[Split]] = {
-    def findSplits(
-        featureIndex: Int,
-        featureSamples: Iterable[Double]): (Int, Array[ContinuousSplit]) = {
-      val splits = {
-        val featureSplits = findSplitsForContinuousFeature(
-          featureSamples.toArray,
-          metadata,
-          featureIndex)
-        logDebug(s"featureIndex = $featureIndex, numSplits = ${featureSplits.length}")
-
-        featureSplits.map(threshold => new ContinuousSplit(featureIndex, threshold))
-      }
-
-      (featureIndex, splits)
-    }
 
     val continuousSplits = {
       // reduce the parallelism for split computations when there are less
@@ -928,8 +864,12 @@ private[ml] object RandomForest extends Logging {
       input
         .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
         .groupByKey(numPartitions)
-        .map { case (k, v) => findSplits(k, v) }
-        .collectAsMap()
+        .map { case (idx, samples) =>
+          val thresholds = findSplitsForContinuousFeature(samples.toArray, metadata, idx)
+          val splits = thresholds.map(threshold => new ContinuousSplit(idx, threshold))
+          logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
+          (idx, splits)
+        }.collectAsMap()
     }
 
     val numFeatures = metadata.numFeatures
@@ -1057,8 +997,6 @@ private[ml] object RandomForest extends Logging {
     assert(splits.length > 0,
       s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
         "  Please remove this feature and then try again.")
-    // set number of splits accordingly
-//    metadata.setNumSplits(featureIndex, splits.length)
 
     splits
   }
