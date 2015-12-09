@@ -30,6 +30,7 @@ class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
+    val metadata: Map[String, String],
     val metrics: Seq[SQLMetricInfo])
 
 private[sql] object SparkPlanInfo {
@@ -41,6 +42,6 @@ private[sql] object SparkPlanInfo {
     }
     val children = plan.children.map(fromSparkPlan)
 
-    new SparkPlanInfo(plan.nodeName, plan.simpleString, children, metrics)
+    new SparkPlanInfo(plan.nodeName, plan.simpleString, children, plan.metadata, metrics)
   }
 }

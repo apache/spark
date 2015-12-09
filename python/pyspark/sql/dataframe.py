@@ -213,7 +213,7 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan PhysicalRDD[age#0,name#1]
+        Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==

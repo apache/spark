@@ -97,22 +97,31 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    extraInformation: String,
+    override val nodeName: String,
+    override val metadata: Map[String, String] = Map.empty,
     override val outputsUnsafeRows: Boolean = false)
   extends LeafNode {
 
   protected override def doExecute(): RDD[InternalRow] = rdd
 
-  override def simpleString: String = "Scan " + extraInformation + output.mkString("[", ",", "]")
+  override def simpleString: String = {
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
 }
 
 private[sql] object PhysicalRDD {
+  // Metadata keys
+  val INPUT_PATHS = "InputPaths"
+  val PUSHED_FILTERS = "PushedFilters"
+
   def createFromDataSource(
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      extraInformation: String = ""): PhysicalRDD = {
-    PhysicalRDD(output, rdd, relation.toString + extraInformation,
-      relation.isInstanceOf[HadoopFsRelation])
+      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
+    // All HadoopFsRelations output UnsafeRows
+    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
+    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
   }
 }
