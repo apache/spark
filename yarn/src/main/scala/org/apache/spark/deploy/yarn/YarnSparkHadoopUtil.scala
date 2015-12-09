@@ -248,7 +248,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
    *             from this.
    * @return a token if one was needed
    */
-  def obtainTokenForHBaseInner(conf: Configuration): Option[Token[TokenIdentifier]] ={
+  def obtainTokenForHBaseInner(conf: Configuration): Option[Token[TokenIdentifier]] = {
     val mirror = universe.runtimeMirror(getClass.getClassLoader)
     val confCreate = mirror.classLoader.
       loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
