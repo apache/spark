@@ -15,22 +15,26 @@
 # limitations under the License.
 #
 
-context("functions in client.R")
+from __future__ import print_function
 
-test_that("adding spark-testing-base as a package works", {
-  args <- generateSparkSubmitArgs("", "", "", "",
-                                  "holdenk:spark-testing-base:1.3.0_0.0.5")
-  expect_equal(gsub("[[:space:]]", "", args),
-               gsub("[[:space:]]", "",
-                    "--packages holdenk:spark-testing-base:1.3.0_0.0.5"))
-})
+from pyspark import SparkContext
+# $example on$
+from pyspark.ml.feature import SQLTransformer
+# $example off$
+from pyspark.sql import SQLContext
 
-test_that("no package specified doesn't add packages flag", {
-  args <- generateSparkSubmitArgs("", "", "", "", "")
-  expect_equal(gsub("[[:space:]]", "", args),
-               "")
-})
+if __name__ == "__main__":
+    sc = SparkContext(appName="SQLTransformerExample")
+    sqlContext = SQLContext(sc)
 
-test_that("multiple packages don't produce a warning", {
-  expect_that(generateSparkSubmitArgs("", "", "", "", c("A", "B")), not(gives_warning()))
-})
+    # $example on$
+    df = sqlContext.createDataFrame([
+        (0, 1.0, 3.0),
+        (2, 2.0, 5.0)
+    ], ["id", "v1", "v2"])
+    sqlTrans = SQLTransformer(
+        statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+    sqlTrans.transform(df).show()
+    # $example off$
+
+    sc.stop()

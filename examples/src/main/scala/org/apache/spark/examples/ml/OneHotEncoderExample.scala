@@ -46,10 +46,11 @@ object OneHotEncoderExample {
       .fit(df)
     val indexed = indexer.transform(df)
 
-    val encoder = new OneHotEncoder().setInputCol("categoryIndex").
-      setOutputCol("categoryVec")
+    val encoder = new OneHotEncoder()
+      .setInputCol("categoryIndex")
+      .setOutputCol("categoryVec")
     val encoded = encoder.transform(indexed)
-    encoded.select("id", "categoryVec").foreach(println)
+    encoded.select("id", "categoryVec").show()
     // $example off$
     sc.stop()
   }

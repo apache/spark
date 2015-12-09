@@ -42,6 +42,7 @@ if __name__ == "__main__":
     indexed = model.transform(df)
     encoder = OneHotEncoder(dropLast=False, inputCol="categoryIndex", outputCol="categoryVec")
     encoded = encoder.transform(indexed)
+    encoded.select("id", "categoryVec").show()
     # $example off$
 
     sc.stop()

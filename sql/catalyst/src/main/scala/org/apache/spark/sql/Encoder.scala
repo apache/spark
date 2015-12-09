@@ -19,20 +19,60 @@ package org.apache.spark.sql
 
 import java.lang.reflect.Modifier
 
+import scala.annotation.implicitNotFound
 import scala.reflect.{ClassTag, classTag}
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.{DecodeUsingSerializer, BoundReference, EncodeUsingSerializer}
 import org.apache.spark.sql.types._
 
 /**
+ * :: Experimental ::
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
  *
- * Encoders are not intended to be thread-safe and thus they are allow to avoid internal locking
- * and reuse internal buffers to improve performance.
+ * == Scala ==
+ * Encoders are generally created automatically through implicits from a `SQLContext`.
+ *
+ * {{{
+ *   import sqlContext.implicits._
+ *
+ *   val ds = Seq(1, 2, 3).toDS() // implicitly provided (sqlContext.implicits.newIntEncoder)
+ * }}}
+ *
+ * == Java ==
+ * Encoders are specified by calling static methods on [[Encoders]].
+ *
+ * {{{
+ *   List<String> data = Arrays.asList("abc", "abc", "xyz");
+ *   Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+ * }}}
+ *
+ * Encoders can be composed into tuples:
+ *
+ * {{{
+ *   Encoder<Tuple2<Integer, String>> encoder2 = Encoders.tuple(Encoders.INT(), Encoders.STRING());
+ *   List<Tuple2<Integer, String>> data2 = Arrays.asList(new scala.Tuple2(1, "a");
+ *   Dataset<Tuple2<Integer, String>> ds2 = context.createDataset(data2, encoder2);
+ * }}}
+ *
+ * Or constructed from Java Beans:
+ *
+ * {{{
+ *   Encoders.bean(MyClass.class);
+ * }}}
+ *
+ * == Implementation ==
+ *  - Encoders are not required to be thread-safe and thus they do not need to use locks to guard
+ *    against concurrent access if they reuse internal buffers to improve performance.
  *
  * @since 1.6.0
  */
+@Experimental
+@implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
+  "(Int, String, etc) and Product types (case classes) are supported by importing " +
+  "sqlContext.implicits._  Support for serializing other types will be added in future " +
+  "releases.")
 trait Encoder[T] extends Serializable {
 
   /** Returns the schema of encoding this type of object as a Row. */
@@ -43,10 +83,12 @@ trait Encoder[T] extends Serializable {
 }
 
 /**
- * Methods for creating encoders.
+ * :: Experimental ::
+ * Methods for creating an [[Encoder]].
  *
  * @since 1.6.0
  */
+@Experimental
 object Encoders {
 
   /**
@@ -96,6 +138,42 @@ object Encoders {
    * @since 1.6.0
    */
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable decimal type.
+    * @since 1.6.0
+    */
+  def DECIMAL: Encoder[java.math.BigDecimal] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable date type.
+    * @since 1.6.0
+    */
+  def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable timestamp type.
+    * @since 1.6.0
+    */
+  def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+   * Creates an encoder for Java Bean of type T.
+   *
+   * T must be publicly accessible.
+   *
+   * supported types for java bean field:
+   *  - primitive types: boolean, int, double, etc.
+   *  - boxed types: Boolean, Integer, Double, etc.
+   *  - String
+   *  - java.math.BigDecimal
+   *  - time related: java.sql.Date, java.sql.Timestamp
+   *  - collection types: only array and java.util.List currently, map support is in progress
+   *  - nested java bean.
+   *
+   * @since 1.6.0
+   */
+  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
