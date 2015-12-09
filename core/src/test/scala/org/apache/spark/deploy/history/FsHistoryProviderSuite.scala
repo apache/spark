@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.health.HealthCheckRegistry
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -49,12 +48,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private var testDir: File = null
   private var metrics: MetricRegistry = _
-  private var health: HealthCheckRegistry = _
 
   before {
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
     metrics = new MetricRegistry()
-    health = new HealthCheckRegistry()
   }
 
   after {

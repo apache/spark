@@ -110,11 +110,11 @@ private[history] abstract class ApplicationHistoryProvider {
    * if the history provider cannot be started.
    * The base implementation contains a re-entrancy check and should
    * be invoked first.
-   * @return the metric and binding information for registration
+   * @return the metric information for registration
    */
-  def start(): (Option[Source], Option[HealthCheckSource]) = {
-    require(started.getAndSet(true), "History provider already started")
-    (None, None)
+  def start(): Option[Source] = {
+    require(!started.getAndSet(true), "History provider already started")
+    None
   }
 
   /**
