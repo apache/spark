@@ -1426,11 +1426,11 @@ setMethod("withColumn",
 
 #' Mutate
 #'
-#' Return a new SparkDataFrame with the specified columns added.
+#' Return a new SparkDataFrame with the specified columns added or replaced.
 #'
 #' @param .data A SparkDataFrame
 #' @param col a named argument of the form name = col
-#' @return A new SparkDataFrame with the new columns added.
+#' @return A new SparkDataFrame with the new columns added or replaced.
 #' @family SparkDataFrame functions
 #' @rdname mutate
 #' @name mutate
@@ -1451,17 +1451,46 @@ setMethod("mutate",
           function(.data, ...) {
             x <- .data
             cols <- list(...)
-            stopifnot(length(cols) > 0)
+            if (length(cols) <= 0) {
+              return(x)
+            }
+
             stopifnot(class(cols[[1]]) == "Column")
+
+            # Check if there is any duplicated column name in the DataFrame
+            dfCols <- columns(x)
+            if (length(unique(dfCols)) != length(dfCols)) {
+              stop("Error: found duplicated column name in the DataFrame")
+            }
+
+            # TODO: simplify the implementation of this method after SPARK-12225 is resolved.
+
+            # The last column of the same name in the specific columns takes effect
             ns <- names(cols)
-            if (!is.null(ns)) {
-              for (n in ns) {
-                if (n != "") {
-                  cols[[n]] <- alias(cols[[n]], n)
-                }
+            deDupCols <- list()
+            for (i in 1:length(cols)) {
+              if (!is.null(ns) && ns[[i]] != "") {
+                deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
+              } else {
+                # TODO: how to check if there are columns of the same name in unnamed Columns.
+                deDupCols[[length(deDupCols) + 1]] <- cols[[i]]
               }
             }
-            do.call(select, c(x, x$"*", cols))
+
+            # Construct the column list for projection
+            ns <- names(deDupCols)
+            colList <- lapply(dfCols, function(col) {
+              if (col %in% ns) {
+                # Replace existing column
+                tmpCol <- deDupCols[[col]]
+                deDupCols[[col]] <<- NULL
+                tmpCol
+              } else {
+                col(col)
+              }
+            })
+
+            do.call(select, c(x, colList, deDupCols))
           })
 
 #' @export
