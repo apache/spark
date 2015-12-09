@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+import org.apache.spark.sql.SQLContext
 
 
 /**
