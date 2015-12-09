@@ -164,18 +164,14 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 860L)
     // `spark.storage.unrollFraction` is 0.4, so the max unroll space is 400 bytes.
     // Since we already occupy 60 bytes, we will try to evict only 400 - 60 = 340 bytes.
-    assert(!mm.acquireUnrollMemory(dummyBlock, 800L, evictedBlocks))
-    assertEvictBlocksToFreeSpaceCalled(ms, 340L)
-    assert(evictedBlocks.nonEmpty)
+    assert(mm.acquireUnrollMemory(dummyBlock, 240L, evictedBlocks))
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L)
+    when(ms.currentUnrollMemory).thenReturn(300L) // 60 + 240
+    assert(mm.storageMemoryUsed === 1000L)
     evictedBlocks.clear()
-    assert(mm.storageMemoryUsed === 520L)
-    // Acquire more unroll memory to exceed our "max unroll space"
-    assert(mm.acquireUnrollMemory(dummyBlock, 440L, evictedBlocks))
-    when(ms.currentUnrollMemory).thenReturn(500L)
-    assert(mm.storageMemoryUsed === 960L)
-    assert(!mm.acquireUnrollMemory(dummyBlock, 300L, evictedBlocks))
-    // We already have 500 bytes > the max unroll space of 400 bytes, so no bytes are freed
-    assertEvictBlocksToFreeSpaceNotCalled(ms)
+    assert(!mm.acquireUnrollMemory(dummyBlock, 150L, evictedBlocks))
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L) // 400 - 300
+    assert(mm.storageMemoryUsed === 900L) // 100 bytes were evicted
     // Release beyond what was acquired
     mm.releaseUnrollMemory(maxStorageMem)
     assert(mm.storageMemoryUsed === 0L)

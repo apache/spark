@@ -65,7 +65,8 @@ class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
-    acquireMemory(blockId, numBytes, numBytes, evictedBlocks)
+    val numBytesToFree = math.max(0, numBytes - memoryFree)
+    acquireMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
   }
 
   /**
@@ -73,20 +74,18 @@ class StorageMemoryPool(lock: Object) extends MemoryPool(lock) with Logging {
    *
    * @param blockId the ID of the block we are acquiring storage memory for
    * @param numBytesToAcquire the size of this block
-   * @param maxNumBytesToFree the maximum amount of space to be freed through evicting blocks
+   * @param numBytesToFree the amount of space to be freed through evicting blocks
    * @return whether all N bytes were successfully granted.
    */
   def acquireMemory(
       blockId: BlockId,
       numBytesToAcquire: Long,
-      maxNumBytesToFree: Long,
+      numBytesToFree: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = lock.synchronized {
     assert(numBytesToAcquire >= 0)
-    assert(maxNumBytesToFree >= 0)
+    assert(numBytesToFree >= 0)
     assert(memoryUsed <= poolSize)
-    if (numBytesToAcquire > memoryFree && maxNumBytesToFree > 0) {
-      val additionalMemoryRequired = numBytesToAcquire - memoryFree
-      val numBytesToFree = math.min(maxNumBytesToFree, additionalMemoryRequired)
+    if (numBytesToFree > 0) {
       memoryStore.evictBlocksToFreeSpace(Some(blockId), numBytesToFree, evictedBlocks)
       // Register evicted blocks, if any, with the active task metrics
       Option(TaskContext.get()).foreach { tc =>
