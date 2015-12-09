@@ -44,6 +44,7 @@ public class JavaMinMaxScalerExample {
 
     // rescale each feature to range [min, max].
     DataFrame scaledData = scalerModel.transform(dataFrame);
+    scaledData.show();
     // $example off$
     jsc.stop();
   }

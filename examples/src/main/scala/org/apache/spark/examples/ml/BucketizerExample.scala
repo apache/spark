@@ -43,6 +43,7 @@ object BucketizerExample {
 
     // Transform original data into its bucket index.
     val bucketedData = bucketizer.transform(dataFrame)
+    bucketedData.show()
     // $example off$
     sc.stop()
   }

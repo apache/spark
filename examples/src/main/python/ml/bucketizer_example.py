@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
     # Transform original data into its bucket index.
     bucketedData = bucketizer.transform(dataFrame)
+    bucketedData.show()
     # $example off$
 
     sc.stop()

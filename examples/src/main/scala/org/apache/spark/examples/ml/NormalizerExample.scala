@@ -40,9 +40,11 @@ object NormalizerExample {
       .setP(1.0)
 
     val l1NormData = normalizer.transform(dataFrame)
+    l1NormData.show()
 
     // Normalize each Vector using $L^\infty$ norm.
     val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
+    lInfNormData.show()
     // $example off$
     sc.stop()
   }

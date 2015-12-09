@@ -42,6 +42,7 @@ object MinMaxScalerExample {
 
     // rescale each feature to range [min, max].
     val scaledData = scalerModel.transform(dataFrame)
+    scaledData.show()
     // $example off$
     sc.stop()
   }

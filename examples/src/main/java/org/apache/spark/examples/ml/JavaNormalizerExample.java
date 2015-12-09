@@ -42,10 +42,12 @@ public class JavaNormalizerExample {
       .setP(1.0);
 
     DataFrame l1NormData = normalizer.transform(dataFrame);
+    l1NormData.show();
 
     // Normalize each Vector using $L^\infty$ norm.
     DataFrame lInfNormData =
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
+    lInfNormData.show();
     // $example off$
     jsc.stop();
   }
