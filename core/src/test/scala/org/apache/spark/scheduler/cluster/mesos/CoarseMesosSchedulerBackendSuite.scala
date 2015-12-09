@@ -23,14 +23,13 @@ import java.util.Collections
 import org.apache.mesos.Protos.Value.Scalar
 import org.apache.mesos.Protos._
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
+import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
+import org.mockito.Matchers
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.mockito.Matchers
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SecurityManager, SparkFunSuite}
+import org.scalatest.mock.MockitoSugar
 
 class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext
@@ -77,6 +76,18 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     backend
   }
 
+  private def buildLimitedBackend() = {
+    sc.conf.set("spark.cores.mb.min", "10000")
+    sc.conf.set("spark.cores.mb.max", "100000")
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val backend = createSchedulerBackend(taskScheduler, driver)
+    assert(backend.maxMBPerCore == 100000.0)
+    assert(backend.minMBPerCore == 10000.0)
+    backend
+  }
+
   var sparkConf: SparkConf = _
 
   before {
@@ -87,6 +98,98 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
     sc = new SparkContext(sparkConf)
   }
+
+  test("coarse mesos backend correctly keep sufficient offer") {
+    assert(
+      buildLimitedBackend().calculateDesiredResources(sc, 1, 80000)
+        .count(x => x._1 == 1 && x._2 == 80000) == 1
+    )
+  }
+  test("coarse mesos backend correctly ignores insufficient offer") {
+    val backend = buildLimitedBackend()
+    assert(backend.calculateDesiredResources(sc, 1, 800).isEmpty)
+  }
+
+  test("coarse mesos backend correctly truncates CPU when too high") {
+    assert(
+      buildLimitedBackend().calculateDesiredResources(sc, 10, 80000)
+        .count(x => x._1 == 8 &&x._2 == 80000) == 1
+    )
+  }
+
+  test("coarse mesos backend correctly truncates MEM when too high") {
+    assert(
+      buildLimitedBackend().calculateDesiredResources(sc, 1, 800000)
+        .count(x => x._1 == 1 && x._2 == 100000) == 1
+    )
+  }
+
+  test("coarse mesos backend correctly handles zero cpu") {
+    assert(buildLimitedBackend().calculateDesiredResources(sc, 0, 800000).isEmpty)
+  }
+
+  test("coarse mesos backend correctly handles zero mem") {
+    assert(buildLimitedBackend().calculateDesiredResources(sc, 1, 0).isEmpty)
+  }
+
+  test("coarse mesos backend correctly handles zero everything") {
+    assert(buildLimitedBackend().calculateDesiredResources(sc, 0, 0).isEmpty)
+  }
+
+  test("coarse mesos backend correctly handles default mem limit") {
+    sc.conf.set("spark.cores.mb.min", "1")
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val backend = createSchedulerBackend(taskScheduler, driver)
+    assert(backend.maxMBPerCore == Double.MaxValue)
+    assert(backend.minMBPerCore == 1.0)
+    val minimumMem = backend.calculateTotalMemory(sc)
+    val minimumOffer = backend.calculateDesiredResources(sc, 1, minimumMem)
+    assert(minimumOffer.isDefined)
+    assert(minimumOffer.get._1 == 1)
+    assert(minimumOffer.get._2 == minimumMem)
+    assert(
+      backend.calculateDesiredResources(sc, 10, minimumMem)
+        .count(x => x._1 == 10 && x._2 == minimumMem) == 1
+    )
+    assert(
+      backend.calculateDesiredResources(sc, minimumMem, minimumMem)
+        .count(x => x._1 == minimumMem && x._2 == minimumMem) == 1
+    )
+    assert(
+      backend.calculateDesiredResources(sc, minimumMem + 1, minimumMem)
+        .count(x => x._1 == minimumMem && x._2 == minimumMem) == 1
+    )
+    assert(backend.calculateDesiredResources(sc, 1, minimumMem - 1).isEmpty)
+  }
+
+  test("coarse mesos backend correctly handles unset mem limit") {
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val backend = createSchedulerBackend(taskScheduler, driver)
+    assert(backend.maxMBPerCore == Double.MaxValue)
+    assert(backend.minMBPerCore == 0.0)
+    assert(backend.calculateDesiredResources(sc, 1, 1).isEmpty)
+    assert(
+      backend.calculateDesiredResources(sc, 1, 10000)
+        .count(x => x._1 == 1 && x._2 == 10000) == 1
+    )
+    assert(
+      backend.calculateDesiredResources(sc, 1, backend.calculateTotalMemory(sc))
+        .count(x => x._1 == 1 && x._2 == backend.calculateTotalMemory(sc)) == 1
+    )
+    assert(
+      backend.calculateDesiredResources(sc, 1, Integer.MAX_VALUE)
+        .count(x => x._1 == 1 && x._2 == Integer.MAX_VALUE) == 1
+    )
+    assert(
+      backend.calculateDesiredResources(sc, Integer.MAX_VALUE, 10000)
+        .count(x => x._1 == Integer.MAX_VALUE && x._2 == 10000) == 1
+    )
+  }
+
 
   test("mesos supports killing and limiting executors") {
     val driver = mock[SchedulerDriver]
