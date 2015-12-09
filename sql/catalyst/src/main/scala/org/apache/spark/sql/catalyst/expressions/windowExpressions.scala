@@ -121,6 +121,19 @@ sealed trait FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean
 }
 
+/**
+ * Extractor for making working with frame boundaries easier.
+ */
+object FrameBoundary {
+  def apply(boundary: FrameBoundary): Option[Int] = unapply(boundary)
+  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
+    case CurrentRow => Some(0)
+    case ValuePreceding(offset) => Some(-offset)
+    case ValueFollowing(offset) => Some(offset)
+    case _ => None
+  }
+}
+
 /** UNBOUNDED PRECEDING boundary. */
 case object UnboundedPreceding extends FrameBoundary {
   def notFollows(other: FrameBoundary): Boolean = other match {
@@ -268,18 +281,6 @@ case class WindowExpression(
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
-}
-
-/**
- * Extractor for making working with frame boundaries easier.
- */
-object FrameBoundaryExtractor {
-  def unapply(boundary: FrameBoundary): Option[Int] = boundary match {
-    case CurrentRow => Some(0)
-    case ValuePreceding(offset) => Some(-offset)
-    case ValueFollowing(offset) => Some(offset)
-    case _ => None
-  }
 }
 
 /**

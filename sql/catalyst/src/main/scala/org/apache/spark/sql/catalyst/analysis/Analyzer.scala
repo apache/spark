@@ -567,13 +567,15 @@ class Analyzer(
           case u @ UnresolvedFunction(name, children, isDistinct) =>
             withPosition(u) {
               registry.lookupFunction(name, children) match {
-                // Do not wrap a WindowFunction in an AggregateExpression.
-                case wf: WindowFunction => wf
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
                   AggregateExpression(max, Complete, isDistinct = false)
                 case min: Min if isDistinct =>
                   AggregateExpression(min, Complete, isDistinct = false)
+                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+                // the context of a Window clause. They do not need to be wrapped in an
+                // AggregateExpression.
+                case wf: AggregateWindowFunction => wf
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
@@ -595,7 +597,7 @@ class Analyzer(
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       // Collect all Windowed Aggregate Expressions.
-      val blacklist = exprs.flatMap { expr =>
+      val windowedAggExprs = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
         }
@@ -603,7 +605,7 @@ class Analyzer(
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
-        case ae: AggregateExpression if !blacklist.contains(ae) => ae
+        case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
       }.isDefined)
     }
   }

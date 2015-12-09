@@ -84,12 +84,6 @@ case class Window(
     child: SparkPlan)
   extends UnaryNode {
 
-  /** A mutable expression buffer. */
-  type ExpressionBuffer = mutable.Buffer[Expression]
-
-  /** A map containing window expressions & functions keyed by their frame and type. */
-  type FunctionMap = mutable.Map[(Char, WindowFrame), (ExpressionBuffer, ExpressionBuffer)]
-
   override def output: Seq[Attribute] = projectList ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -158,97 +152,102 @@ case class Window(
   }
 
   /**
-   * Create a frame processor.
-   *
-   * This method uses Code Generation. It can only be used on the executor side.
-   *
-   * @param frame boundaries.
-   * @param functions to process in the frame.
-   * @param ordinal at which the processor starts writing to the output.
-   * @param target to which the processor will write.
-   * @return a frame processor.
+   * Collection containing an entry for each window frame to process. Each entry contains a frames'
+   * WindowExpressions and factory function for the WindowFrameFunction.
    */
-  private[this] def createFrameProcessor(
-    frame: (Char, WindowFrame),
-    functions: Array[Expression],
-    ordinal: Int,
-    target: MutableRow): WindowFunctionFrame = {
-
-    // Construct an aggregate processor if we have to.
-    def processor = {
-      val prepared = functions.map(_.asInstanceOf[AggregateFunction])
-      AggregateProcessor(prepared, ordinal, child.output, newMutableProjection)
-    }
-
-    // Create the frame processor.
-    frame match {
-      // Offset Frame
-      case ('O', SpecifiedWindowFrame(RowFrame,
-                  FrameBoundaryExtractor(l),
-                  FrameBoundaryExtractor(h)))
-        if l == h =>
-        new OffsetWindowFunctionFrame(target, ordinal, functions, child.output,
-          newMutableProjection, l)
-
-      // Growing Frame.
-      case ('A', SpecifiedWindowFrame(frameType,
-                  UnboundedPreceding,
-                  FrameBoundaryExtractor(high))) =>
-        val uBoundOrdering = createBoundOrdering(frameType, high)
-        new UnboundedPrecedingWindowFunctionFrame(target, processor, uBoundOrdering)
-
-      // Shrinking Frame.
-      case ('A', SpecifiedWindowFrame(frameType,
-                  FrameBoundaryExtractor(low),
-                  UnboundedFollowing)) =>
-        val lBoundOrdering = createBoundOrdering(frameType, low)
-        new UnboundedFollowingWindowFunctionFrame(target, processor, lBoundOrdering)
-
-      // Moving Frame.
-      case ('A', SpecifiedWindowFrame(frameType,
-                  FrameBoundaryExtractor(l),
-                  FrameBoundaryExtractor(h))) =>
-        val lBoundOrdering = createBoundOrdering(frameType, l)
-        val uBoundOrdering = createBoundOrdering(frameType, h)
-        new SlidingWindowFunctionFrame(target, processor, lBoundOrdering, uBoundOrdering)
-
-      // Entire Partition Frame.
-      case ('A', SpecifiedWindowFrame(_,
-                  UnboundedPreceding,
-                  UnboundedFollowing)) =>
-        new UnboundedWindowFunctionFrame(target, processor)
-    }
-  }
-
-  /** Map of window expressions and functions by their key. */
-  private[this] lazy val windowFunctionMap: FunctionMap = {
-    val functions: FunctionMap = mutable.Map.empty
+  private[this] lazy val windowFrameFactoryMap = {
+    type FrameKey = (String, FrameType, Option[Int], Option[Int])
+    type ExpressionBuffer = mutable.Buffer[Expression]
+    val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
-    def collect(tpe: Char, frame: WindowFrame, e: Expression, f: Expression): Unit = {
-      val (es, fs) = functions.getOrElseUpdate(
-        (tpe, frame), (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
+    def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
+      val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd))
+      val (es, fns) = framedFunctions.getOrElseUpdate(
+        key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es.append(e)
-      fs.append(f)
+      fns.append(fn)
     }
 
-    // Collect all valid window functions.
+    // Collect all valid window functions and group them by their frame.
     windowExpression.foreach { x =>
       x.foreach {
         case e @ WindowExpression(function, spec) =>
-          val frame = spec.frameSpecification
+          val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case AggregateExpression(f, _, _) => collect('A', frame, e, f)
-            case f: AggregateWindowFunction => collect('A', frame, e, f)
-            case f: OffsetWindowFunction => collect('O', frame, e, f)
+            case AggregateExpression(f, _, _) => collect("AGGREGATE", frame, e, f)
+            case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
+            case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
             case f => sys.error(s"Unsupported window function: $f")
           }
         case _ =>
       }
     }
 
-    // Done.
-    functions
+    // Map the groups to a (unbound) expression and frame factory pair.
+    var numExpressions = 0
+    framedFunctions.toSeq.map {
+      case (key, (expressions, functionSeq)) =>
+        val ordinal = numExpressions
+        val functions = functionSeq.toArray
+
+        // Construct an aggregate processor if we need one.
+        def processor = AggregateProcessor(functions, ordinal, child.output, newMutableProjection)
+
+        // Create the factory
+        val factory = key match {
+          // Offset Frame
+          case ("OFFSET", RowFrame, Some(offset), Some(h)) if offset == h =>
+            target: MutableRow =>
+              new OffsetWindowFunctionFrame(
+                target,
+                ordinal,
+                functions,
+                child.output,
+                newMutableProjection,
+                offset)
+
+          // Growing Frame.
+          case ("AGGREGATE", frameType, None, Some(high)) =>
+            target: MutableRow => {
+              new UnboundedPrecedingWindowFunctionFrame(
+                target,
+                processor,
+                createBoundOrdering(frameType, high))
+            }
+
+          // Shrinking Frame.
+          case ("AGGREGATE", frameType, Some(low), None) =>
+            target: MutableRow => {
+              new UnboundedFollowingWindowFunctionFrame(
+                target,
+                processor,
+                createBoundOrdering(frameType, low))
+            }
+
+          // Moving Frame.
+          case ("AGGREGATE", frameType, Some(low), Some(high)) =>
+            target: MutableRow => {
+              new SlidingWindowFunctionFrame(
+                target,
+                processor,
+                createBoundOrdering(frameType, low),
+                createBoundOrdering(frameType, high))
+            }
+
+          // Entire Partition Frame.
+          case ("AGGREGATE", frameType, None, None) =>
+            target: MutableRow => {
+              new UnboundedWindowFunctionFrame(target, processor)
+            }
+        }
+
+        // Keep track of the number of expressions. This is a side-effect in a map...
+        numExpressions += expressions.size
+
+        // Create the Frame Expression - Factory pair.
+        (expressions, factory)
+    }
   }
 
   /**
@@ -273,31 +272,16 @@ case class Window(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    // Create Frame processor factories and order the unbound window expressions by the frame they
-    // are processed in; this is the order in which their results will be written to window
-    // function result buffer.
-    val numFrames = windowFunctionMap.size
-    val factories = Array.ofDim[MutableRow => WindowFunctionFrame](numFrames)
-    val unboundExpressions = scala.collection.mutable.Buffer.empty[Expression]
-    windowFunctionMap.zipWithIndex.foreach {
-      case ((frame, (expressions, functions)), index) =>
-        // Track the ordinal.
-        val ordinal = unboundExpressions.size
-
-        // Track the unbound expressions
-        unboundExpressions ++= expressions
-
-        // Create the frame processor factory.
-        factories(index) = (target: MutableRow) =>
-          createFrameProcessor(frame, functions.toArray, ordinal, target)
-    }
+    // Unwrap the expressions and factories from the map.
+    val expressions = windowFrameFactoryMap.flatMap(_._1)
+    val factories = windowFrameFactoryMap.map(_._2).toArray
 
     // Start processing.
     child.execute().mapPartitions { stream =>
       new Iterator[InternalRow] {
 
         // Get all relevant projections.
-        val result = createResultProjection(unboundExpressions)
+        val result = createResultProjection(expressions)
         val grouping = UnsafeProjection.create(partitionSpec, child.output)
 
         // Manage the stream and the grouping.
@@ -318,8 +302,8 @@ case class Window(
 
         // Manage the current partition.
         val rows = ArrayBuffer.empty[InternalRow]
-        val windowFunctionResult = new SpecificMutableRow(unboundExpressions.map(_.dataType))
-        val frames: Array[WindowFunctionFrame] = factories.map(_(windowFunctionResult))
+        val windowFunctionResult = new SpecificMutableRow(expressions.map(_.dataType))
+        val frames = factories.map(_(windowFunctionResult))
         val numFrames = frames.length
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
@@ -730,7 +714,7 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
  * 'executor' part.
  */
 private[execution] object AggregateProcessor {
-  def apply(functions: Array[AggregateFunction],
+  def apply(functions: Array[Expression],
     ordinal: Int,
     inputAttributes: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
@@ -744,7 +728,7 @@ private[execution] object AggregateProcessor {
     // Create and add a size reference to SizeBasedWindowFunction.
     var sizeOrdinal = -1
     var size: BoundReference = null
-    val addSize = (f: AggregateFunction) => f match {
+    val addSize = (f: Expression) => f match {
       case wf: SizeBasedWindowFunction =>
         if (size == null) {
           sizeOrdinal = aggBufferAttributes.size
@@ -754,11 +738,11 @@ private[execution] object AggregateProcessor {
           updateExpressions += NoOp
         }
         wf.withSize(size)
-      case wf => wf
+      case e => e
     }
 
     // Add an AggregateFunction to the AggregateProcessor.
-    val addToProcessor = (f: AggregateFunction) => f match {
+    val addToProcessor = (f: Expression) => f match {
       case agg: DeclarativeAggregate =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         initialValues ++= agg.initialValues
@@ -776,10 +760,12 @@ private[execution] object AggregateProcessor {
         initialValues ++= noOps
         updateExpressions ++= noOps
         evaluateExpressions += imperative
+      case other =>
+        sys.error(s"Unsupported Aggregate Function: $f")
     }
 
     // Process the functions.
-    functions.iterator.map(addSize).foreach(addToProcessor)
+    functions.foreach(addSize.andThen(addToProcessor))
 
     // Create the projections.
     val initialProjection = newMutableProjection(initialValues, Nil)()
