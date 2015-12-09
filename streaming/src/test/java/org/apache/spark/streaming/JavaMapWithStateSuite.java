@@ -42,7 +42,7 @@ import org.apache.spark.api.java.function.Function4;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;
 
-public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implements Serializable {
+public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements Serializable {
 
   /**
    * This test is only for testing the APIs. It's not necessary to run it.
@@ -52,7 +52,7 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
     JavaPairDStream<String, Integer> wordsDstream = null;
 
     final Function4<Time, String, Optional<Integer>, State<Boolean>, Optional<Double>>
-        trackStateFunc =
+        mappingFunc =
         new Function4<Time, String, Optional<Integer>, State<Boolean>, Optional<Double>>() {
 
           @Override
@@ -70,15 +70,15 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
 
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream =
         wordsDstream.mapWithState(
-            StateSpec.function(trackStateFunc)
+            StateSpec.function(mappingFunc)
                 .initialState(initialRDD)
                 .numPartitions(10)
                 .partitioner(new HashPartitioner(10))
                 .timeout(Durations.seconds(10)));
 
-    JavaPairDStream<String, Boolean> emittedRecords = stateDstream.stateSnapshots();
+    JavaPairDStream<String, Boolean> stateSnapshots = stateDstream.stateSnapshots();
 
-    final Function2<Optional<Integer>, State<Boolean>, Double> trackStateFunc2 =
+    final Function2<Optional<Integer>, State<Boolean>, Double> mappingFunc2 =
         new Function2<Optional<Integer>, State<Boolean>, Double>() {
 
           @Override
@@ -95,13 +95,13 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
 
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream2 =
         wordsDstream.mapWithState(
-            StateSpec.<String, Integer, Boolean, Double>function(trackStateFunc2)
+            StateSpec.<String, Integer, Boolean, Double>function(mappingFunc2)
                 .initialState(initialRDD)
                 .numPartitions(10)
                 .partitioner(new HashPartitioner(10))
                 .timeout(Durations.seconds(10)));
 
-    JavaPairDStream<String, Boolean> emittedRecords2 = stateDstream2.stateSnapshots();
+    JavaPairDStream<String, Boolean> stateSnapshots2 = stateDstream2.stateSnapshots();
   }
 
   @Test
@@ -148,7 +148,7 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
             new Tuple2<String, Integer>("c", 1))
     );
 
-    Function2<Optional<Integer>, State<Integer>, Integer> trackStateFunc =
+    Function2<Optional<Integer>, State<Integer>, Integer> mappingFunc =
         new Function2<Optional<Integer>, State<Integer>, Integer>() {
 
           @Override
@@ -160,14 +160,14 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
         };
     testOperation(
         inputData,
-        StateSpec.<String, Integer, Integer, Integer>function(trackStateFunc),
+        StateSpec.<String, Integer, Integer, Integer>function(mappingFunc),
         outputData,
         stateData);
   }
 
   private <K, S, T> void testOperation(
       List<List<K>> input,
-      StateSpec<K, Integer, S, T> trackStateSpec,
+      StateSpec<K, Integer, S, T> mapWithStateSpec,
       List<Set<T>> expectedOutputs,
       List<Set<Tuple2<K, S>>> expectedStateSnapshots) {
     int numBatches = expectedOutputs.size();
@@ -178,7 +178,7 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
           public Tuple2<K, Integer> call(K x) throws Exception {
             return new Tuple2<K, Integer>(x, 1);
           }
-        })).mapWithState(trackStateSpec);
+        })).mapWithState(mapWithStateSpec);
 
     final List<Set<T>> collectedOutputs =
         Collections.synchronizedList(Lists.<Set<T>>newArrayList());
