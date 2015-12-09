@@ -222,7 +222,7 @@ private[kinesis] class KinesisReceiver[T](
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
   private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
-    return Option(shardIdToLatestStoredSeqNum.get(shardId))
+    Option(shardIdToLatestStoredSeqNum.get(shardId))
   }
 
   /**
