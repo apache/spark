@@ -38,9 +38,9 @@ public final class Platform {
     // use reflection to access unaligned field
     try {
       Class<?> clazz = Class.forName("java.nio.Bits");
-      Field unalignedField = clazz.getDeclaredField("unaligned");
-      unalignedField.setAccessible(true);
-      unaligned = (boolean) unalignedField.get(null);
+      Method m = clazz.getDeclaredMethod("unaligned");
+      m.setAccessible(true);
+      unaligned = (boolean) m.invoke(null);
     } catch (Throwable t) {
       unaligned = false;
     }
