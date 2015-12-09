@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  *                       the same output data type.
  *
  */
-abstract class Expression extends TreeNode[Expression] {
+abstract class Expression extends TreeNode[Expression] with PredicateHelper{
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -156,7 +156,18 @@ abstract class Expression extends TreeNode[Expression] {
     if (!deterministic || !other.deterministic) return false
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
-    checkSemantic(elements1, elements2)
+
+
+    this.getClass() == other.getClass() && ((this, other) match {
+      // tolerant of ordering different
+      case (left: And, right: And) =>
+        checkSemantic(splitConjunctivePredicates(left).toSet.toSeq,
+                      splitConjunctivePredicates(right).toSet.toSeq)
+      case (left: Or, right: Or) =>
+        checkSemantic(splitDisjunctivePredicates(left).toSet.toSeq,
+                      splitDisjunctivePredicates(right).toSet.toSeq)
+      case _ => checkSemantic(elements1, elements2)
+    })
   }
 
   /**
