@@ -100,7 +100,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.OFF_HEAP =>
         // For now, we only support on-heap caching of data, so we do not need to interact with
         // the storage pool when allocating off-heap memory. This will change in the future, though.
-        super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
+        offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
     }
   }
 
@@ -110,6 +110,12 @@ private[spark] class UnifiedMemoryManager private[memory] (
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
+    if (numBytes > maxStorageMemory) {
+      // Fail fast if the block simply won't fit
+      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+        s"memory limit ($maxStorageMemory bytes)")
+      return false
+    }
     if (numBytes > storageMemoryPool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
