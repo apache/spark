@@ -209,7 +209,8 @@ object Utils {
           partialMergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       if (usesTungstenAggregate) {
         TungstenAggregate(
-          requiredChildDistributionExpressions = Some(groupingAttributes),
+          requiredChildDistributionExpressions =
+            Some(groupingAttributes ++ distinctColumnAttributes),
           groupingExpressions = groupingAttributes ++ distinctColumnAttributes,
           nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
           nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
@@ -220,7 +221,8 @@ object Utils {
           child = partialAggregate)
       } else {
         SortBasedAggregate(
-          requiredChildDistributionExpressions = Some(groupingAttributes),
+          requiredChildDistributionExpressions =
+            Some(groupingAttributes ++ distinctColumnAttributes),
           groupingExpressions = groupingAttributes ++ distinctColumnAttributes,
           nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
           nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
