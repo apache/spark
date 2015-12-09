@@ -1261,7 +1261,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
-    drop(Seq(colName) : _*)
+    drop(colName, Seq() : _*)
   }
 
   /**
@@ -1271,10 +1271,11 @@ class DataFrame private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): DataFrame = {
+  def drop(colName: String, colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val remainingCols =
-      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+    val remainingCols = schema.filter { f =>
+        (colName +: colNames).forall(n => !resolver(f.name, n))
+      }.map(f => Column(f.name))
     if (remainingCols.size == this.schema.size) {
       this
     } else {
@@ -1291,16 +1292,34 @@ class DataFrame private[sql](
    * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    drop(Seq(col) : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with a column dropped.
+   * This version of drop accepts Column(s) rather than name(s).
+   * This is a no-op if the DataFrame doesn't have column(s)
+   * with an equivalent expression.
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def drop(cols: Column*): DataFrame = {
+    val resolver = sqlContext.analyzer.resolver
+    val attrs = this.logicalPlan.output
+    val expressions = cols.map {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+        queryExecution.analyzed.resolveQuoted(u.name, resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
-    val attrs = this.logicalPlan.output
-    val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
-    }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+    val remainingCols = attrs.filter { attr =>
+        !expressions.contains(attr)
+      }.map(attr => Column(attr))
+    if (remainingCols.size == this.schema.size) {
+      this
+    } else {
+      this.select(remainingCols: _*)
+    }
   }
 
   /**
