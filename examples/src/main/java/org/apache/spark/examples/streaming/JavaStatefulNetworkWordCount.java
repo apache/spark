@@ -65,7 +65,7 @@ public class JavaStatefulNetworkWordCount {
     JavaStreamingContext ssc = new JavaStreamingContext(sparkConf, Durations.seconds(1));
     ssc.checkpoint(".");
 
-    // Initial RDD input to trackStateByKey
+    // Initial state RDD input to mapWithState
     @SuppressWarnings("unchecked")
     List<Tuple2<String, Integer>> tuples = Arrays.asList(new Tuple2<String, Integer>("hello", 1),
             new Tuple2<String, Integer>("world", 1));
@@ -90,7 +90,7 @@ public class JavaStatefulNetworkWordCount {
         });
 
     // Update the cumulative count function
-    final Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> trackStateFunc =
+    final Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> mappingFunc =
         new Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>>() {
 
           @Override
@@ -104,7 +104,7 @@ public class JavaStatefulNetworkWordCount {
 
     // This will give a Dstream made of state (which is the cumulative count of the words)
     JavaMapWithStateDStream<String, Integer, Integer, Tuple2<String, Integer>> stateDstream =
-        wordsDstream.mapWithState(StateSpec.function(trackStateFunc).initialState(initialRDD));
+        wordsDstream.mapWithState(StateSpec.function(mappingFunc).initialState(initialRDD));
 
     stateDstream.print();
     ssc.start();
