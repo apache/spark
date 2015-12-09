@@ -30,6 +30,8 @@ import org.apache.spark.sql.types._
  *
  * Encoders are not intended to be thread-safe and thus they are allow to avoid internal locking
  * and reuse internal buffers to improve performance.
+ *
+ * @since 1.6.0
  */
 trait Encoder[T] extends Serializable {
 
@@ -42,23 +44,102 @@ trait Encoder[T] extends Serializable {
 
 /**
  * Methods for creating encoders.
+ *
+ * @since 1.6.0
  */
 object Encoders {
 
+  /**
+   * An encoder for nullable boolean type.
+   * @since 1.6.0
+   */
   def BOOLEAN: Encoder[java.lang.Boolean] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable byte type.
+   * @since 1.6.0
+   */
   def BYTE: Encoder[java.lang.Byte] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable short type.
+   * @since 1.6.0
+   */
   def SHORT: Encoder[java.lang.Short] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable int type.
+   * @since 1.6.0
+   */
   def INT: Encoder[java.lang.Integer] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable long type.
+   * @since 1.6.0
+   */
   def LONG: Encoder[java.lang.Long] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable float type.
+   * @since 1.6.0
+   */
   def FLOAT: Encoder[java.lang.Float] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable double type.
+   * @since 1.6.0
+   */
   def DOUBLE: Encoder[java.lang.Double] = ExpressionEncoder()
+
+  /**
+   * An encoder for nullable string type.
+   * @since 1.6.0
+   */
   def STRING: Encoder[java.lang.String] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable decimal type.
+    * @since 1.6.0
+    */
+  def DECIMAL: Encoder[java.math.BigDecimal] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable date type.
+    * @since 1.6.0
+    */
+  def DATE: Encoder[java.sql.Date] = ExpressionEncoder()
+
+  /**
+    * An encoder for nullable timestamp type.
+    * @since 1.6.0
+    */
+  def TIMESTAMP: Encoder[java.sql.Timestamp] = ExpressionEncoder()
+
+  /**
+   * Creates an encoder for Java Bean of type T.
+   *
+   * T must be publicly accessible.
+   *
+   * supported types for java bean field:
+   *  - primitive types: boolean, int, double, etc.
+   *  - boxed types: Boolean, Integer, Double, etc.
+   *  - String
+   *  - java.math.BigDecimal
+   *  - time related: java.sql.Date, java.sql.Timestamp
+   *  - collection types: only array and java.util.List currently, map support is in progress
+   *  - nested java bean.
+   *
+   * @since 1.6.0
+   */
+  def bean[T](beanClass: Class[T]): Encoder[T] = ExpressionEncoder.javaBean(beanClass)
 
   /**
    * (Scala-specific) Creates an encoder that serializes objects of type T using Kryo.
    * This encoder maps T into a single byte array (binary) field.
    *
    * T must be publicly accessible.
+   *
+   * @since 1.6.0
    */
   def kryo[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = true)
 
@@ -67,6 +148,8 @@ object Encoders {
    * This encoder maps T into a single byte array (binary) field.
    *
    * T must be publicly accessible.
+   *
+   * @since 1.6.0
    */
   def kryo[T](clazz: Class[T]): Encoder[T] = kryo(ClassTag[T](clazz))
 
@@ -77,6 +160,8 @@ object Encoders {
    * Note that this is extremely inefficient and should only be used as the last resort.
    *
    * T must be publicly accessible.
+   *
+   * @since 1.6.0
    */
   def javaSerialization[T: ClassTag]: Encoder[T] = genericSerializer(useKryo = false)
 
@@ -87,6 +172,8 @@ object Encoders {
    * Note that this is extremely inefficient and should only be used as the last resort.
    *
    * T must be publicly accessible.
+   *
+   * @since 1.6.0
    */
   def javaSerialization[T](clazz: Class[T]): Encoder[T] = javaSerialization(ClassTag[T](clazz))
 
@@ -120,12 +207,20 @@ object Encoders {
     )
   }
 
+  /**
+   * An encoder for 2-ary tuples.
+   * @since 1.6.0
+   */
   def tuple[T1, T2](
       e1: Encoder[T1],
       e2: Encoder[T2]): Encoder[(T1, T2)] = {
     ExpressionEncoder.tuple(encoderFor(e1), encoderFor(e2))
   }
 
+  /**
+   * An encoder for 3-ary tuples.
+   * @since 1.6.0
+   */
   def tuple[T1, T2, T3](
       e1: Encoder[T1],
       e2: Encoder[T2],
@@ -133,6 +228,10 @@ object Encoders {
     ExpressionEncoder.tuple(encoderFor(e1), encoderFor(e2), encoderFor(e3))
   }
 
+  /**
+   * An encoder for 4-ary tuples.
+   * @since 1.6.0
+   */
   def tuple[T1, T2, T3, T4](
       e1: Encoder[T1],
       e2: Encoder[T2],
@@ -141,6 +240,10 @@ object Encoders {
     ExpressionEncoder.tuple(encoderFor(e1), encoderFor(e2), encoderFor(e3), encoderFor(e4))
   }
 
+  /**
+   * An encoder for 5-ary tuples.
+   * @since 1.6.0
+   */
   def tuple[T1, T2, T3, T4, T5](
       e1: Encoder[T1],
       e2: Encoder[T2],
