@@ -31,10 +31,6 @@ object Main extends Logging {
   val tmp = System.getProperty("java.io.tmpdir")
   val rootDir = conf.get("spark.repl.classdir", tmp)
   val outputDir = Utils.createTempDir(rootDir)
-  val s = new Settings()
-  s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
-    "-classpath", getAddedJars.mkString(File.pathSeparator)), true)
   // the creation of SecurityManager has to be lazy so SPARK_YARN_MODE is set if needed
   lazy val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
   var sparkContext: SparkContext = _
@@ -42,13 +38,33 @@ object Main extends Logging {
   var interp = new SparkILoop // this is a public var because tests reset it.
 
   def main(args: Array[String]) {
-    if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-    // Start the classServer and store its URI in a spark system property
-    // (which will be passed to executors so that they can connect to it)
-    classServer.start()
-    interp.process(s) // Repl starts and goes in loop of R.E.P.L
-    classServer.stop()
-    Option(sparkContext).map(_.stop)
+    val s = new Settings(scalaOptionError)
+    s.processArguments(
+      List(
+        "-Yrepl-class-based",
+        "-Yrepl-outdir",
+        s"${outputDir.getAbsolutePath}",
+        "-classpath",
+        getAddedJars.mkString(File.pathSeparator)) ++ args,
+      processAll = true)
+
+    if (!hasErrors) {
+      if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+      // Start the classServer and store its URI in a spark system property
+      // (which will be passed to executors so that they can connect to it)
+      classServer.start()
+
+      interp.process(s) // Repl starts and goes in loop of R.E.P.L
+      classServer.stop()
+      Option(sparkContext).map(_.stop)
+    }
+  }
+
+  private var hasErrors = false
+
+  private def scalaOptionError(msg: String): Unit = {
+    hasErrors = true
+    println(msg)
   }
 
   def getAddedJars: Array[String] = {
