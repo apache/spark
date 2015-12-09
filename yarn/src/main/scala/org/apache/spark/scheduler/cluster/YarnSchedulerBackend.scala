@@ -17,17 +17,17 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.{ThreadUtils, RpcUtils}
-
-import scala.util.control.NonFatal
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -50,6 +50,67 @@ private[spark] abstract class YarnSchedulerBackend(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
 
   private implicit val askTimeout = RpcUtils.askRpcTimeout(sc.conf)
+
+  /** Application ID. */
+  protected var appId: Option[ApplicationId] = None
+
+  /** Attempt ID. This is unset for client-mode schedulers */
+  private var attemptId: Option[ApplicationAttemptId] = None
+
+  /** Scheduler extension services. */
+  private val services: SchedulerExtensionServices = new SchedulerExtensionServices()
+
+  // Flag to specify whether this schedulerBackend should be reset.
+  private var shouldResetOnAmRegister = false
+
+  /**
+   * Bind to YARN. This *must* be done before calling [[start()]].
+   *
+   * @param appId YARN application ID
+   * @param attemptId Optional YARN attempt ID
+   */
+  protected def bindToYarn(appId: ApplicationId, attemptId: Option[ApplicationAttemptId]): Unit = {
+    this.appId = Some(appId)
+    this.attemptId = attemptId
+  }
+
+  override def start() {
+    require(appId.isDefined, "application ID unset")
+    val binding = SchedulerExtensionServiceBinding(sc, appId.get, attemptId)
+    services.start(binding)
+    super.start()
+  }
+
+  override def stop(): Unit = {
+    try {
+      super.stop()
+    } finally {
+      services.stop()
+    }
+  }
+
+  /**
+   * Get the attempt ID for this run, if the cluster manager supports multiple
+   * attempts. Applications run in client mode will not have attempt IDs.
+   *
+   * @return The application attempt id, if available.
+   */
+  override def applicationAttemptId(): Option[String] = {
+    attemptId.map(_.toString)
+  }
+
+  /**
+   * Get an application ID associated with the job.
+   * This returns the string value of [[appId]] if set, otherwise
+   * the locally-generated ID from the superclass.
+   * @return The application ID
+   */
+  override def applicationId(): String = {
+    appId.map(_.toString).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
+  }
 
   /**
    * Request executors from the ApplicationMaster by specifying the total number desired.
@@ -95,6 +156,16 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {
     new YarnDriverEndpoint(rpcEnv, properties)
+  }
+
+  /**
+   * Reset the state of SchedulerBackend to the initial state. This is happened when AM is failed
+   * and re-registered itself to driver after a failure. The stale state in driver should be
+   * cleaned.
+   */
+  override protected def reset(): Unit = {
+    super.reset()
+    sc.executorAllocationManager.foreach(_.reset())
   }
 
   /**
@@ -160,6 +231,8 @@ private[spark] abstract class YarnSchedulerBackend(
         case None =>
           logWarning("Attempted to check for an executor loss reason" +
             " before the AM has registered!")
+          driverEndpoint.askWithRetry[Boolean](
+            RemoveExecutor(executorId, SlaveLost("AM is not yet registered.")))
       }
     }
 
@@ -167,6 +240,13 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager(am) =>
         logInfo(s"ApplicationMaster registered as $am")
         amEndpoint = Option(am)
+        if (!shouldResetOnAmRegister) {
+          shouldResetOnAmRegister = true
+        } else {
+          // AM is already registered before, this potentially means that AM failed and
+          // a new one registered after the failure. This will only happen in yarn-client mode.
+          reset()
+        }
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
@@ -212,6 +292,7 @@ private[spark] abstract class YarnSchedulerBackend(
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       if (amEndpoint.exists(_.address == remoteAddress)) {
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
+        amEndpoint = None
       }
     }
 

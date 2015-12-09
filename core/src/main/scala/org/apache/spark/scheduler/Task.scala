@@ -27,8 +27,7 @@ import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 
 /**
@@ -172,7 +171,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new ByteArrayOutputStream(4096)
+    val out = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -191,9 +190,9 @@ private[spark] object Task {
 
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task).array()
-    out.write(taskBytes)
-    ByteBuffer.wrap(out.toByteArray)
+    val taskBytes = serializer.serialize(task)
+    Utils.writeByteBuffer(taskBytes, out)
+    out.toByteBuffer
   }
 
   /**

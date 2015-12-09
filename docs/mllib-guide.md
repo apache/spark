@@ -66,15 +66,14 @@ We list major functionality from both below, with links to detailed guides.
 
 # spark.ml: high-level APIs for ML pipelines
 
-**[spark.ml programming guide](ml-guide.html)** provides an overview of the Pipelines API and major
-concepts. It also contains sections on using algorithms within the Pipelines API, for example:
-
-* [Feature extraction, transformation, and selection](ml-features.html)
+* [Overview: estimators, transformers and pipelines](ml-intro.html)
+* [Extracting, transforming and selecting features](ml-features.html)
+* [Classification and regression](ml-classification-regression.html)
 * [Clustering](ml-clustering.html)
-* [Decision trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
+* [Advanced topics](ml-advanced.html)
+
+Some techniques are not available yet in spark.ml, most notably dimensionality reduction 
+Users can seemlessly combine the implementation of these techniques found in `spark.mllib` with the rest of the algorithms found in `spark.ml`.
 
 # Dependencies
 
