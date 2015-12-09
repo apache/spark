@@ -62,6 +62,8 @@ For more background and more details about the implementation, refer to the docu
 
   > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
 
+**Example**
+
 The following example shows how to train a logistic regression model
 with elastic net regularization. `elasticNetParam` corresponds to
 $\alpha$ and `regParam` corresponds to $\lambda$.
@@ -127,10 +129,12 @@ Logistic regression model summary is not yet supported in Python.
 </div>
 
 
-## Classification with decision trees
+## Decision tree classifier
 
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
+
+**Example**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -162,10 +166,12 @@ More details on parameters can be found in the [Python API documentation](api/py
 
 </div>
 
-## Classification with random forests
+## Random forest classifier
 
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
+
+**Example**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -193,10 +199,12 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 </div>
 </div>
 
-## Classification with gradient-boosted trees
+## Gradient-boosted tree classifier
 
 Gradient-boosted trees (GBTs) are a popular classification and regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
+
+**Example**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use two feature transformers to prepare the data; these help index categories for the label and categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -246,7 +254,7 @@ The number of nodes `$N$` in the output layer corresponds to the number of class
 
 MLPC employes backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
 
-**Examples**
+**Example**
 
 <div class="codetabs">
 
@@ -273,7 +281,7 @@ MLPC employes backpropagation for learning the model. We use logistic loss funct
 
 Predictions are done by evaluating each binary classifier and the index of the most confident classifier is output as label.
 
-### Example
+**Example**
 
 The example below demonstrates how to load the
 [Iris dataset](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/iris.scale), parse it as a DataFrame and perform multiclass classification using `OneVsRest`. The test error is calculated to measure the algorithm accuracy.
@@ -300,7 +308,11 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 ## Linear regression
 
 The interface for working with linear regression models and model
-summaries is similar to the logistic regression case. The following
+summaries is similar to the logistic regression case.
+
+**Example**
+
+The following
 example demonstrates training an elastic net regularized linear
 regression model and extracting model summary statistics.
 
@@ -322,10 +334,12 @@ regression model and extracting model summary statistics.
 </div>
 
 
-## Regression with decision trees
+## Decision tree regression
 
 Decision trees are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on decision trees](#decision-trees).
+
+**Example**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the Decision Tree algorithm can recognize.
@@ -355,10 +369,12 @@ More details on parameters can be found in the [Python API documentation](api/py
 </div>
 
 
-## Regression with random forests
+## Random forest regression
 
 Random forests are a popular family of classification and regression methods.
 More information about the `spark.ml` implementation can be found further in the [section on random forests](#random-forests).
+
+**Example**
 
 The following examples load a dataset in LibSVM format, split it into training and test sets, train on the first dataset, and then evaluate on the held-out test set.
 We use a feature transformer to index categorical features, adding metadata to the `DataFrame` which the tree-based algorithms can recognize.
@@ -386,10 +402,12 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 </div>
 </div>
 
-## Regression with gradient-boosted trees
+## Gradient-boosted tree regression
 
 Gradient-boosted trees (GBTs) are a popular regression method using ensembles of decision trees. 
 More information about the `spark.ml` implementation can be found further in the [section on GBTs](#gradient-boosted-trees-gbts).
+
+**Example**
 
 Note: For this example dataset, `GBTRegressor` actually only needs 1 iteration, but that will not
 be true in general.
@@ -475,7 +493,7 @@ The optimization algorithm underlying the implementation is L-BFGS.
 The implementation matches the result from R's survival function 
 [survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
 
-### Survival regression example
+**Example**
 
 <div class="codetabs">
 
@@ -509,11 +527,17 @@ MLlib supports decision trees for binary and multiclass classification and for r
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions or even billions of instances.
 
-Users can find more information about the decision tree algorithm in the [MLlib Decision Tree guide](mllib-decision-tree.html).  In this section, we demonstrate the Pipelines API for Decision Trees.
+Users can find more information about the decision tree algorithm in the [MLlib Decision Tree guide](mllib-decision-tree.html).
+The main differences between this API and the [original MLlib Decision Tree API](mllib-decision-tree.html) are:
+
+* support for ML Pipelines
+* separation of Decision Trees for classification vs. regression
+* use of DataFrame metadata to distinguish continuous and categorical features
+
 
 The Pipelines API for Decision Trees offers a bit more functionality than the original API.  In particular, for classification, users can get the predicted probability of each class (a.k.a. class conditional probabilities).
 
-Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described in the [Ensembles guide](ml-ensembles.html).
+Ensembles of trees (Random Forests and Gradient-Boosted Trees) are described below in the [Tree ensembles section](#tree-ensembles).
 
 ## Inputs and Outputs
 
@@ -584,15 +608,6 @@ All output columns are optional; to exclude an output column, set its correspond
   </tbody>
 </table>
 
-## Examples
-
-The below examples demonstrate the Pipelines API for Decision Trees. The main differences between this API and the [original MLlib Decision Tree API](mllib-decision-tree.html) are:
-
-* support for ML Pipelines
-* separation of Decision Trees for classification vs. regression
-* use of DataFrame metadata to distinguish continuous and categorical features
-
-
 
 # Tree Ensembles
 
@@ -616,8 +631,7 @@ Random forests combine many decision trees in order to reduce the risk of overfi
 MLlib supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
 
-This section gives examples of using random forests with the Pipelines API.
-For more information on the algorithm, please see the [main MLlib docs on random forests](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on random forests](mllib-ensembles.html).
 
 ### Inputs and Outputs
 
@@ -698,8 +712,7 @@ GBTs iteratively train decision trees in order to minimize a loss function.
 MLlib supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
 
-This section gives examples of using GBTs with the Pipelines API.
-For more information on the algorithm, please see the [main MLlib docs on GBTs](mllib-ensembles.html).
+For more information on the algorithm itself, please see the [`spark.mllib` documentation on GBTs](mllib-ensembles.html).
 
 ### Inputs and Outputs
 
