@@ -866,7 +866,7 @@ private[ml] object RandomForest extends Logging {
         .groupByKey(numPartitions)
         .map { case (idx, samples) =>
           val thresholds = findSplitsForContinuousFeature(samples.toArray, metadata, idx)
-          val splits: Array[Split] = thresholds.map(threshold => new ContinuousSplit(idx, threshold))
+          val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
           logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
           (idx, splits)
         }.collectAsMap()
