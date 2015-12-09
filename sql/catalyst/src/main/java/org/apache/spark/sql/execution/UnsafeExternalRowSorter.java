@@ -51,7 +51,7 @@ final class UnsafeExternalRowSorter {
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
 
-  public static abstract class PrefixComputer {
+  public abstract static class PrefixComputer {
     abstract long computePrefix(InternalRow row);
   }
 
@@ -168,13 +168,6 @@ final class UnsafeExternalRowSorter {
       insertRow(inputIterator.next());
     }
     return sort();
-  }
-
-  /**
-   * Return true if UnsafeExternalRowSorter can sort rows with the given schema, false otherwise.
-   */
-  public static boolean supportsSchema(StructType schema) {
-    return UnsafeProjection.canSupport(schema);
   }
 
   private static final class RowComparator extends RecordComparator {

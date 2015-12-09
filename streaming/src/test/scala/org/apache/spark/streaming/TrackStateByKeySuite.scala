@@ -22,39 +22,42 @@ import java.io.File
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
+import org.scalatest.PrivateMethodTester._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.streaming.dstream.{TrackStateDStream, TrackStateDStreamImpl}
+import org.apache.spark.streaming.dstream.{DStream, InternalTrackStateDStream, TrackStateDStream, TrackStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
-class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
+class TrackStateByKeySuite extends SparkFunSuite
+  with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
 
   private var sc: SparkContext = null
-  private var ssc: StreamingContext = null
-  private var checkpointDir: File = null
-  private val batchDuration = Seconds(1)
+  protected var checkpointDir: File = null
+  protected val batchDuration = Seconds(1)
 
   before {
-    StreamingContext.getActive().foreach {
-      _.stop(stopSparkContext = false)
-    }
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     checkpointDir = Utils.createTempDir("checkpoint")
-
-    ssc = new StreamingContext(sc, batchDuration)
-    ssc.checkpoint(checkpointDir.toString)
   }
 
   after {
-    StreamingContext.getActive().foreach {
-      _.stop(stopSparkContext = false)
+    if (checkpointDir != null) {
+      Utils.deleteRecursively(checkpointDir)
     }
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
   }
 
   override def beforeAll(): Unit = {
     val conf = new SparkConf().setMaster("local").setAppName("TrackStateByKeySuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
+  }
+
+  override def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
+    }
   }
 
   test("state - get, exists, update, remove, ") {
@@ -235,7 +238,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       assert(dstreamImpl.stateClass === classOf[Double])
       assert(dstreamImpl.emittedClass === classOf[Long])
     }
-
+    val ssc = new StreamingContext(sc, batchDuration)
     val inputStream = new TestInputStream[(String, Int)](ssc, Seq.empty, numPartitions = 2)
 
     // Defining StateSpec inline with trackStateByKey and simple function implicitly gets the types
@@ -436,6 +439,87 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     assert(collectedStateSnapshots.last.toSet === Set(("a", 1)))
   }
 
+  test("trackStateByKey - checkpoint durations") {
+    val privateMethod = PrivateMethod[InternalTrackStateDStream[_, _, _, _]]('internalStream)
+
+    def testCheckpointDuration(
+        batchDuration: Duration,
+        expectedCheckpointDuration: Duration,
+        explicitCheckpointDuration: Option[Duration] = None
+      ): Unit = {
+      val ssc = new StreamingContext(sc, batchDuration)
+
+      try {
+        val inputStream = new TestInputStream(ssc, Seq.empty[Seq[Int]], 2).map(_ -> 1)
+        val dummyFunc = (value: Option[Int], state: State[Int]) => 0
+        val trackStateStream = inputStream.trackStateByKey(StateSpec.function(dummyFunc))
+        val internalTrackStateStream = trackStateStream invokePrivate privateMethod()
+
+        explicitCheckpointDuration.foreach { d =>
+          trackStateStream.checkpoint(d)
+        }
+        trackStateStream.register()
+        ssc.checkpoint(checkpointDir.toString)
+        ssc.start()  // should initialize all the checkpoint durations
+        assert(trackStateStream.checkpointDuration === null)
+        assert(internalTrackStateStream.checkpointDuration === expectedCheckpointDuration)
+      } finally {
+        ssc.stop(stopSparkContext = false)
+      }
+    }
+
+    testCheckpointDuration(Milliseconds(100), Seconds(1))
+    testCheckpointDuration(Seconds(1), Seconds(10))
+    testCheckpointDuration(Seconds(10), Seconds(100))
+
+    testCheckpointDuration(Milliseconds(100), Seconds(2), Some(Seconds(2)))
+    testCheckpointDuration(Seconds(1), Seconds(2), Some(Seconds(2)))
+    testCheckpointDuration(Seconds(10), Seconds(20), Some(Seconds(20)))
+  }
+
+
+  test("trackStateByKey - driver failure recovery") {
+    val inputData =
+      Seq(
+        Seq(),
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val stateData =
+      Seq(
+        Seq(),
+        Seq(("a", 1)),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("a", 3), ("b", 2), ("c", 1)),
+        Seq(("a", 4), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1))
+      )
+
+    def operation(dstream: DStream[String]): DStream[(String, Int)] = {
+
+      val checkpointDuration = batchDuration * (stateData.size / 2)
+
+      val runningCount = (value: Option[Int], state: State[Int]) => {
+        state.update(state.getOption().getOrElse(0) + value.getOrElse(0))
+        state.get()
+      }
+
+      val trackStateStream = dstream.map { _ -> 1 }.trackStateByKey(
+        StateSpec.function(runningCount))
+      // Set internval make sure there is one RDD checkpointing
+      trackStateStream.checkpoint(checkpointDuration)
+      trackStateStream.stateSnapshots()
+    }
+
+    testCheckpointedOperation(inputData, operation, stateData, inputData.size / 2,
+      batchDuration = batchDuration, stopSparkContextAfterTest = false)
+  }
 
   private def testOperation[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],
@@ -458,6 +542,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     ): (Seq[Seq[T]], Seq[Seq[(K, S)]]) = {
 
     // Setup the stream computation
+    val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
     val trackeStateStream = inputStream.map(x => (x, 1)).trackStateByKey(trackStateSpec)
     val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
@@ -469,12 +554,14 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     stateSnapshotStream.register()
 
     val batchCounter = new BatchCounter(ssc)
+    ssc.checkpoint(checkpointDir.toString)
     ssc.start()
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     clock.advance(batchDuration.milliseconds * numBatches)
 
     batchCounter.waitUntilBatchesCompleted(numBatches, 10000)
+    ssc.stop(stopSparkContext = false)
     (collectedOutputs, collectedStateSnapshots)
   }
 
