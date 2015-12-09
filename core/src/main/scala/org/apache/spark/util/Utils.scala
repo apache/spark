@@ -331,7 +331,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * A file name may contain some invalid url characters, such as " ". This method will convert the
+   * A file name may contain some invalid URI characters, such as " ". This method will convert the
    * file name to a raw path accepted by `java.net.URI(String)`.
    *
    * Note: the file name must not contain "/" or "\"
@@ -345,11 +345,11 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Get the file name from uri's raw path and decode it. The raw path of uri must not end with "/".
+   * Get the file name from uri's raw path and decode it. If the raw path of uri ends with "/",
+   * return the name before the last "/".
    */
   def decodeFileNameInURI(uri: URI): String = {
     val rawPath = uri.getRawPath
-    assert(!rawPath.endsWith("/"))
     val rawFileName = rawPath.split("/").last
     new URI("file:///" + rawFileName).getPath.substring(1)
   }
