@@ -121,6 +121,16 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!-- Jersey dependencies, used to override version.
      See https://github.com/apache/spark/pull/9503#issuecomment-154369560 for
      background on why we need to use a newer Jersey only in this test module;
