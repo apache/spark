@@ -98,6 +98,9 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assert(mm.storageMemoryUsed === 1000L)
     assert(mm.acquireStorageMemory(dummyBlock, 1L, evictedBlocks))
     assertEvictBlocksToFreeSpaceCalled(ms, 1L)
+    // Note: We evicted 1 byte to put another 1-byte block in, so the storage memory used remains at
+    // 1000 bytes. This is different from real behavior, where the 1-byte block would have evicted
+    // the 1000-byte block entirely. This is set up differently so we can write finer-grained tests.
     assert(mm.storageMemoryUsed === 1000L)
     mm.releaseStorageMemory(800L)
     assert(mm.storageMemoryUsed === 200L)
