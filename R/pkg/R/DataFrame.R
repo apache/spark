@@ -1209,7 +1209,11 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #' }
 setMethod("subset", signature(x = "DataFrame"),
           function(x, subset, select, ...) {
-            x[subset, select, ...]
+            if (missing(subset)) {
+                x[, select, ...]
+            } else {
+                x[subset, select, ...]
+            }
           })
 
 #' Select
