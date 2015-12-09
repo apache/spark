@@ -866,7 +866,7 @@ private[ml] object RandomForest extends Logging {
         .groupByKey(numPartitions)
         .map { case (idx, samples) =>
           val thresholds = findSplitsForContinuousFeature(samples.toArray, metadata, idx)
-          val splits = thresholds.map(threshold => new ContinuousSplit(idx, threshold))
+          val splits: Array[Split] = thresholds.map(threshold => new ContinuousSplit(idx, threshold))
           logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
           (idx, splits)
         }.collectAsMap()
@@ -877,28 +877,27 @@ private[ml] object RandomForest extends Logging {
       case i if metadata.isContinuous(i) =>
         val split = continuousSplits(i)
         metadata.setNumSplits(i, split.length)
-        split.asInstanceOf[Array[Split]]
+        split
 
       case i if metadata.isCategorical(i) && metadata.isUnordered(i) =>
         // Unordered features
         // 2^(maxFeatureValue - 1) - 1 combinations
         val featureArity = metadata.featureArity(i)
-        val split = Range(0, metadata.numSplits(i)).map { splitIndex =>
+        val split: IndexedSeq[Split] = Range(0, metadata.numSplits(i)).map { splitIndex =>
           val categories = extractMultiClassCategories(splitIndex + 1, featureArity)
           new CategoricalSplit(i, categories.toArray, featureArity)
         }
 
         // For unordered categorical features, there is no need to construct the bins.
         // since there is a one-to-one correspondence between the splits and the bins.
-        split.toArray.asInstanceOf[Array[Split]]
+        split.toArray
 
       case i if metadata.isCategorical(i) =>
         // Ordered features
         //   Bins correspond to feature values, so we do not need to compute splits or bins
         //   beforehand.  Splits are constructed as needed during training.
-        Array.empty[CategoricalSplit].asInstanceOf[Array[Split]]
+        Array.empty[Split]
     }
-
     splits.toArray
   }
 
