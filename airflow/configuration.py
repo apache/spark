@@ -410,7 +410,7 @@ TEST_CONFIG_FILE = AIRFLOW_HOME + '/unittests.cfg'
 if not os.path.isfile(TEST_CONFIG_FILE):
     logging.info("Creating new airflow config file for unit tests in: " +
                  TEST_CONFIG_FILE)
-    with open(AIRFLOW_CONFIG, 'w') as f:
+    with open(TEST_CONFIG_FILE, 'w') as f:
         f.write(parameterized_config(TEST_CONFIG))
 
 if not os.path.isfile(AIRFLOW_CONFIG):

@@ -220,7 +220,7 @@ class SchedulerJob(BaseJob):
 
         if test_mode:
             self.num_runs = 1
-        elif num_runs and num_runs > 0:
+        else:
             self.num_runs = num_runs
 
         self.refresh_dags_every = refresh_dags_every
