@@ -400,7 +400,15 @@ private[serializer] class KryoInputDataInputBridge(input: KryoInput) extends Dat
   override def readUTF(): String = input.readString() // readString in kryo does utf8
   override def readInt(): Int = input.readInt()
   override def readUnsignedShort(): Int = input.readShortUnsigned()
-  override def skipBytes(n: Int): Int = input.skip(n.toLong).toInt
+  override def skipBytes(n: Int): Int = {
+    var remaining: Long = n
+    while (remaining > 0) {
+      val skip = Math.min(Integer.MAX_VALUE, remaining).asInstanceOf[Int]
+      input.skip(skip)
+      remaining -= skip
+    }
+    n
+  }
   override def readFully(b: Array[Byte]): Unit = input.read(b)
   override def readFully(b: Array[Byte], off: Int, len: Int): Unit = input.read(b, off, len)
   override def readLine(): String = throw new UnsupportedOperationException("readLine")
