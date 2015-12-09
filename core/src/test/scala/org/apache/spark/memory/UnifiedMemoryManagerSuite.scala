@@ -189,8 +189,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(!mm.acquireStorageMemory(dummyBlock, 250L, evictedBlocks))
     assert(mm.executionMemoryUsed === 800L)
     assert(mm.storageMemoryUsed === 100L)
-    assertEvictBlocksToFreeSpaceCalled(ms, 150L) // try to evict blocks ...
-    assert(evictedBlocks.isEmpty) // ... but don't evict since evicting will not be sufficient
+    // Do not attempt to evict blocks, since evicting will not free enough memory:
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
     mm.releaseExecutionMemory(maxMemory, taskAttemptId, MemoryMode.ON_HEAP)
     mm.releaseStorageMemory(maxMemory)
     // Acquire some execution memory again, but this time keep it within the execution region
@@ -206,8 +206,8 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(!mm.acquireStorageMemory(dummyBlock, 850L, evictedBlocks))
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 750L)
-    assertEvictBlocksToFreeSpaceCalled(ms, 800L) // try to evict blocks...
-    assert(evictedBlocks.isEmpty) // ... but don't evict since evicting will not be sufficient
+    // Do not attempt to evict blocks, since evicting will not free enough memory:
+    assertEvictBlocksToFreeSpaceNotCalled(ms)
   }
 
   test("small heap") {
