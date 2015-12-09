@@ -52,10 +52,6 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
     val outputFields = inputFields :+ attr.toStructField()
     StructType(outputFields)
   }
-
-  /** @group setParam */
-  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
-  setDefault(handleInvalid, "error")
 }
 
 /**
@@ -72,6 +68,10 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   with StringIndexerBase with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("strIdx"))
+
+  /** @group setParam */
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -132,6 +132,10 @@ class StringIndexerModel (
     }
     map
   }
+
+  /** @group setParam */
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+  setDefault(handleInvalid, "error")
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
