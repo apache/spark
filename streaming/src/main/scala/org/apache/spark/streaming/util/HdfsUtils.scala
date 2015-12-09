@@ -16,6 +16,8 @@
  */
 package org.apache.spark.streaming.util
 
+import java.io.IOException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
@@ -27,7 +29,7 @@ private[streaming] object HdfsUtils {
     // If the file exists and we have append support, append instead of creating a new file
     val stream: FSDataOutputStream = {
       if (dfs.isFile(dfsPath)) {
-        if (conf.getBoolean("hdfs.append.support", false)) {
+        if (conf.getBoolean("hdfs.append.support", false) || dfs.isInstanceOf[RawLocalFileSystem]) {
           dfs.append(dfsPath)
         } else {
           throw new IllegalStateException("File exists and there is no append support!")
@@ -42,8 +44,19 @@ private[streaming] object HdfsUtils {
   def getInputStream(path: String, conf: Configuration): FSDataInputStream = {
     val dfsPath = new Path(path)
     val dfs = getFileSystemForPath(dfsPath, conf)
-    val instream = dfs.open(dfsPath)
-    instream
+    if (dfs.isFile(dfsPath)) {
+      try {
+        dfs.open(dfsPath)
+      } catch {
+        case e: IOException =>
+          // If we are really unlucky, the file may be deleted as we're opening the stream.
+          // This can happen as clean up is performed by daemon threads that may be left over from
+          // previous runs.
+          if (!dfs.isFile(dfsPath)) null else throw e
+      }
+    } else {
+      null
+    }
   }
 
   def checkState(state: Boolean, errorMsg: => String) {
@@ -70,5 +83,12 @@ private[streaming] object HdfsUtils {
       case localFs: LocalFileSystem => localFs.getRawFileSystem
       case _ => fs
     }
+  }
+
+  /** Check if the file exists at the given path. */
+  def checkFileExists(path: String, conf: Configuration): Boolean = {
+    val hdpPath = new Path(path)
+    val fs = getFileSystemForPath(hdpPath, conf)
+    fs.isFile(hdpPath)
   }
 }

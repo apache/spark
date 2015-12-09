@@ -129,32 +129,6 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
   }
 
-  test("block generator") {
-    val blockGeneratorListener = new FakeBlockGeneratorListener
-    val blockIntervalMs = 200
-    val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
-    val blockGenerator = new BlockGenerator(blockGeneratorListener, 1, conf)
-    val expectedBlocks = 5
-    val waitTime = expectedBlocks * blockIntervalMs + (blockIntervalMs / 2)
-    val generatedData = new ArrayBuffer[Int]
-
-    // Generate blocks
-    val startTime = System.currentTimeMillis()
-    blockGenerator.start()
-    var count = 0
-    while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator.addData(count)
-      generatedData += count
-      count += 1
-      Thread.sleep(10)
-    }
-    blockGenerator.stop()
-
-    val recordedData = blockGeneratorListener.arrayBuffers.flatten
-    assert(blockGeneratorListener.arrayBuffers.size > 0)
-    assert(recordedData.toSet === generatedData.toSet)
-  }
-
   ignore("block generator throttling") {
     val blockGeneratorListener = new FakeBlockGeneratorListener
     val blockIntervalMs = 100
@@ -225,7 +199,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
       .setAppName(framework)
       .set("spark.ui.enabled", "true")
       .set("spark.streaming.receiver.writeAheadLog.enable", "true")
-      .set("spark.streaming.receiver.writeAheadLog.rollingInterval", "1")
+      .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
     val batchDuration = Milliseconds(500)
     val tempDirectory = Utils.createTempDir()
     val logDirectory1 = new File(checkpointDirToLogDir(tempDirectory.getAbsolutePath, 0))
@@ -256,8 +230,8 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
     }
 
     withStreamingContext(new StreamingContext(sparkConf, batchDuration)) { ssc =>
-      val receiver1 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
-      val receiver2 = ssc.sparkContext.clean(new FakeReceiver(sendData = true))
+      val receiver1 = new FakeReceiver(sendData = true)
+      val receiver2 = new FakeReceiver(sendData = true)
       val receiverStream1 = ssc.receiverStream(receiver1)
       val receiverStream2 = ssc.receiverStream(receiver2)
       receiverStream1.register()
@@ -345,6 +319,13 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     def reportError(message: String, throwable: Throwable) {
       errors += throwable
+    }
+
+    override protected def onReceiverStart(): Boolean = true
+
+    override def createBlockGenerator(
+        blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
+      null
     }
   }
 

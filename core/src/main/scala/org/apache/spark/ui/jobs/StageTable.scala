@@ -17,10 +17,9 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.xml.Node
-import scala.xml.Text
-
 import java.util.Date
+
+import scala.xml.{Node, Text}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -76,19 +75,24 @@ private[ui] class StageTableBase(
     val basePathUri = UIUtils.prependBaseUri(basePath)
 
     val killLink = if (killEnabled) {
-      val killLinkUri = s"$basePathUri/stages/stage/kill/"
       val confirm =
         s"if (window.confirm('Are you sure you want to kill stage ${s.stageId} ?')) " +
         "{ this.parentNode.submit(); return true; } else { return false; }"
+      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
+      /*
+      val killLinkUri = s"$basePathUri/stages/stage/kill/"
       <form action={killLinkUri} method="POST" style="display:inline">
         <input type="hidden" name="id" value={s.stageId.toString}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
+       */
+      val killLinkUri = s"$basePathUri/stages/stage/kill/?id=${s.stageId}&terminate=true"
+      <a href={killLinkUri} onclick={confirm} class="kill-link">(kill)</a>
     }
 
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
-    val nameLink = <a href={nameLinkUri}>{s.name}</a>
+    val nameLink = <a href={nameLinkUri} class="name-link">{s.name}</a>
 
     val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
     val details = if (s.details.nonEmpty) {
@@ -111,15 +115,28 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <span class="description-input" title={desc}>{desc}</span>
+      UIUtils.makeDescription(desc, basePathUri)
     }
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
+  }
+
+  protected def missingStageRow(stageId: Int): Seq[Node] = {
+    <td>{stageId}</td> ++
+    {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
+    <td>No data available for this stage</td> ++ // Description
+    <td></td> ++ // Submitted
+    <td></td> ++ // Duration
+    <td></td> ++ // Tasks: Succeeded/Total
+    <td></td> ++ // Input
+    <td></td> ++ // Output
+    <td></td> ++ // Shuffle Read
+    <td></td> // Shuffle Write
   }
 
   protected def stageRow(s: StageInfo): Seq[Node] = {
     val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
     if (stageDataOption.isEmpty) {
-      return <td>{s.stageId}</td><td>No data available for this stage</td>
+      return missingStageRow(s.stageId)
     }
 
     val stageData = stageDataOption.get
@@ -128,9 +145,22 @@ private[ui] class StageTableBase(
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis)
-    val duration = s.submissionTime.map { t =>
-      if (finishTime > t) finishTime - t else System.currentTimeMillis - t
-    }
+
+    // The submission time for a stage is misleading because it counts the time
+    // the stage waits to be launched. (SPARK-10930)
+    val taskLaunchTimes =
+      stageData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
+    val duration: Option[Long] =
+      if (taskLaunchTimes.nonEmpty) {
+        val startTime = taskLaunchTimes.min
+        if (finishTime > startTime) {
+          Some(finishTime - startTime)
+        } else {
+          Some(System.currentTimeMillis() - startTime)
+        }
+      } else {
+        None
+      }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
     val inputRead = stageData.inputBytes
@@ -174,7 +204,8 @@ private[ui] class StageTableBase(
   }
 
   /** Render an HTML row that represents a stage */
-  private def renderStageRow(s: StageInfo): Seq[Node] = <tr>{stageRow(s)}</tr>
+  private def renderStageRow(s: StageInfo): Seq[Node] =
+    <tr id={"stage-" + s.stageId + "-" + s.attemptId}>{stageRow(s)}</tr>
 }
 
 private[ui] class FailedStageTable(

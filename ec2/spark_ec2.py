@@ -19,8 +19,9 @@
 # limitations under the License.
 #
 
-from __future__ import with_statement, print_function
+from __future__ import division, print_function, with_statement
 
+import codecs
 import hashlib
 import itertools
 import logging
@@ -47,8 +48,10 @@ if sys.version < "3":
 else:
     from urllib.request import urlopen, Request
     from urllib.error import HTTPError
+    raw_input = input
+    xrange = range
 
-SPARK_EC2_VERSION = "1.2.1"
+SPARK_EC2_VERSION = "1.6.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 VALID_SPARK_VERSIONS = set([
@@ -65,6 +68,14 @@ VALID_SPARK_VERSIONS = set([
     "1.1.1",
     "1.2.0",
     "1.2.1",
+    "1.3.0",
+    "1.3.1",
+    "1.4.0",
+    "1.4.1",
+    "1.5.0",
+    "1.5.1",
+    "1.5.2",
+    "1.6.0",
 ])
 
 SPARK_TACHYON_MAP = {
@@ -75,14 +86,22 @@ SPARK_TACHYON_MAP = {
     "1.1.1": "0.5.0",
     "1.2.0": "0.5.0",
     "1.2.1": "0.5.0",
+    "1.3.0": "0.5.0",
+    "1.3.1": "0.5.0",
+    "1.4.0": "0.6.4",
+    "1.4.1": "0.6.4",
+    "1.5.0": "0.7.1",
+    "1.5.1": "0.7.1",
+    "1.5.2": "0.7.1",
+    "1.6.0": "0.8.2",
 }
 
 DEFAULT_SPARK_VERSION = SPARK_EC2_VERSION
 DEFAULT_SPARK_GITHUB_REPO = "https://github.com/apache/spark"
 
 # Default location to get the spark-ec2 scripts (and ami-list) from
-DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/mesos/spark-ec2"
-DEFAULT_SPARK_EC2_BRANCH = "branch-1.3"
+DEFAULT_SPARK_EC2_GITHUB_REPO = "https://github.com/amplab/spark-ec2"
+DEFAULT_SPARK_EC2_BRANCH = "branch-1.5"
 
 
 def setup_external_libs(libs):
@@ -116,7 +135,7 @@ def setup_external_libs(libs):
             )
             with open(tgz_file_path, "wb") as tgz_file:
                 tgz_file.write(download_stream.read())
-            with open(tgz_file_path) as tar:
+            with open(tgz_file_path, "rb") as tar:
                 if hashlib.md5(tar.read()).hexdigest() != lib["md5"]:
                     print("ERROR: Got wrong md5sum for {lib}.".format(lib=lib["name"]), file=stderr)
                     sys.exit(1)
@@ -169,6 +188,10 @@ def parse_args():
         "-i", "--identity-file",
         help="SSH private key file to use for logging into instances")
     parser.add_option(
+        "-p", "--profile", default=None,
+        help="If you have multiple profiles (AWS or boto config), you can configure " +
+             "additional, named profiles by using this option (default: %default)")
+    parser.add_option(
         "-t", "--instance-type", default="m1.large",
         help="Type of instance to launch (default: %default). " +
              "WARNING: must be 64-bit; small instances won't work")
@@ -212,7 +235,8 @@ def parse_args():
              "(default: %default).")
     parser.add_option(
         "--hadoop-major-version", default="1",
-        help="Major version of Hadoop (default: %default)")
+        help="Major version of Hadoop. Valid options are 1 (Hadoop 1.0.4), 2 (CDH 4.2.0), yarn " +
+             "(Hadoop 2.4.0) (default: %default)")
     parser.add_option(
         "-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
         help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
@@ -232,7 +256,7 @@ def parse_args():
         help="Number of EBS volumes to attach to each node as /vol[x]. " +
              "The volumes will be deleted when the instances terminate. " +
              "Only possible on EBS-backed AMIs. " +
-             "EBS volumes are only attached if --ebs-vol-size > 0." +
+             "EBS volumes are only attached if --ebs-vol-size > 0. " +
              "Only support up to 8 EBS volumes.")
     parser.add_option(
         "--placement-group", type="string", default=None,
@@ -264,7 +288,8 @@ def parse_args():
         help="Launch fresh slaves, but use an existing stopped master if possible")
     parser.add_option(
         "--worker-instances", type="int", default=1,
-        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES (default: %default)")
+        help="Number of instances per worker: variable SPARK_WORKER_INSTANCES. Not used if YARN " +
+             "is used as Hadoop major version (default: %default)")
     parser.add_option(
         "--master-opts", type="string", default="",
         help="Extra options to give to master through SPARK_MASTER_OPTS variable " +
@@ -279,6 +304,10 @@ def parse_args():
         "--additional-security-group", type="string", default="",
         help="Additional security group to place the machines in")
     parser.add_option(
+        "--additional-tags", type="string", default="",
+        help="Additional tags to set on the machines; tags are comma-separated, while name and " +
+             "value are colon separated; ex: \"Task:MySparkProject,Env:production\"")
+    parser.add_option(
         "--copy-aws-credentials", action="store_true", default=False,
         help="Add AWS credentials to hadoop configuration to allow Spark to access S3")
     parser.add_option(
@@ -291,6 +320,13 @@ def parse_args():
         "--private-ips", action="store_true", default=False,
         help="Use private IPs for instances rather than public if VPC/subnet " +
              "requires that.")
+    parser.add_option(
+        "--instance-initiated-shutdown-behavior", default="stop",
+        choices=["stop", "terminate"],
+        help="Whether instances should terminate when shut down or just stop")
+    parser.add_option(
+        "--instance-profile-name", default=None,
+        help="IAM profile name to launch instances under")
 
     (opts, args) = parser.parse_args()
     if len(args) != 2:
@@ -303,14 +339,16 @@ def parse_args():
     home_dir = os.getenv('HOME')
     if home_dir is None or not os.path.isfile(home_dir + '/.boto'):
         if not os.path.isfile('/etc/boto.cfg'):
-            if os.getenv('AWS_ACCESS_KEY_ID') is None:
-                print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
-                      file=stderr)
-                sys.exit(1)
-            if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
-                print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
-                      file=stderr)
-                sys.exit(1)
+            # If there is no boto config, check aws credentials
+            if not os.path.isfile(home_dir + '/.aws/credentials'):
+                if os.getenv('AWS_ACCESS_KEY_ID') is None:
+                    print("ERROR: The environment variable AWS_ACCESS_KEY_ID must be set",
+                          file=stderr)
+                    sys.exit(1)
+                if os.getenv('AWS_SECRET_ACCESS_KEY') is None:
+                    print("ERROR: The environment variable AWS_SECRET_ACCESS_KEY must be set",
+                          file=stderr)
+                    sys.exit(1)
     return (opts, action, cluster_name)
 
 
@@ -347,46 +385,63 @@ def get_validate_spark_version(version, repo):
 
 
 # Source: http://aws.amazon.com/amazon-linux-ami/instance-type-matrix/
-# Last Updated: 2014-06-20
+# Last Updated: 2015-06-19
 # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
 EC2_INSTANCE_TYPES = {
     "c1.medium":   "pvm",
     "c1.xlarge":   "pvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
     "c3.2xlarge":  "pvm",
     "c3.4xlarge":  "pvm",
     "c3.8xlarge":  "pvm",
-    "c3.large":    "pvm",
-    "c3.xlarge":   "pvm",
+    "c4.large":    "hvm",
+    "c4.xlarge":   "hvm",
+    "c4.2xlarge":  "hvm",
+    "c4.4xlarge":  "hvm",
+    "c4.8xlarge":  "hvm",
     "cc1.4xlarge": "hvm",
     "cc2.8xlarge": "hvm",
     "cg1.4xlarge": "hvm",
     "cr1.8xlarge": "hvm",
+    "d2.xlarge":   "hvm",
+    "d2.2xlarge":  "hvm",
+    "d2.4xlarge":  "hvm",
+    "d2.8xlarge":  "hvm",
+    "g2.2xlarge":  "hvm",
+    "g2.8xlarge":  "hvm",
     "hi1.4xlarge": "pvm",
     "hs1.8xlarge": "pvm",
+    "i2.xlarge":   "hvm",
     "i2.2xlarge":  "hvm",
     "i2.4xlarge":  "hvm",
     "i2.8xlarge":  "hvm",
-    "i2.xlarge":   "hvm",
-    "m1.large":    "pvm",
-    "m1.medium":   "pvm",
     "m1.small":    "pvm",
+    "m1.medium":   "pvm",
+    "m1.large":    "pvm",
     "m1.xlarge":   "pvm",
+    "m2.xlarge":   "pvm",
     "m2.2xlarge":  "pvm",
     "m2.4xlarge":  "pvm",
-    "m2.xlarge":   "pvm",
-    "m3.2xlarge":  "hvm",
-    "m3.large":    "hvm",
     "m3.medium":   "hvm",
+    "m3.large":    "hvm",
     "m3.xlarge":   "hvm",
+    "m3.2xlarge":  "hvm",
+    "m4.large":    "hvm",
+    "m4.xlarge":   "hvm",
+    "m4.2xlarge":  "hvm",
+    "m4.4xlarge":  "hvm",
+    "m4.10xlarge": "hvm",
+    "r3.large":    "hvm",
+    "r3.xlarge":   "hvm",
     "r3.2xlarge":  "hvm",
     "r3.4xlarge":  "hvm",
     "r3.8xlarge":  "hvm",
-    "r3.large":    "hvm",
-    "r3.xlarge":   "hvm",
     "t1.micro":    "pvm",
-    "t2.medium":   "hvm",
     "t2.micro":    "hvm",
     "t2.small":    "hvm",
+    "t2.medium":   "hvm",
+    "t2.large":    "hvm",
 }
 
 
@@ -408,13 +463,14 @@ def get_spark_ami(opts):
         b=opts.spark_ec2_git_branch)
 
     ami_path = "%s/%s/%s" % (ami_prefix, opts.region, instance_type)
+    reader = codecs.getreader("ascii")
     try:
-        ami = urlopen(ami_path).read().strip()
-        print("Spark AMI: " + ami)
+        ami = reader(urlopen(ami_path)).read().strip()
     except:
         print("Could not resolve AMI at: " + ami_path, file=stderr)
         sys.exit(1)
 
+    print("Spark AMI: " + ami)
     return ami
 
 
@@ -465,6 +521,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('tcp', 50070, 50070, authorized_address)
         master_group.authorize('tcp', 60070, 60070, authorized_address)
         master_group.authorize('tcp', 4040, 4045, authorized_address)
+        # Rstudio (GUI for R) needs port 8787 for web access
+        master_group.authorize('tcp', 8787, 8787, authorized_address)
         # HDFS NFS gateway requires 111,2049,4242 for tcp & udp
         master_group.authorize('tcp', 111, 111, authorized_address)
         master_group.authorize('udp', 111, 111, authorized_address)
@@ -472,6 +530,8 @@ def launch_cluster(conn, opts, cluster_name):
         master_group.authorize('udp', 2049, 2049, authorized_address)
         master_group.authorize('tcp', 4242, 4242, authorized_address)
         master_group.authorize('udp', 4242, 4242, authorized_address)
+        # RM in YARN mode uses 8088
+        master_group.authorize('tcp', 8088, 8088, authorized_address)
         if opts.ganglia:
             master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
@@ -541,7 +601,7 @@ def launch_cluster(conn, opts, cluster_name):
             dev = BlockDeviceType()
             dev.ephemeral_name = 'ephemeral%d' % i
             # The first ephemeral drive is /dev/sdb.
-            name = '/dev/sd' + string.letters[i + 1]
+            name = '/dev/sd' + string.ascii_letters[i + 1]
             block_map[name] = dev
 
     # Launch slaves
@@ -567,7 +627,8 @@ def launch_cluster(conn, opts, cluster_name):
                 block_device_map=block_map,
                 subnet_id=opts.subnet_id,
                 placement_group=opts.placement_group,
-                user_data=user_data_content)
+                user_data=user_data_content,
+                instance_profile_name=opts.instance_profile_name)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -612,16 +673,19 @@ def launch_cluster(conn, opts, cluster_name):
         for zone in zones:
             num_slaves_this_zone = get_partition(opts.slaves, num_zones, i)
             if num_slaves_this_zone > 0:
-                slave_res = image.run(key_name=opts.key_pair,
-                                      security_group_ids=[slave_group.id] + additional_group_ids,
-                                      instance_type=opts.instance_type,
-                                      placement=zone,
-                                      min_count=num_slaves_this_zone,
-                                      max_count=num_slaves_this_zone,
-                                      block_device_map=block_map,
-                                      subnet_id=opts.subnet_id,
-                                      placement_group=opts.placement_group,
-                                      user_data=user_data_content)
+                slave_res = image.run(
+                    key_name=opts.key_pair,
+                    security_group_ids=[slave_group.id] + additional_group_ids,
+                    instance_type=opts.instance_type,
+                    placement=zone,
+                    min_count=num_slaves_this_zone,
+                    max_count=num_slaves_this_zone,
+                    block_device_map=block_map,
+                    subnet_id=opts.subnet_id,
+                    placement_group=opts.placement_group,
+                    user_data=user_data_content,
+                    instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+                    instance_profile_name=opts.instance_profile_name)
                 slave_nodes += slave_res.instances
                 print("Launched {s} slave{plural_s} in {z}, regid = {r}".format(
                       s=num_slaves_this_zone,
@@ -643,32 +707,43 @@ def launch_cluster(conn, opts, cluster_name):
             master_type = opts.instance_type
         if opts.zone == 'all':
             opts.zone = random.choice(conn.get_all_zones()).name
-        master_res = image.run(key_name=opts.key_pair,
-                               security_group_ids=[master_group.id] + additional_group_ids,
-                               instance_type=master_type,
-                               placement=opts.zone,
-                               min_count=1,
-                               max_count=1,
-                               block_device_map=block_map,
-                               subnet_id=opts.subnet_id,
-                               placement_group=opts.placement_group,
-                               user_data=user_data_content)
+        master_res = image.run(
+            key_name=opts.key_pair,
+            security_group_ids=[master_group.id] + additional_group_ids,
+            instance_type=master_type,
+            placement=opts.zone,
+            min_count=1,
+            max_count=1,
+            block_device_map=block_map,
+            subnet_id=opts.subnet_id,
+            placement_group=opts.placement_group,
+            user_data=user_data_content,
+            instance_initiated_shutdown_behavior=opts.instance_initiated_shutdown_behavior,
+            instance_profile_name=opts.instance_profile_name)
 
         master_nodes = master_res.instances
         print("Launched master in %s, regid = %s" % (zone, master_res.id))
 
     # This wait time corresponds to SPARK-4983
     print("Waiting for AWS to propagate instance metadata...")
-    time.sleep(5)
-    # Give the instances descriptive names
+    time.sleep(15)
+
+    # Give the instances descriptive names and set additional tags
+    additional_tags = {}
+    if opts.additional_tags.strip():
+        additional_tags = dict(
+            map(str.strip, tag.split(':', 1)) for tag in opts.additional_tags.split(',')
+        )
+
     for master in master_nodes:
-        master.add_tag(
-            key='Name',
-            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        master.add_tags(
+            dict(additional_tags, Name='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
+        )
+
     for slave in slave_nodes:
-        slave.add_tag(
-            key='Name',
-            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        slave.add_tags(
+            dict(additional_tags, Name='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
+        )
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -732,13 +807,17 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
             ssh_write(slave_address, opts, ['tar', 'x'], dot_ssh_tar)
 
     modules = ['spark', 'ephemeral-hdfs', 'persistent-hdfs',
-               'mapreduce', 'spark-standalone', 'tachyon']
+               'mapreduce', 'spark-standalone', 'tachyon', 'rstudio']
 
     if opts.hadoop_major_version == "1":
-        modules = filter(lambda x: x != "mapreduce", modules)
+        modules = list(filter(lambda x: x != "mapreduce", modules))
 
     if opts.ganglia:
         modules.append('ganglia')
+
+    # Clear SPARK_WORKER_INSTANCES if running on YARN
+    if opts.hadoop_major_version == "yarn":
+        opts.worker_instances = ""
 
     # NOTE: We should clone the repository before running deploy_files to
     # prevent ec2-variables.sh from being overwritten
@@ -849,7 +928,11 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
         for i in cluster_instances:
             i.update()
 
-        statuses = conn.get_all_instance_status(instance_ids=[i.id for i in cluster_instances])
+        max_batch = 100
+        statuses = []
+        for j in xrange(0, len(cluster_instances), max_batch):
+            batch = [i.id for i in cluster_instances[j:j + max_batch]]
+            statuses.extend(conn.get_all_instance_status(instance_ids=batch))
 
         if cluster_state == 'ssh-ready':
             if all(i.state == 'running' for i in cluster_instances) and \
@@ -878,44 +961,63 @@ def wait_for_cluster_state(conn, opts, cluster_instances, cluster_state):
 # Get number of local disks available for a given EC2 instance type.
 def get_num_disks(instance_type):
     # Source: http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Last Updated: 2014-06-20
+    # Last Updated: 2015-06-19
     # For easy maintainability, please keep this manually-inputted dictionary sorted by key.
     disks_by_instance = {
         "c1.medium":   1,
         "c1.xlarge":   4,
+        "c3.large":    2,
+        "c3.xlarge":   2,
         "c3.2xlarge":  2,
         "c3.4xlarge":  2,
         "c3.8xlarge":  2,
-        "c3.large":    2,
-        "c3.xlarge":   2,
+        "c4.large":    0,
+        "c4.xlarge":   0,
+        "c4.2xlarge":  0,
+        "c4.4xlarge":  0,
+        "c4.8xlarge":  0,
         "cc1.4xlarge": 2,
         "cc2.8xlarge": 4,
         "cg1.4xlarge": 2,
         "cr1.8xlarge": 2,
+        "d2.xlarge":   3,
+        "d2.2xlarge":  6,
+        "d2.4xlarge":  12,
+        "d2.8xlarge":  24,
         "g2.2xlarge":  1,
+        "g2.8xlarge":  2,
         "hi1.4xlarge": 2,
         "hs1.8xlarge": 24,
+        "i2.xlarge":   1,
         "i2.2xlarge":  2,
         "i2.4xlarge":  4,
         "i2.8xlarge":  8,
-        "i2.xlarge":   1,
-        "m1.large":    2,
-        "m1.medium":   1,
         "m1.small":    1,
+        "m1.medium":   1,
+        "m1.large":    2,
         "m1.xlarge":   4,
+        "m2.xlarge":   1,
         "m2.2xlarge":  1,
         "m2.4xlarge":  2,
-        "m2.xlarge":   1,
-        "m3.2xlarge":  2,
-        "m3.large":    1,
         "m3.medium":   1,
+        "m3.large":    1,
         "m3.xlarge":   2,
+        "m3.2xlarge":  2,
+        "m4.large":    0,
+        "m4.xlarge":   0,
+        "m4.2xlarge":  0,
+        "m4.4xlarge":  0,
+        "m4.10xlarge": 0,
+        "r3.large":    1,
+        "r3.xlarge":   1,
         "r3.2xlarge":  1,
         "r3.4xlarge":  1,
         "r3.8xlarge":  2,
-        "r3.large":    1,
-        "r3.xlarge":   1,
         "t1.micro":    0,
+        "t2.micro":    0,
+        "t2.small":    0,
+        "t2.medium":   0,
+        "t2.large":    0,
     }
     if instance_type in disks_by_instance:
         return disks_by_instance[instance_type]
@@ -960,6 +1062,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 
     master_addresses = [get_dns_name(i, opts.private_ips) for i in master_nodes]
     slave_addresses = [get_dns_name(i, opts.private_ips) for i in slave_nodes]
+    worker_instances_str = "%d" % opts.worker_instances if opts.worker_instances else ""
     template_vars = {
         "master_list": '\n'.join(master_addresses),
         "active_master": active_master,
@@ -973,7 +1076,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
         "spark_version": spark_v,
         "tachyon_version": tachyon_v,
         "hadoop_major_version": opts.hadoop_major_version,
-        "spark_worker_instances": "%d" % opts.worker_instances,
+        "spark_worker_instances": worker_instances_str,
         "spark_master_opts": opts.master_opts
     }
 
@@ -1066,8 +1169,8 @@ def ssh(host, opts, command):
                 # If this was an ssh failure, provide the user with hints.
                 if e.returncode == 255:
                     raise UsageError(
-                        "Failed to SSH to remote host {0}.\n" +
-                        "Please check that you have provided the correct --identity-file and " +
+                        "Failed to SSH to remote host {0}.\n"
+                        "Please check that you have provided the correct --identity-file and "
                         "--key-pair parameters and try again.".format(host))
                 else:
                     raise e
@@ -1128,7 +1231,7 @@ def get_zones(conn, opts):
 
 # Gets the number of items in a partition
 def get_partition(total, num_partitions, current_partitions):
-    num_slaves_this_zone = total / num_partitions
+    num_slaves_this_zone = total // num_partitions
     if (total % num_partitions) - current_partitions > 0:
         num_slaves_this_zone += 1
     return num_slaves_this_zone
@@ -1145,6 +1248,10 @@ def get_ip_address(instance, private_ips=False):
 def get_dns_name(instance, private_ips=False):
     dns = instance.public_dns_name if not private_ips else \
         instance.private_ip_address
+    if not dns:
+        raise UsageError("Failed to determine hostname of {0}.\n"
+                         "Please check that you provided --private-ips if "
+                         "necessary".format(instance))
     return dns
 
 
@@ -1222,7 +1329,10 @@ def real_main():
         sys.exit(1)
 
     try:
-        conn = ec2.connect_to_region(opts.region)
+        if opts.profile is None:
+            conn = ec2.connect_to_region(opts.region)
+        else:
+            conn = ec2.connect_to_region(opts.region, profile_name=opts.profile)
     except Exception as e:
         print((e), file=stderr)
         sys.exit(1)

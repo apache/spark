@@ -20,12 +20,12 @@ package org.apache.spark
 import scala.collection.mutable.ArrayBuffer
 import scala.math.abs
 
-import org.scalatest.{FunSuite, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.StatCounter
 
-class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMethodTester {
+class PartitioningSuite extends SparkFunSuite with SharedSparkContext with PrivateMethodTester {
 
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
@@ -91,13 +91,13 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
 
   test("RangePartitioner for keys that are not Comparable (but with Ordering)") {
     // Row does not extend Comparable, but has an implicit Ordering defined.
-    implicit object RowOrdering extends Ordering[Row] {
-      override def compare(x: Row, y: Row): Int = x.value - y.value
+    implicit object RowOrdering extends Ordering[Item] {
+      override def compare(x: Item, y: Item): Int = x.value - y.value
     }
 
-    val rdd = sc.parallelize(1 to 4500).map(x => (Row(x), Row(x)))
+    val rdd = sc.parallelize(1 to 4500).map(x => (Item(x), Item(x)))
     val partitioner = new RangePartitioner(1500, rdd)
-    partitioner.getPartition(Row(100))
+    partitioner.getPartition(Item(100))
   }
 
   test("RangPartitioner.sketch") {
@@ -252,4 +252,4 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
 }
 
 
-private sealed case class Row(value: Int)
+private sealed case class Item(value: Int)

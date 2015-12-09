@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
@@ -91,3 +92,4 @@ object Correlations {
     sc.stop()
   }
 }
+// scalastyle:on println

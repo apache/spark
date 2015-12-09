@@ -17,22 +17,18 @@
 
 package org.apache.spark.sql
 
-import java.io.File
-
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{OpenHashSetUDT, HyperLogLogUDT}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql.test.TestSQLContext.{sparkContext, sql}
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashSet
+
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
 private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
@@ -52,17 +48,17 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
   override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
-  override def serialize(obj: Any): Seq[Double] = {
+  override def serialize(obj: Any): ArrayData = {
     obj match {
       case features: MyDenseVector =>
-        features.data.toSeq
+        new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
     }
   }
 
   override def deserialize(datum: Any): MyDenseVector = {
     datum match {
-      case data: Seq[_] =>
-        new MyDenseVector(data.asInstanceOf[Seq[Double]].toArray)
+      case data: ArrayData =>
+        new MyDenseVector(data.toDoubleArray())
     }
   }
 
@@ -71,12 +67,12 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
   private[spark] override def asNullable: MyDenseVectorUDT = this
 }
 
-class UserDefinedTypeSuite extends QueryTest {
-  val points = Seq(
-    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
-    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-  val pointsRDD = sparkContext.parallelize(points).toDF()
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
+  import testImplicits._
 
+  private lazy val pointsRDD = Seq(
+    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0)))).toDF()
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
@@ -94,24 +90,35 @@ class UserDefinedTypeSuite extends QueryTest {
   }
 
   test("UDTs and UDFs") {
-    TestSQLContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    sqlContext.udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
   }
 
-
-  test("UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.saveAsParquetFile(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
-  test("Repartition UDTs with Parquet") {
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    pointsRDD.repartition(1).saveAsParquetFile(tempDir.getCanonicalPath)
+  testStandardAndLegacyModes("Repartition UDTs with Parquet") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      pointsRDD.repartition(1).write.parquet(path)
+      checkAnswer(
+        sqlContext.read.parquet(path),
+        Seq(
+          Row(1.0, new MyDenseVector(Array(0.1, 1.0))),
+          Row(0.0, new MyDenseVector(Array(0.2, 2.0)))))
+    }
   }
 
   // Tests to make sure that all operators correctly convert types on the way out.
@@ -123,22 +130,38 @@ class UserDefinedTypeSuite extends QueryTest {
     df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0).getAs[MyDenseVector](0)
   }
 
-  test("HyperLogLogUDT") {
-    val hyperLogLogUDT = HyperLogLogUDT
-    val hyperLogLog = new HyperLogLog(0.4)
-    (1 to 10).foreach(i => hyperLogLog.offer(Row(i)))
+  test("UDTs with JSON") {
+    val data = Seq(
+      "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
+      "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
+    )
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, false),
+      StructField("vec", new MyDenseVectorUDT, false)
+    ))
 
-    val actual = hyperLogLogUDT.deserialize(hyperLogLogUDT.serialize(hyperLogLog))
-    assert(actual.cardinality() === hyperLogLog.cardinality())
-    assert(java.util.Arrays.equals(actual.getBytes, hyperLogLog.getBytes))
+    val stringRDD = sparkContext.parallelize(data)
+    val jsonRDD = sqlContext.read.schema(schema).json(stringRDD)
+    checkAnswer(
+      jsonRDD,
+      Row(1, new MyDenseVector(Array(1.1, 2.2, 3.3, 4.4))) ::
+        Row(2, new MyDenseVector(Array(2.25, 4.5, 8.75))) ::
+        Nil
+    )
   }
 
-  test("OpenHashSetUDT") {
-    val openHashSetUDT = new OpenHashSetUDT(IntegerType)
-    val set = new OpenHashSet[Int]
-    (1 to 10).foreach(i => set.add(i))
+  test("SPARK-10472 UserDefinedType.typeName") {
+    assert(IntegerType.typeName === "integer")
+    assert(new MyDenseVectorUDT().typeName === "mydensevector")
+  }
 
-    val actual = openHashSetUDT.deserialize(openHashSetUDT.serialize(set))
-    assert(actual.iterator.toSet === set.iterator.toSet)
+  test("Catalyst type converter null handling for UDTs") {
+    val udt = new MyDenseVectorUDT()
+    val toScalaConverter = CatalystTypeConverters.createToScalaConverter(udt)
+    assert(toScalaConverter(null) === null)
+
+    val toCatalystConverter = CatalystTypeConverters.createToCatalystConverter(udt)
+    assert(toCatalystConverter(null) === null)
+
   }
 }

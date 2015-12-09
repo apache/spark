@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.sasl;
 
+import java.io.IOException;
+import java.util.Map;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
@@ -27,9 +29,9 @@ import javax.security.sasl.RealmChoiceCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
 import javax.security.sasl.SaslException;
-import java.io.IOException;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,19 +42,25 @@ import static org.apache.spark.network.sasl.SparkSaslServer.*;
  * initial state to the "authenticated" state. This client initializes the protocol via a
  * firstToken, which is then followed by a set of challenges and responses.
  */
-public class SparkSaslClient {
+public class SparkSaslClient implements SaslEncryptionBackend {
   private final Logger logger = LoggerFactory.getLogger(SparkSaslClient.class);
 
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
+  private final String expectedQop;
   private SaslClient saslClient;
 
-  public SparkSaslClient(String secretKeyId, SecretKeyHolder secretKeyHolder) {
+  public SparkSaslClient(String secretKeyId, SecretKeyHolder secretKeyHolder, boolean encrypt) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
+    this.expectedQop = encrypt ? QOP_AUTH_CONF : QOP_AUTH;
+
+    Map<String, String> saslProps = ImmutableMap.<String, String>builder()
+      .put(Sasl.QOP, expectedQop)
+      .build();
     try {
       this.saslClient = Sasl.createSaslClient(new String[] { DIGEST }, null, null, DEFAULT_REALM,
-        SASL_PROPS, new ClientCallbackHandler());
+        saslProps, new ClientCallbackHandler());
     } catch (SaslException e) {
       throw Throwables.propagate(e);
     }
@@ -76,6 +84,11 @@ public class SparkSaslClient {
     return saslClient != null && saslClient.isComplete();
   }
 
+  /** Returns the value of a negotiated property. */
+  public Object getNegotiatedProperty(String name) {
+    return saslClient.getNegotiatedProperty(name);
+  }
+
   /**
    * Respond to server's SASL token.
    * @param token contains server's SASL token
@@ -93,6 +106,7 @@ public class SparkSaslClient {
    * Disposes of any system resources or security-sensitive information the
    * SaslClient might be using.
    */
+  @Override
   public synchronized void dispose() {
     if (saslClient != null) {
       try {
@@ -134,4 +148,15 @@ public class SparkSaslClient {
       }
     }
   }
+
+  @Override
+  public byte[] wrap(byte[] data, int offset, int len) throws SaslException {
+    return saslClient.wrap(data, offset, len);
+  }
+
+  @Override
+  public byte[] unwrap(byte[] data, int offset, int len) throws SaslException {
+    return saslClient.unwrap(data, offset, len);
+  }
+
 }

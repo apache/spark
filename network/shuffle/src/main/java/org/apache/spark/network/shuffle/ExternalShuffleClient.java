@@ -18,8 +18,10 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,10 +48,11 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   private final TransportConf conf;
   private final boolean saslEnabled;
+  private final boolean saslEncryptionEnabled;
   private final SecretKeyHolder secretKeyHolder;
 
-  private TransportClientFactory clientFactory;
-  private String appId;
+  protected TransportClientFactory clientFactory;
+  protected String appId;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -58,19 +61,28 @@ public class ExternalShuffleClient extends ShuffleClient {
   public ExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled) {
+      boolean saslEnabled,
+      boolean saslEncryptionEnabled) {
+    Preconditions.checkArgument(
+      !saslEncryptionEnabled || saslEnabled,
+      "SASL encryption can only be enabled if SASL is also enabled.");
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.saslEnabled = saslEnabled;
+    this.saslEncryptionEnabled = saslEncryptionEnabled;
+  }
+
+  protected void checkInit() {
+    assert appId != null : "Called before init()";
   }
 
   @Override
   public void init(String appId) {
     this.appId = appId;
-    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), true);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (saslEnabled) {
-      bootstraps.add(new SaslClientBootstrap(conf, appId, secretKeyHolder));
+      bootstraps.add(new SaslClientBootstrap(conf, appId, secretKeyHolder, saslEncryptionEnabled));
     }
     clientFactory = context.createClientFactory(bootstraps);
   }
@@ -82,7 +94,7 @@ public class ExternalShuffleClient extends ShuffleClient {
       final String execId,
       String[] blockIds,
       BlockFetchingListener listener) {
-    assert appId != null : "Called before init()";
+    checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
@@ -125,10 +137,14 @@ public class ExternalShuffleClient extends ShuffleClient {
       int port,
       String execId,
       ExecutorShuffleInfo executorInfo) throws IOException {
-    assert appId != null : "Called before init()";
-    TransportClient client = clientFactory.createClient(host, port);
-    byte[] registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteArray();
-    client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
+    checkInit();
+    TransportClient client = clientFactory.createUnmanagedClient(host, port);
+    try {
+      ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
+      client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
+    } finally {
+      client.close();
+    }
   }
 
   @Override

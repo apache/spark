@@ -54,6 +54,10 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               if (!taskSetManager.canFetchMoreResults(serializedData.limit())) {
                 return
               }
+              // deserialize "value" without holding any lock so that it won't block other threads.
+              // We should call it here, so that when it's called again in
+              // "TaskSetManager.handleSuccessfulTask", it does not need to deserialize the value.
+              directResult.value()
               (directResult, serializedData.limit())
             case IndirectTaskResult(blockId, size) =>
               if (!taskSetManager.canFetchMoreResults(size)) {
@@ -99,16 +103,16 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
+          val loader = Utils.getContextOrSparkClassLoader
           try {
             if (serializedData != null && serializedData.limit() > 0) {
               reason = serializer.get().deserialize[TaskEndReason](
-                serializedData, Utils.getSparkClassLoader)
+                serializedData, loader)
             }
           } catch {
             case cnd: ClassNotFoundException =>
               // Log an error but keep going here -- the task failed, so not catastrophic
               // if we can't deserialize the reason.
-              val loader = Utils.getContextOrSparkClassLoader
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
             case ex: Exception => {}

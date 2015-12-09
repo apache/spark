@@ -17,10 +17,16 @@
 
 package org.apache.spark
 
+import java.io.{ObjectInputStream, ObjectOutputStream}
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
+
+// ==============================================================================================
+// NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
+// ==============================================================================================
 
 /**
  * :: DeveloperApi ::
@@ -46,6 +52,14 @@ case object Success extends TaskEndReason
 sealed trait TaskFailedReason extends TaskEndReason {
   /** Error message displayed in the web UI. */
   def toErrorString: String
+
+  /**
+   * Whether this task failure should be counted towards the maximum number of times the task is
+   * allowed to fail before the stage is aborted.  Set to false in cases where the task's failure
+   * was unrelated to the task; for example, if the task failed because the executor it was running
+   * on was killed.
+   */
+  def countTowardsTaskFailures: Boolean = true
 }
 
 /**
@@ -90,6 +104,10 @@ case class FetchFailed(
  *
  * `fullStackTrace` is a better representation of the stack trace because it contains the whole
  * stack trace including the exception and its causes
+ *
+ * `exception` is the actual exception that caused the task to fail. It may be `None` in
+ * the case that the exception is not in fact serializable. If a task fails more than
+ * once (due to retries), `exception` is that one that caused the last failure.
  */
 @DeveloperApi
 case class ExceptionFailure(
@@ -97,11 +115,26 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    metrics: Option[TaskMetrics])
+    metrics: Option[TaskMetrics],
+    private val exceptionWrapper: Option[ThrowableSerializationWrapper])
   extends TaskFailedReason {
 
+  /**
+   * `preserveCause` is used to keep the exception itself so it is available to the
+   * driver. This may be set to `false` in the event that the exception is not in fact
+   * serializable.
+   */
+  private[spark] def this(e: Throwable, metrics: Option[TaskMetrics], preserveCause: Boolean) {
+    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics,
+      if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None)
+  }
+
   private[spark] def this(e: Throwable, metrics: Option[TaskMetrics]) {
-    this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e), metrics)
+    this(e, metrics, preserveCause = true)
+  }
+
+  def exception: Option[Throwable] = exceptionWrapper.flatMap {
+    (w: ThrowableSerializationWrapper) => Option(w.exception)
   }
 
   override def toErrorString: String =
@@ -124,6 +157,25 @@ case class ExceptionFailure(
     val desc = if (description == null) "" else description
     val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
     s"$className: $desc\n$st"
+  }
+}
+
+/**
+ * A class for recovering from exceptions when deserializing a Throwable that was
+ * thrown in user task code. If the Throwable cannot be deserialized it will be null,
+ * but the stacktrace and message will be preserved correctly in SparkException.
+ */
+private[spark] class ThrowableSerializationWrapper(var exception: Throwable) extends
+    Serializable with Logging {
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    out.writeObject(exception)
+  }
+  private def readObject(in: ObjectInputStream): Unit = {
+    try {
+      exception = in.readObject().asInstanceOf[Throwable]
+    } catch {
+      case e : Exception => log.warn("Task exception could not be deserialized", e)
+    }
   }
 }
 
@@ -151,9 +203,18 @@ case object TaskKilled extends TaskFailedReason {
  * Task requested the driver to commit, but was denied.
  */
 @DeveloperApi
-case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extends TaskFailedReason {
+case class TaskCommitDenied(
+    jobID: Int,
+    partitionID: Int,
+    attemptNumber: Int) extends TaskFailedReason {
   override def toErrorString: String = s"TaskCommitDenied (Driver denied task commit)" +
-    s" for job: $jobID, partition: $partitionID, attempt: $attemptID"
+    s" for job: $jobID, partition: $partitionID, attemptNumber: $attemptNumber"
+  /**
+   * If a task failed because its attempt to commit was denied, do not count this failure
+   * towards failing the stage. This is intended to prevent spurious stage failures in cases
+   * where many speculative tasks are launched and denied to commit.
+   */
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**
@@ -162,8 +223,22 @@ case class TaskCommitDenied(jobID: Int, partitionID: Int, attemptID: Int) extend
  * the task crashed the JVM.
  */
 @DeveloperApi
-case class ExecutorLostFailure(execId: String) extends TaskFailedReason {
-  override def toErrorString: String = s"ExecutorLostFailure (executor ${execId} lost)"
+case class ExecutorLostFailure(
+    execId: String,
+    exitCausedByApp: Boolean = true,
+    reason: Option[String]) extends TaskFailedReason {
+  override def toErrorString: String = {
+    val exitBehavior = if (exitCausedByApp) {
+      "caused by one of the running tasks"
+    } else {
+      "unrelated to the running tasks"
+    }
+    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
+    s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
+      reason.map { r => s" Reason: $r" }.getOrElse("")
+  }
+
+  override def countTowardsTaskFailures: Boolean = exitCausedByApp
 }
 
 /**

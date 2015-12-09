@@ -85,6 +85,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
    * Print usage and exit JVM with the given exit code.
    */
   private def printUsageAndExit(exitCode: Int) {
+    // scalastyle:off println
     System.err.println(
       "Usage: Master [options]\n" +
       "\n" +
@@ -95,6 +96,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
       "  --webui-port PORT      Port for web UI (default: 8080)\n" +
       "  --properties-file FILE Path to a custom Spark properties file.\n" +
       "                         Default is conf/spark-defaults.conf.")
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }

@@ -19,14 +19,13 @@ package org.apache.spark.scheduler
 
 import java.util.Random
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.Map
 import scala.collection.mutable
-
-import org.scalatest.FunSuite
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{ManualClock, Utils}
+import org.apache.spark.util.ManualClock
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -39,7 +38,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: mutable.Map[Long, Any],
+      accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo,
       taskMetrics: TaskMetrics) {
     taskScheduler.endedTasks(taskInfo.index) = reason
@@ -49,7 +48,10 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
 
   override def executorLost(execId: String) {}
 
-  override def taskSetFailed(taskSet: TaskSet, reason: String) {
+  override def taskSetFailed(
+      taskSet: TaskSet,
+      reason: String,
+      exception: Option[Throwable]): Unit = {
     taskScheduler.taskSetsFailed += taskSet.id
   }
 }
@@ -137,7 +139,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, Seq.empty) {
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
@@ -146,7 +148,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0) {
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
-class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
@@ -332,7 +334,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // Now mark host2 as dead
     sched.removeExecutor("exec2")
-    manager.executorLost("exec2", "host2")
+    manager.executorLost("exec2", "host2", SlaveLost())
 
     // nothing should be chosen
     assert(manager.resourceOffer("exec1", "host1", ANY) === None)
@@ -502,11 +504,38 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Array(PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY)))
     // test if the valid locality is recomputed when the executor is lost
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2")
+    manager.executorLost("execC", "host2", SlaveLost())
     assert(manager.myLocalityLevels.sameElements(Array(NODE_LOCAL, NO_PREF, ANY)))
     sched.removeExecutor("execD")
-    manager.executorLost("execD", "host1")
+    manager.executorLost("execD", "host1", SlaveLost())
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
+  }
+
+  test("Executors exit for reason unrelated to currently running tasks") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc)
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1", "execA")),
+      Seq(TaskLocation("host1", "execB")),
+      Seq(TaskLocation("host2", "execC")),
+      Seq())
+    val manager = new TaskSetManager(sched, taskSet, 1, new ManualClock)
+    sched.addExecutor("execA", "host1")
+    manager.executorAdded()
+    sched.addExecutor("execC", "host2")
+    manager.executorAdded()
+    assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
+    sched.removeExecutor("execA")
+    manager.executorLost(
+      "execA",
+      "host1",
+      ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
+    assert(!sched.taskSetsFailed.contains(taskSet.id))
+    assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
+    sched.removeExecutor("execC")
+    manager.executorLost(
+      "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
+    assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
   test("test RACK_LOCAL tasks") {
@@ -719,8 +748,8 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("execB.2", "host2", ANY) !== None)
     sched.removeExecutor("execA")
     sched.removeExecutor("execB.2")
-    manager.executorLost("execA", "host1")
-    manager.executorLost("execB.2", "host2")
+    manager.executorLost("execA", "host1", SlaveLost())
+    manager.executorLost("execB.2", "host2", SlaveLost())
     clock.advance(LOCALITY_WAIT_MS * 4)
     sched.addExecutor("execC", "host3")
     manager.executorAdded()
@@ -734,9 +763,9 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val sched = new FakeTaskScheduler(sc,
         ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
-      Seq(HostTaskLocation("host1")),
-      Seq(HostTaskLocation("host2")),
-      Seq(HDFSCacheTaskLocation("host3")))
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(TaskLocation("hdfs_cache_host3")))
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
@@ -749,6 +778,12 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     sched.removeExecutor("execC")
     manager.executorAdded()
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
+  }
+
+  test("Test TaskLocation for different host type.") {
+    assert(TaskLocation("host1") === HostTaskLocation("host1"))
+    assert(TaskLocation("hdfs_cache_host1") === HDFSCacheTaskLocation("host1"))
+    assert(TaskLocation("executor_host1_3") === ExecutorCacheTaskLocation("host1", "3"))
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {

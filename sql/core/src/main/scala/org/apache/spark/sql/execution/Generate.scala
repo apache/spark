@@ -17,13 +17,24 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * :: DeveloperApi ::
- * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the
+ * For lazy computing, be sure the generator.terminate() called in the very last
+ * TODO reusing the CompletionIterator?
+ */
+private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
+  extends Iterator[InternalRow] {
+
+  lazy val results = func().toIterator
+  override def hasNext: Boolean = results.hasNext
+  override def next(): InternalRow = results.next()
+}
+
+/**
+ * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
@@ -35,7 +46,6 @@ import org.apache.spark.sql.catalyst.expressions._
  * @param output the output attributes of this node, which constructed in analysis phase,
  *               and we can not change it, as the parent node bound with it already.
  */
-@DeveloperApi
 case class Generate(
     generator: Generator,
     join: Boolean,
@@ -46,28 +56,34 @@ case class Generate(
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 
-  override def execute(): RDD[Row] = {
+  protected override def doExecute(): RDD[InternalRow] = {
+    // boundGenerator.terminate() should be triggered after all of the rows in the partition
     if (join) {
-      child.execute().mapPartitions { iter =>
-        val nullValues = Seq.fill(generator.elementTypes.size)(Literal(null))
-        // Used to produce rows with no matches when outer = true.
-        val outerProjection =
-          newProjection(child.output ++ nullValues, child.output)
-
-        val joinProjection = newProjection(output, output)
+      child.execute().mapPartitionsInternal { iter =>
+        val generatorNullRow = InternalRow.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
         val joinedRow = new JoinedRow
 
-        iter.flatMap {row =>
+        iter.flatMap { row =>
+          // we should always set the left (child output)
+          joinedRow.withLeft(row)
           val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
-            outerProjection(row) :: Nil
+            joinedRow.withRight(generatorNullRow) :: Nil
           } else {
-            outputRows.map(or => joinProjection(joinedRow(row, or)))
+            outputRows.map(or => joinedRow.withRight(or))
           }
+        } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
+          // we leave the left side as the last element of its child output
+          // keep it the same as Hive does
+          joinedRow.withRight(row)
         }
       }
     } else {
-      child.execute().mapPartitions(iter => iter.flatMap(row => boundGenerator.eval(row)))
+      child.execute().mapPartitionsInternal { iter =>
+        iter.flatMap(row => boundGenerator.eval(row)) ++
+        LazyIterator(() => boundGenerator.terminate())
+      }
     }
   }
 }
+

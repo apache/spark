@@ -20,9 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
 case class PrimitiveData(
@@ -75,8 +73,8 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
-class ScalaReflectionSuite extends FunSuite {
-  import ScalaReflection._
+class ScalaReflectionSuite extends SparkFunSuite {
+  import org.apache.spark.sql.catalyst.ScalaReflection._
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]
@@ -104,7 +102,7 @@ class ScalaReflectionSuite extends FunSuite {
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
         StructField("stringField", StringType, nullable = true),
-        StructField("decimalField", DecimalType.Unlimited, nullable = true),
+        StructField("decimalField", DecimalType.SYSTEM_DEFAULT, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
         StructField("binaryField", BinaryType, nullable = true))),
@@ -188,79 +186,11 @@ class ScalaReflectionSuite extends FunSuite {
       nullable = true))
   }
 
-  test("get data type of a value") {
-    // BooleanType
-    assert(BooleanType === typeOfObject(true))
-    assert(BooleanType === typeOfObject(false))
-
-    // BinaryType
-    assert(BinaryType === typeOfObject("string".getBytes))
-
-    // StringType
-    assert(StringType === typeOfObject("string"))
-
-    // ByteType
-    assert(ByteType === typeOfObject(127.toByte))
-
-    // ShortType
-    assert(ShortType === typeOfObject(32767.toShort))
-
-    // IntegerType
-    assert(IntegerType === typeOfObject(2147483647))
-
-    // LongType
-    assert(LongType === typeOfObject(9223372036854775807L))
-
-    // FloatType
-    assert(FloatType === typeOfObject(3.4028235E38.toFloat))
-
-    // DoubleType
-    assert(DoubleType === typeOfObject(1.7976931348623157E308))
-
-    // DecimalType
-    assert(DecimalType.Unlimited ===
-      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
-
-    // DateType
-    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
-
-    // TimestampType
-    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
-
-    // NullType
-    assert(NullType === typeOfObject(null))
-
-    def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
-      case value: java.math.BigDecimal => DecimalType.Unlimited
-      case _ => StringType
-    }
-
-    assert(DecimalType.Unlimited === typeOfObject1(
-      new BigInteger("92233720368547758070")))
-    assert(DecimalType.Unlimited === typeOfObject1(
-      new java.math.BigDecimal("1.7976931348623157E318")))
-    assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
-
-    def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.Unlimited
-    }
-
-    intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
-
-    def typeOfObject3: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case c: Seq[_] => ArrayType(typeOfObject3(c.head))
-    }
-
-    assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1,2,3))))
-  }
-
   test("convert PrimitiveData to catalyst") {
     val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
-    val convertedData = Row(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
+    val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true)
     val dataType = schemaFor[PrimitiveData].dataType
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("convert Option[Product] to catalyst") {
@@ -268,9 +198,9 @@ class ScalaReflectionSuite extends FunSuite {
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData))
     val dataType = schemaFor[OptionalData].dataType
-    val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      Row(1, 1, 1, 1, 1, 1, true))
-    assert(CatalystTypeConverters.convertToCatalyst(data, dataType) === convertedData)
+    val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
+      InternalRow(1, 1, 1, 1, 1, 1, true))
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
   test("infer schema from case class with multiple constructors") {
@@ -281,5 +211,22 @@ class ScalaReflectionSuite extends FunSuite {
         assert(s.fieldNames === Seq("a", "b", "c"))
         assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
     }
+  }
+
+  test("get parameter type from a function object") {
+    val primitiveFunc = (i: Int, j: Long) => "x"
+    val primitiveTypes = getParameterTypes(primitiveFunc)
+    assert(primitiveTypes.forall(_.isPrimitive))
+    assert(primitiveTypes === Seq(classOf[Int], classOf[Long]))
+
+    val boxedFunc = (i: java.lang.Integer, j: java.lang.Long) => "x"
+    val boxedTypes = getParameterTypes(boxedFunc)
+    assert(boxedTypes.forall(!_.isPrimitive))
+    assert(boxedTypes === Seq(classOf[java.lang.Integer], classOf[java.lang.Long]))
+
+    val anyFunc = (i: Any, j: AnyRef) => "x"
+    val anyTypes = getParameterTypes(anyFunc)
+    assert(anyTypes.forall(!_.isPrimitive))
+    assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
 }

@@ -24,12 +24,16 @@ import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render, parse => parseJson}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -38,21 +42,24 @@ import org.apache.spark.sql.types._
  * Note: Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
+@Since("1.0.0")
 sealed trait Vector extends Serializable {
 
   /**
    * Size of the vector.
    */
+  @Since("1.0.0")
   def size: Int
 
   /**
    * Converts the instance to a double array.
    */
+  @Since("1.0.0")
   def toArray: Array[Double]
 
   override def equals(other: Any): Boolean = {
     other match {
-      case v2: Vector => {
+      case v2: Vector =>
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
@@ -63,20 +70,30 @@ sealed trait Vector extends Serializable {
             Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
-      }
       case _ => false
     }
   }
 
+  /**
+   * Returns a hash code value for the vector. The hash code is based on its size and its first 128
+   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   */
   override def hashCode(): Int = {
-    var result: Int = size + 31
-    this.foreachActive { case (index, value) =>
-      // ignore explict 0 for comparison between sparse and dense
-      if (value != 0) {
-        result = 31 * result + index
-        // refer to {@link java.util.Arrays.equals} for hash algorithm
-        val bits = java.lang.Double.doubleToLongBits(value)
-        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+    // This is a reference implementation. It calls return in foreachActive, which is slow.
+    // Subclasses should override it with optimized implementation.
+    var result: Int = 31 + size
+    var nnz = 0
+    this.foreachActive { (index, value) =>
+      if (nnz < Vectors.MAX_HASH_NNZ) {
+        // ignore explicit 0 for comparison between sparse and dense
+        if (value != 0) {
+          result = 31 * result + index
+          val bits = java.lang.Double.doubleToLongBits(value)
+          result = 31 * result + (bits ^ (bits >>> 32)).toInt
+          nnz += 1
+        }
+      } else {
+        return result
       }
     }
     result
@@ -85,17 +102,19 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[mllib] def toBreeze: BV[Double]
+  private[spark] def toBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
+  @Since("1.1.0")
   def apply(i: Int): Double = toBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
    */
+  @Since("1.1.0")
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
@@ -107,19 +126,70 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Double) => Unit)
+  @Since("1.6.0")
+  def foreachActive(f: (Int, Double) => Unit): Unit
+
+  /**
+   * Number of active entries.  An "active entry" is an element which is explicitly stored,
+   * regardless of its value.  Note that inactive entries have value 0.
+   */
+  @Since("1.4.0")
+  def numActives: Int
+
+  /**
+   * Number of nonzero elements. This scans all active values and count nonzeros.
+   */
+  @Since("1.4.0")
+  def numNonzeros: Int
+
+  /**
+   * Converts this vector to a sparse vector with all explicit zeros removed.
+   */
+  @Since("1.4.0")
+  def toSparse: SparseVector
+
+  /**
+   * Converts this vector to a dense vector.
+   */
+  @Since("1.4.0")
+  def toDense: DenseVector = new DenseVector(this.toArray)
+
+  /**
+   * Returns a vector in either dense or sparse format, whichever uses less storage.
+   */
+  @Since("1.4.0")
+  def compressed: Vector = {
+    val nnz = numNonzeros
+    // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
+    if (1.5 * (nnz + 1.0) < size) {
+      toSparse
+    } else {
+      toDense
+    }
+  }
+
+  /**
+   * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
+   * Returns -1 if vector has length 0.
+   */
+  @Since("1.5.0")
+  def argmax: Int
+
+  /**
+   * Converts the vector to a JSON string.
+   */
+  @Since("1.6.0")
+  def toJson: String
 }
 
 /**
- * :: DeveloperApi ::
+ * :: AlphaComponent ::
  *
  * User-defined type for [[Vector]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.DataFrame]].
- *
- * NOTE: This is currently private[spark] but will be made public later once it is stabilized.
  */
-@DeveloperApi
-private[spark] class VectorUDT extends UserDefinedType[Vector] {
+@AlphaComponent
+class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
@@ -133,40 +203,39 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
   }
 
-  override def serialize(obj: Any): Row = {
-    val row = new GenericMutableRow(4)
+  override def serialize(obj: Any): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, indices.toSeq)
-        row.update(3, values.toSeq)
+        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row
       case DenseVector(values) =>
+        val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, values.toSeq)
+        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row
     }
-    row
   }
 
   override def deserialize(datum: Any): Vector = {
     datum match {
-      // TODO: something wrong with UDT serialization
-      case v: Vector =>
-        v
-      case row: Row =>
-        require(row.length == 4,
-          s"VectorUDT.deserialize given row with length ${row.length} but requires length == 4")
+      case row: InternalRow =>
+        require(row.numFields == 4,
+          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
         val tpe = row.getByte(0)
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getAs[Iterable[Int]](2).toArray
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getAs[Iterable[Double]](3).toArray
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }
@@ -183,7 +252,8 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
     }
   }
 
-  override def hashCode: Int = 7919
+  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
+  override def hashCode(): Int = classOf[VectorUDT].getName.hashCode()
 
   override def typeName: String = "vector"
 
@@ -195,11 +265,13 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
  * We don't use the name `Vector` because Scala imports
  * [[scala.collection.immutable.Vector]] by default.
  */
+@Since("1.0.0")
 object Vectors {
 
   /**
    * Creates a dense vector from its values.
    */
+  @Since("1.0.0")
   @varargs
   def dense(firstValue: Double, otherValues: Double*): Vector =
     new DenseVector((firstValue +: otherValues).toArray)
@@ -208,6 +280,7 @@ object Vectors {
   /**
    * Creates a dense vector from a double array.
    */
+  @Since("1.0.0")
   def dense(values: Array[Double]): Vector = new DenseVector(values)
 
   /**
@@ -217,6 +290,7 @@ object Vectors {
    * @param indices index array, must be strictly increasing.
    * @param values value array, must have the same length as indices.
    */
+  @Since("1.0.0")
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
     new SparseVector(size, indices, values)
 
@@ -226,6 +300,7 @@ object Vectors {
    * @param size vector size.
    * @param elements vector elements in (index, value) pairs.
    */
+  @Since("1.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
     require(size > 0, "The size of the requested sparse vector must be greater than 0.")
 
@@ -247,6 +322,7 @@ object Vectors {
    * @param size vector size.
    * @param elements vector elements in (index, value) pairs.
    */
+  @Since("1.0.0")
   def sparse(size: Int, elements: JavaIterable[(JavaInteger, JavaDouble)]): Vector = {
     sparse(size, elements.asScala.map { case (i, x) =>
       (i.intValue(), x.doubleValue())
@@ -259,6 +335,7 @@ object Vectors {
    * @param size vector size
    * @return a zero vector
    */
+  @Since("1.1.0")
   def zeros(size: Int): Vector = {
     new DenseVector(new Array[Double](size))
   }
@@ -266,8 +343,30 @@ object Vectors {
   /**
    * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
    */
+  @Since("1.1.0")
   def parse(s: String): Vector = {
     parseNumeric(NumericParser.parse(s))
+  }
+
+  /**
+   * Parses the JSON representation of a vector into a [[Vector]].
+   */
+  @Since("1.6.0")
+  def fromJson(json: String): Vector = {
+    implicit val formats = DefaultFormats
+    val jValue = parseJson(json)
+    (jValue \ "type").extract[Int] match {
+      case 0 => // sparse
+        val size = (jValue \ "size").extract[Int]
+        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
+        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        sparse(size, indices, values)
+      case 1 => // dense
+        val values = (jValue \ "values").extract[Seq[Double]].toArray
+        dense(values)
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
+    }
   }
 
   private[mllib] def parseNumeric(any: Any): Vector = {
@@ -284,7 +383,7 @@ object Vectors {
   /**
    * Creates a vector instance from a breeze vector.
    */
-  private[mllib] def fromBreeze(breezeVector: BV[Double]): Vector = {
+  private[spark] def fromBreeze(breezeVector: BV[Double]): Vector = {
     breezeVector match {
       case v: BDV[Double] =>
         if (v.offset == 0 && v.stride == 1 && v.length == v.data.length) {
@@ -309,6 +408,7 @@ object Vectors {
    * @param p norm.
    * @return norm in L^p^ space.
    */
+  @Since("1.3.0")
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
       s"You specified p=$p.")
@@ -317,7 +417,7 @@ object Vectors {
       case SparseVector(n, ids, vs) => vs
       case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
-    val size = values.size
+    val size = values.length
 
     if (p == 1) {
       var sum = 0.0
@@ -361,6 +461,7 @@ object Vectors {
    * @param v2 second Vector.
    * @return squared distance between two Vectors.
    */
+  @Since("1.3.0")
   def sqdist(v1: Vector, v2: Vector): Double = {
     require(v1.size == v2.size, s"Vector dimensions do not match: Dim(v1)=${v1.size} and Dim(v2)" +
       s"=${v2.size}.")
@@ -371,8 +472,8 @@ object Vectors {
         val v1Indices = v1.indices
         val v2Values = v2.values
         val v2Indices = v2.indices
-        val nnzv1 = v1Indices.size
-        val nnzv2 = v2Indices.size
+        val nnzv1 = v1Indices.length
+        val nnzv2 = v2Indices.length
 
         var kv1 = 0
         var kv2 = 0
@@ -401,7 +502,7 @@ object Vectors {
 
       case (DenseVector(vv1), DenseVector(vv2)) =>
         var kv = 0
-        val sz = vv1.size
+        val sz = vv1.length
         while (kv < sz) {
           val score = vv1(kv) - vv2(kv)
           squaredDistance += score * score
@@ -422,7 +523,7 @@ object Vectors {
     var kv2 = 0
     val indices = v1.indices
     var squaredDistance = 0.0
-    val nnzv1 = indices.size
+    val nnzv1 = indices.length
     val nnzv2 = v2.size
     var iv1 = if (nnzv1 > 0) indices(kv1) else -1
 
@@ -451,8 +552,8 @@ object Vectors {
       v1Values: Array[Double],
       v2Indices: IndexedSeq[Int],
       v2Values: Array[Double]): Boolean = {
-    val v1Size = v1Values.size
-    val v2Size = v2Values.size
+    val v1Size = v1Values.length
+    val v2Size = v2Values.length
     var k1 = 0
     var k2 = 0
     var allEqual = true
@@ -469,31 +570,41 @@ object Vectors {
     }
     allEqual
   }
+
+  /** Max number of nonzero entries used in computing hash code. */
+  private[linalg] val MAX_HASH_NNZ = 128
 }
 
 /**
  * A dense vector represented by a value array.
  */
+@Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class DenseVector(val values: Array[Double]) extends Vector {
+class DenseVector @Since("1.0.0") (
+    @Since("1.0.0") val values: Array[Double]) extends Vector {
 
+  @Since("1.0.0")
   override def size: Int = values.length
 
   override def toString: String = values.mkString("[", ",", "]")
 
+  @Since("1.0.0")
   override def toArray: Array[Double] = values
 
-  private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
 
+  @Since("1.0.0")
   override def apply(i: Int): Double = values(i)
 
+  @Since("1.1.0")
   override def copy: DenseVector = {
     new DenseVector(values.clone())
   }
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
-    val localValuesSize = values.size
+    val localValuesSize = values.length
     val localValues = values
 
     while (i < localValuesSize) {
@@ -501,10 +612,87 @@ class DenseVector(val values: Array[Double]) extends Vector {
       i += 1
     }
   }
+
+  override def hashCode(): Int = {
+    var result: Int = 31 + size
+    var i = 0
+    val end = values.length
+    var nnz = 0
+    while (i < end && nnz < Vectors.MAX_HASH_NNZ) {
+      val v = values(i)
+      if (v != 0.0) {
+        result = 31 * result + i
+        val bits = java.lang.Double.doubleToLongBits(values(i))
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+        nnz += 1
+      }
+      i += 1
+    }
+    result
+  }
+
+  @Since("1.4.0")
+  override def numActives: Int = size
+
+  @Since("1.4.0")
+  override def numNonzeros: Int = {
+    // same as values.count(_ != 0.0) but faster
+    var nnz = 0
+    values.foreach { v =>
+      if (v != 0.0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  @Since("1.4.0")
+  override def toSparse: SparseVector = {
+    val nnz = numNonzeros
+    val ii = new Array[Int](nnz)
+    val vv = new Array[Double](nnz)
+    var k = 0
+    foreachActive { (i, v) =>
+      if (v != 0) {
+        ii(k) = i
+        vv(k) = v
+        k += 1
+      }
+    }
+    new SparseVector(size, ii, vv)
+  }
+
+  @Since("1.5.0")
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      var maxIdx = 0
+      var maxValue = values(0)
+      var i = 1
+      while (i < size) {
+        if (values(i) > maxValue) {
+          maxIdx = i
+          maxValue = values(i)
+        }
+        i += 1
+      }
+      maxIdx
+    }
+  }
+
+  @Since("1.6.0")
+  override def toJson: String = {
+    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+    compact(render(jValue))
+  }
 }
 
+@Since("1.3.0")
 object DenseVector {
+
   /** Extracts the value array from a dense vector. */
+  @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 
@@ -515,19 +703,23 @@ object DenseVector {
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
  */
+@Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
-class SparseVector(
-    override val size: Int,
-    val indices: Array[Int],
-    val values: Array[Double]) extends Vector {
+class SparseVector @Since("1.0.0") (
+    @Since("1.0.0") override val size: Int,
+    @Since("1.0.0") val indices: Array[Int],
+    @Since("1.0.0") val values: Array[Double]) extends Vector {
 
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.size} indices and " +
-    s" ${values.size} values.")
+    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
+    s" ${values.length} values.")
+  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+    s"which exceeds the specified vector size ${size}.")
 
   override def toString: String =
-    "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
+    s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
 
+  @Since("1.0.0")
   override def toArray: Array[Double] = {
     val data = new Array[Double](size)
     var i = 0
@@ -539,15 +731,17 @@ class SparseVector(
     data
   }
 
+  @Since("1.1.0")
   override def copy: SparseVector = {
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+  @Since("1.6.0")
+  override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
-    val localValuesSize = values.size
+    val localValuesSize = values.length
     val localIndices = indices
     val localValues = values
 
@@ -556,9 +750,143 @@ class SparseVector(
       i += 1
     }
   }
+
+  override def hashCode(): Int = {
+    var result: Int = 31 + size
+    val end = values.length
+    var k = 0
+    var nnz = 0
+    while (k < end && nnz < Vectors.MAX_HASH_NNZ) {
+      val v = values(k)
+      if (v != 0.0) {
+        val i = indices(k)
+        result = 31 * result + i
+        val bits = java.lang.Double.doubleToLongBits(v)
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+        nnz += 1
+      }
+      k += 1
+    }
+    result
+  }
+
+  @Since("1.4.0")
+  override def numActives: Int = values.length
+
+  @Since("1.4.0")
+  override def numNonzeros: Int = {
+    var nnz = 0
+    values.foreach { v =>
+      if (v != 0.0) {
+        nnz += 1
+      }
+    }
+    nnz
+  }
+
+  @Since("1.4.0")
+  override def toSparse: SparseVector = {
+    val nnz = numNonzeros
+    if (nnz == numActives) {
+      this
+    } else {
+      val ii = new Array[Int](nnz)
+      val vv = new Array[Double](nnz)
+      var k = 0
+      foreachActive { (i, v) =>
+        if (v != 0.0) {
+          ii(k) = i
+          vv(k) = v
+          k += 1
+        }
+      }
+      new SparseVector(size, ii, vv)
+    }
+  }
+
+  @Since("1.5.0")
+  override def argmax: Int = {
+    if (size == 0) {
+      -1
+    } else {
+      // Find the max active entry.
+      var maxIdx = indices(0)
+      var maxValue = values(0)
+      var maxJ = 0
+      var j = 1
+      val na = numActives
+      while (j < na) {
+        val v = values(j)
+        if (v > maxValue) {
+          maxValue = v
+          maxIdx = indices(j)
+          maxJ = j
+        }
+        j += 1
+      }
+
+      // If the max active entry is nonpositive and there exists inactive ones, find the first zero.
+      if (maxValue <= 0.0 && na < size) {
+        if (maxValue == 0.0) {
+          // If there exists an inactive entry before maxIdx, find it and return its index.
+          if (maxJ < maxIdx) {
+            var k = 0
+            while (k < maxJ && indices(k) == k) {
+              k += 1
+            }
+            maxIdx = k
+          }
+        } else {
+          // If the max active value is negative, find and return the first inactive index.
+          var k = 0
+          while (k < na && indices(k) == k) {
+            k += 1
+          }
+          maxIdx = k
+        }
+      }
+
+      maxIdx
+    }
+  }
+
+  /**
+   * Create a slice of this vector based on the given indices.
+   * @param selectedIndices Unsorted list of indices into the vector.
+   *                        This does NOT do bound checking.
+   * @return  New SparseVector with values in the order specified by the given indices.
+   *
+   * NOTE: The API needs to be discussed before making this public.
+   *       Also, if we have a version assuming indices are sorted, we should optimize it.
+   */
+  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+    var currentIdx = 0
+    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
+      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
+      val i_v = if (iIdx >= 0) {
+        Iterator((currentIdx, this.values(iIdx)))
+      } else {
+        Iterator()
+      }
+      currentIdx += 1
+      i_v
+    }.unzip
+    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+  }
+
+  @Since("1.6.0")
+  override def toJson: String = {
+    val jValue = ("type" -> 0) ~
+      ("size" -> size) ~
+      ("indices" -> indices.toSeq) ~
+      ("values" -> values.toSeq)
+    compact(render(jValue))
+  }
 }
 
+@Since("1.3.0")
 object SparseVector {
+  @Since("1.3.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
 }

@@ -19,8 +19,7 @@ package org.apache.spark.mllib.random
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDDPartition, RandomRDD}
@@ -34,7 +33,7 @@ import org.apache.spark.util.StatCounter
  *
  * TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
  */
-class RandomRDDsSuite extends FunSuite with MLlibTestSparkContext with Serializable {
+class RandomRDDsSuite extends SparkFunSuite with MLlibTestSparkContext with Serializable {
 
   def testGeneratedRDD(rdd: RDD[Double],
       expectedSize: Long,

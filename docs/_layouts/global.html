@@ -71,10 +71,11 @@
                                 <li><a href="programming-guide.html">Spark Programming Guide</a></li>
                                 <li class="divider"></li>
                                 <li><a href="streaming-programming-guide.html">Spark Streaming</a></li>
-                                <li><a href="sql-programming-guide.html">DataFrames and SQL</a></li>
+                                <li><a href="sql-programming-guide.html">DataFrames, Datasets and SQL</a></li>
                                 <li><a href="mllib-guide.html">MLlib (Machine Learning)</a></li>
                                 <li><a href="graphx-programming-guide.html">GraphX (Graph Processing)</a></li>
                                 <li><a href="bagel-programming-guide.html">Bagel (Pregel on Spark)</a></li>
+                                <li><a href="sparkr.html">SparkR (R on Spark)</a></li>
                             </ul>
                         </li>
 
@@ -111,7 +112,6 @@
                                 <li><a href="job-scheduling.html">Job Scheduling</a></li>
                                 <li><a href="security.html">Security</a></li>
                                 <li><a href="hardware-provisioning.html">Hardware Provisioning</a></li>
-                                <li><a href="hadoop-third-party-distributions.html">3<sup>rd</sup>-Party Hadoop Distros</a></li>
                                 <li class="divider"></li>
                                 <li><a href="building-spark.html">Building Spark</a></li>
                                 <li><a href="https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark">Contributing to Spark</a></li>
@@ -124,19 +124,28 @@
             </div>
         </div>
 
-        <div class="container" id="content">
-          {% if page.displayTitle %}
-            <h1 class="title">{{ page.displayTitle }}</h1>
-          {% else %}
-            <h1 class="title">{{ page.title }}</h1>
-          {% endif %}
+        <div class="container-wrapper">
 
-          {{ content }}
+            {% if page.url contains "/ml" %}
+              {% include nav-left-wrapper-ml.html nav-mllib=site.data.menu-mllib nav-ml=site.data.menu-ml %}
+            {% endif %}
 
-        </div> <!-- /container -->
+
+            <div class="container" id="content">
+              {% if page.displayTitle %}
+                <h1 class="title">{{ page.displayTitle }}</h1>
+              {% else %}
+                <h1 class="title">{{ page.title }}</h1>
+              {% endif %}
+
+              {{ content }}
+
+            </div> <!-- /container -->
+        </div>
 
         <script src="js/vendor/jquery-1.8.0.min.js"></script>
         <script src="js/vendor/bootstrap.min.js"></script>
+        <script src="js/vendor/anchor.min.js"></script>
         <script src="js/main.js"></script>
 
         <!-- MathJax Section -->

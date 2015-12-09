@@ -62,6 +62,8 @@ MLlib provides SVD functionality to row-oriented matrices, provided in the
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
+Refer to the [`SingularValueDecomposition` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.SingularValueDecomposition) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
@@ -80,6 +82,8 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
 </div>
 <div data-lang="java" markdown="1">
+Refer to the [`SingularValueDecomposition` Java docs](api/java/org/apache/spark/mllib/linalg/SingularValueDecomposition.html) for details on the API.
+
 {% highlight java %}
 import java.util.LinkedList;
 
@@ -137,13 +141,15 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format.
+MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
+
+Refer to the [`RowMatrix` Scala docs](api/scala/index.html#org.apache.spark.mllib.linalg.distributed.RowMatrix) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.linalg.Matrix
@@ -157,6 +163,25 @@ val pc: Matrix = mat.computePrincipalComponents(10) // Principal components are 
 // Project the rows to the linear space spanned by the top 10 principal components.
 val projected: RowMatrix = mat.multiply(pc)
 {% endhighlight %}
+
+The following code demonstrates how to compute principal components on source vectors
+and use them to project the vectors into a low-dimensional space while keeping associated labels:
+
+Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feature.PCA) for details on the API.
+
+{% highlight scala %}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.feature.PCA
+
+val data: RDD[LabeledPoint] = ...
+
+// Compute the top 10 principal components.
+val pca = new PCA(10).fit(data.map(_.features))
+
+// Project vectors to the linear space spanned by the top 10 principal components, keeping the label
+val projected = data.map(p => p.copy(features = pca.transform(p.features)))
+{% endhighlight %}
+
 </div>
 
 <div data-lang="java" markdown="1">
@@ -164,6 +189,8 @@ val projected: RowMatrix = mat.multiply(pc)
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
 The number of columns should be small, e.g, less than 1000.
+
+Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
 
 {% highlight java %}
 import java.util.LinkedList;

@@ -108,7 +108,7 @@ public class JavaNaiveBayesSuite implements Serializable {
   @Test
   public void testModelTypeSetters() {
     NaiveBayes nb = new NaiveBayes()
-        .setModelType("Bernoulli")
-        .setModelType("Multinomial");
+      .setModelType("bernoulli")
+      .setModelType("multinomial");
   }
 }

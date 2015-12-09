@@ -17,10 +17,11 @@
 
 package org.apache.spark.rpc.akka
 
+import java.io.File
+import java.nio.channels.ReadableByteChannel
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -29,22 +30,23 @@ import akka.actor.{ActorSystem, ExtendedActorSystem, Actor, ActorRef, Props, Add
 import akka.event.Logging.Error
 import akka.pattern.{ask => akkaAsk}
 import akka.remote.{AssociationEvent, AssociatedEvent, DisassociatedEvent, AssociationErrorEvent}
-import org.apache.spark.{SparkException, Logging, SparkConf}
+import akka.serialization.JavaSerializer
+
+import org.apache.spark.{HttpFileServer, Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.rpc._
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils, ThreadUtils}
 
 /**
  * A RpcEnv implementation based on Akka.
  *
  * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
  * remove Akka from the dependencies.
- *
- * @param actorSystem
- * @param conf
- * @param boundPort
  */
 private[spark] class AkkaRpcEnv private[akka] (
-    val actorSystem: ActorSystem, conf: SparkConf, boundPort: Int)
+    val actorSystem: ActorSystem,
+    val securityManager: SecurityManager,
+    conf: SparkConf,
+    boundPort: Int)
   extends RpcEnv(conf) with Logging {
 
   private val defaultAddress: RpcAddress = {
@@ -67,6 +69,8 @@ private[spark] class AkkaRpcEnv private[akka] (
    */
   private val refToEndpoint = new ConcurrentHashMap[RpcEndpointRef, RpcEndpoint]()
 
+  private val _fileServer = new AkkaFileServer(conf, securityManager)
+
   private def registerEndpoint(endpoint: RpcEndpoint, endpointRef: RpcEndpointRef): Unit = {
     endpointToRef.put(endpoint, endpointRef)
     refToEndpoint.put(endpointRef, endpoint)
@@ -86,9 +90,9 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     @volatile var endpointRef: AkkaRpcEndpointRef = null
-    // Use lazy because the Actor needs to use `endpointRef`.
+    // Use defered function because the Actor needs to use `endpointRef`.
     // So `actorRef` should be created after assigning `endpointRef`.
-    lazy val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
+    val actorRef = () => actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
       assert(endpointRef != null)
 
@@ -165,9 +169,9 @@ private[spark] class AkkaRpcEnv private[akka] (
             _sender ! AkkaMessage(response, false)
           }
 
-          // Some RpcEndpoints need to know the sender's address
-          override val sender: RpcEndpointRef =
-            new AkkaRpcEndpointRef(defaultAddress, _sender, conf)
+          // Use "lazy" because most of RpcEndpoints don't need "senderAddress"
+          override lazy val senderAddress: RpcAddress =
+            new AkkaRpcEndpointRef(defaultAddress, _sender, conf).address
         })
       } else {
         endpoint.receive
@@ -178,10 +182,10 @@ private[spark] class AkkaRpcEnv private[akka] (
       })
     } catch {
       case NonFatal(e) =>
-        if (needReply) {
-          // If the sender asks a reply, we should send the error back to the sender
-          _sender ! AkkaFailure(e)
-        } else {
+        _sender ! AkkaFailure(e)
+        if (!needReply) {
+          // If the sender does not require a reply, it may not handle the exception. So we rethrow
+          // "e" to make sure it will be processed.
           throw e
         }
     }
@@ -212,8 +216,11 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     import actorSystem.dispatcher
-    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout).
-      map(new AkkaRpcEndpointRef(defaultAddress, _, conf))
+    actorSystem.actorSelection(uri).resolveOne(defaultLookupTimeout.duration).
+      map(new AkkaRpcEndpointRef(defaultAddress, _, conf)).
+      // this is just in case there is a timeout from creating the future in resolveOne, we want the
+      // exception to indicate the conf that determines the timeout
+      recover(defaultLookupTimeout.addMessageIfTimeout)
   }
 
   override def uriOf(systemName: String, address: RpcAddress, endpointName: String): String = {
@@ -223,6 +230,7 @@ private[spark] class AkkaRpcEnv private[akka] (
 
   override def shutdown(): Unit = {
     actorSystem.shutdown()
+    _fileServer.shutdown()
   }
 
   override def stop(endpoint: RpcEndpointRef): Unit = {
@@ -235,6 +243,58 @@ private[spark] class AkkaRpcEnv private[akka] (
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorSystem)"
+
+  override def deserialize[T](deserializationAction: () => T): T = {
+    JavaSerializer.currentSystem.withValue(actorSystem.asInstanceOf[ExtendedActorSystem]) {
+      deserializationAction()
+    }
+  }
+
+  override def openChannel(uri: String): ReadableByteChannel = {
+    throw new UnsupportedOperationException(
+      "AkkaRpcEnv's files should be retrieved using an HTTP client.")
+  }
+
+  override def fileServer: RpcEnvFileServer = _fileServer
+
+}
+
+private[akka] class AkkaFileServer(
+    conf: SparkConf,
+    securityManager: SecurityManager) extends RpcEnvFileServer {
+
+  @volatile private var httpFileServer: HttpFileServer = _
+
+  override def addFile(file: File): String = {
+    getFileServer().addFile(file)
+  }
+
+  override def addJar(file: File): String = {
+    getFileServer().addJar(file)
+  }
+
+  def shutdown(): Unit = {
+    if (httpFileServer != null) {
+      httpFileServer.stop()
+    }
+  }
+
+  private def getFileServer(): HttpFileServer = {
+    if (httpFileServer == null) synchronized {
+      if (httpFileServer == null) {
+        httpFileServer = startFileServer()
+      }
+    }
+    httpFileServer
+  }
+
+  private def startFileServer(): HttpFileServer = {
+    val fileServerPort = conf.getInt("spark.fileserver.port", 0)
+    val server = new HttpFileServer(conf, securityManager, fileServerPort)
+    server.initialize()
+    server
+  }
+
 }
 
 private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
@@ -243,7 +303,7 @@ private[spark] class AkkaRpcEnvFactory extends RpcEnvFactory {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       config.name, config.host, config.port, config.conf, config.securityManager)
     actorSystem.actorOf(Props(classOf[ErrorMonitor]), "ErrorMonitor")
-    new AkkaRpcEnv(actorSystem, config.conf, boundPort)
+    new AkkaRpcEnv(actorSystem, config.securityManager, config.conf, boundPort)
   }
 }
 
@@ -257,18 +317,25 @@ private[akka] class ErrorMonitor extends Actor with ActorLogReceive with Logging
   }
 
   override def receiveWithLogging: Actor.Receive = {
-    case Error(cause: Throwable, _, _, message: String) => logError(message, cause)
+    case Error(cause: Throwable, _, _, message: String) => logDebug(message, cause)
   }
 }
 
 private[akka] class AkkaRpcEndpointRef(
-    @transient defaultAddress: RpcAddress,
-    @transient _actorRef: => ActorRef,
-    @transient conf: SparkConf,
-    @transient initInConstructor: Boolean = true)
+    @transient private val defaultAddress: RpcAddress,
+    @transient private val _actorRef: () => ActorRef,
+    conf: SparkConf,
+    initInConstructor: Boolean)
   extends RpcEndpointRef(conf) with Logging {
 
-  lazy val actorRef = _actorRef
+  def this(
+      defaultAddress: RpcAddress,
+      _actorRef: ActorRef,
+      conf: SparkConf) = {
+    this(defaultAddress, () => _actorRef, conf, true)
+  }
+
+  lazy val actorRef = _actorRef()
 
   override lazy val address: RpcAddress = {
     val akkaAddress = actorRef.path.address
@@ -293,9 +360,9 @@ private[akka] class AkkaRpcEndpointRef(
     actorRef ! AkkaMessage(message, false)
   }
 
-  override def sendWithReply[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    actorRef.ask(AkkaMessage(message, true))(timeout).flatMap {
+  override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+    actorRef.ask(AkkaMessage(message, true))(timeout.duration).flatMap {
+      // The function will run in the calling thread, so it should be short and never block.
       case msg @ AkkaMessage(message, reply) =>
         if (reply) {
           logError(s"Receive $msg but the sender cannot reply")
@@ -305,11 +372,18 @@ private[akka] class AkkaRpcEndpointRef(
         }
       case AkkaFailure(e) =>
         Future.failed(e)
-    }.mapTo[T]
+    }(ThreadUtils.sameThread).mapTo[T].
+    recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
   }
 
   override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 
+  final override def equals(that: Any): Boolean = that match {
+    case other: AkkaRpcEndpointRef => actorRef == other.actorRef
+    case _ => false
+  }
+
+  final override def hashCode(): Int = if (actorRef == null) 0 else actorRef.hashCode()
 }
 
 /**

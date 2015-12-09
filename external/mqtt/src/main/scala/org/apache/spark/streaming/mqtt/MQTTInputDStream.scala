@@ -17,25 +17,12 @@
 
 package org.apache.spark.streaming.mqtt
 
-import java.io.IOException
-import java.util.concurrent.Executors
-import java.util.Properties
-
-import scala.collection.JavaConversions._
-import scala.collection.Map
-import scala.collection.mutable.HashMap
-import scala.reflect.ClassTag
-
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttClient
-import org.eclipse.paho.client.mqttv3.MqttClientPersistence
-import org.eclipse.paho.client.mqttv3.MqttException
 import org.eclipse.paho.client.mqttv3.MqttMessage
-import org.eclipse.paho.client.mqttv3.MqttTopic
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
-import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
@@ -51,11 +38,13 @@ import org.apache.spark.streaming.receiver.Receiver
 
 private[streaming]
 class MQTTInputDStream(
-    @transient ssc_ : StreamingContext,
+    ssc_ : StreamingContext,
     brokerUrl: String,
     topic: String,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[String](ssc_) {
+
+  private[streaming] override def name: String = s"MQTT stream [$id]"
 
   def getReceiver(): Receiver[String] = {
     new MQTTReceiver(brokerUrl, topic, storageLevel)
@@ -86,7 +75,7 @@ class MQTTReceiver(
 
       // Handles Mqtt message
       override def messageArrived(topic: String, message: MqttMessage) {
-        store(new String(message.getPayload(),"utf-8"))
+        store(new String(message.getPayload(), "utf-8"))
       }
 
       override def deliveryComplete(token: IMqttDeliveryToken) {

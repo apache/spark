@@ -18,13 +18,16 @@
 package org.apache.spark.rpc.akka
 
 import org.apache.spark.rpc._
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SSLSampleConfigs, SecurityManager, SparkConf}
 
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 
-  override def createRpcEnv(conf: SparkConf, name: String, port: Int): RpcEnv = {
+  override def createRpcEnv(conf: SparkConf,
+      name: String,
+      port: Int,
+      clientMode: Boolean = false): RpcEnv = {
     new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, name, "localhost", port, new SecurityManager(conf)))
+      RpcEnvConfig(conf, name, "localhost", port, new SecurityManager(conf), clientMode))
   }
 
   test("setupEndpointRef: systemName, address, endpointName") {
@@ -37,13 +40,31 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
     })
     val conf = new SparkConf()
     val newRpcEnv = new AkkaRpcEnvFactory().create(
-      RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
+      RpcEnvConfig(conf, "test", "localhost", 0, new SecurityManager(conf), false))
     try {
       val newRef = newRpcEnv.setupEndpointRef("local", ref.address, "test_endpoint")
-      assert("akka.tcp://local@localhost:12345/user/test_endpoint" ===
+      assert(s"akka.tcp://local@${env.address}/user/test_endpoint" ===
         newRef.asInstanceOf[AkkaRpcEndpointRef].actorRef.path.toString)
     } finally {
       newRpcEnv.shutdown()
+    }
+  }
+
+  test("uriOf") {
+    val uri = env.uriOf("local", RpcAddress("1.2.3.4", 12345), "test_endpoint")
+    assert("akka.tcp://local@1.2.3.4:12345/user/test_endpoint" === uri)
+  }
+
+  test("uriOf: ssl") {
+    val conf = SSLSampleConfigs.sparkSSLConfig()
+    val securityManager = new SecurityManager(conf)
+    val rpcEnv = new AkkaRpcEnvFactory().create(
+      RpcEnvConfig(conf, "test", "localhost", 0, securityManager, false))
+    try {
+      val uri = rpcEnv.uriOf("local", RpcAddress("1.2.3.4", 12345), "test_endpoint")
+      assert("akka.ssl.tcp://local@1.2.3.4:12345/user/test_endpoint" === uri)
+    } finally {
+      rpcEnv.shutdown()
     }
   }
 

@@ -19,8 +19,11 @@ package org.apache.spark.network.server;
 
 import java.io.Closeable;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -28,6 +31,7 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,17 +48,34 @@ public class TransportServer implements Closeable {
 
   private final TransportContext context;
   private final TransportConf conf;
+  private final RpcHandler appRpcHandler;
+  private final List<TransportServerBootstrap> bootstraps;
 
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
 
-  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
-  public TransportServer(TransportContext context, int portToBind) {
+  /**
+   * Creates a TransportServer that binds to the given host and the given port, or to any available
+   * if 0. If you don't want to bind to any special host, set "hostToBind" to null.
+   * */
+  public TransportServer(
+      TransportContext context,
+      String hostToBind,
+      int portToBind,
+      RpcHandler appRpcHandler,
+      List<TransportServerBootstrap> bootstraps) {
     this.context = context;
     this.conf = context.getConf();
+    this.appRpcHandler = appRpcHandler;
+    this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
 
-    init(portToBind);
+    try {
+      init(hostToBind, portToBind);
+    } catch (RuntimeException e) {
+      JavaUtils.closeQuietly(this);
+      throw e;
+    }
   }
 
   public int getPort() {
@@ -64,7 +85,7 @@ public class TransportServer implements Closeable {
     return port;
   }
 
-  private void init(int portToBind) {
+  private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
@@ -95,11 +116,18 @@ public class TransportServer implements Closeable {
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
-        context.initializePipeline(ch);
+        RpcHandler rpcHandler = appRpcHandler;
+        for (TransportServerBootstrap bootstrap : bootstraps) {
+          rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
+        }
+        context.initializePipeline(ch, rpcHandler);
       }
     });
 
-    bindRightPort(portToBind);
+    InetSocketAddress address = hostToBind == null ?
+        new InetSocketAddress(portToBind): new InetSocketAddress(hostToBind, portToBind);
+    channelFuture = bootstrap.bind(address);
+    channelFuture.syncUninterruptibly();
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port :" + port);
@@ -119,39 +147,5 @@ public class TransportServer implements Closeable {
       bootstrap.childGroup().shutdownGracefully();
     }
     bootstrap = null;
-  }
-
-  /**
-   * Attempt to bind to the specified port up to a fixed number of retries.
-   * If all attempts fail after the max number of retries, exit.
-   */
-  private void bindRightPort(int portToBind) {
-    int maxPortRetries = conf.portMaxRetries();
-
-    for (int i = 0; i <= maxPortRetries; i++) {
-      int tryPort = -1;
-      if (0 == portToBind) {
-        // Do not increment port if tryPort is 0, which is treated as a special port
-        tryPort = 0;
-      } else {
-        // If the new port wraps around, do not try a privilege port
-        tryPort = ((portToBind + i - 1024) % (65536 - 1024)) + 1024;
-      }
-      try {
-        channelFuture = bootstrap.bind(new InetSocketAddress(tryPort));
-        channelFuture.syncUninterruptibly();
-        return;
-      } catch (Exception e) {
-        logger.warn("Netty service could not bind on port " + tryPort +
-          ". Attempting the next port.");
-        if (i >= maxPortRetries) {
-          logger.error(e.getMessage() + ": Netty server failed after "
-            + maxPortRetries + " retries.");
-
-          // If it can't find a right port, it should exit directly.
-          System.exit(-1);
-        }
-      }
-    }
   }
 }

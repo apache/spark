@@ -56,6 +56,7 @@ setMethod("show", "GroupedData",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
+#' @rdname agg
 #' @export
 #' @examples
 #' \dontrun{
@@ -67,7 +68,7 @@ setMethod("count",
             dataFrame(callJMethod(x@sgd, "count"))
           })
 
-#' Agg
+#' summarize
 #'
 #' Aggregates on the entire DataFrame without groups.
 #' The resulting DataFrame will also contain the grouping columns.
@@ -77,18 +78,19 @@ setMethod("count",
 #'
 #' @param x a GroupedData
 #' @return a DataFrame
-#' @rdname agg
+#' @rdname summarize
+#' @name agg
+#' @family agg_funcs
 #' @examples
 #' \dontrun{
 #'  df2 <- agg(df, age = "sum")  # new column name will be created as 'SUM(age#0)'
-#'  df2 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
+#'  df3 <- agg(df, ageSum = sum(df$age)) # Creates a new column named ageSum
+#'  df4 <- summarize(df, ageSum = max(df$age))
 #' }
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
-
 setMethod("agg",
           signature(x = "GroupedData"),
           function(x, ...) {
-            cols = list(...)
+            cols <- list(...)
             stopifnot(length(cols) > 0)
             if (is.character(cols[[1]])) {
               cols <- varargsToEnv(...)
@@ -98,29 +100,37 @@ setMethod("agg",
               if (!is.null(ns)) {
                 for (n in ns) {
                   if (n != "") {
-                    cols[[n]] = alias(cols[[n]], n)
+                    cols[[n]] <- alias(cols[[n]], n)
                   }
                 }
               }
               jcols <- lapply(cols, function(c) { c@jc })
-              # the GroupedData.agg(col, cols*) API does not contain grouping Column
-              sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "aggWithGrouping",
-                                 x@sgd, listToSeq(jcols))
+              sdf <- callJMethod(x@sgd, "agg", jcols[[1]], jcols[-1])
             } else {
               stop("agg can only support Column or character")
             }
             dataFrame(sdf)
           })
 
+#' @rdname summarize
+#' @name summarize
+setMethod("summarize",
+          signature(x = "GroupedData"),
+          function(x, ...) {
+            agg(x, ...)
+          })
 
-# sum/mean/avg/min/max
-methods <- c("sum", "mean", "avg", "min", "max")
+# Aggregate Functions by name
+methods <- c("avg", "max", "mean", "min", "sum")
+
+# These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
+# "variance", "var_samp", "var_pop"
 
 createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
             function(x, ...) {
-              sdf <- callJMethod(x@sgd, name, toSeq(...))
+              sdf <- callJMethod(x@sgd, name, list(...))
               dataFrame(sdf)
             })
 }
@@ -132,4 +142,3 @@ createMethods <- function() {
 }
 
 createMethods()
-

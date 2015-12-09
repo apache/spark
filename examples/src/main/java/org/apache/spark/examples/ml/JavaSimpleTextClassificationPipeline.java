@@ -66,7 +66,7 @@ public class JavaSimpleTextClassificationPipeline {
       .setOutputCol("features");
     LogisticRegression lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01);
+      .setRegParam(0.001);
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
@@ -77,7 +77,7 @@ public class JavaSimpleTextClassificationPipeline {
     List<Document> localTest = Lists.newArrayList(
       new Document(4L, "spark i j k"),
       new Document(5L, "l m n"),
-      new Document(6L, "mapreduce spark"),
+      new Document(6L, "spark hadoop spark"),
       new Document(7L, "apache hadoop"));
     DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 

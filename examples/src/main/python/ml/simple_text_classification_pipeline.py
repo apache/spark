@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
     hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
-    lr = LogisticRegression(maxIter=10, regParam=0.01)
+    lr = LogisticRegression(maxIter=10, regParam=0.001)
     pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 
     # Fit the pipeline to training documents.
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     Document = Row("id", "text")
     test = sc.parallelize([(4, "spark i j k"),
                            (5, "l m n"),
-                           (6, "mapreduce spark"),
+                           (6, "spark hadoop spark"),
                            (7, "apache hadoop")]) \
         .map(lambda x: Document(*x)).toDF()
 

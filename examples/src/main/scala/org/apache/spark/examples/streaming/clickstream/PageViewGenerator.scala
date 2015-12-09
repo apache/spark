@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming.clickstream
 
 import java.net.ServerSocket
@@ -50,15 +51,14 @@ object PageView extends Serializable {
   */
 // scalastyle:on
 object PageViewGenerator {
-  val pages = Map("http://foo.com/"        -> .7,
-                  "http://foo.com/news"    -> 0.2,
+  val pages = Map("http://foo.com/" -> .7,
+                  "http://foo.com/news" -> 0.2,
                   "http://foo.com/contact" -> .1)
   val httpStatus = Map(200 -> .95,
                        404 -> .05)
   val userZipCode = Map(94709 -> .5,
                         94117 -> .5)
-  val userID = Map((1 to 100).map(_ -> .01):_*)
-
+  val userID = Map((1 to 100).map(_ -> .01) : _*)
 
   def pickFromDistribution[T](inputMap : Map[T, Double]) : T = {
     val rand = new Random().nextDouble()
@@ -109,3 +109,4 @@ object PageViewGenerator {
     }
   }
 }
+// scalastyle:on println

@@ -21,8 +21,7 @@ import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConversions
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -34,7 +33,6 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.AccumulatorParam._
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
@@ -104,7 +102,7 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment.asScala, Map()))
 
   private[spark] val env = sc.env
 
@@ -118,7 +116,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   def appName: String = sc.appName
 
-  def jars: util.List[String] = sc.jars
+  def jars: util.List[String] = sc.jars.asJava
 
   def startTime: java.lang.Long = sc.startTime
 
@@ -142,7 +140,7 @@ class JavaSparkContext(val sc: SparkContext)
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
+    sc.parallelize(list.asScala, numSlices)
   }
 
   /** Get an RDD that has no partitions or elements. */
@@ -161,7 +159,7 @@ class JavaSparkContext(val sc: SparkContext)
   : JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(list.asScala, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -170,8 +168,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
-    JavaDoubleRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list).map(_.doubleValue()),
-      numSlices))
+    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()), numSlices))
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
@@ -268,8 +265,6 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaPairRDD(sc.binaryFiles(path, minPartitions))
 
   /**
-   * :: Experimental ::
-   *
    * Read a directory of binary files from HDFS, a local file system (available on all nodes),
    * or any Hadoop-supported file system URI as a byte array. Each file is read as a single
    * record and returned in a key-value pair, where the key is the path of each file,
@@ -296,19 +291,15 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * @note Small files are preferred; very large files but may cause bad performance.
    */
-  @Experimental
   def binaryFiles(path: String): JavaPairRDD[String, PortableDataStream] =
     new JavaPairRDD(sc.binaryFiles(path, defaultMinPartitions))
 
   /**
-   * :: Experimental ::
-   *
    * Load data from a flat binary file, assuming the length of each record is constant.
    *
    * @param path Directory to the input data files
    * @return An RDD of data with values, represented as byte arrays
    */
-  @Experimental
   def binaryRecords(path: String, recordLength: Int): JavaRDD[Array[Byte]] = {
     new JavaRDD(sc.binaryRecords(path, recordLength))
   }
@@ -519,7 +510,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Build the union of two or more RDDs. */
   override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
-    val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
+    val rdds: Seq[RDD[T]] = (Seq(first) ++ rest.asScala).map(_.rdd)
     implicit val ctag: ClassTag[T] = first.classTag
     sc.union(rdds)
   }
@@ -527,7 +518,7 @@ class JavaSparkContext(val sc: SparkContext)
   /** Build the union of two or more RDDs. */
   override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
       : JavaPairRDD[K, V] = {
-    val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
+    val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ rest.asScala).map(_.rdd)
     implicit val ctag: ClassTag[(K, V)] = first.classTag
     implicit val ctagK: ClassTag[K] = first.kClassTag
     implicit val ctagV: ClassTag[V] = first.vClassTag
@@ -536,7 +527,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Build the union of two or more RDDs. */
   override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
-    val rdds: Seq[RDD[Double]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.srdd)
+    val rdds: Seq[RDD[Double]] = (Seq(first) ++ rest.asScala).map(_.srdd)
     new JavaDoubleRDD(sc.union(rdds))
   }
 
@@ -754,6 +745,14 @@ class JavaSparkContext(val sc: SparkContext)
    * [[org.apache.spark.api.java.JavaSparkContext.setLocalProperty]].
    */
   def getLocalProperty(key: String): String = sc.getLocalProperty(key)
+
+  /** Control our logLevel. This overrides any user-defined log settings.
+   * @param logLevel The desired log level as a string.
+   * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
+   */
+  def setLogLevel(logLevel: String) {
+    sc.setLogLevel(logLevel)
+  }
 
   /**
    * Assigns a group ID to all the jobs started by this thread until the group ID is set to a

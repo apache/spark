@@ -19,9 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -31,6 +30,7 @@ import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{Utils, Clock, SystemClock}
 
 /**
@@ -43,7 +43,7 @@ private[deploy] class DriverRunner(
     val workDir: File,
     val sparkHome: File,
     val driverDesc: DriverDescription,
-    val worker: ActorRef,
+    val worker: RpcEndpointRef,
     val workerUrl: String,
     val securityManager: SecurityManager)
   extends Logging {
@@ -85,8 +85,8 @@ private[deploy] class DriverRunner(
           }
 
           // TODO: If we add ability to submit multiple jars they should also be added here
-          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, driverDesc.mem,
-            sparkHome.getAbsolutePath, substituteVariables)
+          val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
+            driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
           launchDriver(builder, driverDir, driverDesc.supervise)
         }
         catch {
@@ -107,7 +107,7 @@ private[deploy] class DriverRunner(
 
         finalState = Some(state)
 
-        worker ! DriverStateChanged(driverId, state, finalException)
+        worker.send(DriverStateChanged(driverId, state, finalException))
       }
     }.start()
   }
@@ -172,8 +172,8 @@ private[deploy] class DriverRunner(
       CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val header = "Launch Command: %s\n%s\n\n".format(
-        builder.command.mkString("\"", "\" \"", "\""), "=" * 40)
+      val formattedCommand = builder.command.asScala.mkString("\"", "\" \"", "\"")
+      val header = "Launch Command: %s\n%s\n\n".format(formattedCommand, "=" * 40)
       Files.append(header, stderr, UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
@@ -229,6 +229,6 @@ private[deploy] trait ProcessBuilderLike {
 private[deploy] object ProcessBuilderLike {
   def apply(processBuilder: ProcessBuilder): ProcessBuilderLike = new ProcessBuilderLike {
     override def start(): Process = processBuilder.start()
-    override def command: Seq[String] = processBuilder.command()
+    override def command: Seq[String] = processBuilder.command().asScala
   }
 }

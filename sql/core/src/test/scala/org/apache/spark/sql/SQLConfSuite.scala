@@ -17,68 +17,80 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuiteLike
+import org.apache.spark.sql.test.{TestSQLContext, SharedSQLContext}
 
-import org.apache.spark.sql.test._
 
-/* Implicits */
-import TestSQLContext._
-
-class SQLConfSuite extends QueryTest with FunSuiteLike {
-
-  val testKey = "test.key.0"
-  val testVal = "test.val.0"
+class SQLConfSuite extends QueryTest with SharedSQLContext {
+  private val testKey = "test.key.0"
+  private val testVal = "test.val.0"
 
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
-    val newContext = new SQLContext(TestSQLContext.sparkContext)
-    assert(newContext.getConf("spark.sql.testkey", "false") == "true")
+    val newContext = new SQLContext(sparkContext)
+    assert(newContext.getConf("spark.sql.testkey", "false") === "true")
   }
 
   test("programmatic ways of basic setting and getting") {
-    conf.clear()
-    assert(getAllConfs.size === 0)
+    // Set a conf first.
+    sqlContext.setConf(testKey, testVal)
+    // Clear the conf.
+    sqlContext.conf.clear()
+    // After clear, only overrideConfs used by unit test should be in the SQLConf.
+    assert(sqlContext.getAllConfs === TestSQLContext.overrideConfs)
 
-    setConf(testKey, testVal)
-    assert(getConf(testKey) == testVal)
-    assert(getConf(testKey, testVal + "_") == testVal)
-    assert(getAllConfs.contains(testKey))
+    sqlContext.setConf(testKey, testVal)
+    assert(sqlContext.getConf(testKey) === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getAllConfs.contains(testKey))
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(TestSQLContext.getConf(testKey) == testVal)
-    assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
-    assert(TestSQLContext.getAllConfs.contains(testKey))
+    assert(sqlContext.getConf(testKey) === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getAllConfs.contains(testKey))
 
-    conf.clear()
+    sqlContext.conf.clear()
   }
 
   test("parse SQL set commands") {
-    conf.clear()
+    sqlContext.conf.clear()
     sql(s"set $testKey=$testVal")
-    assert(getConf(testKey, testVal + "_") == testVal)
-    assert(TestSQLContext.getConf(testKey, testVal + "_") == testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
 
     sql("set some.property=20")
-    assert(getConf("some.property", "0") == "20")
+    assert(sqlContext.getConf("some.property", "0") === "20")
     sql("set some.property = 40")
-    assert(getConf("some.property", "0") == "40")
+    assert(sqlContext.getConf("some.property", "0") === "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
     sql(s"set $key=$vs")
-    assert(getConf(key, "0") == vs)
+    assert(sqlContext.getConf(key, "0") === vs)
 
     sql(s"set $key=")
-    assert(getConf(key, "0") == "")
+    assert(sqlContext.getConf(key, "0") === "")
 
-    conf.clear()
+    sqlContext.conf.clear()
   }
 
   test("deprecated property") {
-    conf.clear()
-    sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-    assert(getConf(SQLConf.SHUFFLE_PARTITIONS) == "10")
+    sqlContext.conf.clear()
+    val original = sqlContext.conf.numShufflePartitions
+    try{
+      sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
+      assert(sqlContext.conf.numShufflePartitions === 10)
+    } finally {
+      sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
+    }
+  }
+
+  test("invalid conf value") {
+    sqlContext.conf.clear()
+    val e = intercept[IllegalArgumentException] {
+      sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
+    }
+    assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
   }
 }

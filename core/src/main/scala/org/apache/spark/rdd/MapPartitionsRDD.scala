@@ -21,6 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
 
+/**
+ * An RDD that applies the provided function to every partition of the parent RDD.
+ */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev: RDD[T],
     f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)

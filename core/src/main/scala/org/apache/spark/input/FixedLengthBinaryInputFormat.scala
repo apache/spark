@@ -21,6 +21,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
+
+import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
@@ -39,7 +41,8 @@ private[spark] object FixedLengthBinaryInputFormat {
 }
 
 private[spark] class FixedLengthBinaryInputFormat
-  extends FileInputFormat[LongWritable, BytesWritable] {
+  extends FileInputFormat[LongWritable, BytesWritable]
+  with Logging {
 
   private var recordLength = -1
 
@@ -51,7 +54,7 @@ private[spark] class FixedLengthBinaryInputFormat
       recordLength = FixedLengthBinaryInputFormat.getRecordLength(context)
     }
     if (recordLength <= 0) {
-      println("record length is less than 0, file cannot be split")
+      logDebug("record length is less than 0, file cannot be split")
       false
     } else {
       true

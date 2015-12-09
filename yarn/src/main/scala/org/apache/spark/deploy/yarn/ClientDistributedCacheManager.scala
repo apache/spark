@@ -43,22 +43,22 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
    * Add a resource to the list of distributed cache resources. This list can
    * be sent to the ApplicationMaster and possibly the executors so that it can
    * be downloaded into the Hadoop distributed cache for use by this application.
-   * Adds the LocalResource to the localResources HashMap passed in and saves 
+   * Adds the LocalResource to the localResources HashMap passed in and saves
    * the stats of the resources to they can be sent to the executors and verified.
    *
    * @param fs FileSystem
    * @param conf Configuration
    * @param destPath path to the resource
    * @param localResources localResource hashMap to insert the resource into
-   * @param resourceType LocalResourceType 
+   * @param resourceType LocalResourceType
    * @param link link presented in the distributed cache to the destination
-   * @param statCache cache to store the file/directory stats 
+   * @param statCache cache to store the file/directory stats
    * @param appMasterOnly Whether to only add the resource to the app master
    */
   def addResource(
       fs: FileSystem,
       conf: Configuration,
-      destPath: Path, 
+      destPath: Path,
       localResources: HashMap[String, LocalResource],
       resourceType: LocalResourceType,
       link: String,
@@ -74,15 +74,15 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     amJarRsrc.setSize(destStatus.getLen())
     if (link == null || link.isEmpty()) throw new Exception("You must specify a valid link name")
     localResources(link) = amJarRsrc
-    
+
     if (!appMasterOnly) {
       val uri = destPath.toUri()
       val pathURI = new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, link)
       if (resourceType == LocalResourceType.FILE) {
-        distCacheFiles(pathURI.toString()) = (destStatus.getLen().toString(), 
+        distCacheFiles(pathURI.toString()) = (destStatus.getLen().toString(),
           destStatus.getModificationTime().toString(), visibility.name())
       } else {
-        distCacheArchives(pathURI.toString()) = (destStatus.getLen().toString(), 
+        distCacheArchives(pathURI.toString()) = (destStatus.getLen().toString(),
           destStatus.getModificationTime().toString(), visibility.name())
       }
     }
@@ -95,13 +95,13 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     val (keys, tupleValues) = distCacheFiles.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
     if (keys.size > 0) {
-      env("SPARK_YARN_CACHE_FILES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
-      env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") = 
-        timeStamps.reduceLeft[String] { (acc,n) => acc + "," + n }
-      env("SPARK_YARN_CACHE_FILES_FILE_SIZES") = 
-        sizes.reduceLeft[String] { (acc,n) => acc + "," + n }
-      env("SPARK_YARN_CACHE_FILES_VISIBILITIES") = 
-        visibilities.reduceLeft[String] { (acc,n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_FILES") = keys.reduceLeft[String] { (acc, n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") =
+        timeStamps.reduceLeft[String] { (acc, n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_FILES_FILE_SIZES") =
+        sizes.reduceLeft[String] { (acc, n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_FILES_VISIBILITIES") =
+        visibilities.reduceLeft[String] { (acc, n) => acc + "," + n }
     }
   }
 
@@ -112,13 +112,13 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     val (keys, tupleValues) = distCacheArchives.unzip
     val (sizes, timeStamps, visibilities) = tupleValues.unzip3
     if (keys.size > 0) {
-      env("SPARK_YARN_CACHE_ARCHIVES") = keys.reduceLeft[String] { (acc,n) => acc + "," + n }
-      env("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS") = 
-        timeStamps.reduceLeft[String] { (acc,n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_ARCHIVES") = keys.reduceLeft[String] { (acc, n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS") =
+        timeStamps.reduceLeft[String] { (acc, n) => acc + "," + n }
       env("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES") =
-        sizes.reduceLeft[String] { (acc,n) => acc + "," + n }
-      env("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES") = 
-        visibilities.reduceLeft[String] { (acc,n) => acc + "," + n }
+        sizes.reduceLeft[String] { (acc, n) => acc + "," + n }
+      env("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES") =
+        visibilities.reduceLeft[String] { (acc, n) => acc + "," + n }
     }
   }
 
@@ -160,7 +160,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
   def ancestorsHaveExecutePermissions(
       fs: FileSystem,
       path: Path,
-      statCache: Map[URI, FileStatus]): Boolean =  {
+      statCache: Map[URI, FileStatus]): Boolean = {
     var current = path
     while (current != null) {
       // the subdirs in the path should have execute permissions for others
@@ -197,7 +197,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
   def getFileStatus(fs: FileSystem, uri: URI, statCache: Map[URI, FileStatus]): FileStatus = {
     val stat = statCache.get(uri) match {
       case Some(existstat) => existstat
-      case None => 
+      case None =>
         val newStat = fs.getFileStatus(new Path(uri))
         statCache.put(uri, newStat)
         newStat

@@ -20,7 +20,7 @@ package org.apache.spark.launcher
 import java.io.File
 import java.util.{HashMap => JHashMap, List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.Command
 
@@ -32,7 +32,7 @@ import org.apache.spark.deploy.Command
 private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, command: Command)
     extends AbstractCommandBuilder {
 
-  childEnv.putAll(command.environment)
+  childEnv.putAll(command.environment.asJava)
   childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, sparkHome)
 
   override def buildCommand(env: JMap[String, String]): JList[String] = {
@@ -40,7 +40,7 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
     cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
     command.javaOpts.foreach(cmd.add)
-    addPermGenSizeOpt(cmd)
+    CommandBuilderUtils.addPermGenSizeOpt(cmd)
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
     cmd
   }

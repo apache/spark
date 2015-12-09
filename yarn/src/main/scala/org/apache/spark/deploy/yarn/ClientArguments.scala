@@ -30,7 +30,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var archives: String = null
   var userJar: String = null
   var userClass: String = null
-  var pyFiles: String = null
+  var pyFiles: Seq[String] = Nil
   var primaryPyFile: String = null
   var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
@@ -42,17 +42,18 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
+  var principal: String = null
+  var keytab: String = null
   def isClusterMode: Boolean = userClass != null
 
-  private var driverMemory: Int = 512 // MB
+  private var driverMemory: Int = Utils.DEFAULT_DRIVER_MEM_MB // MB
   private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
   private val driverCoresKey = "spark.driver.cores"
   private val amCoresKey = "spark.yarn.am.cores"
-  private val isDynamicAllocationEnabled =
-    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
+  private val isDynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
 
   parseArgs(args.toList)
   loadEnvironmentArgs()
@@ -80,22 +81,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       .orNull
     // If dynamic allocation is enabled, start at the configured initial number of executors.
     // Default to minExecutors if no initialExecutors is set.
-    if (isDynamicAllocationEnabled) {
-      val minExecutorsConf = "spark.dynamicAllocation.minExecutors"
-      val initialExecutorsConf = "spark.dynamicAllocation.initialExecutors"
-      val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
-      val minNumExecutors = sparkConf.getInt(minExecutorsConf, 0)
-      val initialNumExecutors = sparkConf.getInt(initialExecutorsConf, minNumExecutors)
-      val maxNumExecutors = sparkConf.getInt(maxExecutorsConf, Integer.MAX_VALUE)
-
-      // If defined, initial executors must be between min and max
-      if (initialNumExecutors < minNumExecutors || initialNumExecutors > maxNumExecutors) {
-        throw new IllegalArgumentException(
-          s"$initialExecutorsConf must be between $minExecutorsConf and $maxNumExecutors!")
-      }
-
-      numExecutors = initialNumExecutors
-    }
+    numExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf, numExecutors)
+    principal = Option(principal)
+      .orElse(sparkConf.getOption("spark.yarn.principal"))
+      .orNull
+    keytab = Option(keytab)
+      .orElse(sparkConf.getOption("spark.yarn.keytab"))
+      .orNull
   }
 
   /**
@@ -115,6 +107,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       throw new SparkException("Executor cores must not be less than " +
         "spark.task.cpus.")
     }
+    // scalastyle:off println
     if (isClusterMode) {
       for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
         if (sparkConf.contains(key)) {
@@ -136,11 +129,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         .map(_.toInt)
         .foreach { cores => amCores = cores }
     }
+    // scalastyle:on println
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
+    // scalastyle:off println
     while (!args.isEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
@@ -185,11 +180,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--num-workers") {
             println("--num-workers is deprecated. Use --num-executors instead.")
           }
-          // Dynamic allocation is not compatible with this option
-          if (isDynamicAllocationEnabled) {
-            throw new IllegalArgumentException("Explicitly setting the number " +
-              "of executors is not compatible with spark.dynamicAllocation.enabled!")
-          }
           numExecutors = value
           args = tail
 
@@ -220,7 +210,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           args = tail
 
         case ("--py-files") :: value :: tail =>
-          pyFiles = value
+          pyFiles = value.split(",")
           args = tail
 
         case ("--files") :: value :: tail =>
@@ -231,12 +221,21 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           archives = value
           args = tail
 
+        case ("--principal") :: value :: tail =>
+          principal = value
+          args = tail
+
+        case ("--keytab") :: value :: tail =>
+          keytab = value
+          args = tail
+
         case Nil =>
 
         case _ =>
           throw new IllegalArgumentException(getUsageMessage(args))
       }
     }
+    // scalastyle:on println
 
     if (primaryPyFile != null && primaryRFile != null) {
       throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
@@ -246,8 +245,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
+    val mem_mb = Utils.DEFAULT_DRIVER_MEM_MB
     message +
-      """
+      s"""
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
@@ -259,7 +259,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)
       |  --executor-cores NUM     Number of cores per executor (Default: 1).
-      |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
+      |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: $mem_mb Mb)
       |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       |  --name NAME              The name of your application (Default: Spark)

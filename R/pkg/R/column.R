@@ -24,10 +24,9 @@ setOldClass("jobj")
 
 #' @title S4 class that represents a DataFrame column
 #' @description The column class supports unary, binary operations on DataFrame columns
-
 #' @rdname column
 #'
-#' @param jc reference to JVM DataFrame column
+#' @slot jc reference to JVM DataFrame column
 #' @export
 setClass("Column",
          slots = list(jc = "jobj"))
@@ -37,15 +36,14 @@ setMethod("initialize", "Column", function(.Object, jc) {
   .Object
 })
 
-column <- function(jc) {
-  new("Column", jc)
-}
-
-col <- function(x) {
-  column(callJStatic("org.apache.spark.sql.functions", "col", x))
-}
+setMethod("column",
+          signature(x = "jobj"),
+          function(x) {
+            new("Column", x)
+          })
 
 #' @rdname show
+#' @name show
 setMethod("show", "Column",
           function(object) {
             cat("Column", callJMethod(object@jc, "toString"), "\n")
@@ -55,12 +53,11 @@ operators <- list(
   "+" = "plus", "-" = "minus", "*" = "multiply", "/" = "divide", "%%" = "mod",
   "==" = "equalTo", ">" = "gt", "<" = "lt", "!=" = "notEqual", "<=" = "leq", ">=" = "geq",
   # we can not override `&&` and `||`, so use `&` and `|` instead
-  "&" = "and", "|" = "or" #, "!" = "unary_$bang"
+  "&" = "and", "|" = "or", #, "!" = "unary_$bang"
+  "^" = "pow"
 )
-column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
+column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
 column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
-functions <- c("min", "max", "sum", "avg", "mean", "count", "abs", "sqrt",
-               "first", "last", "lower", "upper", "sumDistinct")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -76,7 +73,11 @@ createOperator <- function(op) {
                 if (class(e2) == "Column") {
                   e2 <- e2@jc
                 }
-                callJMethod(e1@jc, operators[[op]], e2)
+                if (op == "^") {
+                  jc <- callJStatic("org.apache.spark.sql.functions", operators[[op]], e1@jc, e2)
+                } else {
+                  callJMethod(e1@jc, operators[[op]], e2)
+                }
               }
               column(jc)
             })
@@ -102,15 +103,6 @@ createColumnFunction2 <- function(name) {
             })
 }
 
-createStaticFunction <- function(name) {
-  setMethod(name,
-            signature(x = "Column"),
-            function(x) {
-              jc <- callJStatic("org.apache.spark.sql.functions", name, x@jc)
-              column(jc)
-            })
-}
-
 createMethods <- function() {
   for (op in names(operators)) {
     createOperator(op)
@@ -121,9 +113,6 @@ createMethods <- function() {
   for (name in column_functions2) {
     createColumnFunction2(name)
   }
-  for (x in functions) {
-    createStaticFunction(x)
-  }
 }
 
 createMethods()
@@ -131,6 +120,11 @@ createMethods()
 #' alias
 #'
 #' Set a new name for a column
+#'
+#' @rdname alias
+#' @name alias
+#' @family colum_func
+#' @export
 setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
@@ -141,7 +135,13 @@ setMethod("alias",
             }
           })
 
+#' substr
+#'
 #' An expression that returns a substring.
+#'
+#' @rdname substr
+#' @name substr
+#' @family colum_func
 #'
 #' @param start starting position
 #' @param stop ending position
@@ -151,9 +151,32 @@ setMethod("substr", signature(x = "Column"),
             column(jc)
           })
 
+#' between
+#'
+#' Test if the column is between the lower bound and upper bound, inclusive.
+#'
+#' @rdname between
+#' @name between
+#' @family colum_func
+#'
+#' @param bounds lower and upper bounds
+setMethod("between", signature(x = "Column"),
+          function(x, bounds) {
+            if (is.vector(bounds) && length(bounds) == 2) {
+              jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
+              column(jc)
+            } else {
+              stop("bounds should be a vector of lower and upper bounds")
+            }
+          })
+
 #' Casts the column to a different data type.
-#' @examples
-#' \dontrun{
+#'
+#' @rdname cast
+#' @name cast
+#' @family colum_func
+#'
+#' @examples \dontrun{
 #'   cast(df$age, "string")
 #'   cast(df$name, list(type="array", elementType="byte", containsNull = TRUE))
 #' }
@@ -171,29 +194,38 @@ setMethod("cast",
             }
           })
 
-#' Approx Count Distinct
+#' Match a column with given values.
 #'
-#' Returns the approximate number of distinct items in a group.
-#'
-setMethod("approxCountDistinct",
+#' @rdname match
+#' @name %in%
+#' @aliases %in%
+#' @return a matched values as a result of comparing with given values.
+#' @export
+#' @examples
+#' \dontrun{
+#' filter(df, "age in (10, 30)")
+#' where(df, df$age %in% c(10, 30))
+#' }
+setMethod("%in%",
           signature(x = "Column"),
-          function(x, rsd = 0.95) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "approxCountDistinct", x@jc, rsd)
-            column(jc)
+          function(x, table) {
+            jc <- callJMethod(x@jc, "in", as.list(table))
+            return(column(jc))
           })
 
-#' Count Distinct
+#' otherwise
 #'
-#' returns the number of distinct items in a group.
+#' If values in the specified column are null, returns the value. 
+#' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
-setMethod("countDistinct",
-          signature(x = "Column"),
-          function(x, ...) {
-            jcol <- lapply(list(...), function (x) {
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              listToSeq(jcol))
+#' @rdname otherwise
+#' @name otherwise
+#' @family colum_func
+#' @export
+setMethod("otherwise",
+          signature(x = "Column", value = "ANY"),
+          function(x, value) {
+            value <- ifelse(class(value) == "Column", value@jc, value)
+            jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })
-

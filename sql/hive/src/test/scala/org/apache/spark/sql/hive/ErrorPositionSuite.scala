@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream}
-
 import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
+  import hiveContext.implicits._
 
   before {
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
@@ -109,25 +108,6 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
       "SELECT 1 + array(1)", "1 + array")
   }
 
-  /** Hive can be very noisy, messing up the output of our tests. */
-  private def quietly[A](f: => A): A = {
-    val origErr = System.err
-    val origOut = System.out
-    try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-
-      f
-    } finally {
-      System.setErr(origErr)
-      System.setOut(origOut)
-    }
-  }
-
   /**
    * Creates a test that checks to see if the error thrown when analyzing a given query includes
    * the location of the given token in the query string.
@@ -142,7 +122,7 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
 
     test(name) {
       val error = intercept[AnalysisException] {
-        quietly(sql(query))
+        quietly(hiveContext.sql(query))
       }
 
       assert(!error.getMessage.contains("Seq("))

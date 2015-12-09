@@ -18,14 +18,14 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark.storage.BlockManagerId
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
+import org.roaringbitmap.RoaringBitmap
 
 import scala.util.Random
 
-class MapStatusSuite extends FunSuite {
+class MapStatusSuite extends SparkFunSuite {
 
   test("compressSize") {
     assert(MapStatus.compressSize(0L) === 0)
@@ -97,5 +97,35 @@ class MapStatusSuite extends FunSuite {
     val ser = new JavaSerializer(new SparkConf)
     val buf = ser.newInstance().serialize(status)
     ser.newInstance().deserialize[MapStatus](buf)
+  }
+
+  test("RoaringBitmap: runOptimize succeeded") {
+    val r = new RoaringBitmap
+    (1 to 200000).foreach(i =>
+      if (i % 200 != 0) {
+        r.add(i)
+      }
+    )
+    val size1 = r.getSizeInBytes
+    val success = r.runOptimize()
+    r.trim()
+    val size2 = r.getSizeInBytes
+    assert(size1 > size2)
+    assert(success)
+  }
+
+  test("RoaringBitmap: runOptimize failed") {
+    val r = new RoaringBitmap
+    (1 to 200000).foreach(i =>
+      if (i % 200 == 0) {
+        r.add(i)
+      }
+    )
+    val size1 = r.getSizeInBytes
+    val success = r.runOptimize()
+    r.trim()
+    val size2 = r.getSizeInBytes
+    assert(size1 === size2)
+    assert(!success)
   }
 }

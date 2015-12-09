@@ -17,16 +17,23 @@
 
 package org.apache.spark.deploy.history
 
+import java.util.zip.ZipOutputStream
+
+import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
-private[history] case class ApplicationHistoryInfo(
-    id: String,
-    name: String,
+private[spark] case class ApplicationAttemptInfo(
+    attemptId: Option[String],
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean = false)
+
+private[spark] case class ApplicationHistoryInfo(
+    id: String,
+    name: String,
+    attempts: List[ApplicationAttemptInfo])
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -41,9 +48,10 @@ private[history] abstract class ApplicationHistoryProvider {
    * Returns the Spark UI for a specific application.
    *
    * @param appId The application ID.
+   * @param attemptId The application attempt ID (or None if there is no attempt ID).
    * @return The application's UI, or None if application is not found.
    */
-  def getAppUI(appId: String): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
 
   /**
    * Called when the server is shutting down.
@@ -56,5 +64,13 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   def getConfig(): Map[String, String] = Map()
+
+  /**
+   * Writes out the event logs to the output stream provided. The logs will be compressed into a
+   * single zip file and written out.
+   * @throws SparkException if the logs for the app id cannot be found.
+   */
+  @throws(classOf[SparkException])
+  def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
 }

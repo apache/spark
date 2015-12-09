@@ -32,15 +32,40 @@
 # environment -> Map[String, T], where T is a native type
 # jobj -> Object, where jobj is an object created in the backend
 
+getSerdeType <- function(object) {
+  type <- class(object)[[1]]
+  if (type != "list") {
+    type
+  } else {
+    # Check if all elements are of same type
+    elemType <- unique(sapply(object, function(elem) { getSerdeType(elem) }))
+    if (length(elemType) <= 1) {
+      "array"
+    } else {
+      "list"
+    }
+  }
+}
+
 writeObject <- function(con, object, writeType = TRUE) {
   # NOTE: In R vectors have same type as objects. So we don't support
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
   type <- class(object)[[1]]  # class of POSIXlt is c("POSIXlt", "POSIXt")
-  if (writeType) {
-    writeType(con, type)
+  # Checking types is needed here, since ‘is.na’ only handles atomic vectors,
+  # lists and pairlists
+  if (type %in% c("integer", "character", "logical", "double", "numeric")) {
+    if (is.na(object)) {
+      object <- NULL
+      type <- "NULL"
+    }
   }
-  switch(type,
+
+  serdeType <- getSerdeType(object)
+  if (writeType) {
+    writeType(con, serdeType)
+  }
+  switch(serdeType,
          NULL = writeVoid(con),
          integer = writeInt(con, object),
          character = writeString(con, object),
@@ -48,7 +73,9 @@ writeObject <- function(con, object, writeType = TRUE) {
          double = writeDouble(con, object),
          numeric = writeDouble(con, object),
          raw = writeRaw(con, object),
+         array = writeArray(con, object),
          list = writeList(con, object),
+         struct = writeList(con, object),
          jobj = writeJobj(con, object),
          environment = writeEnv(con, object),
          Date = writeDate(con, object),
@@ -71,7 +98,7 @@ writeJobj <- function(con, value) {
 writeString <- function(con, value) {
   utfVal <- enc2utf8(value)
   writeInt(con, as.integer(nchar(utfVal, type = "bytes") + 1))
-  writeBin(utfVal, con, endian = "big")
+  writeBin(utfVal, con, endian = "big", useBytes=TRUE)
 }
 
 writeInt <- function(con, value) {
@@ -102,16 +129,8 @@ writeRowSerialize <- function(outputCon, rows) {
 serializeRow <- function(row) {
   rawObj <- rawConnection(raw(0), "wb")
   on.exit(close(rawObj))
-  writeRow(rawObj, row)
+  writeList(rawObj, row)
   rawConnectionValue(rawObj)
-}
-
-writeRow <- function(con, row) {
-  numCols <- length(row)
-  writeInt(con, numCols)
-  for (i in 1:numCols) {
-    writeObject(con, row[[i]])
-  }
 }
 
 writeRaw <- function(con, batch) {
@@ -128,26 +147,26 @@ writeType <- function(con, class) {
                  double = "d",
                  numeric = "d",
                  raw = "r",
+                 array = "a",
                  list = "l",
+                 struct = "s",
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = 't',
-                 POSIXct = 't',
+                 POSIXlt = "t",
+                 POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
 }
 
 # Used to pass arrays where all the elements are of the same type
-writeList <- function(con, arr) {
-  # All elements should be of same type
-  elemType <- unique(sapply(arr, function(elem) { class(elem) }))
-  stopifnot(length(elemType) <= 1)
-
+writeArray <- function(con, arr) {
   # TODO: Empty lists are given type "character" right now.
   # This may not work if the Java side expects array of any other type.
-  if (length(elemType) == 0) {
+  if (length(arr) == 0) {
     elemType <- class("somestring")
+  } else {
+    elemType <- getSerdeType(arr[[1]])
   }
 
   writeType(con, elemType)
@@ -160,13 +179,21 @@ writeList <- function(con, arr) {
   }
 }
 
+# Used to pass arrays where the elements can be of different types
+writeList <- function(con, list) {
+  writeInt(con, length(list))
+  for (elem in list) {
+    writeObject(con, elem)
+  }
+}
+
 # Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)
 
   writeInt(con, len)
   if (len > 0) {
-    writeList(con, as.list(ls(env)))
+    writeArray(con, as.list(ls(env)))
     vals <- lapply(ls(env), function(x) { env[[x]] })
     writeList(con, as.list(vals))
   }

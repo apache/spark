@@ -19,11 +19,14 @@ package org.apache.spark.ml.attribute
 
 import scala.annotation.varargs
 
-import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.types.{DoubleType, NumericType, Metadata, MetadataBuilder, StructField}
 
 /**
+ * :: DeveloperApi ::
  * Abstract class for ML attributes.
  */
+@DeveloperApi
 sealed abstract class Attribute extends Serializable {
 
   name.foreach { n =>
@@ -121,14 +124,34 @@ private[attribute] trait AttributeFactory {
   private[attribute] def fromMetadata(metadata: Metadata): Attribute
 
   /**
+   * Creates an [[Attribute]] from a [[StructField]] instance, optionally preserving name.
+   */
+  private[ml] def decodeStructField(field: StructField, preserveName: Boolean): Attribute = {
+    require(field.dataType.isInstanceOf[NumericType])
+    val metadata = field.metadata
+    val mlAttr = AttributeKeys.ML_ATTR
+    if (metadata.contains(mlAttr)) {
+      val attr = fromMetadata(metadata.getMetadata(mlAttr))
+      if (preserveName) {
+        attr
+      } else {
+        attr.withName(field.name)
+      }
+    } else {
+      UnresolvedAttribute
+    }
+  }
+
+  /**
    * Creates an [[Attribute]] from a [[StructField]] instance.
    */
-  def fromStructField(field: StructField): Attribute = {
-    require(field.dataType == DoubleType)
-    fromMetadata(field.metadata.getMetadata(AttributeKeys.ML_ATTR)).withName(field.name)
-  }
+  def fromStructField(field: StructField): Attribute = decodeStructField(field, false)
 }
 
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
 object Attribute extends AttributeFactory {
 
   private[attribute] override def fromMetadata(metadata: Metadata): Attribute = {
@@ -157,6 +180,7 @@ object Attribute extends AttributeFactory {
 
 
 /**
+ * :: DeveloperApi ::
  * A numeric attribute with optional summary statistics.
  * @param name optional name
  * @param index optional index
@@ -165,6 +189,7 @@ object Attribute extends AttributeFactory {
  * @param std optional standard deviation
  * @param sparsity optional sparsity (ratio of zeros)
  */
+@DeveloperApi
 class NumericAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -272,8 +297,10 @@ class NumericAttribute private[ml] (
 }
 
 /**
+ * :: DeveloperApi ::
  * Factory methods for numeric attributes.
  */
+@DeveloperApi
 object NumericAttribute extends AttributeFactory {
 
   /** The default numeric attribute. */
@@ -292,6 +319,7 @@ object NumericAttribute extends AttributeFactory {
 }
 
 /**
+ * :: DeveloperApi ::
  * A nominal attribute.
  * @param name optional name
  * @param index optional index
@@ -300,6 +328,7 @@ object NumericAttribute extends AttributeFactory {
  *                  defined.
  * @param values optional values. At most one of `numValues` and `values` can be defined.
  */
+@DeveloperApi
 class NominalAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -424,7 +453,11 @@ class NominalAttribute private[ml] (
   }
 }
 
-/** Factory methods for nominal attributes. */
+/**
+ * :: DeveloperApi ::
+ * Factory methods for nominal attributes.
+ */
+@DeveloperApi
 object NominalAttribute extends AttributeFactory {
 
   /** The default nominal attribute. */
@@ -444,11 +477,13 @@ object NominalAttribute extends AttributeFactory {
 }
 
 /**
+ * :: DeveloperApi ::
  * A binary attribute.
  * @param name optional name
  * @param index optional index
  * @param values optionla values. If set, its size must be 2.
  */
+@DeveloperApi
 class BinaryAttribute private[ml] (
     override val name: Option[String] = None,
     override val index: Option[Int] = None,
@@ -520,7 +555,11 @@ class BinaryAttribute private[ml] (
   }
 }
 
-/** Factory methods for binary attributes. */
+/**
+ * :: DeveloperApi ::
+ * Factory methods for binary attributes.
+ */
+@DeveloperApi
 object BinaryAttribute extends AttributeFactory {
 
   /** The default binary attribute. */
@@ -534,4 +573,35 @@ object BinaryAttribute extends AttributeFactory {
       if (metadata.contains(VALUES)) Some(metadata.getStringArray(VALUES)) else None
     new BinaryAttribute(name, index, values)
   }
+}
+
+/**
+ * :: DeveloperApi ::
+ * An unresolved attribute.
+ */
+@DeveloperApi
+object UnresolvedAttribute extends Attribute {
+
+  override def attrType: AttributeType = AttributeType.Unresolved
+
+  override def withIndex(index: Int): Attribute = this
+
+  override def isNumeric: Boolean = false
+
+  override def withoutIndex: Attribute = this
+
+  override def isNominal: Boolean = false
+
+  override def name: Option[String] = None
+
+  override private[attribute] def toMetadataImpl(withType: Boolean): Metadata = {
+    Metadata.empty
+  }
+
+  override def withoutName: Attribute = this
+
+  override def index: Option[Int] = None
+
+  override def withName(name: String): Attribute = this
+
 }

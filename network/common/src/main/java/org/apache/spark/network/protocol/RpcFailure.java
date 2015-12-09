@@ -21,7 +21,7 @@ import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 
 /** Response to {@link RpcRequest} for a failed RPC. */
-public final class RpcFailure implements ResponseMessage {
+public final class RpcFailure extends AbstractMessage implements ResponseMessage {
   public final long requestId;
   public final String errorString;
 
@@ -48,6 +48,11 @@ public final class RpcFailure implements ResponseMessage {
     long requestId = buf.readLong();
     String errorString = Encoders.Strings.decode(buf);
     return new RpcFailure(requestId, errorString);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(requestId, errorString);
   }
 
   @Override

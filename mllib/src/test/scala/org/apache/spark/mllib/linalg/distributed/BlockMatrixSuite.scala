@@ -20,14 +20,13 @@ package org.apache.spark.mllib.linalg.distributed
 import java.{util => ju}
 
 import breeze.linalg.{DenseMatrix => BDM}
-import org.scalatest.FunSuite
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 5
   val n = 4
@@ -57,11 +56,13 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     val random = new ju.Random()
     // This should generate a 4x4 grid of 1x2 blocks.
     val part0 = GridPartitioner(4, 7, suggestedNumPartitions = 12)
+    // scalastyle:off
     val expected0 = Array(
       Array(0, 0, 4, 4,  8,  8, 12),
       Array(1, 1, 5, 5,  9,  9, 13),
       Array(2, 2, 6, 6, 10, 10, 14),
       Array(3, 3, 7, 7, 11, 11, 15))
+    // scalastyle:on
     for (i <- 0 until 4; j <- 0 until 7) {
       assert(part0.getPartition((i, j)) === expected0(i)(j))
       assert(part0.getPartition((i, j, random.nextInt())) === expected0(i)(j))
@@ -232,6 +233,24 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(largeC.numRows() === largeA.numRows())
     assert(largeC.numCols() === largeB.numCols())
     assert(localC ~== result absTol 1e-8)
+  }
+
+  test("simulate multiply") {
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))))
+    val rdd = sc.parallelize(blocks, 2)
+    val B = new BlockMatrix(rdd, colPerPart, rowPerPart)
+    val resultPartitioner = GridPartitioner(gridBasedMat.numRowBlocks, B.numColBlocks,
+      math.max(numPartitions, 2))
+    val (destinationsA, destinationsB) = gridBasedMat.simulateMultiply(B, resultPartitioner)
+    assert(destinationsA((0, 0)) === Set(0))
+    assert(destinationsA((0, 1)) === Set(2))
+    assert(destinationsA((1, 0)) === Set(0))
+    assert(destinationsA((1, 1)) === Set(2))
+    assert(destinationsA((2, 1)) === Set(3))
+    assert(destinationsB((0, 0)) === Set(0))
+    assert(destinationsB((1, 1)) === Set(2, 3))
   }
 
   test("validate") {

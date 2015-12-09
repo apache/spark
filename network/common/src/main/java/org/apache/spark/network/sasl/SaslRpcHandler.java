@@ -17,10 +17,13 @@
 
 package org.apache.spark.network.sasl;
 
-import java.util.concurrent.ConcurrentMap;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import javax.security.sasl.Sasl;
 
-import com.google.common.collect.Maps;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +31,8 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * RPC Handler which performs SASL authentication before delegating to a child RPC handler.
@@ -37,8 +42,14 @@ import org.apache.spark.network.server.StreamManager;
  * Note that the authentication process consists of multiple challenge-response pairs, each of
  * which are individual RPCs.
  */
-public class SaslRpcHandler extends RpcHandler {
-  private final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
+class SaslRpcHandler extends RpcHandler {
+  private static final Logger logger = LoggerFactory.getLogger(SaslRpcHandler.class);
+
+  /** Transport configuration. */
+  private final TransportConf conf;
+
+  /** The client channel. */
+  private final Channel channel;
 
   /** RpcHandler we will delegate to for authenticated connections. */
   private final RpcHandler delegate;
@@ -46,37 +57,76 @@ public class SaslRpcHandler extends RpcHandler {
   /** Class which provides secret keys which are shared by server and client on a per-app basis. */
   private final SecretKeyHolder secretKeyHolder;
 
-  /** Maps each channel to its SASL authentication state. */
-  private final ConcurrentMap<TransportClient, SparkSaslServer> channelAuthenticationMap;
+  private SparkSaslServer saslServer;
+  private boolean isComplete;
 
-  public SaslRpcHandler(RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
+  SaslRpcHandler(
+      TransportConf conf,
+      Channel channel,
+      RpcHandler delegate,
+      SecretKeyHolder secretKeyHolder) {
+    this.conf = conf;
+    this.channel = channel;
     this.delegate = delegate;
     this.secretKeyHolder = secretKeyHolder;
-    this.channelAuthenticationMap = Maps.newConcurrentMap();
+    this.saslServer = null;
+    this.isComplete = false;
   }
 
   @Override
-  public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
-    SparkSaslServer saslServer = channelAuthenticationMap.get(client);
-    if (saslServer != null && saslServer.isComplete()) {
+  public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
+    if (isComplete) {
       // Authentication complete, delegate to base handler.
       delegate.receive(client, message, callback);
       return;
     }
 
-    SaslMessage saslMessage = SaslMessage.decode(Unpooled.wrappedBuffer(message));
+    ByteBuf nettyBuf = Unpooled.wrappedBuffer(message);
+    SaslMessage saslMessage;
+    try {
+      saslMessage = SaslMessage.decode(nettyBuf);
+    } finally {
+      nettyBuf.release();
+    }
 
     if (saslServer == null) {
       // First message in the handshake, setup the necessary state.
-      saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder);
-      channelAuthenticationMap.put(client, saslServer);
+      client.setClientId(saslMessage.appId);
+      saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
+        conf.saslServerAlwaysEncrypt());
     }
 
-    byte[] response = saslServer.response(saslMessage.payload);
+    byte[] response;
+    try {
+      response = saslServer.response(JavaUtils.bufferToArray(
+        saslMessage.body().nioByteBuffer()));
+    } catch (IOException ioe) {
+      throw new RuntimeException(ioe);
+    }
+    callback.onSuccess(ByteBuffer.wrap(response));
+
+    // Setup encryption after the SASL response is sent, otherwise the client can't parse the
+    // response. It's ok to change the channel pipeline here since we are processing an incoming
+    // message, so the pipeline is busy and no new incoming messages will be fed to it before this
+    // method returns. This assumes that the code ensures, through other means, that no outbound
+    // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
       logger.debug("SASL authentication successful for channel {}", client);
+      isComplete = true;
+      if (SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
+        logger.debug("Enabling encryption for channel {}", client);
+        SaslEncryption.addToChannel(channel, saslServer, conf.maxSaslEncryptedBlockSize());
+        saslServer = null;
+      } else {
+        saslServer.dispose();
+        saslServer = null;
+      }
     }
-    callback.onSuccess(response);
+  }
+
+  @Override
+  public void receive(TransportClient client, ByteBuffer message) {
+    delegate.receive(client, message);
   }
 
   @Override
@@ -86,9 +136,18 @@ public class SaslRpcHandler extends RpcHandler {
 
   @Override
   public void connectionTerminated(TransportClient client) {
-    SparkSaslServer saslServer = channelAuthenticationMap.remove(client);
-    if (saslServer != null) {
-      saslServer.dispose();
+    try {
+      delegate.connectionTerminated(client);
+    } finally {
+      if (saslServer != null) {
+        saslServer.dispose();
+      }
     }
   }
+
+  @Override
+  public void exceptionCaught(Throwable cause, TransportClient client) {
+    delegate.exceptionCaught(cause, client);
+  }
+
 }

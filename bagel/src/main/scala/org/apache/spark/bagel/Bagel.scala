@@ -22,6 +22,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 object Bagel extends Logging {
   val DEFAULT_STORAGE_LEVEL = StorageLevel.MEMORY_AND_DISK
 
@@ -78,7 +79,7 @@ object Bagel extends Logging {
       val startTime = System.currentTimeMillis
 
       val aggregated = agg(verts, aggregator)
-      val combinedMsgs = msgs.combineByKey(
+      val combinedMsgs = msgs.combineByKeyWithClassTag(
         combiner.createCombiner _, combiner.mergeMsg _, combiner.mergeCombiners _, partitioner)
       val grouped = combinedMsgs.groupWith(verts)
       val superstep_ = superstep  // Create a read-only copy of superstep for capture in closure
@@ -270,18 +271,21 @@ object Bagel extends Logging {
   }
 }
 
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 trait Combiner[M, C] {
   def createCombiner(msg: M): C
   def mergeMsg(combiner: C, msg: M): C
   def mergeCombiners(a: C, b: C): C
 }
 
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 trait Aggregator[V, A] {
   def createAggregator(vert: V): A
   def mergeAggregators(a: A, b: A): A
 }
 
 /** Default combiner that simply appends messages together (i.e. performs no aggregation) */
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 class DefaultCombiner[M: Manifest] extends Combiner[M, Array[M]] with Serializable {
   def createCombiner(msg: M): Array[M] =
     Array(msg)
@@ -297,6 +301,7 @@ class DefaultCombiner[M: Manifest] extends Combiner[M, Array[M]] with Serializab
  * Subclasses may store state along with each vertex and must
  * inherit from java.io.Serializable or scala.Serializable.
  */
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 trait Vertex {
   def active: Boolean
 }
@@ -307,6 +312,7 @@ trait Vertex {
  * Subclasses may contain a payload to deliver to the target vertex
  * and must inherit from java.io.Serializable or scala.Serializable.
  */
+@deprecated("Uses of Bagel should migrate to GraphX", "1.6.0")
 trait Message[K] {
   def targetId: K
 }

@@ -17,11 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 
-class DoubleRDDSuite extends FunSuite with SharedSparkContext {
+class DoubleRDDSuite extends SparkFunSuite with SharedSparkContext {
   test("sum") {
     assert(sc.parallelize(Seq.empty[Double]).sum() === 0.0)
     assert(sc.parallelize(Seq(1.0)).sum() === 1.0)

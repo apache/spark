@@ -16,17 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -e
 
-# Figure out where Spark is installed
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-
-. "$SPARK_HOME"/bin/load-spark-env.sh
-
-if [ -z "$1" ]; then
-  echo "Usage: spark-class <class> [<args>]" 1>&2
-  exit 1
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 fi
+
+. "${SPARK_HOME}"/bin/load-spark-env.sh
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
@@ -42,54 +37,45 @@ fi
 
 # Find assembly jar
 SPARK_ASSEMBLY_JAR=
-if [ -f "$SPARK_HOME/RELEASE" ]; then
-  ASSEMBLY_DIR="$SPARK_HOME/lib"
+if [ -f "${SPARK_HOME}/RELEASE" ]; then
+  ASSEMBLY_DIR="${SPARK_HOME}/lib"
 else
-  ASSEMBLY_DIR="$SPARK_HOME/assembly/target/scala-$SPARK_SCALA_VERSION"
+  ASSEMBLY_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION"
 fi
 
+GREP_OPTIONS=
 num_jars="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" | wc -l)"
-if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" ]; then
+if [ "$num_jars" -eq "0" -a -z "$SPARK_ASSEMBLY_JAR" -a "$SPARK_PREPEND_CLASSES" != "1" ]; then
   echo "Failed to find Spark assembly in $ASSEMBLY_DIR." 1>&2
   echo "You need to build Spark before running this program." 1>&2
   exit 1
 fi
-ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" || true)"
-if [ "$num_jars" -gt "1" ]; then
-  echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
-  echo "$ASSEMBLY_JARS" 1>&2
-  echo "Please remove all but one jar." 1>&2
-  exit 1
-fi
-
-SPARK_ASSEMBLY_JAR="${ASSEMBLY_DIR}/${ASSEMBLY_JARS}"
-
-# Verify that versions of java used to build the jars and run Spark are compatible
-if [ -n "$JAVA_HOME" ]; then
-  JAR_CMD="$JAVA_HOME/bin/jar"
-else
-  JAR_CMD="jar"
-fi
-
-if [ $(command -v "$JAR_CMD") ] ; then
-  jar_error_check=$("$JAR_CMD" -tf "$SPARK_ASSEMBLY_JAR" nonexistent/class/path 2>&1)
-  if [[ "$jar_error_check" =~ "invalid CEN header" ]]; then
-    echo "Loading Spark jar with '$JAR_CMD' failed. " 1>&2
-    echo "This is likely because Spark was compiled with Java 7 and run " 1>&2
-    echo "with Java 6. (see SPARK-1703). Please use Java 7 to run Spark " 1>&2
-    echo "or build Spark with Java 6." 1>&2
+if [ -d "$ASSEMBLY_DIR" ]; then
+  ASSEMBLY_JARS="$(ls -1 "$ASSEMBLY_DIR" | grep "^spark-assembly.*hadoop.*\.jar$" || true)"
+  if [ "$num_jars" -gt "1" ]; then
+    echo "Found multiple Spark assembly jars in $ASSEMBLY_DIR:" 1>&2
+    echo "$ASSEMBLY_JARS" 1>&2
+    echo "Please remove all but one jar." 1>&2
     exit 1
   fi
 fi
+
+SPARK_ASSEMBLY_JAR="${ASSEMBLY_DIR}/${ASSEMBLY_JARS}"
 
 LAUNCH_CLASSPATH="$SPARK_ASSEMBLY_JAR"
 
 # Add the launcher build dir to the classpath if requested.
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then
-  LAUNCH_CLASSPATH="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
+  LAUNCH_CLASSPATH="${SPARK_HOME}/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
 fi
 
 export _SPARK_ASSEMBLY="$SPARK_ASSEMBLY_JAR"
+
+# For tests
+if [[ -n "$SPARK_TESTING" ]]; then
+  unset YARN_CONF_DIR
+  unset HADOOP_CONF_DIR
+fi
 
 # The launcher library will print arguments separated by a NULL character, to allow arguments with
 # characters that would be otherwise interpreted by the shell. Read that in a while loop, populating
@@ -98,9 +84,4 @@ CMD=()
 while IFS= read -d '' -r ARG; do
   CMD+=("$ARG")
 done < <("$RUNNER" -cp "$LAUNCH_CLASSPATH" org.apache.spark.launcher.Main "$@")
-
-if [ "${CMD[0]}" = "usage" ]; then
-  "${CMD[@]}"
-else
-  exec "${CMD[@]}"
-fi
+exec "${CMD[@]}"

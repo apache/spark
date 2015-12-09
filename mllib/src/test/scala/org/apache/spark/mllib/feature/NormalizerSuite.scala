@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{norm => brzNorm}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
+class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val data = Array(
     Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
@@ -106,10 +105,10 @@ class NormalizerSuite extends FunSuite with MLlibTestSparkContext {
 
     assert((dataInf, dataInfRDD.collect()).zipped.forall((v1, v2) => v1 ~== v2 absTol 1E-5))
 
-    assert(dataInf(0).toArray.map(Math.abs).max ~== 1.0 absTol 1E-5)
-    assert(dataInf(2).toArray.map(Math.abs).max ~== 1.0 absTol 1E-5)
-    assert(dataInf(3).toArray.map(Math.abs).max ~== 1.0 absTol 1E-5)
-    assert(dataInf(4).toArray.map(Math.abs).max ~== 1.0 absTol 1E-5)
+    assert(dataInf(0).toArray.map(math.abs).max ~== 1.0 absTol 1E-5)
+    assert(dataInf(2).toArray.map(math.abs).max ~== 1.0 absTol 1E-5)
+    assert(dataInf(3).toArray.map(math.abs).max ~== 1.0 absTol 1E-5)
+    assert(dataInf(4).toArray.map(math.abs).max ~== 1.0 absTol 1E-5)
 
     assert(dataInf(0) ~== Vectors.sparse(3, Seq((0, -0.86956522), (1, 1.0))) absTol 1E-5)
     assert(dataInf(1) ~== Vectors.dense(0.0, 0.0, 0.0) absTol 1E-5)

@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.mllib.linalg.{Vectors, Matrices}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Vector, Vectors, Matrices}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
+class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(6.0, 9.0),
@@ -47,7 +46,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     }
 
   }
-  
+
   test("two clusters") {
     val data = sc.parallelize(GaussianTestData.data)
 
@@ -63,7 +62,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     val Ew = Array(1.0 / 3.0, 2.0 / 3.0)
     val Emu = Array(Vectors.dense(-4.3673), Vectors.dense(5.1604))
     val Esigma = Array(Matrices.dense(1, 1, Array(1.1098)), Matrices.dense(1, 1, Array(0.86644)))
-    
+
     val gmm = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)
@@ -75,6 +74,20 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     assert(gmm.gaussians(1).mu ~== Emu(1) absTol 1E-3)
     assert(gmm.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
     assert(gmm.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
+  }
+
+  test("two clusters with distributed decompositions") {
+    val data = sc.parallelize(GaussianTestData.data2, 2)
+
+    val k = 5
+    val d = data.first().size
+    assert(GaussianMixture.shouldDistributeGaussians(k, d))
+
+    val gmm = new GaussianMixture()
+      .setK(k)
+      .run(data)
+
+    assert(gmm.k === k)
   }
 
   test("single cluster with sparse data") {
@@ -117,7 +130,7 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     val sparseGMM = new GaussianMixture()
       .setK(2)
       .setInitialModel(initialGmm)
-      .run(data)
+      .run(sparseData)
 
     assert(sparseGMM.weights(0) ~== Ew(0) absTol 1E-3)
     assert(sparseGMM.weights(1) ~== Ew(1) absTol 1E-3)
@@ -149,6 +162,16 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("model prediction, parallel and local") {
+    val data = sc.parallelize(GaussianTestData.data)
+    val gmm = new GaussianMixture().setK(2).setSeed(0).run(data)
+
+    val batchPredictions = gmm.predict(data)
+    batchPredictions.zip(data).collect().foreach { case (batchPred, datum) =>
+      assert(batchPred === gmm.predict(datum))
+    }
+  }
+
   object GaussianTestData {
 
     val data = Array(
@@ -158,6 +181,10 @@ class GaussianMixtureSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.dense( 5.7048), Vectors.dense( 4.6567), Vectors.dense( 5.5026),
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     )
+
+    val data2: Array[Vector] = Array.tabulate(25){ i: Int =>
+      Vectors.dense(Array.tabulate(50)(i + _.toDouble))
+    }
 
   }
 }

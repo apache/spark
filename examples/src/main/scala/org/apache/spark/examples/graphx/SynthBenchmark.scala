@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
 import org.apache.spark.SparkContext._
@@ -128,3 +129,4 @@ object SynthBenchmark {
     sc.stop()
   }
 }
+// scalastyle:on println

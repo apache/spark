@@ -29,7 +29,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
-import org.apache.spark.network.ByteArrayWritableChannel;
+import org.apache.spark.network.util.ByteArrayWritableChannel;
 
 public class MessageWithHeaderSuite {
 

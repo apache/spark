@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.mllib.random.RandomRDDs
@@ -58,3 +59,4 @@ object RandomRDDGeneration {
   }
 
 }
+// scalastyle:on println

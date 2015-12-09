@@ -20,8 +20,7 @@ package org.apache.spark.mllib.tree
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils
 
 
-class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
+class DecisionTreeSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests examining individual elements of training
@@ -65,7 +64,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     val (splits, bins) = DecisionTree.findSplitsBins(rdd, metadata)
@@ -136,8 +135,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 3)
-      assert(fakeMetadata.numSplits(0) === 3)
-      assert(fakeMetadata.numBins(0) === 4)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
     }
@@ -152,8 +149,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 2)
-      assert(fakeMetadata.numSplits(0) === 2)
-      assert(fakeMetadata.numBins(0) === 3)
       assert(splits(0) === 2.0)
       assert(splits(1) === 3.0)
     }
@@ -168,8 +163,6 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
       val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 1)
-      assert(fakeMetadata.numSplits(0) === 1)
-      assert(fakeMetadata.numBins(0) === 2)
       assert(splits(0) === 1.0)
     }
   }
@@ -185,7 +178,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 100,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(metadata.isUnordered(featureIndex = 0))
@@ -244,7 +237,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       maxDepth = 2,
       numClasses = 100,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
+      categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     // 2^(10-1) - 1 > 100, so categorical features will be ordered
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
@@ -428,7 +421,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       numClasses = 2,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
@@ -462,7 +455,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       Variance,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+      categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
@@ -491,7 +484,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
       Variance,
       maxDepth = 2,
       maxBins = 100,
-      categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+      categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2))
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -795,7 +788,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
-      maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
+      maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1 -> 2),
       numClasses = 2, minInstancesPerNode = 2)
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
@@ -859,7 +852,7 @@ class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
   }
 }
 
-object DecisionTreeSuite extends FunSuite {
+object DecisionTreeSuite extends SparkFunSuite {
 
   def validateClassifier(
       model: DecisionTreeModel,
@@ -998,7 +991,7 @@ object DecisionTreeSuite extends FunSuite {
         node.split = Some(new Split(feature = 1, threshold = 0.0, Categorical,
           categories = List(0.0, 1.0)))
     }
-    // TODO: The information gain stats should be consistent with the same info stored in children.
+    // TODO: The information gain stats should be consistent with info in children: SPARK-7131
     node.stats = Some(new InformationGainStats(gain = 0.1, impurity = 0.2,
       leftImpurity = 0.3, rightImpurity = 0.4, new Predict(1.0, 0.4), new Predict(0.0, 0.6)))
     node
@@ -1006,9 +999,9 @@ object DecisionTreeSuite extends FunSuite {
 
   /**
    * Create a tree model.  This is deterministic and contains a variety of node and feature types.
-   * TODO: Update this to be a correct tree (with matching probabilities, impurities, etc.)
+   * TODO: Update to be a correct tree (with matching probabilities, impurities, etc.): SPARK-7131
    */
-  private[mllib] def createModel(algo: Algo): DecisionTreeModel = {
+  private[spark] def createModel(algo: Algo): DecisionTreeModel = {
     val topNode = createInternalNode(id = 1, Continuous)
     val (node2, node3) = (createLeafNode(id = 2), createInternalNode(id = 3, Categorical))
     val (node6, node7) = (createLeafNode(id = 6), createLeafNode(id = 7))

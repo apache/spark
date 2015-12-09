@@ -41,7 +41,7 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     val ow = new ObjectWritable()
-    ow.setConf(new Configuration())
+    ow.setConf(new Configuration(false))
     ow.readFields(in)
     t = ow.get().asInstanceOf[T]
   }

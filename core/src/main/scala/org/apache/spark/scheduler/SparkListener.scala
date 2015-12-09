@@ -22,15 +22,19 @@ import java.util.Properties
 import scala.collection.Map
 import scala.collection.mutable
 
-import org.apache.spark.{Logging, TaskEndReason}
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+
+import org.apache.spark.{Logging, SparkConf, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
-sealed trait SparkListenerEvent
+@JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
+trait SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
@@ -98,6 +102,9 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
+
 /**
  * Periodic updates from executors.
  * @param execId executor id
@@ -110,8 +117,13 @@ case class SparkListenerExecutorMetricsUpdate(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerApplicationStart(appName: String, appId: Option[String], time: Long,
-  sparkUser: String) extends SparkListenerEvent
+case class SparkListenerApplicationStart(
+    appName: String,
+    appId: Option[String],
+    time: Long,
+    sparkUser: String,
+    appAttemptId: Option[String],
+    driverLogs: Option[Map[String, String]] = None) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
@@ -121,6 +133,17 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
  * This event is not meant to be posted to listeners downstream.
  */
 private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
+
+/**
+ * Interface for creating history listeners defined in other modules like SQL, which are used to
+ * rebuild the history UI.
+ */
+private[spark] trait SparkHistoryListenerFactory {
+  /**
+   * Create listeners used to rebuild the history UI.
+   */
+  def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener]
+}
 
 /**
  * :: DeveloperApi ::
@@ -210,6 +233,16 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+   * Called when the driver receives a block update info.
+   */
+  def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated) { }
+
+  /**
+   * Called when other events like SQL-specific events are posted.
+   */
+  def onOtherEvent(event: SparkListenerEvent) { }
 }
 
 /**
@@ -265,7 +298,7 @@ class StatsReportListener extends SparkListener with Logging {
 private[spark] object StatsReportListener extends Logging {
 
   // For profiling, the extremes are more interesting
-  val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
+  val percentiles = Array[Int](0, 5, 10, 25, 50, 75, 90, 95, 100)
   val probabilities = percentiles.map(_ / 100.0)
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
@@ -299,7 +332,7 @@ private[spark] object StatsReportListener extends Logging {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], format:String) {
+  def showDistribution(heading: String, dOpt: Option[Distribution], format: String) {
     def f(d: Double): String = format.format(d)
     showDistribution(heading, dOpt, f _)
   }
@@ -313,7 +346,7 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showBytesDistribution(
-      heading:String,
+      heading: String,
       getMetric: (TaskInfo, TaskMetrics) => Option[Long],
       taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showBytesDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))

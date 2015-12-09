@@ -41,8 +41,9 @@ public class JavaLDAExample {
           public Vector call(String s) {
             String[] sarray = s.trim().split(" ");
             double[] values = new double[sarray.length];
-            for (int i = 0; i < sarray.length; i++)
+            for (int i = 0; i < sarray.length; i++) {
               values[i] = Double.parseDouble(sarray[i]);
+            }
             return Vectors.dense(values);
           }
         }
@@ -58,7 +59,7 @@ public class JavaLDAExample {
     corpus.cache();
 
     // Cluster the documents into three topics using LDA
-    DistributedLDAModel ldaModel = new LDA().setK(3).run(corpus);
+    DistributedLDAModel ldaModel = (DistributedLDAModel)new LDA().setK(3).run(corpus);
 
     // Output topics. Each is a distribution over words (matching word count vectors)
     System.out.println("Learned topics (as distributions over vocab of " + ldaModel.vocabSize()

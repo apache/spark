@@ -323,11 +323,14 @@ object JavaAPICompletenessChecker {
     val missingMethods = javaEquivalents -- javaMethods
 
     for (method <- missingMethods) {
+      // scalastyle:off println
       println(method)
+      // scalastyle:on println
     }
   }
 
   def main(args: Array[String]) {
+    // scalastyle:off println
     println("Missing RDD methods")
     printMissingMethods(classOf[RDD[_]], classOf[JavaRDD[_]])
     println()
@@ -359,5 +362,6 @@ object JavaAPICompletenessChecker {
     println("Missing PairDStream methods")
     printMissingMethods(classOf[PairDStreamFunctions[_, _]], classOf[JavaPairDStream[_, _]])
     println()
+    // scalastyle:on println
   }
 }

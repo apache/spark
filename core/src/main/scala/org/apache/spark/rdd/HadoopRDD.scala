@@ -44,14 +44,14 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{NextIterator, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, NextIterator, Utils}
 import org.apache.spark.scheduler.{HostTaskLocation, HDFSCacheTaskLocation}
 import org.apache.spark.storage.StorageLevel
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
  */
-private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
+private[spark] class HadoopPartition(rddId: Int, idx: Int, s: InputSplit)
   extends Partition {
 
   val inputSplit = new SerializableWritable[InputSplit](s)
@@ -88,8 +88,8 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  *
  * @param sc The SparkContext to associate the RDD with.
  * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
- *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
- *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
+ *   variable references an instance of JobConf, then that JobConf will be used for the Hadoop job.
+ *   Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
  * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
  *     creates.
  * @param inputFormatClass Storage format of the data to be read.
@@ -100,13 +100,17 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 @DeveloperApi
 class HadoopRDD[K, V](
     sc: SparkContext,
-    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    broadcastedConf: Broadcast[SerializableConfiguration],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     minPartitions: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
+
+  if (initLocalJobConfFuncOpt.isDefined) {
+    sparkContext.clean(initLocalJobConfFuncOpt.get)
+  }
 
   def this(
       sc: SparkContext,
@@ -117,9 +121,9 @@ class HadoopRDD[K, V](
       minPartitions: Int) = {
     this(
       sc,
-      sc.broadcast(new SerializableWritable(conf))
-        .asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
-      None /* initLocalJobConfFuncOpt */,
+      sc.broadcast(new SerializableConfiguration(conf))
+        .asInstanceOf[Broadcast[SerializableConfiguration]],
+      initLocalJobConfFuncOpt = None,
       inputFormatClass,
       keyClass,
       valueClass,
@@ -133,7 +137,7 @@ class HadoopRDD[K, V](
   // used to build JobTracker ID
   private val createTime = new Date()
 
-  private val shouldCloneJobConf = sc.conf.getBoolean("spark.hadoop.cloneConf", false)
+  private val shouldCloneJobConf = sparkContext.conf.getBoolean("spark.hadoop.cloneConf", false)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
@@ -178,17 +182,12 @@ class HadoopRDD[K, V](
   }
 
   protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-    if (HadoopRDD.containsCachedMetadata(inputFormatCacheKey)) {
-      return HadoopRDD.getCachedMetadata(inputFormatCacheKey).asInstanceOf[InputFormat[K, V]]
-    }
-    // Once an InputFormat for this RDD is created, cache it so that only one reflection call is
-    // done in each local process.
     val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
-    if (newInputFormat.isInstanceOf[Configurable]) {
-      newInputFormat.asInstanceOf[Configurable].setConf(conf)
+    newInputFormat match {
+      case c: Configurable => c.setConf(conf)
+      case _ =>
     }
-    HadoopRDD.putCachedMetadata(inputFormatCacheKey, newInputFormat)
     newInputFormat
   }
 
@@ -197,9 +196,6 @@ class HadoopRDD[K, V](
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
     val inputFormat = getInputFormat(jobConf)
-    if (inputFormat.isInstanceOf[Configurable]) {
-      inputFormat.asInstanceOf[Configurable].setConf(jobConf)
-    }
     val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
@@ -216,6 +212,12 @@ class HadoopRDD[K, V](
       val jobConf = getJobConf()
 
       val inputMetrics = context.taskMetrics.getInputMetricsForReadMethod(DataReadMethod.Hadoop)
+
+      // Sets the thread local variable for the file's name
+      split.inputSplit.value match {
+        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
+        case _ => SqlNewHadoopRDDState.unsetInputFileName()
+      }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
@@ -253,8 +255,22 @@ class HadoopRDD[K, V](
       }
 
       override def close() {
-        try {
-          reader.close()
+        if (reader != null) {
+          SqlNewHadoopRDDState.unsetInputFileName()
+          // Close the reader and release it. Note: it's very important that we don't close the
+          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+          // corruption issues when reading compressed input.
+          try {
+            reader.close()
+          } catch {
+            case e: Exception =>
+              if (!ShutdownHookManager.inShutdown()) {
+                logWarning("Exception in RecordReader.close()", e)
+              }
+          } finally {
+            reader = null
+          }
           if (bytesReadCallback.isDefined) {
             inputMetrics.updateBytesRead()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
@@ -266,12 +282,6 @@ class HadoopRDD[K, V](
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
-            }
-          }
-        } catch {
-          case e: Exception => {
-            if (!Utils.inShutdown()) {
-              logWarning("Exception in RecordReader.close()", e)
             }
           }
         }
@@ -379,11 +389,11 @@ private[spark] object HadoopRDD extends Logging {
 
   private[spark] class SplitInfoReflections {
     val inputSplitWithLocationInfo =
-      Class.forName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
+      Utils.classForName("org.apache.hadoop.mapred.InputSplitWithLocationInfo")
     val getLocationInfo = inputSplitWithLocationInfo.getMethod("getLocationInfo")
-    val newInputSplit = Class.forName("org.apache.hadoop.mapreduce.InputSplit")
+    val newInputSplit = Utils.classForName("org.apache.hadoop.mapreduce.InputSplit")
     val newGetLocationInfo = newInputSplit.getMethod("getLocationInfo")
-    val splitLocationInfo = Class.forName("org.apache.hadoop.mapred.SplitLocationInfo")
+    val splitLocationInfo = Utils.classForName("org.apache.hadoop.mapred.SplitLocationInfo")
     val isInMemory = splitLocationInfo.getMethod("isInMemory")
     val getLocation = splitLocationInfo.getMethod("getLocation")
   }

@@ -21,21 +21,32 @@ import java.math.BigDecimal
 import java.sql.DriverManager
 import java.util.{Calendar, GregorianCalendar, Properties}
 
-import org.apache.spark.sql.test._
 import org.h2.jdbc.JdbcSQLException
-import org.scalatest.{FunSuite, BeforeAndAfter}
-import TestSQLContext._
-import TestSQLContext.implicits._
+import org.scalatest.BeforeAndAfter
 
-class JDBCSuite extends FunSuite with BeforeAndAfter {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
+class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext {
+  import testImplicits._
+
   val url = "jdbc:h2:mem:testdb0"
   val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
   val testBytes = Array[Byte](99.toByte, 134.toByte, 135.toByte, 200.toByte, 205.toByte)
 
+  val testH2Dialect = new JdbcDialect {
+    override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2")
+    override def getCatalystType(
+        sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+      Some(StringType)
+  }
+
   before {
-    Class.forName("org.h2.Driver")
+    Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
     val properties = new Properties()
@@ -58,6 +69,14 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |CREATE TEMPORARY TABLE foobar
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE fetchtwo
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         fetchSize '2')
       """.stripMargin.replaceAll("\n", " "))
 
     sql(
@@ -103,6 +122,8 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         ).executeUpdate()
     conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
       + "'1996-01-01', '2002-02-20 11:22:33.543543543')").executeUpdate()
+    conn.prepareStatement("insert into test.timetypes values ('12:34:56', "
+      + "null, '2002-02-20 11:22:33.543543543')").executeUpdate()
     conn.commit()
     sql(
       s"""
@@ -112,7 +133,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
       """.stripMargin.replaceAll("\n", " "))
 
 
-    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(40, 20))"
+    conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
     conn.prepareStatement("insert into test.flttypes values ("
       + "1.0000000000000002220446049250313080847263336181640625, "
@@ -124,6 +145,23 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
         |CREATE TEMPORARY TABLE flttypes
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.FLTTYPES', user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement(
+      s"""
+        |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
+        |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
+        |m DOUBLE, n REAL, o DECIMAL(38, 18))
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.prepareStatement("insert into test.nulltypes values ("
+      + "null, null, null, null, null, null, null, null, null, "
+      + "null, null, null, null, null, null)").executeUpdate()
+    conn.commit()
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nulltypes
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
@@ -158,8 +196,24 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(names(2).equals("mary"))
   }
 
+  test("SELECT first field when fetchSize is two") {
+    val names = sql("SELECT NAME FROM fetchtwo").collect().map(x => x.getString(0)).sortWith(_ < _)
+    assert(names.size === 3)
+    assert(names(0).equals("fred"))
+    assert(names(1).equals("joe 'foo' \"bar\""))
+    assert(names(2).equals("mary"))
+  }
+
   test("SELECT second field") {
     val ids = sql("SELECT THEID FROM foobar").collect().map(x => x.getInt(0)).sortWith(_ < _)
+    assert(ids.size === 3)
+    assert(ids(0) === 1)
+    assert(ids(1) === 2)
+    assert(ids(2) === 3)
+  }
+
+  test("SELECT second field when fetchSize is two") {
+    val ids = sql("SELECT THEID FROM fetchtwo").collect().map(x => x.getInt(0)).sortWith(_ < _)
     assert(ids.size === 3)
     assert(ids(0) === 1)
     assert(ids(1) === 2)
@@ -184,23 +238,49 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(ids(2) === 3)
   }
 
+  test("Register JDBC query with renamed fields") {
+    // Regression test for bug SPARK-7345
+    sql(
+      s"""
+        |CREATE TEMPORARY TABLE renamed
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable '(select NAME as NAME1, NAME as NAME2 from TEST.PEOPLE)',
+        |user 'testUser', password 'testPass')
+      """.stripMargin.replaceAll("\n", " "))
+
+    val df = sql("SELECT * FROM renamed")
+    assert(df.schema.fields.size == 2)
+    assert(df.schema.fields(0).name == "NAME1")
+    assert(df.schema.fields(1).name == "NAME2")
+  }
+
   test("Basic API") {
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE").collect().size === 3)
+    assert(sqlContext.read.jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", new Properties).collect().length === 3)
+  }
+
+  test("Basic API with FetchSize") {
+    val properties = new Properties
+    properties.setProperty("fetchSize", "2")
+    assert(sqlContext.read.jdbc(
+      urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
   }
 
   test("Partitioning via JDBCPartitioningInfo API") {
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3)
-      .collect.size === 3)
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", "THEID", 0, 4, 3, new Properties)
+      .collect().length === 3)
   }
 
   test("Partitioning via list-of-where-clauses API") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    assert(TestSQLContext.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts).collect().size === 3)
+    assert(sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
+      .collect().length === 3)
   }
 
   test("H2 integral types") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NOT NULL").collect()
-    assert(rows.size === 1)
+    assert(rows.length === 1)
     assert(rows(0).getInt(0) === 1)
     assert(rows(0).getBoolean(1) === false)
     assert(rows(0).getInt(2) === 3)
@@ -210,7 +290,7 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
 
   test("H2 null entries") {
     val rows = sql("SELECT * FROM inttypes WHERE A IS NULL").collect()
-    assert(rows.size === 1)
+    assert(rows.length === 1)
     assert(rows(0).isNullAt(0))
     assert(rows(0).isNullAt(1))
     assert(rows(0).isNullAt(2))
@@ -246,22 +326,44 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
-    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543543)
+    assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
   test("test DATE types") {
-    val rows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").collect()
-    val cachedRows = TestSQLContext.jdbc(urlWithUserAndPass, "TEST.TIMETYPES").cache().collect()
+    val rows = sqlContext.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    val cachedRows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+      .cache().collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(1).getAs[java.sql.Date](1) === null)
+    assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+  }
+
+  test("test DATE types in cache") {
+    val rows = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
+    sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+      .cache().registerTempTable("mycached_date")
+    val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
   }
 
+  test("test types for null value") {
+    val rows = sqlContext.read.jdbc(
+      urlWithUserAndPass, "TEST.NULLTYPES", new Properties).collect()
+    assert((0 to 14).forall(i => rows(0).isNullAt(i)))
+  }
+
   test("H2 floating-point types") {
     val rows = sql("SELECT * FROM flttypes").collect()
-    assert(rows(0).getDouble(0) === 1.00000000000000022) // Yes, I meant ==.
-    assert(rows(0).getDouble(1) === 1.00000011920928955) // Yes, I meant ==.
-    assert(rows(0).getAs[BigDecimal](2)
-        .equals(new BigDecimal("123456789012345.54321543215432100000")))
+    assert(rows(0).getDouble(0) === 1.00000000000000022)
+    assert(rows(0).getDouble(1) === 1.00000011920928955)
+    assert(rows(0).getAs[BigDecimal](2) ===
+      new BigDecimal("123456789012345.543215432154321000"))
+    assert(rows(0).schema.fields(2).dataType === DecimalType(38, 18))
+    val result = sql("SELECT C FROM flttypes where C > C - 1").collect()
+    assert(result(0).getAs[BigDecimal](0) ===
+      new BigDecimal("123456789012345.543215432154321000"))
   }
 
   test("SQL query as table name") {
@@ -290,5 +392,107 @@ class JDBCSuite extends FunSuite with BeforeAndAfter {
           |         user 'testUser', password 'testPass')
         """.stripMargin.replaceAll("\n", " "))
     }
+  }
+
+  test("Remap types via JdbcDialects") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    val df = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
+    assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
+    val rows = df.collect()
+    assert(rows(0).get(0).isInstanceOf[String])
+    assert(rows(0).get(1).isInstanceOf[String])
+    JdbcDialects.unregisterDialect(testH2Dialect)
+  }
+
+  test("Default jdbc dialect registration") {
+    assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") == MySQLDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") == PostgresDialect)
+    assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") == DB2Dialect)
+    assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") == MsSqlServerDialect)
+    assert(JdbcDialects.get("jdbc:derby:db") == DerbyDialect)
+    assert(JdbcDialects.get("test.invalid") == NoopDialect)
+  }
+
+  test("quote column names by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val Derby = JdbcDialects.get("jdbc:derby:db")
+
+    val columns = Seq("abc", "key")
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
+    assert(DerbyColumns === Seq(""""abc"""", """"key""""))
+  }
+
+  test("Dialect unregister") {
+    JdbcDialects.registerDialect(testH2Dialect)
+    JdbcDialects.unregisterDialect(testH2Dialect)
+    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+  }
+
+  test("Aggregated dialects") {
+    val agg = new AggregatedDialect(List(new JdbcDialect {
+      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+        if (sqlType % 2 == 0) {
+          Some(LongType)
+        } else {
+          None
+        }
+    }, testH2Dialect))
+    assert(agg.canHandle("jdbc:h2:xxx"))
+    assert(!agg.canHandle("jdbc:h2"))
+    assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
+    assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+  }
+
+  test("DB2Dialect type mapping") {
+    val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
+  test("PostgresDialect type mapping") {
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+  }
+
+  test("DerbyDialect jdbc type mapping") {
+    val derbyDialect = JdbcDialects.get("jdbc:derby:db")
+    assert(derbyDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
+    assert(derbyDialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(derbyDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "BOOLEAN")
+  }
+
+  test("table exists query by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val table = "weblogs"
+    val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
+    val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
+    assert(MySQL.getTableExistsQuery(table) == limitQuery)
+    assert(Postgres.getTableExistsQuery(table) == limitQuery)
+    assert(db2.getTableExistsQuery(table) == defaultQuery)
+    assert(h2.getTableExistsQuery(table) == defaultQuery)
+    assert(derby.getTableExistsQuery(table) == defaultQuery)
+  }
+
+  test("Test DataFrame.where for Date and Timestamp") {
+    // Regression test for bug SPARK-11788
+    val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
+    val date = java.sql.Date.valueOf("1995-01-01")
+    val jdbcDf = sqlContext.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
+    val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+    assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
+    assert(rows(0).getAs[java.sql.Timestamp](2)
+      === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 }

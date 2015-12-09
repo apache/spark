@@ -23,7 +23,7 @@ import io.netty.buffer.ByteBuf;
 /**
  * Response to {@link ChunkFetchRequest} when there is an error fetching the chunk.
  */
-public final class ChunkFetchFailure implements ResponseMessage {
+public final class ChunkFetchFailure extends AbstractMessage implements ResponseMessage {
   public final StreamChunkId streamChunkId;
   public final String errorString;
 
@@ -50,6 +50,11 @@ public final class ChunkFetchFailure implements ResponseMessage {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     String errorString = Encoders.Strings.decode(buf);
     return new ChunkFetchFailure(streamChunkId, errorString);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(streamChunkId, errorString);
   }
 
   @Override

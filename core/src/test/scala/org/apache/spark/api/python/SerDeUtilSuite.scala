@@ -17,11 +17,9 @@
 
 package org.apache.spark.api.python
 
-import org.scalatest.FunSuite
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
-import org.apache.spark.SharedSparkContext
-
-class SerDeUtilSuite extends FunSuite with SharedSparkContext {
+class SerDeUtilSuite extends SparkFunSuite with SharedSparkContext {
 
   test("Converting an empty pair RDD to python does not throw an exception (SPARK-5441)") {
     val emptyRdd = sc.makeRDD(Seq[(Any, Any)]())

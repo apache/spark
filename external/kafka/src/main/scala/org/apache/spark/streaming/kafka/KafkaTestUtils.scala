@@ -20,25 +20,26 @@ package org.apache.spark.streaming.kafka
 import java.io.File
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap}
-import java.util.Properties
 import java.util.concurrent.TimeoutException
+import java.util.{Map => JMap, Properties}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import kafka.admin.AdminUtils
+import kafka.api.Request
 import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.StringEncoder
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.ZKStringSerializer
-import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
+import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up
@@ -46,12 +47,12 @@ import org.apache.spark.util.Utils
  *
  * The reason to put Kafka test utility class in src is to test Python related Kafka APIs.
  */
-private class KafkaTestUtils extends Logging {
+private[kafka] class KafkaTestUtils extends Logging {
 
   // Zookeeper related configurations
   private val zkHost = "localhost"
   private var zkPort: Int = 0
-  private val zkConnectionTimeout = 6000
+  private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 6000
 
   private var zookeeper: EmbeddedZookeeper = _
@@ -150,7 +151,7 @@ private class KafkaTestUtils extends Logging {
     }
   }
 
-  /** Create a Kafka topic and wait until it propagated to the whole cluster */
+  /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated
@@ -159,8 +160,7 @@ private class KafkaTestUtils extends Logging {
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    import scala.collection.JavaConversions._
-    sendMessages(topic, Map(messageToFreq.mapValues(_.intValue()).toSeq: _*))
+    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
   }
 
   /** Send the messages to the Kafka broker */
@@ -193,6 +193,8 @@ private class KafkaTestUtils extends Logging {
     val props = new Properties()
     props.put("metadata.broker.list", brokerAddress)
     props.put("serializer.class", classOf[StringEncoder].getName)
+    // wait for all in-sync replicas to ack sends
+    props.put("request.required.acks", "-1")
     props
   }
 
@@ -228,11 +230,19 @@ private class KafkaTestUtils extends Logging {
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
+    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+      case Some(partitionState) =>
+        val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
+
+        ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
+          Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
+          leaderAndInSyncReplicas.isr.size >= 1
+
+      case _ =>
+        false
+    }
     eventually(Time(10000), Time(100)) {
-      assert(
-        server.apis.metadataCache.containsTopicAndPartition(topic, partition),
-        s"Partition [$topic, $partition] metadata not propagated after timeout"
-      )
+      assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
 

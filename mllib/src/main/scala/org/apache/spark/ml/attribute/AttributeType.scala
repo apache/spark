@@ -17,12 +17,17 @@
 
 package org.apache.spark.ml.attribute
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
+ * :: DeveloperApi ::
  * An enum-like type for attribute types: [[AttributeType$#Numeric]], [[AttributeType$#Nominal]],
  * and [[AttributeType$#Binary]].
  */
+@DeveloperApi
 sealed abstract class AttributeType(val name: String)
 
+@DeveloperApi
 object AttributeType {
 
   /** Numeric type. */
@@ -43,6 +48,12 @@ object AttributeType {
     Binary
   }
 
+  /** Unresolved type. */
+  val Unresolved: AttributeType = {
+    case object Unresolved extends AttributeType("unresolved")
+    Unresolved
+  }
+
   /**
    * Gets the [[AttributeType]] object from its name.
    * @param name attribute type name: "numeric", "nominal", or "binary"
@@ -54,6 +65,8 @@ object AttributeType {
       Nominal
     } else if (name == Binary.name) {
       Binary
+    } else if (name == Unresolved.name) {
+      Unresolved
     } else {
       throw new IllegalArgumentException(s"Cannot recognize type $name.")
     }

@@ -18,10 +18,11 @@
 package org.apache.spark.api.r
 
 import java.io._
-import java.net.ServerSocket
+import java.net.{InetAddress, ServerSocket}
+import java.util.Arrays
 import java.util.{Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -39,7 +40,6 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     deserializer: String,
     serializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
   extends RDD[U](parent) with Logging {
   protected var dataStream: DataInputStream = _
@@ -55,12 +55,12 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     val parentIterator = firstParent[T].iterator(partition, context)
 
     // we expect two connections
-    val serverSocket = new ServerSocket(0, 2)
+    val serverSocket = new ServerSocket(0, 2, InetAddress.getByName("localhost"))
     val listenPort = serverSocket.getLocalPort()
 
     // The stdout/stderr is shared by multiple tasks, because we use one daemon
     // to launch child process as worker.
-    val errThread = RRDD.createRWorker(rLibDir, listenPort)
+    val errThread = RRDD.createRWorker(listenPort)
 
     // We use two sockets to separate input and output, then it's easy to manage
     // the lifecycle of them to avoid deadlock.
@@ -113,6 +113,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     partition: Int): Unit = {
 
     val env = SparkEnv.get
+    val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val stream = new BufferedOutputStream(output, bufferSize)
 
@@ -120,6 +121,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
       override def run(): Unit = {
         try {
           SparkEnv.set(env)
+          TaskContext.setTaskContext(taskContext)
           val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(partition)
 
@@ -161,7 +163,9 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
               dataOut.write(elem.asInstanceOf[Array[Byte]])
             } else if (deserializer == SerializationFormats.STRING) {
               // write string(for StringRRDD)
+              // scalastyle:off println
               printOut.println(elem)
+              // scalastyle:on println
             }
           }
 
@@ -233,11 +237,10 @@ private class PairwiseRRDD[T: ClassTag](
     hashFunc: Array[Byte],
     deserializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, (Int, Array[Byte])](
     parent, numPartitions, hashFunc, deserializer,
-    SerializationFormats.BYTE, packageNames, rLibDir,
+    SerializationFormats.BYTE, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): (Int, Array[Byte]) = {
@@ -264,10 +267,9 @@ private class RRDD[T: ClassTag](
     deserializer: String,
     serializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, Array[Byte]](
-    parent, -1, func, deserializer, serializer, packageNames, rLibDir,
+    parent, -1, func, deserializer, serializer, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): Array[Byte] = {
@@ -291,10 +293,9 @@ private class StringRRDD[T: ClassTag](
     func: Array[Byte],
     deserializer: String,
     packageNames: Array[Byte],
-    rLibDir: String,
     broadcastVars: Array[Object])
   extends BaseRRDD[T, String](
-    parent, -1, func, deserializer, SerializationFormats.STRING, packageNames, rLibDir,
+    parent, -1, func, deserializer, SerializationFormats.STRING, packageNames,
     broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   override protected def readData(length: Int): String = {
@@ -309,7 +310,7 @@ private class StringRRDD[T: ClassTag](
 }
 
 private object SpecialLengths {
-  val TIMING_DATA   = -1
+  val TIMING_DATA = -1
 }
 
 private[r] class BufferedStreamThread(
@@ -355,7 +356,6 @@ private[r] object RRDD {
 
     val sparkConf = new SparkConf().setAppName(appName)
                                    .setSparkHome(sparkHome)
-                                   .setJars(jars)
 
     // Override `master` if we have a user-specified value
     if (master != "") {
@@ -366,14 +366,18 @@ private[r] object RRDD {
       sparkConf.setIfMissing("spark.master", "local")
     }
 
-    for ((name, value) <- sparkEnvirMap) {
-      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkEnvirMap.asScala) {
+      sparkConf.set(name.toString, value.toString)
     }
-    for ((name, value) <- sparkExecutorEnvMap) {
-      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
+    for ((name, value) <- sparkExecutorEnvMap.asScala) {
+      sparkConf.setExecutorEnv(name.toString, value.toString)
     }
 
-    new JavaSparkContext(sparkConf)
+    val jsc = new JavaSparkContext(sparkConf)
+    jars.foreach { jar =>
+      jsc.addJar(jar)
+    }
+    jsc
   }
 
   /**
@@ -387,17 +391,23 @@ private[r] object RRDD {
     thread
   }
 
-  private def createRProcess(rLibDir: String, port: Int, script: String): BufferedStreamThread = {
-    val rCommand = "Rscript"
+  private def createRProcess(port: Int, script: String): BufferedStreamThread = {
+    // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
+    // but kept here for backward compatibility.
+    val sparkConf = SparkEnv.get.conf
+    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
+    rCommand = sparkConf.get("spark.r.command", rCommand)
+
     val rOptions = "--vanilla"
-    val rExecScript = rLibDir + "/SparkR/worker/" + script
-    val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
+    val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
+    val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
     // and confuses worker script which tries to load a non-existent file
     pb.environment().put("R_TESTS", "")
-    pb.environment().put("SPARKR_RLIBDIR", rLibDir)
+    pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
@@ -408,15 +418,15 @@ private[r] object RRDD {
   /**
    * ProcessBuilder used to launch worker R processes.
    */
-  def createRWorker(rLibDir: String, port: Int): BufferedStreamThread = {
+  def createRWorker(port: Int): BufferedStreamThread = {
     val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
     if (!Utils.isWindows && useDaemon) {
       synchronized {
         if (daemonChannel == null) {
           // we expect one connections
-          val serverSocket = new ServerSocket(0, 1)
+          val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
           val daemonPort = serverSocket.getLocalPort
-          errThread = createRProcess(rLibDir, daemonPort, "daemon.R")
+          errThread = createRProcess(daemonPort, "daemon.R")
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(10000)
           val sock = serverSocket.accept()
@@ -438,7 +448,7 @@ private[r] object RRDD {
         errThread
       }
     } else {
-      createRProcess(rLibDir, port, "worker.R")
+      createRProcess(port, "worker.R")
     }
   }
 
