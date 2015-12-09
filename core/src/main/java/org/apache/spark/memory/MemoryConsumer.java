@@ -21,6 +21,8 @@ import java.io.IOException;
 
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * An memory consumer of TaskMemoryManager, which support spilling.
@@ -28,6 +30,9 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  * Note: this only supports allocation / spilling of Tungsten memory.
  */
 public abstract class MemoryConsumer {
+
+  private final Logger logger = LoggerFactory.getLogger(MemoryConsumer.class);
+
 
   protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
@@ -80,6 +85,7 @@ public abstract class MemoryConsumer {
    */
   public LongArray allocateArray(long size) {
     long required = size * 8L;
+    logger.info("allocateArray with size " + required + " bytes");
     MemoryBlock page = taskMemoryManager.allocatePage(required, this);
     if (page == null || page.size() < required) {
       long got = 0;

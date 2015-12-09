@@ -148,7 +148,7 @@ public class TaskMemoryManager {
             try {
               long released = c.spill(required - got, consumer);
               if (released > 0 && mode == tungstenMemoryMode) {
-                logger.debug("Task {} released {} from {} for {}", taskAttemptId,
+                logger.info("Task {} released {} from {} for {}", taskAttemptId,
                   Utils.bytesToString(released), c, consumer);
                 got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
                 if (got >= required) {
@@ -169,7 +169,7 @@ public class TaskMemoryManager {
         try {
           long released = consumer.spill(required - got, consumer);
           if (released > 0 && mode == tungstenMemoryMode) {
-            logger.debug("Task {} released {} from itself ({})", taskAttemptId,
+            logger.info("Task {} released {} from itself ({})", taskAttemptId,
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
           }
@@ -183,7 +183,7 @@ public class TaskMemoryManager {
       if (consumer != null) {
         consumers.add(consumer);
       }
-      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
+      logger.info("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
   }
