@@ -14,24 +14,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-context("include an external JAR in SparkContext")
 
-runScript <- function() {
-  sparkHome <- Sys.getenv("SPARK_HOME")
-  sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
-  jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
-  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
-  submitPath <- file.path(sparkHome, "bin/spark-submit")
-  res <- system2(command = submitPath,
-                 args = c(jarPath, scriptPath),
-                 stdout = TRUE)
-  tail(res, 2)
-}
+from __future__ import print_function
 
-test_that("sparkJars tag in SparkContext", {
-  testOutput <- runScript()
-  helloTest <- testOutput[1]
-  expect_equal(helloTest, "Hello, Dave")
-  basicFunction <- testOutput[2]
-  expect_equal(basicFunction, "4")
-})
+from pyspark import SparkContext
+# $example on$
+from pyspark.ml.feature import SQLTransformer
+# $example off$
+from pyspark.sql import SQLContext
+
+if __name__ == "__main__":
+    sc = SparkContext(appName="SQLTransformerExample")
+    sqlContext = SQLContext(sc)
+
+    # $example on$
+    df = sqlContext.createDataFrame([
+        (0, 1.0, 3.0),
+        (2, 2.0, 5.0)
+    ], ["id", "v1", "v2"])
+    sqlTrans = SQLTransformer(
+        statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+    sqlTrans.transform(df).show()
+    # $example off$
+
+    sc.stop()
