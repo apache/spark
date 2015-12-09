@@ -103,8 +103,14 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
           mm.releaseStorageMemory(numBytesToFree)
           args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
             (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
-          evictedBlocks.append(
-            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
+          // We need to add this call so that that the suite-level `evictedBlocks` is updated when
+          // execution evicts storage; in that case, args.last will not be equal to evictedBlocks
+          // because it will be a temporary buffer created inside of the MemoryManager rather than
+          // being passed in by the test code.
+          if (!(evictedBlocks eq args.last)) {
+            evictedBlocks.append(
+              (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
+          }
           true
         } else {
           // No blocks were evicted because eviction would not free enough space.
