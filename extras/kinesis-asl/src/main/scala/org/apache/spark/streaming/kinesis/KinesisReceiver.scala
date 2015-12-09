@@ -222,7 +222,7 @@ private[kinesis] class KinesisReceiver[T](
 
   /** Get the latest sequence number for the given shard that can be checkpointed through KCL */
   private[kinesis] def getLatestSeqNumToCheckpoint(shardId: String): Option[String] = {
-    return Option[String]{ shardIdToLatestStoredSeqNum.get(shardId) }
+    return Option(shardIdToLatestStoredSeqNum.get(shardId))
   }
 
   /**
@@ -265,7 +265,7 @@ private[kinesis] class KinesisReceiver[T](
   /** Store the block along with its associated ranges */
   private def storeBlockWithRanges(
       blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[T]): Unit = {
-    val rangesToReportOption = Option[SequenceNumberRanges]{ blockIdToSeqNumRanges.remove(blockId) }
+    val rangesToReportOption = Option(blockIdToSeqNumRanges.remove(blockId))
     if (rangesToReportOption.isEmpty) {
       stop("Error while storing block into Spark, could not find sequence number ranges " +
         s"for block $blockId")
