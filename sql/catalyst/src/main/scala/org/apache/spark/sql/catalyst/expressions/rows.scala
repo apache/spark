@@ -211,6 +211,18 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   protected def this() = this(null, null)
 
   override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+
+  override def getAsOpt[T](fieldName: String): Option[T] = {
+    val index = schema match {
+      case null => -1
+      case _ =>
+        val fieldNames = schema.fieldNames
+        if (fieldNames.contains(fieldName)) fieldNames.indexOf(fieldName) else -1
+    }
+    val value = if (index < 0) None else getAsOpt[T](index)
+
+    value.asInstanceOf[Option[T]]
+  }
 }
 
 /**

@@ -26,23 +26,41 @@ class RowTest extends FunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::
-    StructField("col2", StringType) ::
-    StructField("col3", IntegerType) :: Nil)
-  val values = Array("value1", "value2", 1)
-  val valuesWithoutCol3 = Array[Any](null, "value2", null)
+    StructField("col2", DoubleType) ::
+    StructField("col3", IntegerType) ::
+    Nil)
+  val values = Array("value1", 1.0, 1)
+  val valuesWithoutCol3 = Array[Any]("value1", "1.0", null)
 
   val sampleRow: Row = new GenericRowWithSchema(values, schema)
   val sampleRowWithoutCol3: Row = new GenericRowWithSchema(valuesWithoutCol3, schema)
   val noSchemaRow: Row = new GenericRow(values)
 
   describe("Row (without schema)") {
-    it("throws an exception when accessing by fieldName") {
+    it("throws an exception when accessing by field name") {
       intercept[UnsupportedOperationException] {
         noSchemaRow.fieldIndex("col1")
       }
       intercept[UnsupportedOperationException] {
         noSchemaRow.getAs("col1")
       }
+    }
+
+    it("getAsOpt[T]() can get values using indices.") {
+      noSchemaRow.getAsOpt[String](0) should be (Some("value1"))
+      noSchemaRow.getAsOpt[Double](1) should be (Some(1.0))
+      noSchemaRow.getAsOpt[Int](2) should be (Some(1))
+    }
+
+    it("getAsOpt[T]() cannot get values using field names.") {
+      noSchemaRow.getAsOpt[String]("col1") should be (None)
+      noSchemaRow.getAsOpt[Double]("col2") should be (None)
+      noSchemaRow.getAsOpt[Int]("col3") should be (None)
+    }
+
+    it("getAsOpt[T]() returns None for non-existing columns.") {
+      noSchemaRow.getAsOpt[String](3) should be (None)
+      sampleRow.getAsOpt[Double]("col4") should be (None)
     }
   }
 
@@ -52,9 +70,32 @@ class RowTest extends FunSpec with Matchers {
       sampleRow.fieldIndex("col3") shouldBe 2
     }
 
-    it("getAs[T] retrieves a value by fieldname") {
+    it("getAs[T] retrieves a value by field name") {
       sampleRow.getAs[String]("col1") shouldBe "value1"
       sampleRow.getAs[Int]("col3") shouldBe 1
+    }
+
+    it("getAsOpt[T]() can get values using indices.") {
+      sampleRow.getAsOpt[String](0) should be (Some("value1"))
+      sampleRow.getAsOpt[Double](1) should be (Some(1.0))
+      sampleRow.getAsOpt[Int](2) should be (Some(1))
+    }
+
+    it("getAsOpt[T]() can get values using field names.") {
+      sampleRow.getAsOpt[String]("col1") should be (Some("value1"))
+      sampleRow.getAsOpt[Double]("col2") should be (Some(1.0))
+      sampleRow.getAsOpt[Int]("col3") should be (Some(1))
+    }
+
+    it("getAsOpt[T] retrieves an Optional value if the field name exists else returns None") {
+      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
+      sampleRow.getAsOpt[Int]("col3") shouldBe Some(1)
+      sampleRow.getAsOpt[String]("col4") shouldBe None
+    }
+
+    it("getAsOpt[T] retrieves an Optional value if class cast is successful else returns None") {
+      sampleRow.getAsOpt[String]("col1") shouldBe Some("value1")
+      sampleRow.getAsOpt[Int]("col2") shouldBe Some(1)
     }
 
     it("Accessing non existent field throws an exception") {
@@ -66,17 +107,19 @@ class RowTest extends FunSpec with Matchers {
     it("getValuesMap() retrieves values of multiple fields as a Map(field -> value)") {
       val expected = Map(
         "col1" -> "value1",
-        "col2" -> "value2"
+        "col2" -> 1.0,
+        "col3" -> 1
       )
-      sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
+      sampleRow.getValuesMap(List("col1", "col2", "col3")) shouldBe expected
     }
 
     it("getValuesMap() retrieves null value on non AnyVal Type") {
       val expected = Map(
-        "col1" -> null,
-        "col2" -> "value2"
+        "col1" -> "value1",
+        "col2" -> "1.0",
+        "col3" -> null
       )
-      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
+      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2", "col3")) shouldBe expected
     }
 
     it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
@@ -86,7 +129,7 @@ class RowTest extends FunSpec with Matchers {
     }
 
     it("getAs() on type extending AnyVal does not throw exception when value is null"){
-      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col3")) shouldBe null
     }
   }
 
