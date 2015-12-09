@@ -40,7 +40,7 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.Function4;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
-import org.apache.spark.streaming.api.java.JavaTrackStateDStream;
+import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;
 
 public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implements Serializable {
 
@@ -68,8 +68,8 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
           }
         };
 
-    JavaTrackStateDStream<String, Integer, Boolean, Double> stateDstream =
-        wordsDstream.trackStateByKey(
+    JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream =
+        wordsDstream.mapWithState(
             StateSpec.function(trackStateFunc)
                 .initialState(initialRDD)
                 .numPartitions(10)
@@ -93,8 +93,8 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
           }
         };
 
-    JavaTrackStateDStream<String, Integer, Boolean, Double> stateDstream2 =
-        wordsDstream.trackStateByKey(
+    JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream2 =
+        wordsDstream.mapWithState(
             StateSpec.<String, Integer, Boolean, Double>function(trackStateFunc2)
                 .initialState(initialRDD)
                 .numPartitions(10)
@@ -172,13 +172,13 @@ public class JavaTrackStateByKeySuite extends LocalJavaStreamingContext implemen
       List<Set<Tuple2<K, S>>> expectedStateSnapshots) {
     int numBatches = expectedOutputs.size();
     JavaDStream<K> inputStream = JavaTestUtils.attachTestInputStream(ssc, input, 2);
-    JavaTrackStateDStream<K, Integer, S, T> trackeStateStream =
+    JavaMapWithStateDStream<K, Integer, S, T> trackeStateStream =
         JavaPairDStream.fromJavaDStream(inputStream.map(new Function<K, Tuple2<K, Integer>>() {
           @Override
           public Tuple2<K, Integer> call(K x) throws Exception {
             return new Tuple2<K, Integer>(x, 1);
           }
-        })).trackStateByKey(trackStateSpec);
+        })).mapWithState(trackStateSpec);
 
     final List<Set<T>> collectedOutputs =
         Collections.synchronizedList(Lists.<Set<T>>newArrayList());

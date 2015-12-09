@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import org.scalatest.PrivateMethodTester._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.streaming.dstream.{DStream, InternalTrackStateDStream, TrackStateDStream, TrackStateDStreamImpl}
+import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream$, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
@@ -231,39 +231,39 @@ class TrackStateByKeySuite extends SparkFunSuite
       Some(0L)
     }
 
-    def testTypes(dstream: TrackStateDStream[_, _, _, _]): Unit = {
-      val dstreamImpl = dstream.asInstanceOf[TrackStateDStreamImpl[_, _, _, _]]
+    def testTypes(dstream: MapWithStateDStream[_, _, _, _]): Unit = {
+      val dstreamImpl = dstream.asInstanceOf[MapWithStateDStreamImpl[_, _, _, _]]
       assert(dstreamImpl.keyClass === classOf[String])
       assert(dstreamImpl.valueClass === classOf[Int])
       assert(dstreamImpl.stateClass === classOf[Double])
-      assert(dstreamImpl.emittedClass === classOf[Long])
+      assert(dstreamImpl.mappedClass === classOf[Long])
     }
     val ssc = new StreamingContext(sc, batchDuration)
     val inputStream = new TestInputStream[(String, Int)](ssc, Seq.empty, numPartitions = 2)
 
     // Defining StateSpec inline with trackStateByKey and simple function implicitly gets the types
-    val simpleFunctionStateStream1 = inputStream.trackStateByKey(
+    val simpleFunctionStateStream1 = inputStream.mapWithState(
       StateSpec.function(simpleFunc).numPartitions(1))
     testTypes(simpleFunctionStateStream1)
 
     // Separately defining StateSpec with simple function requires explicitly specifying types
     val simpleFuncSpec = StateSpec.function[String, Int, Double, Long](simpleFunc)
-    val simpleFunctionStateStream2 = inputStream.trackStateByKey(simpleFuncSpec)
+    val simpleFunctionStateStream2 = inputStream.mapWithState(simpleFuncSpec)
     testTypes(simpleFunctionStateStream2)
 
     // Separately defining StateSpec with advanced function implicitly gets the types
     val advFuncSpec1 = StateSpec.function(advancedFunc)
-    val advFunctionStateStream1 = inputStream.trackStateByKey(advFuncSpec1)
+    val advFunctionStateStream1 = inputStream.mapWithState(advFuncSpec1)
     testTypes(advFunctionStateStream1)
 
     // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
-    val advFunctionStateStream2 = inputStream.trackStateByKey(
+    val advFunctionStateStream2 = inputStream.mapWithState(
       StateSpec.function(simpleFunc).numPartitions(1))
     testTypes(advFunctionStateStream2)
 
     // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
     val advFuncSpec2 = StateSpec.function[String, Int, Double, Long](advancedFunc)
-    val advFunctionStateStream3 = inputStream.trackStateByKey[Double, Long](advFuncSpec2)
+    val advFunctionStateStream3 = inputStream.mapWithState[Double, Long](advFuncSpec2)
     testTypes(advFunctionStateStream3)
   }
 
@@ -440,7 +440,7 @@ class TrackStateByKeySuite extends SparkFunSuite
   }
 
   test("trackStateByKey - checkpoint durations") {
-    val privateMethod = PrivateMethod[InternalTrackStateDStream[_, _, _, _]]('internalStream)
+    val privateMethod = PrivateMethod[InternalMapWithStateDStream[_, _, _, _]]('internalStream)
 
     def testCheckpointDuration(
         batchDuration: Duration,
@@ -452,7 +452,7 @@ class TrackStateByKeySuite extends SparkFunSuite
       try {
         val inputStream = new TestInputStream(ssc, Seq.empty[Seq[Int]], 2).map(_ -> 1)
         val dummyFunc = (value: Option[Int], state: State[Int]) => 0
-        val trackStateStream = inputStream.trackStateByKey(StateSpec.function(dummyFunc))
+        val trackStateStream = inputStream.mapWithState(StateSpec.function(dummyFunc))
         val internalTrackStateStream = trackStateStream invokePrivate privateMethod()
 
         explicitCheckpointDuration.foreach { d =>
@@ -510,7 +510,7 @@ class TrackStateByKeySuite extends SparkFunSuite
         state.get()
       }
 
-      val trackStateStream = dstream.map { _ -> 1 }.trackStateByKey(
+      val trackStateStream = dstream.map { _ -> 1 }.mapWithState(
         StateSpec.function(runningCount))
       // Set internval make sure there is one RDD checkpointing
       trackStateStream.checkpoint(checkpointDuration)
@@ -544,7 +544,7 @@ class TrackStateByKeySuite extends SparkFunSuite
     // Setup the stream computation
     val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
-    val trackeStateStream = inputStream.map(x => (x, 1)).trackStateByKey(trackStateSpec)
+    val trackeStateStream = inputStream.map(x => (x, 1)).mapWithState(trackStateSpec)
     val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
     val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
     val collectedStateSnapshots = new ArrayBuffer[Seq[(K, S)]] with SynchronizedBuffer[Seq[(K, S)]]

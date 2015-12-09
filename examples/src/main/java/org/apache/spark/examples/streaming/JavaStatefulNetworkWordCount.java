@@ -103,8 +103,8 @@ public class JavaStatefulNetworkWordCount {
         };
 
     // This will give a Dstream made of state (which is the cumulative count of the words)
-    JavaTrackStateDStream<String, Integer, Integer, Tuple2<String, Integer>> stateDstream =
-        wordsDstream.trackStateByKey(StateSpec.function(trackStateFunc).initialState(initialRDD));
+    JavaMapWithStateDStream<String, Integer, Integer, Tuple2<String, Integer>> stateDstream =
+        wordsDstream.mapWithState(StateSpec.function(trackStateFunc).initialState(initialRDD));
 
     stateDstream.print();
     ssc.start();
