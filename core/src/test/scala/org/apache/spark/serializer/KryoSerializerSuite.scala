@@ -17,17 +17,21 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileOutputStream, FileInputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -348,6 +352,28 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
+
+  test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
+    val dir = Utils.createTempDir()
+    val tmpfile = dir.toString + "/RoaringBitmap"
+    val outStream = new FileOutputStream(tmpfile)
+    val output = new KryoOutput(outStream)
+    val bitmap = new RoaringBitmap
+    bitmap.add(1)
+    bitmap.add(3)
+    bitmap.add(5)
+    bitmap.serialize(new KryoOutputDataOutputBridge(output))
+    output.flush()
+    output.close()
+
+    val inStream = new FileInputStream(tmpfile)
+    val input = new KryoInput(inStream)
+    val ret = new RoaringBitmap
+    ret.deserialize(new KryoInputDataInputBridge(input))
+    input.close()
+    assert(ret == bitmap)
+    Utils.deleteRecursively(dir)
   }
 
   test("getAutoReset") {
