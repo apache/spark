@@ -112,12 +112,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - boolean") {
     withParquetDataFrame((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { implicit df =>
-        checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-        checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], Seq(Row(true), Row(false)))
 
-        checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
-        checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
-        checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
+      checkFilterPredicate('_1 === true, classOf[Eq[_]], true)
+      checkFilterPredicate('_1 <=> true, classOf[Eq[_]], true)
+      checkFilterPredicate('_1 !== true, classOf[NotEq[_]], false)
     }
   }
 
