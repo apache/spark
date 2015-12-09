@@ -15,19 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+// scalastyle:off println
+package org.apache.spark.examples.ml
 
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
+// $example on$
+import org.apache.spark.ml.feature.SQLTransformer
+// $example off$
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-/**
- * Provide a zero-copy way to convert data in ByteArrayOutputStream to ByteBuffer
- */
-private[spark] class ByteBufferOutputStream(capacity: Int) extends ByteArrayOutputStream(capacity) {
 
-  def this() = this(32)
+object SQLTransformerExample {
+  def main(args: Array[String]) {
+    val conf = new SparkConf().setAppName("SQLTransformerExample")
+    val sc = new SparkContext(conf)
+    val sqlContext = new SQLContext(sc)
 
-  def toByteBuffer: ByteBuffer = {
-    return ByteBuffer.wrap(buf, 0, count)
+    // $example on$
+    val df = sqlContext.createDataFrame(
+      Seq((0, 1.0, 3.0), (2, 2.0, 5.0))).toDF("id", "v1", "v2")
+
+    val sqlTrans = new SQLTransformer().setStatement(
+      "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
+
+    sqlTrans.transform(df).show()
+    // $example off$
   }
 }
+// scalastyle:on println
