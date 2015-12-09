@@ -90,11 +90,11 @@ public class JavaStatefulNetworkWordCount {
         });
 
     // Update the cumulative count function
-    final Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> mappingFunc =
-        new Function4<Time, String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>>() {
+    final Function3<String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> mappingFunc =
+        new Function3<String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>>() {
 
           @Override
-          public Optional<Tuple2<String, Integer>> call(Time time, String word, Optional<Integer> one, State<Integer> state) {
+          public Optional<Tuple2<String, Integer>> call(String word, Optional<Integer> one, State<Integer> state) {
             int sum = one.or(0) + (state.exists() ? state.get() : 0);
             Tuple2<String, Integer> output = new Tuple2<String, Integer>(word, sum);
             state.update(sum);

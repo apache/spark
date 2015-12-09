@@ -164,7 +164,7 @@ class MapWithStateSuite extends SparkFunSuite
       )
 
     // state maintains running count, and updated count is returned
-    val mappingFunc = (value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (key: String, value: Option[Int], state: State[Int]) => {
       val sum = value.getOrElse(0) + state.getOption.getOrElse(0)
       state.update(sum)
       sum
@@ -221,7 +221,7 @@ class MapWithStateSuite extends SparkFunSuite
   test("mapWithState - type inferencing and class tags") {
 
     // Simple track state function with value as Int, state as Double and mapped type as Double
-    val simpleFunc = (value: Option[Int], state: State[Double]) => {
+    val simpleFunc = (key: String, value: Option[Int], state: State[Double]) => {
       0L
     }
 
@@ -451,7 +451,7 @@ class MapWithStateSuite extends SparkFunSuite
 
       try {
         val inputStream = new TestInputStream(ssc, Seq.empty[Seq[Int]], 2).map(_ -> 1)
-        val dummyFunc = (value: Option[Int], state: State[Int]) => 0
+        val dummyFunc = (key: Int, value: Option[Int], state: State[Int]) => 0
         val mapWithStateStream = inputStream.mapWithState(StateSpec.function(dummyFunc))
         val internalmapWithStateStream = mapWithStateStream invokePrivate privateMethod()
 
@@ -505,7 +505,7 @@ class MapWithStateSuite extends SparkFunSuite
 
       val checkpointDuration = batchDuration * (stateData.size / 2)
 
-      val runningCount = (value: Option[Int], state: State[Int]) => {
+      val runningCount = (key: String, value: Option[Int], state: State[Int]) => {
         state.update(state.getOption().getOrElse(0) + value.getOrElse(0))
         state.get()
       }

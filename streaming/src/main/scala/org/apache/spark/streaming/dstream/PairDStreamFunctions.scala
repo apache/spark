@@ -360,20 +360,20 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *
    * Example of using `mapWithState`:
    * {{{
-   *    // A mapping function that maintains an integer state and return a string
-   *    def mappingFunction(data: Option[Int], wrappedState: State[Int]): String = {
-   *          // Use state.exists(), state.get(), state.update() and state.remove()
-   *          // to manage state, and return the necessary string
+   *    // A mapping function that maintains an integer state and return a String
+   *    def mappingFunction(key: String, value: Option[Int], state: State[Int]): Option[String] = {
+   *      // Use state.exists(), state.get(), state.update() and state.remove()
+   *      // to manage state, and return the necessary string
    *    }
    *
    *    val spec = StateSpec.function(mappingFunction).numPartitions(10)
    *
-   *    val mapWithStateDStream = keyValueDStream.mapWithState[Int, String](spec)
+   *    val mapWithStateDStream = keyValueDStream.mapWithState[StateType, MappedType](spec)
    * }}}
    *
    * @param spec          Specification of this transformation
-   * @tparam StateType    Class type of the state
-   * @tparam MappedType  Class type of the tranformed data return by the tracking function
+   * @tparam StateType    Class type of the state data
+   * @tparam MappedType   Class type of the mapped data
    */
   @Experimental
   def mapWithState[StateType: ClassTag, MappedType: ClassTag](

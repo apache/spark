@@ -34,8 +34,8 @@ import org.apache.spark.streaming.dstream.InternalMapWithStateDStream._
  * Additionally, it also gives access to the stream of state snapshots, that is, the state data of
  * all keys after a batch has updated them.
  *
- * @tparam KeyType Class of the state key
- * @tparam ValueType Class of the state value
+ * @tparam KeyType Class of the key
+ * @tparam ValueType Class of the value
  * @tparam StateType Class of the state data
  * @tparam MappedType Class of the mapped data
  */

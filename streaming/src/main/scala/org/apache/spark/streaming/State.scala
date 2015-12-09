@@ -29,8 +29,8 @@ import org.apache.spark.annotation.Experimental
  *
  * Scala example of using `State`:
  * {{{
- *    // A mapping function that maintains an integer state and return a String
- *    def mappingFunction(data: Option[Int], state: State[Int]): Option[String] = {
+ *    // A mapping function that maintains an integer state and returns a String
+ *    def mappingFunction(key: String, value: Option[Int], state: State[Int]): Option[String] = {
  *      // Check if state exists
  *      if (state.exists) {
  *        val existingState = state.get  // Get the existing state
@@ -52,12 +52,12 @@ import org.apache.spark.annotation.Experimental
  *
  * Java example of using `State`:
  * {{{
- *    // A mapping function that maintains an integer state and return a String
- *   Function2<Optional<Integer>, State<Integer>, Optional<String>> mappingFunction =
- *       new Function2<Optional<Integer>, State<Integer>, Optional<String>>() {
+ *    // A mapping function that maintains an integer state and returns a String
+ *    Function3<String, Optional<Integer>, State<Integer>, String> mappingFunction =
+ *       new Function3<String, Optional<Integer>, State<Integer>, String>() {
  *
  *         @Override
- *         public Optional<String> call(Optional<Integer> one, State<Integer> state) {
+ *         public String call(String key, Optional<Integer> value, State<Integer> state) {
  *           if (state.exists()) {
  *             int existingState = state.get(); // Get the existing state
  *             boolean shouldRemove = ...; // Decide whether to remove the state

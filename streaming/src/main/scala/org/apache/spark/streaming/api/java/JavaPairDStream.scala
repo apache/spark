@@ -439,8 +439,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Example of using `mapWithState`:
    * {{{
    *   // A mapping function that maintains an integer state and return a string
-   *   Function2<Optional<Integer>, State<Integer>, Optional<String>> mappingFunction =
-   *       new Function2<Optional<Integer>, State<Integer>, Optional<String>>() {
+   *   Function3<String, Optional<Integer>, State<Integer>, String> mappingFunction =
+   *       new Function3<String, Optional<Integer>, State<Integer>, String>() {
    *           @Override
    *           public Optional<String> call(Optional<Integer> value, State<Integer> state) {
    *               // Use state.exists(), state.get(), state.update() and state.remove()
@@ -455,7 +455,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *
    * @param spec          Specification of this transformation
    * @tparam StateType    Class type of the state data
-   * @tparam MappedType   Class type of mapped data
+   * @tparam MappedType   Class type of the mapped data
    */
   @Experimental
   def mapWithState[StateType, MappedType](spec: StateSpec[K, V, StateType, MappedType]):

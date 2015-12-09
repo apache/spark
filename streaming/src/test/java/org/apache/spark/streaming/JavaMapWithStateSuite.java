@@ -37,7 +37,7 @@ import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.api.java.function.Function3;
 import org.apache.spark.api.java.function.Function4;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;
@@ -78,11 +78,11 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
 
     JavaPairDStream<String, Boolean> stateSnapshots = stateDstream.stateSnapshots();
 
-    final Function2<Optional<Integer>, State<Boolean>, Double> mappingFunc2 =
-        new Function2<Optional<Integer>, State<Boolean>, Double>() {
+    final Function3<String, Optional<Integer>, State<Boolean>, Double> mappingFunc2 =
+        new Function3<String, Optional<Integer>, State<Boolean>, Double>() {
 
           @Override
-          public Double call(Optional<Integer> one, State<Boolean> state) {
+          public Double call(String key, Optional<Integer> one, State<Boolean> state) {
             // Use all State's methods here
             state.exists();
             state.get();
@@ -148,11 +148,11 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
             new Tuple2<String, Integer>("c", 1))
     );
 
-    Function2<Optional<Integer>, State<Integer>, Integer> mappingFunc =
-        new Function2<Optional<Integer>, State<Integer>, Integer>() {
+    Function3<String, Optional<Integer>, State<Integer>, Integer> mappingFunc =
+        new Function3<String, Optional<Integer>, State<Integer>, Integer>() {
 
           @Override
-          public Integer call(Optional<Integer> value, State<Integer> state) throws Exception {
+          public Integer call(String key, Optional<Integer> value, State<Integer> state) throws Exception {
             int sum = value.or(0) + (state.exists() ? state.get() : 0);
             state.update(sum);
             return sum;
@@ -172,7 +172,7 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
       List<Set<Tuple2<K, S>>> expectedStateSnapshots) {
     int numBatches = expectedOutputs.size();
     JavaDStream<K> inputStream = JavaTestUtils.attachTestInputStream(ssc, input, 2);
-    JavaMapWithStateDStream<K, Integer, S, T> trackeStateStream =
+    JavaMapWithStateDStream<K, Integer, S, T> mapWithStateDStream =
         JavaPairDStream.fromJavaDStream(inputStream.map(new Function<K, Tuple2<K, Integer>>() {
           @Override
           public Tuple2<K, Integer> call(K x) throws Exception {
@@ -182,7 +182,7 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
 
     final List<Set<T>> collectedOutputs =
         Collections.synchronizedList(Lists.<Set<T>>newArrayList());
-    trackeStateStream.foreachRDD(new Function<JavaRDD<T>, Void>() {
+    mapWithStateDStream.foreachRDD(new Function<JavaRDD<T>, Void>() {
       @Override
       public Void call(JavaRDD<T> rdd) throws Exception {
         collectedOutputs.add(Sets.newHashSet(rdd.collect()));
@@ -191,7 +191,7 @@ public class JavaMapWithStateSuite extends LocalJavaStreamingContext implements 
     });
     final List<Set<Tuple2<K, S>>> collectedStateSnapshots =
         Collections.synchronizedList(Lists.<Set<Tuple2<K, S>>>newArrayList());
-    trackeStateStream.stateSnapshots().foreachRDD(new Function<JavaPairRDD<K, S>, Void>() {
+    mapWithStateDStream.stateSnapshots().foreachRDD(new Function<JavaPairRDD<K, S>, Void>() {
       @Override
       public Void call(JavaPairRDD<K, S> rdd) throws Exception {
         collectedStateSnapshots.add(Sets.newHashSet(rdd.collect()));
