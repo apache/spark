@@ -228,7 +228,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
-case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class And(left: Expression, right: Expression) extends BinaryOperator
+  with Predicate with PredicateHelper{
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -256,10 +257,12 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     // Non-deterministic expressions cannot be semantic equal
     if (!deterministic || !other.deterministic) return false
 
-    // we know both expressions are And, so we can tolerate ordering different
-    val elements1 = splitConjunctivePredicates(this).toSet.toSeq
-    val elements2 = splitConjunctivePredicates(other).toSet.toSeq
-    checkSemantic(elements1, elements2)
+    // We already know both expressions are And, so we can tolerate ordering different
+    // Recursively call semanticEquals on subexpressions to check the equivalency of two seqs.
+    var elements1 = splitConjunctivePredicates(this)
+    val elements2 = splitConjunctivePredicates(other)
+    for (e <- elements2) elements1 = removeFirstSemanticEquivalent(elements1, e)
+    elements1.isEmpty
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
@@ -287,7 +290,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 }
 
 
-case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
+case class Or(left: Expression, right: Expression) extends BinaryOperator
+  with Predicate with PredicateHelper {
 
   override def inputType: AbstractDataType = BooleanType
 
@@ -316,9 +320,11 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     if (!deterministic || !other.deterministic) return false
 
     // we know both expressions are Or, so we can tolerate ordering different
-    val elements1 = splitDisjunctivePredicates(this).toSet.toSeq
-    val elements2 = splitDisjunctivePredicates(other).toSet.toSeq
-    checkSemantic(elements1, elements2)
+    // Recursively call semanticEquals on subexpressions to check the equivalency of two seqs.
+    var elements1 = splitDisjunctivePredicates(this)
+    val elements2 = splitDisjunctivePredicates(other)
+    for (e <- elements2) elements1 = removeFirstSemanticEquivalent(elements1, e)
+    elements1.isEmpty
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

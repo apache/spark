@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
  *                       the same output data type.
  *
  */
-abstract class Expression extends TreeNode[Expression] with PredicateHelper{
+abstract class Expression extends TreeNode[Expression]{
 
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
@@ -158,6 +158,18 @@ abstract class Expression extends TreeNode[Expression] with PredicateHelper{
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
     checkSemantic(elements1, elements2)
+  }
+
+  /**
+   * Returns a sequence of expressions by removing from q the first expression that is semantically
+   * equivalent to e.
+   */
+  def removeFirstSemanticEquivalent(seq: Seq[Expression], e: Expression): Seq[Expression] = {
+    seq match {
+      case Seq() => Seq()
+      case x +: rest if x semanticEquals e => rest
+      case x +: rest => x +: removeFirstSemanticEquivalent(rest, e)
+    }
   }
 
   /**

@@ -63,6 +63,9 @@ class SameResultSuite extends SparkFunSuite {
     assertSameResult(testRelation.where('a === 'b || 'c === 'd),
       testRelation2.where('c === 'd || 'a === 'b )
     )
+    assertSameResult(testRelation.where(('a === 'b || 'c === 'd) && ('e === 'f || 'g === 'h)),
+      testRelation2.where(('g === 'h || 'e === 'f) && ('c === 'd || 'a === 'b ))
+    )
 
     assertSameResult(testRelation.where('a === 'b && 'c === 'd),
       testRelation2.where('a === 'c && 'b === 'd),
