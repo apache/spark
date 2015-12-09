@@ -28,6 +28,7 @@ class MemoryListenerSuite extends SparkFunSuite {
     val listener = new MemoryListener
     val execId1 = "exec-1"
     val host1 = "host-1"
+    val port: Option[Int] = Some(80)
 
     listener.onExecutorAdded(
       SparkListenerExecutorAdded(1L, execId1, new ExecutorInfo(host1, 1, Map.empty)))
@@ -38,13 +39,13 @@ class MemoryListenerSuite extends SparkFunSuite {
 
     // multiple metrics updated in stage 2
     listener.onStageSubmitted(MemoryListenerSuite.createStageStartEvent(2))
-    val execMetrics1 = MemoryListenerSuite.createExecutorMetrics(host1, 80, 2L, 20, 10)
+    val execMetrics1 = MemoryListenerSuite.createExecutorMetrics(host1, port, 2L, 20, 10)
     listener.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
       execId1, execMetrics1))
-    val execMetrics2 = MemoryListenerSuite.createExecutorMetrics(host1, 80, 3L, 30, 5)
+    val execMetrics2 = MemoryListenerSuite.createExecutorMetrics(host1, port, 3L, 30, 5)
     listener.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
       execId1, execMetrics2))
-    val execMetrics3 = MemoryListenerSuite.createExecutorMetrics(host1, 80, 4L, 15, 15)
+    val execMetrics3 = MemoryListenerSuite.createExecutorMetrics(host1, port, 4L, 15, 15)
     listener.onExecutorMetricsUpdate(MemoryListenerSuite.createExecutorMetricsUpdateEvent(
       execId1, execMetrics3))
     listener.onStageCompleted(MemoryListenerSuite.createStageEndEvent(2))
@@ -87,7 +88,8 @@ class MemoryListenerSuite extends SparkFunSuite {
     val listener = new MemoryListener
     val (execId1, execId2, execId3) = ("exec-1", "exec-2", "exec-3")
     val (host1, host2, host3) = ("host-1", "host-2", "host-3")
-    val (port1, port2, port3) = (80, 80, 80)
+    val (port1, port2, port3): (Option[Int], Option[Int], Option[Int]) =
+      (Some(80), Some(80), Some(80))
 
     // two executors added first
     listener.onExecutorAdded(
@@ -135,7 +137,6 @@ class MemoryListenerSuite extends SparkFunSuite {
 
     assert(listener.activeStagesToMem.isEmpty)
     assert(listener.completedStagesToMem.size === 4)
-    assert(listener.activeExecutorIdToMem.size === listener.latestExecIdToExecMetrics.size)
     assert(listener.removedExecutorIdToMem.size === 1)
 
     listener.onExecutorRemoved(SparkListenerExecutorRemoved(7L, execId1, ""))
@@ -180,7 +181,7 @@ object MemoryListenerSuite extends SparkFunSuite {
 
   def createExecutorMetrics(
       hostname: String,
-      port: Int,
+      port: Option[Int],
       timeStamp: Long,
       onHeapSize: Long,
       offHeapSize: Long): ExecutorMetrics = {

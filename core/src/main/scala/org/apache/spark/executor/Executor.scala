@@ -87,7 +87,9 @@ private[spark] class Executor(
 
   private val executorMetrics: ExecutorMetrics = new ExecutorMetrics
   executorMetrics.setHostname(Utils.localHostName)
-  executorMetrics.setPort(env.rpcEnv.address.port)
+  if (env.rpcEnv.address != null) {
+    executorMetrics.setPort(Some(env.rpcEnv.address.port))
+  }
 
   // Whether to load classes in user jars before those in Spark jars
   private val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)

@@ -39,11 +39,17 @@ class ExecutorMetrics extends Serializable {
   /**
    * Host's port the executor runs on
    */
-  private var _port: Int = _
-  def port: Int = _port
-  private[spark] def setPort(value: Int) = _port = value
+  private var _port: Option[Int] = None
+  def port: Option[Int] = _port
+  private[spark] def setPort(value: Option[Int]) = _port = value
 
-  private[spark] def hostPort: String = hostname + ":" + port
+  private[spark] def hostPort: String = {
+    val hp = port match {
+      case None => hostname
+      case value => hostname + ":" + value
+    }
+    hp
+  }
 
   private var _transportMetrics: TransportMetrics = new TransportMetrics
   def transportMetrics: TransportMetrics = _transportMetrics
@@ -61,7 +67,7 @@ class ExecutorMetrics extends Serializable {
 object ExecutorMetrics extends Serializable {
   def apply(
       hostName: String,
-      port: Int,
+      port: Option[Int],
       transportMetrics: TransportMetrics): ExecutorMetrics = {
     val execMetrics = new ExecutorMetrics
     execMetrics.setHostname(hostName)

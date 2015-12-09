@@ -129,7 +129,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val eventLogger = new EventLoggingListener("test-memListener", None, testDirPath.toUri(), conf)
     val execId = "exec-1"
     val hostName = "host-1"
-    val port = 80
+    val port: Option[Int] = Some(80)
 
     eventLogger.start()
     eventLogger.onExecutorAdded(SparkListenerExecutorAdded(

@@ -35,9 +35,9 @@ private[ui] class MemTableBase(
     <th>Executor ID</th>
     <th>Address</th>
     <th>Network Memory (on-heap)</th>
-    <th>Network Memory (direct-heap)</th>
+    <th>Network Memory (off-heap)</th>
     <th>Peak Network Memory (on-heap) / Happen Time</th>
-    <th>Peak Network Read (direct-heap) / Happen Time</th>
+    <th>Peak Network Read (off-heap) / Happen Time</th>
   }
 
   def toNodeSeq: Seq[Node] = {

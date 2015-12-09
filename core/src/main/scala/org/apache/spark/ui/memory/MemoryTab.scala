@@ -40,27 +40,32 @@ private[ui] class MemoryTab(parent: SparkUI) extends SparkUITab(parent, "memory"
 class MemoryListener extends SparkListener {
   type ExecutorId = String
   val activeExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
+  // TODO There might be plenty of removed executors (e.g. Dynamic Allocation Mode), This may use
+  // too much memory.
   val removedExecutorIdToMem = new HashMap[ExecutorId, MemoryUIInfo]
-  // latestExecIdToExecMetrics including all executors that is active and removed.
-  // this may consume a lot of memory when executors are changing frequently, e.g. in dynamical
-  // allocation mode.
+  // A map that maintains the latest metrics of each active executor
   val latestExecIdToExecMetrics = new HashMap[ExecutorId, ExecutorMetrics]
   // activeStagesToMem a map maintains all executors memory information of each stage,
   // the Map type is [(stageId, attemptId), Seq[(executorId, MemoryUIInfo)]
   val activeStagesToMem = new HashMap[(Int, Int), HashMap[ExecutorId, MemoryUIInfo]]
+  // TODO We need to get conf of the retained stages so that we don't need to handle all the
+  // stages since there might be too many completed stages.
   val completedStagesToMem = new HashMap[(Int, Int), HashMap[ExecutorId, MemoryUIInfo]]
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
     val executorId = event.execId
     val executorMetrics = event.executorMetrics
     val memoryInfo = activeExecutorIdToMem.getOrElseUpdate(executorId, new MemoryUIInfo)
-    memoryInfo.updateExecutorMetrics(executorMetrics)
+    memoryInfo.updateMemUiInfo(executorMetrics)
     activeStagesToMem.foreach { case (_, stageMemMetrics) =>
-      if (stageMemMetrics.contains(executorId)) {
-        stageMemMetrics.get(executorId).get.updateExecutorMetrics(executorMetrics)
+      // If executor is added in the stage running time, we also update the metrics for the
+      // executor in {{activeStagesToMem}}
+      if (!stageMemMetrics.contains(executorId)) {
+        stageMemMetrics(executorId) = new MemoryUIInfo
       }
+      stageMemMetrics(executorId).updateMemUiInfo(executorMetrics)
     }
-    latestExecIdToExecMetrics.update(executorId, executorMetrics)
+    latestExecIdToExecMetrics(executorId) = executorMetrics
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
@@ -71,28 +76,39 @@ class MemoryListener extends SparkListener {
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val executorId = event.executorId
     val info = activeExecutorIdToMem.remove(executorId)
+    latestExecIdToExecMetrics.remove(executorId)
     removedExecutorIdToMem.getOrElseUpdate(executorId, info.getOrElse(new MemoryUIInfo))
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     val stage = (event.stageInfo.stageId, event.stageInfo.attemptId)
     val memInfoMap = new HashMap[ExecutorId, MemoryUIInfo]
-    activeExecutorIdToMem.foreach(idToMem => memInfoMap.update(idToMem._1, new MemoryUIInfo))
-    activeStagesToMem.update(stage, memInfoMap)
+    activeExecutorIdToMem.map { case (id, _) =>
+      memInfoMap(id) = new MemoryUIInfo
+      val latestExecMetrics = latestExecIdToExecMetrics.get(id)
+      latestExecMetrics match {
+        case None => // Do nothing
+        case Some(metrics) =>
+          memInfoMap(id).updateMemUiInfo(metrics)
+      }
+    }
+    activeStagesToMem(stage) = memInfoMap
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
     val stage = (event.stageInfo.stageId, event.stageInfo.attemptId)
+    // We need to refresh {{activeStagesToMem}} with {{activeExecutorIdToMem}} in case the
+    // executor is added in the stage running time and no {{SparkListenerExecutorMetricsUpdate}}
+    // event is updated in this stage.
     activeStagesToMem.get(stage).map { memInfoMap =>
-      activeExecutorIdToMem.foreach { case (executorId, _) =>
-        val memInfo = memInfoMap.getOrElse(executorId, new MemoryUIInfo)
-        latestExecIdToExecMetrics.get(executorId).foreach { prevExecutorMetrics =>
-          memInfo.updateExecutorMetrics(prevExecutorMetrics)
+      activeExecutorIdToMem.foreach { case (executorId, memUiInfo) =>
+        if (!memInfoMap.contains(executorId)) {
+          memInfoMap(executorId) = new MemoryUIInfo
+          memInfoMap(executorId).copyMemUiInfo(memUiInfo)
         }
-        memInfoMap.update(executorId, memInfo)
       }
-      completedStagesToMem.put(stage, activeStagesToMem.remove(stage).get)
     }
+    completedStagesToMem.put(stage, activeStagesToMem.remove(stage).get)
   }
 }
 
@@ -106,13 +122,18 @@ class MemoryUIInfo {
     executorAddress = execInfo.executorHost
   }
 
-  def updateExecutorMetrics(execMetrics: ExecutorMetrics): Unit = {
+  def updateMemUiInfo(execMetrics: ExecutorMetrics): Unit = {
     transportInfo = transportInfo match {
       case Some(transportMemSize) => transportInfo
       case _ => Some(new TransportMemSize)
     }
     executorAddress = execMetrics.hostPort
-    transportInfo.get.updateTransport(execMetrics.transportMetrics)
+    transportInfo.get.updateTransMemSize(execMetrics.transportMetrics)
+  }
+
+  def copyMemUiInfo(memUiInfo: MemoryUIInfo): Unit = {
+    executorAddress = memUiInfo.executorAddress
+    transportInfo.foreach(_.copyTransMemSize(memUiInfo.transportInfo.get))
   }
 }
 
@@ -123,7 +144,7 @@ class TransportMemSize {
   var peakOnHeapSizeTime: MemTime = new MemTime()
   var peakOffHeapSizeTime: MemTime = new MemTime()
 
-  def updateTransport(transportMetrics: TransportMetrics): Unit = {
+  def updateTransMemSize(transportMetrics: TransportMetrics): Unit = {
     val updatedOnHeapSize = transportMetrics.onHeapSize
     val updatedOffHeapSize = transportMetrics.offHeapSize
     val updateTime: Long = transportMetrics.timeStamp
@@ -135,6 +156,15 @@ class TransportMemSize {
     if (updatedOffHeapSize >= peakOffHeapSizeTime.memorySize) {
       peakOffHeapSizeTime = MemTime(updatedOffHeapSize, updateTime)
     }
+  }
+
+  def copyTransMemSize(transMemSize: TransportMemSize): Unit = {
+    onHeapSize = transMemSize.onHeapSize
+    offHeapSize = transMemSize.offHeapSize
+    peakOnHeapSizeTime = MemTime(transMemSize.peakOnHeapSizeTime.memorySize,
+      transMemSize.peakOnHeapSizeTime.timeStamp)
+    peakOffHeapSizeTime = MemTime(transMemSize.peakOffHeapSizeTime.memorySize,
+      transMemSize.peakOffHeapSizeTime.timeStamp)
   }
 }
 

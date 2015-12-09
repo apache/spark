@@ -39,7 +39,7 @@ private[ui] class StageMemoryPage(parent: MemoryTab) extends WebUIPage("stage") 
 
       val finishedStageToMem = memoryListener.completedStagesToMem
       val content = if (finishedStageToMem.get(stage).isDefined) {
-        val executorIdToMem = finishedStageToMem.get(stage).get.toSeq.sortBy(_._1)
+        val executorIdToMem = finishedStageToMem(stage).toSeq.sortBy(_._1)
         val execMemTable = new MemTableBase(executorIdToMem, memoryListener)
         <h4 id="activeExec">Executors ({executorIdToMem.size})</h4> ++
           execMemTable.toNodeSeq

@@ -24,7 +24,7 @@ import scala.collection.Map
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.json4s.DefaultFormats
+import org.json4s.{JsonAST, DefaultFormats}
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
@@ -296,7 +296,7 @@ private[spark] object JsonProtocol {
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
     val transportMetrics = transportMetricsToJson(executorMetrics.transportMetrics)
     ("Executor Hostname" -> executorMetrics.hostname) ~
-    ("Executor Port" -> executorMetrics.port) ~
+    ("Executor Port" -> executorMetrics.port.map(new JInt(_)).getOrElse(JNothing)) ~
     ("TransportMetrics" -> transportMetrics)
   }
 
@@ -732,7 +732,7 @@ private[spark] object JsonProtocol {
       return metrics
     }
     metrics.setHostname((json \ "Executor Hostname").extract[String])
-    metrics.setPort((json \ "Executor Port").extract[Int])
+    metrics.setPort(Utils.jsonOption(json \ "Executor Port").map(_.extract[Int]))
     metrics.setTransportMetrics(transportMetricsFromJson(json \ "TransportMetrics"))
     metrics
   }

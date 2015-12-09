@@ -86,7 +86,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetrics = {
       val execMetrics = new ExecutorMetrics
       execMetrics.setHostname("host-1")
-      execMetrics.setPort(80)
+      execMetrics.setPort(Some(80))
       execMetrics.setTransportMetrics(TransportMetrics(0L, 10, 10))
       execMetrics
     }
@@ -398,7 +398,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldJson = newJson.removeField { case (field, _) => field == "Executor Metrics Updated"}
     val newMetrics = JsonProtocol.executorMetricsUpdateFromJson(oldJson)
     assert(newMetrics.executorMetrics.hostname === "")
-    assert(newMetrics.executorMetrics.port === 0)
+    assert(newMetrics.executorMetrics.port === None)
     assert(newMetrics.executorMetrics.transportMetrics.onHeapSize === 0L)
     assert(newMetrics.executorMetrics.transportMetrics.offHeapSize === 0L)
     assert(newMetrics.executorMetrics.transportMetrics.timeStamp != 0L)
