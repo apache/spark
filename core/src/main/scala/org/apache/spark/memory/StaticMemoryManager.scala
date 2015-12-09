@@ -49,7 +49,7 @@ private[spark] class StaticMemoryManager(
   }
 
   // Max number of bytes worth of blocks to evict when unrolling
-  private val maxMemoryToEvictForUnroll: Long = {
+  private val maxUnrollMemory: Long = {
     (maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
 
@@ -72,8 +72,14 @@ private[spark] class StaticMemoryManager(
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     val currentUnrollMemory = storageMemoryPool.memoryStore.currentUnrollMemory
-    val maxNumBytesToFree = math.max(0, maxMemoryToEvictForUnroll - currentUnrollMemory)
-    val numBytesToFree = math.min(numBytes, maxNumBytesToFree)
+    val freeMemory = storageMemoryPool.memoryFree
+    // When unrolling, we will use all of the existing free memory, and, if necessary,
+    // some extra space freed from evicting cached blocks. We must place a cap on the
+    // amount of memory to be evicted by unrolling, however, otherwise unrolling one
+    // big block can blow away the entire cache.
+    val maxNumBytesToFree = math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
+    // Keep it within the range 0 <= X <= maxNumBytesToFree
+    val numBytesToFree = math.max(0, math.min(maxNumBytesToFree, numBytes - freeMemory))
     storageMemoryPool.acquireMemory(blockId, numBytes, numBytesToFree, evictedBlocks)
   }
 
