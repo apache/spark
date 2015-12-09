@@ -37,9 +37,10 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.SparkConf._
+import org.apache.spark.SparkConf.ConfEntry
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
+import org.apache.spark.sql.SQLConf._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
