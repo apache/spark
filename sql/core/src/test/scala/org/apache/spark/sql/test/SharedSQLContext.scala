@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, DataFrame, SQLContext}
 
 
 /**
@@ -62,5 +62,20 @@ trait SharedSQLContext extends SQLTestUtils {
     } finally {
       super.afterAll()
     }
+  }
+
+  /**
+   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
+   */
+  protected def stripSparkFilter(df: DataFrame): DataFrame = {
+    val schema = df.schema
+    val childRDD = df
+      .queryExecution
+      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+      .child
+      .execute()
+      .map(row => Row.fromSeq(row.toSeq(schema)))
+
+    sqlContext.createDataFrame(childRDD, schema)
   }
 }

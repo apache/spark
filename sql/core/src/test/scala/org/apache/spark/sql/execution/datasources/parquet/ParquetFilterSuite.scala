@@ -57,8 +57,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[ParquetRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(parquetRelation: ParquetRelation, _)) =>
-            maybeRelation = Some(parquetRelation)
+          case PhysicalOperation(_, filters, LogicalRelation(relation: ParquetRelation, _)) =>
+            maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
         assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
@@ -75,7 +75,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             assert(f.getClass === filterClass)
           }
         }
-        checker(extractSourceRDDToDataFrame(query), expected)
+        checker(stripSparkFilter(query), expected)
       }
     }
   }
@@ -108,20 +108,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
       (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
-  }
-
-  private def extractSourceRDDToDataFrame(df: DataFrame): DataFrame = {
-
-    // This is the source RDD without Spark-side filtering.
-    val schema = df.schema
-    val childRDD = df
-      .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-      .child
-      .execute()
-      .map(row => Row.fromSeq(row.toSeq(schema)))
-
-    sqlContext.createDataFrame(childRDD, schema)
   }
 
   test("filter pushdown - boolean") {
@@ -372,7 +358,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(extractSourceRDDToDataFrame(df).count == 1)
+          assert(stripSparkFilter(df).count == 1)
         }
       }
     }
