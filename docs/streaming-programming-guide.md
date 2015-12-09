@@ -595,7 +595,7 @@ Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
   Examples: file systems, socket connections, and Akka actors.
-- *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
+- *External sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
 
@@ -673,7 +673,7 @@ see the API documentations of the relevant functions in
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
 
-### Advanced Sources
+### External Sources
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
@@ -710,12 +710,12 @@ TwitterUtils.createStream(jssc);
 </div>
 </div>
 
-Note that these advanced sources are not available in the Spark shell, hence applications based on
-these advanced sources cannot be tested in the shell. If you really want to use them in the Spark
+Note that these external sources are not available in the Spark shell, hence applications based on
+these external sources cannot be tested in the shell. If you really want to use them in the Spark
 shell you will have to download the corresponding Maven artifact's JAR along with its dependencies
 and add it to the classpath.
 
-Some of these advanced sources are as follows.
+Some of these external sources are as follows.
 
 - **Kafka:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kafka 0.8.2.1. See the [Kafka Integration Guide](streaming-kafka-integration.html) for more details.
 
@@ -1771,7 +1771,7 @@ To run a Spark Streaming applications, you need to have the following.
 - *Package the application JAR* - You have to compile your streaming application into a JAR.
   If you are using [`spark-submit`](submitting-applications.html) to start the
   application, then you will not need to provide Spark and Spark Streaming in the JAR. However,
-  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume, Twitter),
+  if your application uses [external sources](#external-sources) (e.g. Kafka, Flume, Twitter),
   then you will have to package the extra artifact they link to, along with their dependencies,
   in the JAR that is used to deploy the application. For example, an application using `TwitterUtils`
   will have to include `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and all its
