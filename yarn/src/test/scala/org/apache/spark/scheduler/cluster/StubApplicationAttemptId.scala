@@ -15,29 +15,34 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.rpc.{RpcEnv, RpcCallContext, RpcEndpoint}
-import org.apache.spark.util.Utils
-
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 /**
- * [[RpcEndpoint]] that runs inside of executors to enable driver -> executor RPC.
+ * A stub application ID; can be set in constructor and/or updated later.
+ * @param applicationId application ID
+ * @param attempt an attempt counter
  */
-private[spark]
-class ExecutorEndpoint(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
+class StubApplicationAttemptId(var applicationId: ApplicationId, var attempt: Int)
+    extends ApplicationAttemptId {
 
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case TriggerThreadDump =>
-      context.reply(Utils.getThreadDump())
+  override def setApplicationId(appID: ApplicationId): Unit = {
+    applicationId = appID
   }
 
-}
+  override def getAttemptId: Int = {
+    attempt
+  }
 
-object ExecutorEndpoint {
-  val EXECUTOR_ENDPOINT_NAME = "ExecutorEndpoint"
+  override def setAttemptId(attemptId: Int): Unit = {
+    attempt = attemptId
+  }
+
+  override def getApplicationId: ApplicationId = {
+    applicationId
+  }
+
+  override def build(): Unit = {
+  }
 }

@@ -332,12 +332,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     for (int n = 0; n < num; ++n) {
       if (columnReaders[col].next()) {
         ByteBuffer bytes = columnReaders[col].nextBinary().toByteBuffer();
-        int len = bytes.limit() - bytes.position();
+        int len = bytes.remaining();
         if (originalTypes[col] == OriginalType.UTF8) {
-          UTF8String str = UTF8String.fromBytes(bytes.array(), bytes.position(), len);
+          UTF8String str =
+              UTF8String.fromBytes(bytes.array(), bytes.arrayOffset() + bytes.position(), len);
           rowWriters[n].write(col, str);
         } else {
-          rowWriters[n].write(col, bytes.array(), bytes.position(), len);
+          rowWriters[n].write(col, bytes.array(), bytes.arrayOffset() + bytes.position(), len);
         }
         rows[n].setNotNullAt(col);
       } else {

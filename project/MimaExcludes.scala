@@ -147,7 +147,22 @@ object MimaExcludes {
         // SPARK-4557 Changed foreachRDD to use VoidFunction
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.api.java.JavaDStreamLike.foreachRDD")
-      )
+      ) ++ Seq(
+        // SPARK-11996 Make the executor thread dump work again
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.ExecutorEndpoint$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.storage.BlockManagerMessages$GetRpcHostPortForExecutor$")
+      ) ++ Seq(
+        // SPARK-3580 Add getNumPartitions method to JavaRDD
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
