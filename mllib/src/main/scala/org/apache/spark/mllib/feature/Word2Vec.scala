@@ -126,6 +126,15 @@ class Word2Vec extends Serializable with Logging {
   }
 
   /**
+   * Sets the window of words (default: 5)
+   */
+  @Since("1.6.0")
+  def setWindowSize(window: Int): this.type = {
+    this.window = window
+    this
+  }
+
+  /**
    * Sets minCount, the minimum number of times a token must appear to be included in the word2vec
    * model's vocabulary (default: 5).
    */
@@ -141,7 +150,7 @@ class Word2Vec extends Serializable with Logging {
   private val MAX_SENTENCE_LENGTH = 1000
 
   /** context words from [-window, window] */
-  private val window = 5
+  private var window = 5
 
   private var trainWordsCount = 0
   private var vocabSize = 0
