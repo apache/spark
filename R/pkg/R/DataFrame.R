@@ -1185,7 +1185,7 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'
 #' Return subsets of DataFrame according to given conditions
 #' @param x A DataFrame
-#' @param subset A logical expression to filter on rows
+#' @param subset (Optional) A logical expression to filter on rows
 #' @param select expression for the single Column or a list of columns to select from the DataFrame
 #' @return A new DataFrame containing only the rows that meet the condition with selected columns
 #' @export
@@ -1211,9 +1211,9 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 setMethod("subset", signature(x = "DataFrame"),
           function(x, subset, select, ...) {
             if (missing(subset)) {
-                x[, select, ...]
+              x[, select, ...]
             } else {
-                x[subset, select, ...]
+              x[subset, select, ...]
             }
           })
 
