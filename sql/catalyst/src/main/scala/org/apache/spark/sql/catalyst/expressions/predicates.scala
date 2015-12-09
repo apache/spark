@@ -252,6 +252,16 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     }
   }
 
+  override def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
+
+    // we know both expressions are And, so we can tolerate ordering different
+    val elements1 = splitConjunctivePredicates(this).toSet.toSeq
+    val elements2 = splitConjunctivePredicates(other).toSet.toSeq
+    checkSemantic(elements1, elements2)
+  }
+
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     val eval1 = left.gen(ctx)
     val eval2 = right.gen(ctx)
@@ -299,6 +309,16 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
         }
       }
     }
+  }
+
+  override def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
+
+    // we know both expressions are Or, so we can tolerate ordering different
+    val elements1 = splitDisjunctivePredicates(this).toSet.toSeq
+    val elements2 = splitDisjunctivePredicates(other).toSet.toSeq
+    checkSemantic(elements1, elements2)
   }
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {

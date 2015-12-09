@@ -128,11 +128,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
       logDebug(
         s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
       cleanLeft.cleanArgs.zip(cleanRight.cleanArgs).forall {
-          case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-          case (a1, a2) => a1 == a2
-        }
-    } &&
-    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
+        case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+        case (a1, a2) => a1 == a2
+      }
+    } && (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
 
   /** Clean an expression so that differences in expression id should not affect equality */
