@@ -202,7 +202,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     assert(mm.acquireStorageMemory(dummyBlock, 750L, evictedBlocks))
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 750L)
-    assertEvictBlocksToFreeSpaceNotCalled(ms) // since there was 800 bytes free
+    assertEvictBlocksToFreeSpaceNotCalled(ms) // since there were 800 bytes free
     assert(!mm.acquireStorageMemory(dummyBlock, 850L, evictedBlocks))
     assert(mm.executionMemoryUsed === 200L)
     assert(mm.storageMemoryUsed === 750L)
