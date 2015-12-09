@@ -1296,10 +1296,10 @@ class DataFrame private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] with a column dropped.
+   * Returns a new [[DataFrame]] with columns dropped.
    * This version of drop accepts Column(s) rather than name(s).
    * This is a no-op if the DataFrame doesn't have column(s)
-   * with an equivalent expression.
+   * with equivalent expression(s).
    * @group dfops
    * @since 1.6.0
    */
