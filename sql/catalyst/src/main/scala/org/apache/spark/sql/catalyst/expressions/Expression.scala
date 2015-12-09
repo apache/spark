@@ -158,7 +158,7 @@ abstract class Expression extends TreeNode[Expression] with PredicateHelper{
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
 
 
-    this.getClass() == other.getClass() && ((this, other) match {
+    (this, other) match {
       // tolerant of ordering different
       case (left: And, right: And) =>
         checkSemantic(splitConjunctivePredicates(left).toSet.toSeq,
@@ -167,7 +167,7 @@ abstract class Expression extends TreeNode[Expression] with PredicateHelper{
         checkSemantic(splitDisjunctivePredicates(left).toSet.toSeq,
                       splitDisjunctivePredicates(right).toSet.toSeq)
       case _ => checkSemantic(elements1, elements2)
-    })
+    }
   }
 
   /**

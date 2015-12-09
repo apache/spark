@@ -127,12 +127,10 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with PredicateHelper w
       cleanLeft.children.size == cleanRight.children.size && {
       logDebug(
         s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      (cleanRight.cleanArgs == cleanLeft.cleanArgs) || ((cleanLeft, cleanRight) match {
-        case (l: Filter, r: Filter) =>
-          equivalentPredicates(cleanExpression(l.condition, l.children.flatMap(_.output)),
-            cleanExpression(r.condition, r.children.flatMap(_.output)))
-        case _ => false
-      })
+      cleanLeft.cleanArgs.zip(cleanRight.cleanArgs).forall {
+          case (e1: Expression, e2: Expression) => e1 semanticEquals e2
+          case (a1, a2) => a1 == a2
+        }
     } &&
     (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
   }
