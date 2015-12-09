@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
-import java.nio.Bits;
 
 import sun.misc.Unsafe;
 
@@ -38,7 +37,8 @@ public final class Platform {
   static {
     // use reflection to access unaligned field
     try {
-      Field unalignedField = Bits.class.getDeclaredField("unaligned");
+      Class<?> clazz = Class.forName("java.nio.Bits");
+      Field unalignedField = clazz.getDeclaredField("unaligned");
       unalignedField.setAccessible(true);
       unaligned = (boolean) unalignedField.get(null);
     } catch (Throwable t) {
