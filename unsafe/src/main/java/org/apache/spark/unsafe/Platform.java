@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 import sun.misc.Unsafe;
 
