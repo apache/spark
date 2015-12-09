@@ -80,7 +80,7 @@ class RowTest extends FunSpec with Matchers {
       sampleRow.getAsOpt[Double](1) should be (Some(1.0))
       sampleRow.getAsOpt[Int](2) should be (Some(1))
     }
- 
+
     it("getAsOpt[T]() can get values using field names.") {
       sampleRow.getAsOpt[String]("col1") should be (Some("value1"))
       sampleRow.getAsOpt[Double]("col2") should be (Some(1.0))
