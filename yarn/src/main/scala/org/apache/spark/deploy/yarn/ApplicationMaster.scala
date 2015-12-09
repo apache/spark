@@ -68,13 +68,12 @@ private[spark] class ApplicationMaster(
   // allocation is enabled), with a minimum of 3.
 
   private val maxNumExecutorFailures = {
-    val defaultKey =
+    val effectiveNumExecutors =
       if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-        DYN_ALLOCATION_MAX_EXECUTORS.key
+        sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       } else {
-        "spark.executor.instances"
+        sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
       }
-    val effectiveNumExecutors = sparkConf.getInt(defaultKey, 0)
     val defaultMaxNumExecutorFailures = math.max(3, 2 * effectiveNumExecutors)
 
     sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)

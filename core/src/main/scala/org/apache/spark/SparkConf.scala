@@ -159,6 +159,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private[spark] def setIfMissing[T](entry: ConfEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.stringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
+  private[spark] def setIfMissing[T](entry: OptionalConfEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry._stringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
   /**
    * Use Kryo serialization and register the given set of classes with Kryo.
    * If called multiple times, this will append the classes from all calls together.

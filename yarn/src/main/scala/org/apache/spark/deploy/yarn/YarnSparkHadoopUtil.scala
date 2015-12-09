@@ -407,7 +407,7 @@ object YarnSparkHadoopUtil {
       val targetNumExecutors =
         sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
       // System property can override environment variable.
-      conf.getInt("spark.executor.instances", targetNumExecutors)
+      conf.get(YarnConfigKeys.EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
     }
   }
 }

@@ -221,6 +221,8 @@ private[spark] object YarnConfigKeys {
     doc = "Name of the Kerberos principal.")
     .optional
 
+  val EXECUTOR_INSTANCES = intConf("spark.executor.instances").optional
+
   /* Private configs. */
 
   val CREDENTIALS_FILE_PATH = stringConf("spark.yarn.credentials.file",
