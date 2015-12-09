@@ -1206,6 +1206,7 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'   df[df$age %in% c(19, 30), 1:2]
 #'   subset(df, df$age %in% c(19, 30), 1:2)
 #'   subset(df, df$age %in% c(19), select = c(1,2))
+#'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "DataFrame"),
           function(x, subset, select, ...) {
