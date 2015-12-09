@@ -72,7 +72,11 @@ private[memory] class ExecutionMemoryPool(
    *
    * @return the number of bytes granted to the task.
    */
-  def acquireMemory(numBytes: Long, taskAttemptId: Long): Long = lock.synchronized {
+  def acquireMemory(
+      numBytes: Long,
+      taskAttemptId: Long,
+      maybeResizePool: Long => Unit = (_: Long) => Unit,
+      computeDaviesThingMax: () => Long = () => poolSize): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
@@ -91,10 +95,15 @@ private[memory] class ExecutionMemoryPool(
       val numActiveTasks = memoryForTask.keys.size
       val curMem = memoryForTask(taskAttemptId)
 
+      // TODO: explain me
+      maybeResizePool(numBytes - memoryFree)
+
+      // TODO: explain me
+      val daviesThingMax = computeDaviesThingMax()
+
       // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;
       // don't let it be negative
-      val maxToGrant =
-        math.min(numBytes, math.max(0, (poolSize / numActiveTasks) - curMem))
+      val maxToGrant = math.min(numBytes, math.max(0, (daviesThingMax / numActiveTasks) - curMem))
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
       val toGrant = math.min(maxToGrant, memoryFree)
 
@@ -106,8 +115,7 @@ private[memory] class ExecutionMemoryPool(
           memoryForTask(taskAttemptId) += toGrant
           return toGrant
         } else {
-          logInfo(
-            s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
+          logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
           lock.wait()
         }
       } else {

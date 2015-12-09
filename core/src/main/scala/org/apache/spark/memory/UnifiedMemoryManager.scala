@@ -81,22 +81,37 @@ private[spark] class UnifiedMemoryManager private[memory] (
     assert(numBytes >= 0)
     memoryMode match {
       case MemoryMode.ON_HEAP =>
-        if (numBytes > onHeapExecutionMemoryPool.memoryFree) {
-          val extraMemoryNeeded = numBytes - onHeapExecutionMemoryPool.memoryFree
-          // There is not enough free memory in the execution pool, so try to reclaim memory from
-          // storage. We can reclaim any free memory from the storage pool. If the storage pool
-          // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
-          // the memory that storage has borrowed from execution.
-          val memoryReclaimableFromStorage =
-            math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
-          if (memoryReclaimableFromStorage > 0) {
-            // Only reclaim as much space as is necessary and available:
-            val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
-              math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
-            onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+
+        /**
+         * TODO: add comment.
+         */
+        def maybeResizePool(extraMemoryNeeded: Long): Unit = {
+          if (extraMemoryNeeded > 0) {
+            // There is not enough free memory in the execution pool, so try to reclaim memory from
+            // storage. We can reclaim any free memory from the storage pool. If the storage pool
+            // has grown to become larger than `storageRegionSize`, we can evict blocks and reclaim
+            // the memory that storage has borrowed from execution.
+            val memoryReclaimableFromStorage =
+              math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
+            if (memoryReclaimableFromStorage > 0) {
+              // Only reclaim as much space as is necessary and available:
+              val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
+                math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
+              onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+            }
           }
         }
-        onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
+
+        /**
+         * TODO: (maxMemory - math.min(storageMemoryUsed, SF * maxMemory)
+         */
+        def computeDaviesThingMax(): Long = {
+          maxMemory - math.min(storageMemoryUsed, storageRegionSize)
+        }
+
+        onHeapExecutionMemoryPool.acquireMemory(
+          numBytes, taskAttemptId, maybeResizePool, computeDaviesThingMax)
+
       case MemoryMode.OFF_HEAP =>
         // For now, we only support on-heap caching of data, so we do not need to interact with
         // the storage pool when allocating off-heap memory. This will change in the future, though.
