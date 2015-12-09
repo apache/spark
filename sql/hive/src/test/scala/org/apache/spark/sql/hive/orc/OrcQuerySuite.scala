@@ -57,9 +57,10 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     tempFile
   }
 
-  def extractSourceRDDToDataFrame(df: DataFrame): DataFrame = {
-
-    // This is the source RDD without Spark-side filtering.
+  /**
+   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
+   */
+  protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
     val childRDD = df
       .queryExecution
@@ -379,7 +380,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
-          val sourceDf = extractSourceRDDToDataFrame(df.where(pred))
+          val sourceDf = stripSparkFilter(df.where(pred))
           val data = sourceDf.collect().toSet
           val expectedData = answer.toSet
 
