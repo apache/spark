@@ -6,6 +6,11 @@ displayTitle: <a href="ml-guide.html">ML</a> - Clustering
 
 In this section, we introduce the pipeline API for [clustering in mllib](mllib-clustering.html).
 
+**Table of Contents**
+
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
 ## Latent Dirichlet allocation (LDA)
 
 `LDA` is implemented as an `Estimator` that supports both `EMLDAOptimizer` and `OnlineLDAOptimizer`,

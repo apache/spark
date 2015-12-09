@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction, Transformation, and Selection - SparkML
-displayTitle: <a href="ml-guide.html">ML</a> - Features
+title: Extracting, transforming and selecting features
+displayTitle: Extracting, transforming and selecting features
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
