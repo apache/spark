@@ -36,6 +36,7 @@ public final class Platform {
   
   private static final boolean unaligned;
   static {
+    boolean _unaligned;
     // use reflection to access unaligned field
     try {
       Class<?> clazz = Class.forName("java.nio.Bits");
@@ -45,6 +46,7 @@ public final class Platform {
     } catch (Throwable t) {
       unaligned = false;
     }
+    unaligned = _unaligned;
   }
 
   /**
