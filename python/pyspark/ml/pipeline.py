@@ -149,6 +149,9 @@ class Pipeline(Estimator):
     .. versionadded:: 1.3.0
     """
 
+    # a placeholder to make it appear in the generated doc
+    stages = Param(Params._dummy(), "stages", "pipeline stages")
+
     @keyword_only
     def __init__(self, stages=None):
         """
@@ -158,7 +161,7 @@ class Pipeline(Estimator):
             stages = []
         super(Pipeline, self).__init__()
         #: Param for pipeline stages.
-        self.stages = Param(self, "stages", "pipeline stages")
+        self.stages = Pipeline.stages._copy_new_parent(self)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
