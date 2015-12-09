@@ -42,9 +42,9 @@ public final class Platform {
       Class<?> clazz = Class.forName("java.nio.Bits");
       Method m = clazz.getDeclaredMethod("unaligned");
       m.setAccessible(true);
-      unaligned = (boolean) m.invoke(null);
+      _unaligned = (boolean) m.invoke(null);
     } catch (Throwable t) {
-      unaligned = false;
+      _unaligned = false;
     }
     unaligned = _unaligned;
   }
