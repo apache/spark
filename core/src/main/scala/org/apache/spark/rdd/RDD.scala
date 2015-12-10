@@ -1092,7 +1092,7 @@ abstract class RDD[T: ClassTag](
    * 
    * @param zeroValue the initial value for the accumulated result of each partition for the seqOp operator, 
    *                  and also the initial value for the combine results from different partitions for the 
-   *                  conbOp operator,  - this will typically be the neutral element  
+   *                  combOp operator,  - this will typically be the neutral element  
    *                  (e.g. Nil for list concatenation or 0 for summation)
    * @param seqOp an operator used to aggregate results within a partition
    * @param combOp an associative operator used to combine results from different partitions
