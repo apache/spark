@@ -190,14 +190,15 @@ trait CheckAnalysis {
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
           // Special handling for cases when self-join introduce duplicate expression ids.
-          case j @ Join(left, right, _, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
-            failAnalysis(
-              s"""
-                 |Failure when resolving conflicting references in Join:
-                 |$plan
-                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+          case j @ Join(left, right, _, _, _)
+            if left.outputSet.intersect(right.outputSet).nonEmpty =>
+              val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+              failAnalysis(
+                s"""
+                   |Failure when resolving conflicting references in Join:
+                   |$plan
+                   |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                   |""".stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(
