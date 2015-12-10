@@ -68,6 +68,7 @@ R-unit-tests.log
 R/unit-tests.out
 python/lib/pyspark.zip
 lint-r-report.log
+.history
 
 # For Hive
 metastore_db/
@@ -79,3 +80,4 @@ sql/hive-thriftserver/test_warehouses
 # For R session data
 .RHistory
 .RData
+
