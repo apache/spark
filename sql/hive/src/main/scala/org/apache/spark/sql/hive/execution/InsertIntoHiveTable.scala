@@ -155,6 +155,11 @@ case class InsertIntoHiveTable(
     val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
     val partitionColumnNames = Option(partitionColumns).map(_.split("/")).orNull
 
+    // Validate that partition values are specified for partition columns.
+    if (partitionColumnNames != null && partitionColumnNames.size > 0 && partitionSpec.size == 0) {
+      throw new SparkException(ErrorMsg.NEED_PARTITION_ERROR.getMsg)
+    }
+
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
       // Report error if dynamic partitioning is not enabled
