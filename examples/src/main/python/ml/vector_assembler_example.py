@@ -14,24 +14,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-context("include an external JAR in SparkContext")
 
-runScript <- function() {
-  sparkHome <- Sys.getenv("SPARK_HOME")
-  sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
-  jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
-  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/jarTest.R")
-  submitPath <- file.path(sparkHome, "bin/spark-submit")
-  res <- system2(command = submitPath,
-                 args = c(jarPath, scriptPath),
-                 stdout = TRUE)
-  tail(res, 2)
-}
+from __future__ import print_function
 
-test_that("sparkJars tag in SparkContext", {
-  testOutput <- runScript()
-  helloTest <- testOutput[1]
-  expect_equal(helloTest, "Hello, Dave")
-  basicFunction <- testOutput[2]
-  expect_equal(basicFunction, "4")
-})
+from pyspark import SparkContext
+from pyspark.sql import SQLContext
+# $example on$
+from pyspark.mllib.linalg import Vectors
+from pyspark.ml.feature import VectorAssembler
+# $example off$
+
+if __name__ == "__main__":
+    sc = SparkContext(appName="VectorAssemblerExample")
+    sqlContext = SQLContext(sc)
+
+    # $example on$
+    dataset = sqlContext.createDataFrame(
+        [(0, 18, 1.0, Vectors.dense([0.0, 10.0, 0.5]), 1.0)],
+        ["id", "hour", "mobile", "userFeatures", "clicked"])
+    assembler = VectorAssembler(
+        inputCols=["hour", "mobile", "userFeatures"],
+        outputCol="features")
+    output = assembler.transform(dataset)
+    print(output.select("features", "clicked").first())
+    # $example off$
+
+    sc.stop()

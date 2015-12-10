@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.util.{BatchedWriteAheadLog, WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
@@ -210,9 +211,9 @@ private[streaming] class ReceivedBlockTracker(
     writeAheadLogOption.foreach { writeAheadLog =>
       logInfo(s"Recovering from write ahead logs in ${checkpointDirOption.get}")
       writeAheadLog.readAll().asScala.foreach { byteBuffer =>
-        logTrace("Recovering record " + byteBuffer)
+        logInfo("Recovering record " + byteBuffer)
         Utils.deserialize[ReceivedBlockTrackerLogEvent](
-          byteBuffer.array, Thread.currentThread().getContextClassLoader) match {
+          JavaUtils.bufferToArray(byteBuffer), Thread.currentThread().getContextClassLoader) match {
           case BlockAdditionEvent(receivedBlockInfo) =>
             insertAddedBlock(receivedBlockInfo)
           case BatchAllocationEvent(time, allocatedBlocks) =>
