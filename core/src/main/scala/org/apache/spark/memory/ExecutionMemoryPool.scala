@@ -131,7 +131,7 @@ private[memory] class ExecutionMemoryPool(
         // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
         // if we can't give it this much now, wait for other tasks to free up memory
         // (this happens if older tasks allocated lots of memory before N grew)
-        if (memoryFree >= math.min(maxToGrant, poolSize / minMemoryPerTask)) {
+        if (memoryFree >= math.min(maxToGrant, minMemoryPerTask - curMem)) {
           memoryForTask(taskAttemptId) += toGrant
           return toGrant
         } else {
