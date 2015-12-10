@@ -90,19 +90,19 @@ public class JavaStatefulNetworkWordCount {
         });
 
     // Update the cumulative count function
-    final Function3<String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>> mappingFunc =
-        new Function3<String, Optional<Integer>, State<Integer>, Optional<Tuple2<String, Integer>>>() {
+    final Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>> mappingFunc =
+        new Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>>() {
 
           @Override
-          public Optional<Tuple2<String, Integer>> call(String word, Optional<Integer> one, State<Integer> state) {
+          public Tuple2<String, Integer> call(String word, Optional<Integer> one, State<Integer> state) {
             int sum = one.or(0) + (state.exists() ? state.get() : 0);
             Tuple2<String, Integer> output = new Tuple2<String, Integer>(word, sum);
             state.update(sum);
-            return Optional.of(output);
+            return output;
           }
         };
 
-    // This will give a Dstream made of state (which is the cumulative count of the words)
+    // DStream made of get cumulative counts that get updated in every batch
     JavaMapWithStateDStream<String, Integer, Integer, Tuple2<String, Integer>> stateDstream =
         wordsDstream.mapWithState(StateSpec.function(mappingFunc).initialState(initialRDD));
 

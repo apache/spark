@@ -61,8 +61,7 @@ import org.apache.spark.{HashPartitioner, Partitioner}
  *       };
  *
  *    JavaMapWithStateDStream<String, Integer, Integer, String> mapWithStateDStream =
- *        keyValueDStream.<Integer, String>mapWithState(
- *            StateSpec.function(mappingFunction).numPartitions(10));
+ *        keyValueDStream.mapWithState(StateSpec.function(mappingFunc));
  * }}}
  *
  * @tparam KeyType    Class of the state key
@@ -137,9 +136,8 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] exten
  *       };
  *
  *    JavaMapWithStateDStream<String, Integer, Integer, String> mapWithStateDStream =
- *        keyValueDStream.<Integer, String>mapWithState(
- *            StateSpec.function(mappingFunction).numPartitions(10));
- * }}}
+ *        keyValueDStream.mapWithState(StateSpec.function(mappingFunc));
+ *}}}
  */
 @Experimental
 object StateSpec {
