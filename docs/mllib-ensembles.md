@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Ensembles - spark.mllib
-displayTitle: Ensembles
+displayTitle: Ensembles - spark.mllib
 ---
 
 * Table of contents

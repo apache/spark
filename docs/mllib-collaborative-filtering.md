@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Collaborative Filtering - spark.mllib
-displayTitle: Collaborative Filtering 
+displayTitle: Collaborative Filtering - spark.mllib
 ---
 
 * Table of contents

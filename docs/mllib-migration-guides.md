@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Old Migration Guides - spark.mllib
-displayTitle: Old Migration Guides
+displayTitle: Old Migration Guides - spark.mllib
 description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 ---
 

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Survival Regression - ML
-displayTitle: <a href="ml-guide.html">ML</a> - Survival Regression
+title: Survival Regression - spark.ml
+displayTitle: Survival Regression - spark.ml
 ---
 
 

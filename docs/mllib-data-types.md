@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Data Types - MLlib
-displayTitle: Data Types
+displayTitle: Data Types - MLlib
 ---
 
 * Table of contents

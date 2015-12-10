@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Optimization - spark.mllib
-displayTitle: Optimization
+displayTitle: Optimization - spark.mllib
 ---
 
 * Table of contents

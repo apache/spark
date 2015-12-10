@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Isotonic regression - spark.mllib
-displayTitle: Regression
+displayTitle: Regression - spark.mllib
 ---
 
 ## Isotonic regression

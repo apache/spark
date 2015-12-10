@@ -1,7 +1,7 @@
 ---
 layout: global
 title: PMML model export - spark.mllib
-displayTitle: PMML model export
+displayTitle: PMML model export - spark.mllib
 ---
 
 * Table of contents

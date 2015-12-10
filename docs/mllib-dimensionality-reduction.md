@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Dimensionality Reduction - spark.mllib
-displayTitle: Dimensionality Reduction
+displayTitle: Dimensionality Reduction - spark.mllib
 ---
 
 * Table of contents

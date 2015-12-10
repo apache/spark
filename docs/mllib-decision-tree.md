@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Decision Trees - spark.mllib
-displayTitle: Decision Trees
+displayTitle: Decision Trees - spark.mllib
 ---
 
 * Table of contents

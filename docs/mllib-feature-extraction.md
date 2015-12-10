@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation
-displayTitle: Feature Extraction and Transformation
+title: Feature Extraction and Transformation - spark.mllib
+displayTitle: Feature Extraction and Transformation - spark.mllib
 ---
 
 * Table of contents

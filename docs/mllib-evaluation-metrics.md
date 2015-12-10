@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Evaluation Metrics
-displayTitle: Evaluation Metrics
+title: Evaluation Metrics - spark.mllib
+displayTitle: Evaluation Metrics - spark.mllib
 ---
 
 * Table of contents

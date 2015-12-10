@@ -1,7 +1,7 @@
 ---
 layout: global
 title: "Overview: estimators, transformers and pipelines - spark.ml"
-displayTitle: "Overview: estimators, transformers and pipelines"
+displayTitle: "Overview: estimators, transformers and pipelines - spark.ml"
 ---
 
 

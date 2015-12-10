@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Linear Methods - spark.mllib
-displayTitle: Linear Methods
+displayTitle: Linear Methods - spark.mllib
 ---
 
 * Table of contents

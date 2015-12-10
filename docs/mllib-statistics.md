@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Basic Statistics - spark.mllib
-displayTitle: Basic Statistics 
+displayTitle: Basic Statistics - spark.mllib
 ---
 
 * Table of contents

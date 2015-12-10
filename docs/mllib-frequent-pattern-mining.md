@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Frequent Pattern Mining - spark.mllib
-displayTitle: Frequent Pattern Mining
+displayTitle: Frequent Pattern Mining - spark.mllib
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
