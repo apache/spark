@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Old Migration Guides - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Old Migration Guides
+title: Old Migration Guides - spark.mllib
+displayTitle: Old Migration Guides
 description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 ---
 
