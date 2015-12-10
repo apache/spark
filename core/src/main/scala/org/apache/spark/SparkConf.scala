@@ -598,8 +598,8 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
     "spark.yarn.max.executor.failures" -> Seq(
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
-    "spark.unsafe.offHeap" -> Seq(
-      AlternateConfig("spark.memory.useOffHeap", "1.6"))
+    "spark.memory.useOffHeap" -> Seq(
+      AlternateConfig("spark.unsafe.offHeap", "1.6"))
     )
 
   /**
