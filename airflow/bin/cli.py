@@ -10,7 +10,6 @@ import argparse
 import dateutil.parser
 
 import airflow
-print ("ABOUT TO IMPORT SETTINGS")
 from airflow import jobs, settings, utils
 from airflow import configuration
 from airflow.executors import DEFAULT_EXECUTOR

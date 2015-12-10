@@ -3,10 +3,9 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-print ("IN SETTINGS")
-
 import logging
 import os
+import sys
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -70,8 +69,8 @@ def policy(task_instance):
     pass
 
 def configure_logging():
-    logging.basicConfig(format=LOG_FORMAT)
-    print ("configured logging")    
+    logging.root.handlers = []
+    logging.basicConfig(format=LOG_FORMAT, stream=sys.stdout, level=LOGGING_LEVEL)
 
 try:
     from airflow_local_settings import *
@@ -79,5 +78,4 @@ try:
 except:
     pass
 
-print ("about to configure logging")
 configure_logging()

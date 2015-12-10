@@ -758,6 +758,9 @@ class LoggingMixin(object):
 
     @property
     def logger(self):
-        if not hasattr(self, "_logger"):
-            self._logger = logging.getLogger().getChild(self.__class__.__name__)
-        return self._logger
+        try:
+            return self._logger
+        except AttributeError:
+            self._logger = logging.getLogger(self.__class__.__name__)
+	    return self._logger
+
