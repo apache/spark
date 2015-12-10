@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
     # Normalize each feature to have unit standard deviation.
     scaledData = scalerModel.transform(dataFrame)
+    scaledData.show()
     # $example off$
 
     sc.stop()

@@ -46,6 +46,7 @@ object VectorIndexerExample {
 
     // Create new column "indexed" with categorical values transformed to indices
     val indexedData = indexerModel.transform(data)
+    indexedData.show()
     // $example off$
     sc.stop()
   }

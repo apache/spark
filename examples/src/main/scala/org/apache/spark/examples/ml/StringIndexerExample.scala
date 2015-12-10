@@ -46,4 +46,3 @@ object StringIndexerExample {
   }
 }
 // scalastyle:on println
-

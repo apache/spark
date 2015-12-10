@@ -38,6 +38,6 @@ if __name__ == "__main__":
     binarizedFeatures = binarizedDataFrame.select("binarized_feature")
     for binarized_feature, in binarizedFeatures.collect():
         print(binarized_feature)
-   # $example off$
+    # $example off$
 
     sc.stop()

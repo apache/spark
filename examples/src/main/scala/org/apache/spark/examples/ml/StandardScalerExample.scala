@@ -44,6 +44,7 @@ object StandardScalerExample {
 
     // Normalize each feature to have unit standard deviation.
     val scaledData = scalerModel.transform(dataFrame)
+    scaledData.show()
     // $example off$
     sc.stop()
   }

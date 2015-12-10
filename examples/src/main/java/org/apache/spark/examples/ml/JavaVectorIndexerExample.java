@@ -54,6 +54,7 @@ public class JavaVectorIndexerExample {
 
     // Create new column "indexed" with categorical values transformed to indices
     DataFrame indexedData = indexerModel.transform(data);
+    indexedData.show();
     // $example off$
     jsc.stop();
   }

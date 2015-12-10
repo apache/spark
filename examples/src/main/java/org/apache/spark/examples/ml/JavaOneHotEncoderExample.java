@@ -70,6 +70,7 @@ public class JavaOneHotEncoderExample {
       .setInputCol("categoryIndex")
       .setOutputCol("categoryVec");
     DataFrame encoded = encoder.transform(indexed);
+    encoded.select("id", "categoryVec").show();
     // $example off$
     jsc.stop();
   }
