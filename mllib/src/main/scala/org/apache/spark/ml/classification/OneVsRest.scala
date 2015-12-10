@@ -21,7 +21,7 @@ import java.util.UUID
 
 import scala.language.existentials
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.{Param, ParamMap}
@@ -70,17 +70,20 @@ private[ml] trait OneVsRestParams extends PredictorParams {
  *               The i-th model is produced by testing the i-th class (taking label 1) vs the rest
  *               (taking label 0).
  */
+@Since("1.4.0")
 @Experimental
 final class OneVsRestModel private[ml] (
-    override val uid: String,
-    labelMetadata: Metadata,
-    val models: Array[_ <: ClassificationModel[_, _]])
+    @Since("1.4.0")  override val uid: String,
+    @Since("1.4.0") labelMetadata: Metadata,
+    @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams {
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def transform(dataset: DataFrame): DataFrame = {
     // Check schema
     transformSchema(dataset.schema, logging = true)
@@ -134,6 +137,7 @@ final class OneVsRestModel private[ml] (
       .drop(accColName)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneVsRestModel = {
     val copied = new OneVsRestModel(
       uid, labelMetadata, models.map(_.copy(extra).asInstanceOf[ClassificationModel[_, _]]))
@@ -150,30 +154,39 @@ final class OneVsRestModel private[ml] (
  * Each example is scored against all k models and the model with highest score
  * is picked to label the example.
  */
+@Since("1.4.0")
 @Experimental
-final class OneVsRest(override val uid: String)
+final class OneVsRest @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
   extends Estimator[OneVsRestModel] with OneVsRestParams {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneVsRest"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setClassifier(value: Classifier[_, _, _]): this.type = {
     set(classifier, value.asInstanceOf[ClassifierType])
   }
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
+  @Since("1.4.0")
   override def fit(dataset: DataFrame): OneVsRestModel = {
     // determine number of classes either from metadata if provided, or via computation.
     val labelSchema = dataset.schema($(labelCol))
@@ -222,6 +235,7 @@ final class OneVsRest(override val uid: String)
     copyValues(model)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): OneVsRest = {
     val copied = defaultCopy(extra).asInstanceOf[OneVsRest]
     if (isDefined(classifier)) {

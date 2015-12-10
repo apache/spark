@@ -26,7 +26,7 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
  * either side can borrow memory from the other.
  *
- * The region shared between execution and storage is a fraction of the total heap space
+ * The region shared between execution and storage is a fraction of (the total heap space - 300MB)
  * configurable through `spark.memory.fraction` (default 0.75). The position of the boundary
  * within this space is further determined by `spark.memory.storageFraction` (default 0.5).
  * This means the size of the storage region is 0.75 * 0.5 = 0.375 of the heap space by default.
@@ -48,8 +48,8 @@ import org.apache.spark.storage.{BlockStatus, BlockId}
  */
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
-    maxMemory: Long,
-    private val storageRegionSize: Long,
+    val maxMemory: Long,
+    storageRegionSize: Long,
     numCores: Int)
   extends MemoryManager(
     conf,
@@ -100,7 +100,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.OFF_HEAP =>
         // For now, we only support on-heap caching of data, so we do not need to interact with
         // the storage pool when allocating off-heap memory. This will change in the future, though.
-        super.acquireExecutionMemory(numBytes, taskAttemptId, memoryMode)
+        offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
     }
   }
 
@@ -110,6 +110,12 @@ private[spark] class UnifiedMemoryManager private[memory] (
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
+    if (numBytes > maxStorageMemory) {
+      // Fail fast if the block simply won't fit
+      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
+        s"memory limit ($maxStorageMemory bytes)")
+      return false
+    }
     if (numBytes > storageMemoryPool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
@@ -130,6 +136,12 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
 object UnifiedMemoryManager {
 
+  // Set aside a fixed amount of memory for non-storage, non-execution purposes.
+  // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
+  // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
+  // the memory used for execution and storage will be (1024 - 300) * 0.75 = 543MB by default.
+  private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
+
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf)
     new UnifiedMemoryManager(
@@ -144,8 +156,16 @@ object UnifiedMemoryManager {
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
   private def getMaxMemory(conf: SparkConf): Long = {
-    val systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
+    val reservedMemory = conf.getLong("spark.testing.reservedMemory",
+      if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
+    val minSystemMemory = reservedMemory * 1.5
+    if (systemMemory < minSystemMemory) {
+      throw new IllegalArgumentException(s"System memory $systemMemory must " +
+        s"be at least $minSystemMemory. Please use a larger heap size.")
+    }
+    val usableMemory = systemMemory - reservedMemory
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)
-    (systemMaxMemory * memoryFraction).toLong
+    (usableMemory * memoryFraction).toLong
   }
 }

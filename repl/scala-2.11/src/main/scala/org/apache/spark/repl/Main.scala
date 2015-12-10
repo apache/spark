@@ -39,10 +39,28 @@ object Main extends Logging {
   var sqlContext: SQLContext = _
   var interp = new SparkILoop // this is a public var because tests reset it.
 
+  private var hasErrors = false
+
+  private def scalaOptionError(msg: String): Unit = {
+    hasErrors = true
+    Console.err.println(msg)
+  }
+
   def main(args: Array[String]) {
-    if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-    interp.process(s) // Repl starts and goes in loop of R.E.P.L
-    Option(sparkContext).map(_.stop)
+    val interpArguments = List(
+      "-Yrepl-class-based",
+      "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
+      "-classpath", getAddedJars.mkString(File.pathSeparator)
+    ) ++ args.toList
+
+    val settings = new Settings(scalaOptionError)
+    settings.processArguments(interpArguments, true)
+
+    if (!hasErrors) {
+      if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+      interp.process(settings) // Repl starts and goes in loop of R.E.P.L
+      Option(sparkContext).map(_.stop)
+    }
   }
 
   def getAddedJars: Array[String] = {

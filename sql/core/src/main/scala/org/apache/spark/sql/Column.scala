@@ -73,7 +73,26 @@ class TypedColumn[-T, U](
 
 /**
  * :: Experimental ::
- * A column in a [[DataFrame]].
+ * A column that will be computed based on the data in a [[DataFrame]].
+ *
+ * A new column is constructed based on the input columns present in a dataframe:
+ *
+ * {{{
+ *   df("columnName")            // On a specific DataFrame.
+ *   col("columnName")           // A generic column no yet associcated with a DataFrame.
+ *   col("columnName.field")     // Extracting a struct field
+ *   col("`a.column.with.dots`") // Escape `.` in column names.
+ *   $"columnName"               // Scala short hand for a named column.
+ *   expr("a + 1")               // A column that is constructed from a parsed SQL Expression.
+ *   lit("abc")                  // A column that produces a literal (constant) value.
+ * }}}
+ *
+ * [[Column]] objects can be composed to form complex expressions:
+ *
+ * {{{
+ *   $"a" + 1
+ *   $"a" === $"b"
+ * }}}
  *
  * @groupname java_expr_ops Java-specific expression operators
  * @groupname expr_ops Expression operators
@@ -136,11 +155,12 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   /**
    * Extracts a value or values from a complex type.
    * The following types of extraction are supported:
-   * - Given an Array, an integer ordinal can be used to retrieve a single value.
-   * - Given a Map, a key of the correct type can be used to retrieve an individual value.
-   * - Given a Struct, a string fieldName can be used to extract that field.
-   * - Given an Array of Structs, a string fieldName can be used to extract filed
-   *   of every struct in that array, and return an Array of fields
+   *
+   *  - Given an Array, an integer ordinal can be used to retrieve a single value.
+   *  - Given a Map, a key of the correct type can be used to retrieve an individual value.
+   *  - Given a Struct, a string fieldName can be used to extract that field.
+   *  - Given an Array of Structs, a string fieldName can be used to extract filed
+   *    of every struct in that array, and return an Array of fields
    *
    * @group expr_ops
    * @since 1.4.0
