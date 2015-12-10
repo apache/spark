@@ -31,10 +31,8 @@ class SortBasedAggregationIterator(
     groupingKeyAttributes: Seq[Attribute],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression],
-    nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression],
-    completeAggregateAttributes: Seq[Attribute],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
@@ -44,17 +42,15 @@ class SortBasedAggregationIterator(
   extends AggregationIterator(
     groupingKeyAttributes,
     valueAttributes,
-    nonCompleteAggregateExpressions,
-    nonCompleteAggregateAttributes,
-    completeAggregateExpressions,
-    completeAggregateAttributes,
+    aggregateExpressions,
+    aggregateAttributes,
     initialInputBufferOffset,
     resultExpressions,
     newMutableProjection,
     outputsUnsafeRows) {
 
   override protected def newBuffer: MutableRow = {
-    val bufferSchema = allAggregateFunctions.flatMap(_.aggBufferAttributes)
+    val bufferSchema = aggregateFunctions.flatMap(_.aggBufferAttributes)
     val bufferRowSize: Int = bufferSchema.length
 
     val genericMutableBuffer = new GenericMutableRow(bufferRowSize)

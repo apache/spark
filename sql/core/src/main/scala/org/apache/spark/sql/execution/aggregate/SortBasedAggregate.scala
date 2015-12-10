@@ -29,10 +29,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class SortBasedAggregate(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
-    nonCompleteAggregateExpressions: Seq[AggregateExpression],
-    nonCompleteAggregateAttributes: Seq[Attribute],
-    completeAggregateExpressions: Seq[AggregateExpression],
-    completeAggregateAttributes: Seq[Attribute],
+    aggregateExpressions: Seq[AggregateExpression],
+    aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
@@ -86,10 +84,8 @@ case class SortBasedAggregate(
           groupingExpressions.map(_.toAttribute),
           child.output,
           iter,
-          nonCompleteAggregateExpressions,
-          nonCompleteAggregateAttributes,
-          completeAggregateExpressions,
-          completeAggregateAttributes,
+          aggregateExpressions,
+          aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
           newMutableProjection,
@@ -109,7 +105,7 @@ case class SortBasedAggregate(
   }
 
   override def simpleString: String = {
-    val allAggregateExpressions = nonCompleteAggregateExpressions ++ completeAggregateExpressions
+    val allAggregateExpressions = aggregateExpressions
 
     val keyString = groupingExpressions.mkString("[", ",", "]")
     val functionString = allAggregateExpressions.mkString("[", ",", "]")

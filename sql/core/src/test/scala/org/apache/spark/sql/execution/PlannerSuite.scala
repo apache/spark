@@ -44,10 +44,10 @@ class PlannerSuite extends SharedSQLContext {
         fail(s"Could query play aggregation query $query. Is it an aggregation query?"))
     val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
-    // For the new aggregation code path, there will be three aggregate operator for
+    // For the new aggregation code path, there will be four aggregate operator for
     // distinct aggregations.
     assert(
-      aggregations.size == 2 || aggregations.size == 3,
+      aggregations.size == 2 || aggregations.size == 4,
       s"The plan of query $query does not have partial aggregations.")
   }
 
