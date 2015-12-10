@@ -27,14 +27,13 @@ import scala.collection.mutable.{HashMap, HashSet}
 import com.google.common.collect.HashBiMap
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
-
-import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
+import org.apache.spark.{SecurityManager, SparkContext, SparkEnv, SparkException, TaskState}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -59,6 +58,11 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
+
+  // Minimum MB memory per core. Will reduce cores to meet this
+  val minMBPerCore = conf.getDouble("spark.cores.mb.min", 0.0)
+  // Maximum MB memory per core. Will truncate memory request to this limit
+  val maxMBPerCore = conf.getDouble("spark.cores.mb.max", Double.MaxValue)
 
   // If shuffle service is enabled, the Spark driver will register with the shuffle service.
   // This is for cleaning up shuffle files reliably.
@@ -254,14 +258,18 @@ private[spark] class CoarseMesosSchedulerBackend(
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         val id = offer.getId.getValue
         if (meetsConstraints) {
+          // Returns NONE if offer isn't sufficient
+          val maybeUsableResources = calculateDesiredResources(
+            sc, math.min(cpus, maxCores - totalCoresAcquired), mem.toInt
+          )
           if (taskIdToSlaveId.size < executorLimit &&
               totalCoresAcquired < maxCores &&
-              mem >= calculateTotalMemory(sc) &&
-              cpus >= 1 &&
+              maybeUsableResources.isDefined &&
               failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
               !slaveIdsWithExecutors.contains(slaveId)) {
             // Launch an executor on the slave
-            val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
+            val cpusToUse = maybeUsableResources.get._1
+            val memToUse = maybeUsableResources.get._2
             totalCoresAcquired += cpusToUse
             val taskId = newMesosTaskId()
             taskIdToSlaveId.put(taskId, slaveId)
@@ -271,7 +279,7 @@ private[spark] class CoarseMesosSchedulerBackend(
             val (remainingResources, cpuResourcesToUse) =
               partitionResources(offer.getResourcesList, "cpus", cpusToUse)
             val (_, memResourcesToUse) =
-              partitionResources(remainingResources.asJava, "mem", calculateTotalMemory(sc))
+              partitionResources(remainingResources.asJava, "mem", memToUse)
             val taskBuilder = MesosTaskInfo.newBuilder()
               .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
               .setSlaveId(offer.getSlaveId)
@@ -397,6 +405,55 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   private def sparkExecutorId(slaveId: String, taskId: String): String = {
     s"$slaveId/$taskId"
+  }
+
+  /**
+    * Try and fit the resources to the constraints
+    * @param sc Spark context
+    * @param availableCpus The available CPUs
+    * @param availableMem The available Memory
+    * @return Tuple of CPU (integer cores)  and Memory (integer MB) desired
+    */
+  def calculateDesiredResources(sc: SparkContext, availableCpus: Int, availableMem: Int):
+  Option[(Int, Int)] =
+  {
+    if (availableCpus <= 0) {
+      // Don't want divide by 0 error
+      logTrace(s"No CPUs")
+      return None
+    }
+    val desiredMemory = super.calculateTotalMemory(sc)
+    val minMB = math.max(desiredMemory, minMBPerCore).toInt
+    val mbCoreRatio = availableMem.toDouble / availableCpus.toDouble
+
+    if (availableMem < minMB) {
+      logTrace(s"Offer of $availableMem has insufficient memory. Needs at least $minMB")
+      None
+    } else if (mbCoreRatio > maxMBPerCore) {
+      // Too high? lower memory
+      val desiredCPUMem = (maxMBPerCore * availableCpus).toInt
+      if(desiredCPUMem >= minMB) {
+        logTrace(s"Too much memory available. Truncating to $desiredCPUMem")
+        Option((availableCpus, desiredCPUMem))
+      } else {
+        logTrace(s"Desired memory from number of cores $availableCpus " +
+          s"insufficient to meet minimum MB required $minMB")
+        None
+      }
+    } else if (mbCoreRatio < minMBPerCore.toDouble) {
+      // Too low? lower CPU
+      val desiredCpus = (availableMem.toDouble / minMBPerCore.toDouble).toInt
+      if(desiredCpus <= 0) {
+        logTrace(s"Weird double rounding problem. memory/cpu ratio too close to threshold")
+        None
+      } else {
+        logTrace(s"Not enough memory per cpu, lowering cpu count to $desiredCpus")
+        Option((desiredCpus, availableMem))
+      }
+    } else {
+      logTrace(s"Cpu and memory just right")
+      Option((availableCpus, availableMem))
+    }
   }
 
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID): Unit = {
