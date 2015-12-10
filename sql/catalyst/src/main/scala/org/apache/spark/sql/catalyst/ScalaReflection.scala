@@ -264,11 +264,12 @@ object ScalaReflection extends ScalaReflection {
         }.getOrElse {
           val className = getClassNameFromType(elementType)
           val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
+          val loopVar = LoopVar(schemaFor(elementType).dataType)
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p), newTypePath),
-              getPath,
-              schemaFor(elementType).dataType),
+              loopVar,
+              constructorFor(elementType, Some(loopVar), newTypePath),
+              getPath),
             "array",
             arrayClassFor(elementType))
         }
@@ -277,12 +278,13 @@ object ScalaReflection extends ScalaReflection {
         val TypeRef(_, _, Seq(elementType)) = t
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
+        val loopVar = LoopVar(schemaFor(elementType).dataType)
         val arrayData =
           Invoke(
             MapObjects(
-              p => constructorFor(elementType, Some(p), newTypePath),
-              getPath,
-              schemaFor(elementType).dataType),
+              loopVar,
+              constructorFor(elementType, Some(loopVar), newTypePath),
+              getPath),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -296,21 +298,23 @@ object ScalaReflection extends ScalaReflection {
         // TODO: add walked type path for map
         val TypeRef(_, _, Seq(keyType, valueType)) = t
 
+        val keyLoopVar = LoopVar(schemaFor(keyType).dataType)
         val keyData =
           Invoke(
             MapObjects(
-              p => constructorFor(keyType, Some(p), walkedTypePath),
-              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
-              schemaFor(keyType).dataType),
+              keyLoopVar,
+              constructorFor(keyType, Some(keyLoopVar), walkedTypePath),
+              Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType))),
             "array",
             ObjectType(classOf[Array[Any]]))
 
+        val valueLoopVar = LoopVar(schemaFor(valueType).dataType)
         val valueData =
           Invoke(
             MapObjects(
-              p => constructorFor(valueType, Some(p), walkedTypePath),
-              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
-              schemaFor(valueType).dataType),
+              valueLoopVar,
+              constructorFor(valueType, Some(valueLoopVar), walkedTypePath),
+              Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType))),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -414,11 +418,8 @@ object ScalaReflection extends ScalaReflection {
       } else {
         val clsName = getClassNameFromType(elementType)
         val newPath = s"""- array element class: "$clsName"""" +: walkedTypePath
-        // `MapObjects` will run `extractorFor` lazily, we need to eagerly call `extractorFor` here
-        // to trigger the type check.
-        extractorFor(inputObject, elementType, newPath)
-
-        MapObjects(extractorFor(_, elementType, newPath), input, externalDataType)
+        val loopVar = LoopVar(externalDataType)
+        MapObjects(loopVar, extractorFor(loopVar, elementType, newPath), input)
       }
     }
 
