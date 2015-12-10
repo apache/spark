@@ -88,6 +88,7 @@ def clear_task_instances(tis, session, activate_dag_runs=True):
         ).all()
         for dr in drs:
             dr.state = State.RUNNING
+            dr.start_date = datetime.now()
 
 
 class DagBag(LoggingMixin):
@@ -1956,6 +1957,9 @@ class DAG(LoggingMixin):
         number of DAG runs in a running state, the scheduler won't create
         new active DAG runs
     :type max_active_runs: int
+    :param dagrun_timeout: specify how long a DagRun should be up before
+        timing out / failing, so that new DagRuns can be created
+    :type dagrun_timeout: datetime.timedelta
     """
 
     def __init__(
@@ -1969,6 +1973,7 @@ class DAG(LoggingMixin):
             concurrency=configuration.getint('core', 'dag_concurrency'),
             max_active_runs=configuration.getint(
                 'core', 'max_active_runs_per_dag'),
+            dagrun_timeout=None,
             params=None):
 
         self.user_defined_macros = user_defined_macros
@@ -1995,6 +2000,7 @@ class DAG(LoggingMixin):
         self.safe_dag_id = dag_id.replace('.', '__dot__')
         self.concurrency = concurrency
         self.max_active_runs = max_active_runs
+        self.dagrun_timeout = dagrun_timeout
 
         self._comps = {
             'dag_id',
@@ -2702,6 +2708,8 @@ class DagRun(Base):
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
     execution_date = Column(DateTime, default=datetime.now())
+    start_date = Column(DateTime, default=datetime.now())
+    end_date = Column(DateTime)
     state = Column(String(50), default=State.RUNNING)
     run_id = Column(String(ID_LEN))
     external_trigger = Column(Boolean, default=True)
@@ -2710,7 +2718,6 @@ class DagRun(Base):
     __table_args__ = (
         Index('dr_run_id', dag_id, run_id, unique=True),
     )
-    
 
     def __repr__(self):
         return (
