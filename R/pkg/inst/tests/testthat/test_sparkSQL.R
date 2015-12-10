@@ -799,6 +799,10 @@ test_that("subsetting", {
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 
+  df7 <- subset(df, select = "name")
+  expect_equal(count(df7), 3)
+  expect_equal(columns(df7), c("name"))
+
   # Test base::subset is working
   expect_equal(nrow(subset(airquality, Temp > 80, select = c(Ozone, Temp))), 68)
 })
