@@ -129,7 +129,9 @@ private[spark] case class SSLOptions(
    * The supportedAlgorithms set is a subset of the enabledAlgorithms that
    * are supported by the current Java security provider for this protocol.
    */
-  private val supportedAlgorithms: Set[String] = {
+  private val supportedAlgorithms: Set[String] = if (enabledAlgorithms.isEmpty) {
+    Set()
+  } else {
     var context: SSLContext = null
     try {
       context = SSLContext.getInstance(protocol.orNull)
@@ -152,7 +154,10 @@ private[spark] case class SSLOptions(
       logDebug(s"Discarding unsupported cipher $cipher")
     }
 
-    enabledAlgorithms & providerAlgorithms
+    val supported = enabledAlgorithms & providerAlgorithms
+    require(supported.nonEmpty, "SSLContext does not support any of the enabled algorithms: " +
+      enabledAlgorithms.mkString(","))
+    supported
   }
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */

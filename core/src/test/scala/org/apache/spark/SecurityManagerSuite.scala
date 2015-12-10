@@ -181,7 +181,7 @@ class SecurityManagerSuite extends SparkFunSuite {
     "SSL_DHE_RSA_WITH_AES_128_CBC_SHA256")
 
     val securityManager = new SecurityManager(conf)
-    val akkaSSLOptions = securityManager.createSSLOptions("akka")
+    val akkaSSLOptions = securityManager.getSSLOptions("akka")
 
     assert(securityManager.fileServerSSLOptions.enabled === true)
     assert(akkaSSLOptions.enabled === true)

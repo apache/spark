@@ -245,7 +245,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
   // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
-  val fileServerSSLOptions = createSSLOptions("fs")
+  val fileServerSSLOptions = getSSLOptions("fs")
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- fileServerSSLOptions.trustStore) yield {
@@ -286,7 +286,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     (None, None)
   }
 
-  def createSSLOptions(module: String): SSLOptions = {
+  def getSSLOptions(module: String): SSLOptions = {
     val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
     logDebug(s"Created SSL options for $module: $opts")
     opts

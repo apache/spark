@@ -32,7 +32,7 @@ class MasterWebUI(
     val master: Master,
     requestedPort: Int,
     customMasterPage: Option[MasterPage] = None)
-  extends WebUI(master.securityMgr, master.securityMgr.createSSLOptions("standalone"),
+  extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
     requestedPort, master.conf, name = "MasterUI") with Logging with UIRoot {
 
   val masterEndpointRef = master.self

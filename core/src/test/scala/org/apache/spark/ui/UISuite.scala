@@ -47,7 +47,7 @@ class UISuite extends SparkFunSuite {
 
   private def sslDisabledConf(): (SparkConf, SSLOptions) = {
     val conf = new SparkConf
-    (conf, new SecurityManager(conf).createSSLOptions("ui"))
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
   private def sslEnabledConf(): (SparkConf, SSLOptions) = {
@@ -56,7 +56,7 @@ class UISuite extends SparkFunSuite {
       .set("spark.ssl.ui.keyStore", "./src/test/resources/spark.keystore")
       .set("spark.ssl.ui.keyStorePassword", "123456")
       .set("spark.ssl.ui.keyPassword", "123456")
-    (conf, new SecurityManager(conf).createSSLOptions("ui"))
+    (conf, new SecurityManager(conf).getSSLOptions("ui"))
   }
 
   ignore("basic ui visibility") {

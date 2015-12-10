@@ -34,7 +34,7 @@ class WorkerWebUI(
     val worker: Worker,
     val workDir: File,
     requestedPort: Int)
-  extends WebUI(worker.securityMgr, worker.securityMgr.createSSLOptions("standalone"),
+  extends WebUI(worker.securityMgr, worker.securityMgr.getSSLOptions("standalone"),
     requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
