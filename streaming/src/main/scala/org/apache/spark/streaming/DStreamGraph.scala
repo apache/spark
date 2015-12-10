@@ -18,11 +18,13 @@
 package org.apache.spark.streaming
 
 import scala.collection.mutable.ArrayBuffer
-import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+import java.io.{ ObjectInputStream, IOException, ObjectOutputStream }
 import org.apache.spark.Logging
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.streaming.dstream.{DStream, ReceiverInputDStream, InputDStream}
+import org.apache.spark.streaming.dstream.{ DStream, ReceiverInputDStream, InputDStream }
+import org.apache.spark.streaming.dstream.DumpableDStream
 import org.apache.spark.util.Utils
+
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
@@ -169,6 +171,23 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def getMaxInputStreamRememberDuration(): Duration = {
     // If an InputDStream is not used, its `rememberDuration` will be null and we can ignore them
     inputStreams.map(_.rememberDuration).filter(_ != null).maxBy(_.milliseconds)
+  }
+
+  /**
+   * recursively visit every node in DStreamGraph and invoke dump for all DumpableDStream
+   */
+  def dump(time: Time, path: String) {
+    this.synchronized {
+      outputStreams.foreach(ds => doDump(ds, time, path))
+    }
+
+    def doDump(ds: DStream[_], time: Time, path: String): Unit = {
+      ds match {
+        case ds: DumpableDStream[_, _] => ds.dump(time, path)
+        case other => log.debug(s"${other.getClass} is not DumpableDStream. Ignore.")
+      }
+      ds.dependencies.foreach { d => doDump(d, time, path) }
+    }
   }
 
   @throws(classOf[IOException])

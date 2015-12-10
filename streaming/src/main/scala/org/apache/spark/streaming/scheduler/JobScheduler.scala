@@ -112,6 +112,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
     logDebug("Stopped job executor")
 
+    // For all DumpableDStream, persist data to checkpoint directory, so that when process
+    // restarted, user is able to load these data back.
+    if (processAllReceivedData) {
+      ssc.graph.dump(Time(clock.getTimeMillis()), ssc.checkpointDir)
+    }
+
     // Stop everything else
     listenerBus.stop()
     eventLoop.stop()

@@ -22,8 +22,10 @@ import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Time}
-
 import scala.reflect.ClassTag
+import org.apache.spark.rdd.ReliableRDDCheckpointData
+import org.apache.spark.rdd.ReliableCheckpointRDD
+import org.apache.spark.util.SerializableConfiguration
 
 private[streaming]
 class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
@@ -32,7 +34,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     partitioner: Partitioner,
     preservePartitioning: Boolean,
     initialRDD : Option[RDD[(K, S)]]
-  ) extends DStream[(K, S)](parent.ssc) {
+  ) extends DumpableDStream[K, S](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
 

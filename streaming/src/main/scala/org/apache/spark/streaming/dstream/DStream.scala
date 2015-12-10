@@ -330,6 +330,20 @@ abstract class DStream[T: ClassTag] (
   }
 
   /**
+   * compute the last valid time till input time
+   * (validTime = zeroTime + N * slideDuration)
+   */
+  private[streaming] def lastValidTime(time: Time): Time = {
+    if (time < zeroTime) {
+      throw new IllegalArgumentException(
+          s"Input(${time}) must bigger then zeroTime($zeroTime)")
+    }
+
+    val multi: Int = ((time - zeroTime) / slideDuration).floor.toInt
+    zeroTime + (slideDuration * multi)
+  }
+
+  /**
    * Get the RDD corresponding to the given time; either retrieve it from cache
    * or compute-and-cache it.
    */
