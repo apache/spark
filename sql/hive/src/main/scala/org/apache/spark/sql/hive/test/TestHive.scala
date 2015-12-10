@@ -87,7 +87,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     dir
   }
 
-  private lazy val temporaryConfig = newTemporaryConfiguration()
+  private lazy val temporaryConfig = newTemporaryConfiguration(useInMemoryDerby = false)
 
   /** Sets up the system initially or after a RESET command */
   protected override def configure(): Map[String, String] = {
