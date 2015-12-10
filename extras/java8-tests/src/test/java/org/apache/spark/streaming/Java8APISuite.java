@@ -861,7 +861,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
   /**
    * This test is only for testing the APIs. It's not necessary to run it.
    */
-  public void testTrackStateByAPI() {
+  public void testMapWithStateAPI() {
     JavaPairRDD<String, Boolean> initialRDD = null;
     JavaPairDStream<String, Integer> wordsDstream = null;
 
@@ -884,7 +884,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream2 =
         wordsDstream.mapWithState(
-            StateSpec.<String, Integer, Boolean, Double>function((value, state) -> {
+            StateSpec.<String, Integer, Boolean, Double>function((key, value, state) -> {
               state.exists();
               state.get();
               state.isTimingOut();
@@ -896,6 +896,6 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
                 .partitioner(new HashPartitioner(10))
                 .timeout(Durations.seconds(10)));
 
-    JavaPairDStream<String, Boolean> emittedRecords2 = stateDstream2.stateSnapshots();
+    JavaPairDStream<String, Boolean> mappedDStream = stateDstream2.stateSnapshots();
   }
 }
