@@ -55,7 +55,7 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
-        false,
+        propagateNull = false,
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
@@ -102,7 +102,7 @@ object RowEncoder {
           Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
           "toSeq",
           ObjectType(classOf[scala.collection.Seq[_]]))
-      val convertedKeys = extractorsFor(keys, ArrayType(kt, false))
+      val convertedKeys = extractorsFor(keys, ArrayType(kt, containsNull = false))
 
       val values =
         Invoke(
@@ -166,7 +166,7 @@ object RowEncoder {
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
         Nil,
-        false,
+        propagateNull = false,
         dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
@@ -203,7 +203,7 @@ object RowEncoder {
         arrayData :: Nil)
 
     case MapType(kt, vt, valueNullable) =>
-      val keyArrayType = ArrayType(kt, false)
+      val keyArrayType = ArrayType(kt, containsNull = false)
       val keyData = constructorFor(Invoke(input, "keyArray", keyArrayType))
 
       val valueArrayType = ArrayType(vt, valueNullable)

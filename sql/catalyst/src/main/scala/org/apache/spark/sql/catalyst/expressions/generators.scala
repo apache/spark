@@ -80,7 +80,8 @@ case class UserDefinedGenerator(
   private def initializeConverters(): Unit = {
     inputRow = new InterpretedProjection(children)
     convertToScala = {
-      val inputSchema = StructType(children.map(e => StructField(e.simpleString, e.dataType, true)))
+      val inputSchema = StructType(children.map(e =>
+        StructField(e.simpleString, e.dataType, nullable = true)))
       CatalystTypeConverters.createToScalaConverter(inputSchema)
     }.asInstanceOf[InternalRow => Row]
   }

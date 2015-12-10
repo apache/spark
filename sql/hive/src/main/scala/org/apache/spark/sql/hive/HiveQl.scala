@@ -396,7 +396,7 @@ private[hive] object HiveQl extends Logging {
 
   protected def nodeToAttribute(node: Node): Attribute = node match {
     case Token("TOK_TABCOL", Token(colName, Nil) :: dataType :: Nil) =>
-      AttributeReference(colName, nodeToDataType(dataType), true)()
+      AttributeReference(colName, nodeToDataType(dataType), nullable = true)()
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -624,7 +624,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       // if ALTER VIEW doesn't have query part, let hive to handle it.
       maybeQuery.map { query =>
-        createView(view, context, viewNameParts, query, Nil, Map(), false, true)
+        createView(view, context, viewNameParts, query, Nil, Map(), allowExist = false,
+          replace = true)
       }.getOrElse(NativePlaceholder)
 
     case view @ Token("TOK_CREATEVIEW", children)
@@ -1141,24 +1142,25 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         val withSort =
           (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
             case (Some(totalOrdering), None, None, None) =>
-              Sort(totalOrdering.getChildren.asScala.map(nodeToSortOrder), true, withDistinct)
+              Sort(totalOrdering.getChildren.asScala.map(nodeToSortOrder), global = true,
+                withDistinct)
             case (None, Some(perPartitionOrdering), None, None) =>
               Sort(
                 perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder),
-                false, withDistinct)
+                global = false, withDistinct)
             case (None, None, Some(partitionExprs), None) =>
               RepartitionByExpression(
                 partitionExprs.getChildren.asScala.map(nodeToExpr), withDistinct)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
               Sort(
-                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder), false,
+                perPartitionOrdering.getChildren.asScala.map(nodeToSortOrder), global = false,
                 RepartitionByExpression(
                   partitionExprs.getChildren.asScala.map(nodeToExpr),
                   withDistinct))
             case (None, None, None, Some(clusterExprs)) =>
               Sort(
                 clusterExprs.getChildren.asScala.map(nodeToExpr).map(SortOrder(_, Ascending)),
-                false,
+                global = false,
                 RepartitionByExpression(
                   clusterExprs.getChildren.asScala.map(nodeToExpr),
                   withDistinct))
@@ -1398,7 +1400,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite, false)
+      InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite,
+        ifNotExists = false)
 
     case Token(destinationToken(),
            Token("TOK_TAB",
@@ -1418,7 +1421,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite, true)
+      InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite,
+        ifNotExists = true)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for ${a.getName}:" +
