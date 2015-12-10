@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Frequent Pattern Mining - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Frequent Pattern Mining
+title: Frequent Pattern Mining - spark.mllib
+displayTitle: Frequent Pattern Mining - spark.mllib
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -9,7 +9,7 @@ first steps to analyze a large-scale dataset, which has been an active research 
 data mining for years.
 We refer users to Wikipedia's [association rule learning](http://en.wikipedia.org/wiki/Association_rule_learning)
 for more information.
-MLlib provides a parallel implementation of FP-growth,
+`spark.mllib` provides a parallel implementation of FP-growth,
 a popular algorithm to mining frequent itemsets.
 
 ## FP-growth
@@ -22,13 +22,13 @@ Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) al
 the second step of FP-growth uses a suffix tree (FP-tree) structure to encode transactions without generating candidate sets
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
-In MLlib, we implemented a parallel version of FP-growth called PFP,
+In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
 as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
 PFP distributes the work of growing FP-trees based on the suffices of transactions,
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
 
-MLlib's FP-growth implementation takes the following (hyper-)parameters:
+`spark.mllib`'s FP-growth implementation takes the following (hyper-)parameters:
 
 * `minSupport`: the minimum support for an itemset to be identified as frequent.
   For example, if an item appears 3 out of 5 transactions, it has a support of 3/5=0.6.
@@ -126,7 +126,7 @@ PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 
-MLlib's PrefixSpan implementation takes the following parameters:
+`spark.mllib`'s PrefixSpan implementation takes the following parameters:
 
 * `minSupport`: the minimum support required to be considered a frequent
   sequential pattern.

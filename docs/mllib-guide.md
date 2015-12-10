@@ -66,7 +66,7 @@ We list major functionality from both below, with links to detailed guides.
 
 # spark.ml: high-level APIs for ML pipelines
 
-* [Overview: estimators, transformers and pipelines](ml-intro.html)
+* [Overview: estimators, transformers and pipelines](ml-guide.html)
 * [Extracting, transforming and selecting features](ml-features.html)
 * [Classification and regression](ml-classification-regression.html)
 * [Clustering](ml-clustering.html)

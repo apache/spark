@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Advanced topics - spark.ml
-displayTitle: Advanced topics
+displayTitle: Advanced topics - spark.ml
 ---
 
 # Optimization of linear methods

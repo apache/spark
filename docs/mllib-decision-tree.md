@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Decision Trees - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Trees
+title: Decision Trees - spark.mllib
+displayTitle: Decision Trees - spark.mllib
 ---
 
 * Table of contents
@@ -15,7 +15,7 @@ feature scaling, and are able to capture non-linearities and feature interaction
 algorithms such as random forests and boosting are among the top performers for classification and
 regression tasks.
 
-MLlib supports decision trees for binary and multiclass classification and for regression,
+`spark.mllib` supports decision trees for binary and multiclass classification and for regression,
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions of instances.
 

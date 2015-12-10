@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Clustering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Clustering
+title: Clustering - spark.mllib
+displayTitle: Clustering - spark.mllib
 ---
 
 [Clustering](https://en.wikipedia.org/wiki/Cluster_analysis) is an unsupervised learning problem whereby we aim to group subsets
@@ -10,19 +10,19 @@ often used for exploratory analysis and/or as a component of a hierarchical
 [supervised learning](https://en.wikipedia.org/wiki/Supervised_learning) pipeline (in which distinct classifiers or regression
 models are trained for each cluster).
 
-MLlib supports the following models:
+The `spark.mllib` package supports the following models:
 
 * Table of contents
 {:toc}
 
 ## K-means
 
-[k-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
+[K-means](http://en.wikipedia.org/wiki/K-means_clustering) is one of the
 most commonly used clustering algorithms that clusters the data points into a
-predefined number of clusters. The MLlib implementation includes a parallelized
+predefined number of clusters. The `spark.mllib` implementation includes a parallelized
 variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
 called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
-The implementation in MLlib has the following parameters:
+The implementation in `spark.mllib` has the following parameters:
 
 * *k* is the number of desired clusters.
 * *maxIterations* is the maximum number of iterations to run.
@@ -171,7 +171,7 @@ sameModel = KMeansModel.load(sc, "myModelPath")
 
 A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
-each with its own probability.  The MLlib implementation uses the
+each with its own probability.  The `spark.mllib` implementation uses the
 [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
  algorithm to induce the maximum-likelihood model given a set of samples.  The implementation
 has the following parameters:
@@ -308,13 +308,13 @@ graph given pairwise similarties as edge properties,
 described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
 [power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.
-MLlib includes an implementation of PIC using GraphX as its backend.
+`spark.mllib` includes an implementation of PIC using GraphX as its backend.
 It takes an `RDD` of `(srcId, dstId, similarity)` tuples and outputs a model with the clustering assignments.
 The similarities must be nonnegative.
 PIC assumes that the similarity measure is symmetric.
 A pair `(srcId, dstId)` regardless of the ordering should appear at most once in the input data.
 If a pair is missing from input, their similarity is treated as zero.
-MLlib's PIC implementation takes the following (hyper-)parameters:
+`spark.mllib`'s PIC implementation takes the following (hyper-)parameters:
 
 * `k`: number of clusters
 * `maxIterations`: maximum number of power iterations
@@ -323,7 +323,7 @@ MLlib's PIC implementation takes the following (hyper-)parameters:
 
 **Examples**
 
-In the following, we show code snippets to demonstrate how to use PIC in MLlib.
+In the following, we show code snippets to demonstrate how to use PIC in `spark.mllib`.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -493,7 +493,7 @@ checkpointing can help reduce shuffle file sizes on disk and help with
 failure recovery.
 
 
-All of MLlib's LDA models support:
+All of `spark.mllib`'s LDA models support:
 
 * `describeTopics`: Returns topics as arrays of most important terms and
 term weights
@@ -721,7 +721,7 @@ sameModel = LDAModel.load(sc, "myModelPath")
 ## Streaming k-means
 
 When data arrive in a stream, we may want to estimate clusters dynamically,
-updating them as new data arrive. MLlib provides support for streaming k-means clustering,
+updating them as new data arrive. `spark.mllib` provides support for streaming k-means clustering,
 with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm
 uses a generalization of the mini-batch k-means update rule. For each batch of data, we assign
 all points to their nearest cluster, compute new cluster centers, then update each cluster using:

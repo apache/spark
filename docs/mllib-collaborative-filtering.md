@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Collaborative Filtering - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering 
+title: Collaborative Filtering - spark.mllib
+displayTitle: Collaborative Filtering - spark.mllib
 ---
 
 * Table of contents
@@ -11,12 +11,12 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Collaborative Filtering
 
 [Collaborative filtering](http://en.wikipedia.org/wiki/Recommender_system#Collaborative_filtering)
 is commonly used for recommender systems.  These techniques aim to fill in the
-missing entries of a user-item association matrix.  MLlib currently supports
+missing entries of a user-item association matrix.  `spark.mllib` currently supports
 model-based collaborative filtering, in which users and products are described
 by a small set of latent factors that can be used to predict missing entries.
-MLlib uses the [alternating least squares
+`spark.mllib` uses the [alternating least squares
 (ALS)](http://dl.acm.org/citation.cfm?id=1608614)
-algorithm to learn these latent factors. The implementation in MLlib has the
+algorithm to learn these latent factors. The implementation in `spark.mllib` has the
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
@@ -34,7 +34,7 @@ The standard approach to matrix factorization based collaborative filtering trea
 the entries in the user-item matrix as *explicit* preferences given by the user to the item.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
-clicks, purchases, likes, shares etc.). The approach used in MLlib to deal with such data is taken
+clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
 from
 [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
 Essentially instead of trying to model the matrix of ratings directly, this approach treats the data
@@ -119,4 +119,4 @@ a dependency.
 ## Tutorial
 
 The [training exercises](https://databricks-training.s3.amazonaws.com/index.html) from the Spark Summit 2014 include a hands-on tutorial for
-[personalized movie recommendation with MLlib](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).
+[personalized movie recommendation with `spark.mllib`](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).
