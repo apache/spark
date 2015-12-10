@@ -42,7 +42,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val conf = new SparkConf()
       .set("spark.memory.fraction", "1")
       .set("spark.testing.memory", maxOnHeapExecutionMemory.toString)
-      .set("spark.memory.offHeapSize", maxOffHeapExecutionMemory.toString)
+      .set("spark.memory.offHeap.size", maxOffHeapExecutionMemory.toString)
       .set("spark.memory.storageFraction", storageFraction.toString)
     UnifiedMemoryManager(conf, numCores = 1)
   }
