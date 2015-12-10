@@ -1054,14 +1054,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.replClassServer.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP class server to listen on.
-    This is only relevant for the Spark shell.
-  </td>
-</tr>
-<tr>
   <td><code>spark.rpc.numRetries</code></td>
   <td>3</td>
   <td>

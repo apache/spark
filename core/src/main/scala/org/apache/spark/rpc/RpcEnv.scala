@@ -179,6 +179,24 @@ private[spark] trait RpcEnvFileServer {
    */
   def addJar(file: File): String
 
+  /**
+   * Adds a local directory to be served via this file server.
+   *
+   * @param baseUri Leading URI path (files can be retrieved by appending their relative
+   *                path to this base URI). This cannot be "files" nor "jars".
+   * @param path Path to the local directory.
+   * @return URI for the root of the directory in the file server.
+   */
+  def addDirectory(baseUri: String, path: File): String
+
+  /** Validates and normalizes the base URI for directories. */
+  protected def validateDirectoryUri(baseUri: String): String = {
+    val fixedBaseUri = "/" + baseUri.stripPrefix("/").stripSuffix("/")
+    require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
+      "Directory URI cannot be /files nor /jars.")
+    fixedBaseUri
+  }
+
 }
 
 private[spark] case class RpcEnvConfig(
