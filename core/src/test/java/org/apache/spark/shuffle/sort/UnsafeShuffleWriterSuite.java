@@ -108,7 +108,7 @@ public class UnsafeShuffleWriterSuite {
     spillFilesCreated.clear();
     conf = new SparkConf()
       .set("spark.buffer.pageSize", "1m")
-      .set("spark.memory.useOffHeap", "false");
+      .set("spark.memory.offHeap.enabled", "false");
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
     taskMemoryManager =  new TaskMemoryManager(memoryManager, 0);

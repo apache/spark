@@ -334,7 +334,7 @@ private[joins] final class UnsafeHashedRelation(
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.memory.useOffHeap", "false"),
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MaxValue,
         Long.MaxValue,
         1),

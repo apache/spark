@@ -61,7 +61,7 @@ class UnsafeFixedWidthAggregationMapSuite
     }
 
     test(name) {
-      val conf = new SparkConf().set("spark.memory.useOffHeap", "false")
+      val conf = new SparkConf().set("spark.memory.offHeap.enabled", "false")
       memoryManager = new TestMemoryManager(conf)
       taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
 

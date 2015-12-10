@@ -29,7 +29,7 @@ public class TaskMemoryManagerSuite {
   public void leakedPageMemoryIsDetected() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.memory.useOffHeap", "false"),
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
         Long.MAX_VALUE,
         Long.MAX_VALUE,
         1),
@@ -42,8 +42,8 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
     final SparkConf conf = new SparkConf()
-      .set("spark.memory.useOffHeap", "true")
-      .set("spark.memory.offHeapSize", "1000");
+      .set("spark.memory.offHeap.enabled", "true")
+      .set("spark.memory.offHeap.size", "1000");
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
@@ -57,7 +57,7 @@ public class TaskMemoryManagerSuite {
   @Test
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.useOffHeap", "false")), 0);
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
@@ -109,10 +109,10 @@ public class TaskMemoryManagerSuite {
   @Test
   public void offHeapConfigurationBackwardsCompatibility() {
     // Tests backwards-compatibility with the old `spark.unsafe.offHeap` configuration, which
-    // was deprecated in Spark 1.6 and replaced by `spark.memory.useOffHeap` (see SPARK-12251).
+    // was deprecated in Spark 1.6 and replaced by `spark.memory.offHeap.enabled` (see SPARK-12251).
     final SparkConf conf = new SparkConf()
       .set("spark.unsafe.offHeap", "true")
-      .set("spark.memory.offHeapSize", "1000");
+      .set("spark.memory.offHeap.size", "1000");
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     assert(manager.tungstenMemoryMode == MemoryMode.OFF_HEAP);
   }

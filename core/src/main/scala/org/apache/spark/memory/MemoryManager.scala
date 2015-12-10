@@ -50,7 +50,7 @@ private[spark] abstract class MemoryManager(
 
   storageMemoryPool.incrementPoolSize(storageMemory)
   onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
-  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeapSize", 0))
+  offHeapExecutionMemoryPool.incrementPoolSize(conf.getSizeAsBytes("spark.memory.offHeap.size", 0))
 
   /**
    * Total available memory for storage, in bytes. This amount can vary over time, depending on
@@ -182,9 +182,9 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.memory.useOffHeap", false)) {
-      require(conf.getSizeAsBytes("spark.memory.offHeapSize", 0) > 0,
-        "spark.memory.offHeapSize must be > 0 when spark.memory.useOffHeap == true")
+    if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
+      require(conf.getSizeAsBytes("spark.memory.offHeap.size", 0) > 0,
+        "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true")
       MemoryMode.OFF_HEAP
     } else {
       MemoryMode.ON_HEAP
