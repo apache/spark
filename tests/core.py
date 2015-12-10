@@ -408,9 +408,9 @@ class CoreTest(unittest.TestCase):
         class Blah(LoggingMixin):
             pass
 
-        assert Blah().logger.name == "Blah"
-        assert SequentialExecutor().logger.name == "SequentialExecutor"
-        assert LocalExecutor().logger.name == "LocalExecutor"
+        assert Blah().logger.name == "tests.core.Blah"
+        assert SequentialExecutor().logger.name == "airflow.executors.sequential_executor.SequentialExecutor"
+        assert LocalExecutor().logger.name == "airflow.executors.local_executor.LocalExecutor"
 
     def test_round_time(self):
 

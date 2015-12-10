@@ -761,6 +761,6 @@ class LoggingMixin(object):
         try:
             return self._logger
         except AttributeError:
-            self._logger = logging.getLogger(self.__class__.__name__)
-	    return self._logger
+            self._logger = logging.root.getChild(self.__class__.__module__ + '.' +self.__class__.__name__)
+            return self._logger
 
