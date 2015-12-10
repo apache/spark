@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Classification and regression - spark.ml
-displayTitle: Classification and regression in spark.ml
+displayTitle: Classification and regression - spark.ml
 ---
 
 
@@ -30,7 +30,7 @@ displayTitle: Classification and regression in spark.ml
 In `spark.ml`, we implement popular linear methods such as logistic
 regression and linear least squares with $L_1$ or $L_2$ regularization.
 Refer to [the linear methods in mllib](mllib-linear-methods.html) for
-details about implementation and tuning.  We also include a Dataframe API for [Elastic
+details about implementation and tuning.  We also include a DataFrame API for [Elastic
 net](http://en.wikipedia.org/wiki/Elastic_net_regularization), a hybrid
 of $L_1$ and $L_2$ regularization proposed in [Zou et al, Regularization
 and variable selection via the elastic
@@ -86,7 +86,7 @@ $\alpha$ and `regParam` corresponds to $\lambda$.
 
 The `spark.ml` implementation of logistic regression also supports
 extracting a summary of the model over the training set. Note that the
-predictions and metrics which are stored as `Dataframe` in
+predictions and metrics which are stored as `DataFrame` in
 `BinaryLogisticRegressionSummary` are annotated `@transient` and hence
 only available on the driver.
 
@@ -611,15 +611,15 @@ All output columns are optional; to exclude an output column, set its correspond
 
 # Tree Ensembles
 
-The Dataframe API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
+The DataFrame API supports two major tree ensemble algorithms: [Random Forests](http://en.wikipedia.org/wiki/Random_forest) and [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting).
 Both use [`spark.ml` decision trees](ml-classification-regression.html#decision-trees) as their base models.
 
 Users can find more information about ensemble algorithms in the [MLlib Ensemble guide](mllib-ensembles.html).  
-In this section, we demonstrate the Dataframe API for ensembles.
+In this section, we demonstrate the DataFrame API for ensembles.
 
 The main differences between this API and the [original MLlib ensembles API](mllib-ensembles.html) are:
 
-* support for Dataframes and ML Pipelines
+* support for DataFrames and ML Pipelines
 * separation of classification vs. regression
 * use of DataFrame metadata to distinguish continuous and categorical features
 * more functionality for random forests: estimates of feature importance, as well as the predicted probability of each class (a.k.a. class conditional probabilities) for classification.
