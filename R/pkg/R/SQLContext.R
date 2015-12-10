@@ -256,18 +256,30 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   }
 }
 
-
 #' Create a DataFrame from a Parquet file.
 #'
 #' Loads a Parquet file, returning the result as a DataFrame.
 #'
 #' @param sqlContext SQLContext to use
-#' @param ... Path(s) of parquet file(s) to read.
+#' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return DataFrame
+#' @rdname read.parquet
+#' @name read.parquet
 #' @export
+read.parquet <- function(sqlContext, path) {
+  # Allow the user to have a more flexible definiton of the text file path
+  paths <- as.list(suppressWarnings(normalizePath(path)))
+  read <- callJMethod(sqlContext, "read")
+  sdf <- callJMethod(read, "parquet", paths)
+  dataFrame(sdf)
+}
 
+#' @rdname read.parquet
+#' @name parquetFile
+#' @export
 # TODO: Implement saveasParquetFile and write examples for both
 parquetFile <- function(sqlContext, ...) {
+  .Deprecated("read.parquet")
   # Allow the user to have a more flexible definiton of the text file path
   paths <- lapply(list(...), function(x) suppressWarnings(normalizePath(x)))
   sdf <- callJMethod(sqlContext, "parquetFile", paths)

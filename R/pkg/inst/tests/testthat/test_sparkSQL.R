@@ -1420,22 +1420,25 @@ test_that("mutate(), transform(), rename() and names()", {
   detach(airquality)
 })
 
-test_that("write.df() on DataFrame and works with parquetFile", {
+test_that("write.df() on DataFrame and works with read.parquet", {
   df <- jsonFile(sqlContext, jsonPath)
   write.df(df, parquetPath, "parquet", mode="overwrite")
-  parquetDF <- parquetFile(sqlContext, parquetPath)
+  parquetDF <- read.parquet(sqlContext, parquetPath)
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(df), count(parquetDF))
 })
 
-test_that("parquetFile works with multiple input paths", {
+test_that("read.parquet()/parquetFile() works with multiple input paths", {
   df <- jsonFile(sqlContext, jsonPath)
   write.df(df, parquetPath, "parquet", mode="overwrite")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
   write.df(df, parquetPath2, "parquet", mode="overwrite")
-  parquetDF <- parquetFile(sqlContext, parquetPath, parquetPath2)
+  parquetDF <- read.parquet(sqlContext, c(parquetPath, parquetPath2))
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
+  parquetDF2 <- suppressWarnings(parquetFile(sqlContext, parquetPath, parquetPath2))
+  expect_is(parquetDF2, "DataFrame")
+  expect_equal(count(parquetDF2), count(df) * 2)
 
   # Test if varargs works with variables
   saveMode <- "overwrite"
