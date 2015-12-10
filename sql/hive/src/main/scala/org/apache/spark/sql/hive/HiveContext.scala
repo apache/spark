@@ -197,6 +197,9 @@ class HiveContext private[hive](
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
 
+  @transient
+  protected[hive] lazy val overridenExecutionHiveConfiguration = newTemporaryConfiguration()
+
   /**
    * The copy of the hive client that is used for execution.  Currently this must always be
    * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
@@ -212,7 +215,7 @@ class HiveContext private[hive](
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       execJars = Seq(),
-      config = newTemporaryConfiguration(),
+      config = overridenExecutionHiveConfiguration,
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
     loader.createClient().asInstanceOf[ClientWrapper]
