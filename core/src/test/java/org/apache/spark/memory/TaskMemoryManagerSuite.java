@@ -41,8 +41,10 @@ public class TaskMemoryManagerSuite {
 
   @Test
   public void encodePageNumberAndOffsetOffHeap() {
-    final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.useOffHeap", "true")), 0);
+    final SparkConf conf = new SparkConf()
+      .set("spark.memory.useOffHeap", "true")
+      .set("spark.memory.offHeapSize", "1000");
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
@@ -108,8 +110,10 @@ public class TaskMemoryManagerSuite {
   public void offHeapConfigurationBackwardsCompatibility() {
     // Tests backwards-compatibility with the old `spark.unsafe.offHeap` configuration, which
     // was deprecated in Spark 1.6 and replaced by `spark.memory.useOffHeap` (see SPARK-12251).
-    final TaskMemoryManager manager = new TaskMemoryManager(
-      new TestMemoryManager(new SparkConf().set("spark.memory.useOffHeap", "true")), 0);
+    final SparkConf conf = new SparkConf()
+      .set("spark.unsafe.offHeap", "true")
+      .set("spark.memory.offHeapSize", "1000");
+    final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     assert(manager.tungstenMemoryMode == MemoryMode.OFF_HEAP);
   }
 

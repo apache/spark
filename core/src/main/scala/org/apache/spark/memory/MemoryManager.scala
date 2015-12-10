@@ -183,6 +183,8 @@ private[spark] abstract class MemoryManager(
    */
   final val tungstenMemoryMode: MemoryMode = {
     if (conf.getBoolean("spark.memory.useOffHeap", false)) {
+      require(conf.getSizeAsBytes("spark.memory.offHeapSize", 0) > 0,
+        "spark.memory.offHeapSize must be > 0 when spark.memory.useOffHeap == true")
       MemoryMode.OFF_HEAP
     } else {
       MemoryMode.ON_HEAP
