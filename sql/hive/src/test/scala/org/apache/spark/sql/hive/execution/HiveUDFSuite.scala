@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{PrintWriter, File, DataInput, DataOutput}
+import java.sql.Timestamp
 import java.util.{ArrayList, Arrays, Properties}
 
 import org.apache.hadoop.conf.Configuration
@@ -348,6 +349,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
 
     sqlContext.dropTempTable("testUDF")
+  }
+
+  test("SPARK-12258 Timestamp UDF and Null value") {
+    hiveContext.runSqlHive("CREATE TABLE ts_test (ts TIMESTAMP) STORED AS TEXTFILE")
+    hiveContext.runSqlHive("INSERT INTO TABLE ts_test VALUES(Null)")
+    hiveContext.udf.register("dummy",
+      (ts: Timestamp) => ts
+    )
+    val result = hiveContext.sql("SELECT dummy(ts) FROM ts_test").collect().mkString("\n")
+    assertResult("[null]")(result)
   }
 
   test("SPARK-11522 select input_file_name from non-parquet table"){
