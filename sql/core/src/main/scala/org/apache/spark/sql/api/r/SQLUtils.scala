@@ -78,7 +78,7 @@ private[r] object SQLUtils {
         val structFields = fields.map { field =>
           field match {
             case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
-              createStructField(fieldName, fieldType, true)
+              createStructField(fieldName, fieldType, nullable = true)
 
             case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
           }

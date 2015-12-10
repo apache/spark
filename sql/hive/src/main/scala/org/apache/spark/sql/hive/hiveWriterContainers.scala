@@ -55,7 +55,7 @@ private[hive] class SparkHiveWriterContainer(
   // Add table properties from storage handler to jobConf, so any custom storage
   // handler settings can be set to jobConf
   if (tableDesc != null) {
-    HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, false)
+    HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, input = false)
     Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
   }
   protected val conf = new SerializableJobConf(jobConf)

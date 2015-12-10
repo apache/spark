@@ -172,7 +172,8 @@ object JavaTypeInference {
       .getOrElse(UnresolvedAttribute(part))
 
     /** Returns the current path or `BoundReference`. */
-    def getPath: Expression = path.getOrElse(BoundReference(0, inferDataType(typeToken)._1, true))
+    def getPath: Expression = path.getOrElse(BoundReference(0, inferDataType(typeToken)._1,
+      nullable = true))
 
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath

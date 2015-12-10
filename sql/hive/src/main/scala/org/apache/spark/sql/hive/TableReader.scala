@@ -320,7 +320,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
     FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
-      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, true)
+      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, input = true)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")

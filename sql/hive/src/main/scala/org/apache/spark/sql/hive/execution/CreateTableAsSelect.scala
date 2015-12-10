@@ -86,7 +86,8 @@ case class CreateTableAsSelect(
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
+      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, overwrite = true,
+        ifNotExists = false)).toRdd
     }
 
     Seq.empty[Row]

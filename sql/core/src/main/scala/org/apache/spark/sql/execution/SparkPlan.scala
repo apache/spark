@@ -127,7 +127,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       assert(!hasUnsafeInputs || canProcessUnsafeRows,
         "Operator will receive unsafe rows as input but cannot process unsafe rows")
     }
-    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+    RDDOperationScope.withScope(sparkContext, nodeName, allowNesting = false,
+      ignoreParent = true) {
       prepare()
       doExecute()
     }

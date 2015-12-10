@@ -78,8 +78,8 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   private def keyValueOutput: Seq[Attribute] = {
     val schema = StructType(
-      StructField("key", StringType, false) ::
-        StructField("value", StringType, false) :: Nil)
+      StructField("key", StringType, nullable = false) ::
+        StructField("value", StringType, nullable = false) :: Nil)
     schema.toAttributes
   }
 
@@ -184,9 +184,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
         }
       }
       val schema = StructType(
-        StructField("key", StringType, false) ::
-          StructField("default", StringType, false) ::
-          StructField("meaning", StringType, false) :: Nil)
+        StructField("key", StringType, nullable = false) ::
+          StructField("default", StringType, nullable = false) ::
+          StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
     // Queries the deprecated "mapred.reduce.tasks" property.
@@ -325,8 +325,8 @@ case class ShowTablesCommand(databaseName: Option[String]) extends RunnableComma
   // The result of SHOW TABLES has two columns, tableName and isTemporary.
   override val output: Seq[Attribute] = {
     val schema = StructType(
-      StructField("tableName", StringType, false) ::
-      StructField("isTemporary", BooleanType, false) :: Nil)
+      StructField("tableName", StringType, nullable = false) ::
+      StructField("isTemporary", BooleanType, nullable = false) :: Nil)
 
     schema.toAttributes
   }

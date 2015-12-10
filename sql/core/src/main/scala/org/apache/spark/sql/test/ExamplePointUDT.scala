@@ -33,7 +33,7 @@ private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializab
  */
 private[sql] class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
-  override def sqlType: DataType = ArrayType(DoubleType, false)
+  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 

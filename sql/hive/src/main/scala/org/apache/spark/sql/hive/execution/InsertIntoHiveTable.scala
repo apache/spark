@@ -180,7 +180,8 @@ case class InsertIntoHiveTable(
 
     // When speculation is on and output committer class name contains "Direct", we should warn
     // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation", false)
+    val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation",
+      defaultValue = false)
     val outputCommitterClass = jobConf.get("mapred.output.committer.class", "")
     if (speculationEnabled && outputCommitterClass.contains("Direct")) {
       val warningMessage =

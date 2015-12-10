@@ -81,7 +81,7 @@ case class AddJar(path: String) extends RunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(
-      StructField("result", IntegerType, false) :: Nil)
+      StructField("result", IntegerType, nullable = false) :: Nil)
     schema.toAttributes
   }
 

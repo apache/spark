@@ -143,7 +143,7 @@ object ScalaReflection extends ScalaReflection {
         walkedTypePath: Seq[String]): Expression = {
       val newPath = path
         .map(p => GetStructField(p, ordinal))
-        .getOrElse(BoundReference(ordinal, dataType, false))
+        .getOrElse(BoundReference(ordinal, dataType, nullable = false))
       upCastToExpectedType(newPath, dataType, walkedTypePath)
     }
 
@@ -153,7 +153,8 @@ object ScalaReflection extends ScalaReflection {
       if (path.isDefined) {
         path.get
       } else {
-        upCastToExpectedType(BoundReference(0, dataType, true), dataType, walkedTypePath)
+        upCastToExpectedType(BoundReference(0, dataType, nullable = true), dataType,
+          walkedTypePath)
       }
     }
 

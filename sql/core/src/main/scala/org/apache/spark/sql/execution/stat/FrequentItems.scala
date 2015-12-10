@@ -118,7 +118,7 @@ private[sql] object FrequentItems extends Logging {
     val resultRow = Row(justItems : _*)
     // append frequent Items to the column name for easy debugging
     val outputCols = colInfo.map { v =>
-      StructField(v._1 + "_freqItems", ArrayType(v._2, false))
+      StructField(v._1 + "_freqItems", ArrayType(v._2, containsNull = false))
     }
     val schema = StructType(outputCols).toAttributes
     new DataFrame(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))

@@ -147,7 +147,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
 
   protected lazy val insert: Parser[LogicalPlan] =
     INSERT ~> (OVERWRITE ^^^ true | INTO ^^^ false) ~ (TABLE ~> relation) ~ select ^^ {
-      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o, false)
+      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o,
+        ifNotExists = false)
     }
 
   protected lazy val cte: Parser[LogicalPlan] =
@@ -198,8 +199,8 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
     )
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
-    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
-    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, false, l) }
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, global = true, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, global = false, l) }
     )
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
