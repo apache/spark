@@ -1095,8 +1095,10 @@ class Analyzer(
             // TODO: skip null handling for not-nullable primitive inputs after we can completely
             // trust the `nullable` information.
             // .filter { case (cls, expr) => cls.isPrimitive && expr.nullable }
-            .filter { case (cls, _) => cls.isPrimitive || cls == classOf[java.sql.Timestamp] ||
-              cls == classOf[java.sql.Date] || cls == classOf[java.math.BigDecimal] }
+            .filter { case (cls, _) =>
+              cls.isPrimitive ||
+                cls == classOf[java.sql.Timestamp] ||
+                  cls == classOf[java.sql.Date] }
             .map { case (_, expr) => IsNull(expr) }
             .reduceLeftOption[Expression]((e1, e2) => Or(e1, e2))
           inputsNullCheck.map(If(_, Literal.create(null, udf.dataType), udf)).getOrElse(udf)
