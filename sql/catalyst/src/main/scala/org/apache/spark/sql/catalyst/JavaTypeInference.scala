@@ -230,25 +230,23 @@ object JavaTypeInference {
         primitiveMethod.map { method =>
           Invoke(getPath, method, ObjectType(c))
         }.getOrElse {
-          val loopVar = LoopVar(inferDataType(elementType)._1)
           Invoke(
             MapObjects(
-              loopVar,
-              constructorFor(typeToken.getComponentType, Some(loopVar)),
-              getPath),
+              p => constructorFor(typeToken.getComponentType, Some(p)),
+              getPath,
+              inferDataType(elementType)._1),
             "array",
             ObjectType(c))
         }
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        val loopVar = LoopVar(inferDataType(et)._1)
         val array =
           Invoke(
             MapObjects(
-              loopVar,
-              constructorFor(et, Some(loopVar)),
-              getPath),
+              p => constructorFor(et, Some(p)),
+              getPath,
+              inferDataType(et)._1),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -259,23 +257,21 @@ object JavaTypeInference {
         val keyDataType = inferDataType(keyType)._1
         val valueDataType = inferDataType(valueType)._1
 
-        val keyLoopVar = LoopVar(keyDataType)
         val keyData =
           Invoke(
             MapObjects(
-              keyLoopVar,
-              constructorFor(keyType, Some(keyLoopVar)),
-              Invoke(getPath, "keyArray", ArrayType(keyDataType))),
+              p => constructorFor(keyType, Some(p)),
+              Invoke(getPath, "keyArray", ArrayType(keyDataType)),
+              keyDataType),
             "array",
             ObjectType(classOf[Array[Any]]))
 
-        val valueLoopVar = LoopVar(valueDataType)
         val valueData =
           Invoke(
             MapObjects(
-              valueLoopVar,
-              constructorFor(valueType, Some(valueLoopVar)),
-              Invoke(getPath, "valueArray", ArrayType(valueDataType))),
+              p => constructorFor(valueType, Some(p)),
+              Invoke(getPath, "valueArray", ArrayType(valueDataType)),
+              valueDataType),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -328,8 +324,7 @@ object JavaTypeInference {
           input :: Nil,
           dataType = ArrayType(dataType, nullable))
       } else {
-        val loopVar = LoopVar(ObjectType(elementType.getRawType))
-        MapObjects(loopVar, extractorFor(loopVar, elementType), input)
+        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))
       }
     }
 

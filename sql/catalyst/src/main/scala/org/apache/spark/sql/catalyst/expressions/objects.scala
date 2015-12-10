@@ -323,9 +323,10 @@ case class WrapOption(child: Expression)
 }
 
 /**
- * A place holder for the loop variable used in [[MapObjects]].
+ * A place holder for the loop variable used in [[MapObjects]].  This should never be constructed
+ * manually, but will instead be passed into the provided lambda function.
  */
-case class LoopVar(value: String, isNull: String, dataType: DataType) extends LeafExpression
+case class LambdaVariable(value: String, isNull: String, dataType: DataType) extends LeafExpression
   with Unevaluable {
 
   override def nullable: Boolean = true
@@ -335,13 +336,17 @@ case class LoopVar(value: String, isNull: String, dataType: DataType) extends Le
   }
 }
 
-object LoopVar {
+object MapObjects {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
-  def apply(dataType: DataType): LoopVar = {
+  def apply(
+      function: Expression => Expression,
+      inputData: Expression,
+      elementType: DataType): MapObjects = {
     val loopValue = "MapObjects_loopValue" + curId.getAndIncrement()
     val loopIsNull = "MapObjects_loopIsNull" + curId.getAndIncrement()
-    LoopVar(loopValue, loopIsNull, dataType)
+    val loopVar = LambdaVariable(loopValue, loopIsNull, elementType)
+    MapObjects(loopVar, function(loopVar), inputData)
   }
 }
 
@@ -360,7 +365,7 @@ object LoopVar {
  * @param inputData An expression that when evaluted returns a collection object.
  */
 case class MapObjects(
-    loopVar: LoopVar,
+    loopVar: LambdaVariable,
     lambdaFunction: Expression,
     inputData: Expression) extends Expression {
 

@@ -93,9 +93,7 @@ object RowEncoder {
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ =>
-        val loopVar = LoopVar(externalDataTypeFor(et))
-        MapObjects(loopVar, extractorsFor(loopVar, et), inputObject)
+      case _ => MapObjects(extractorsFor(_, et), inputObject, externalDataTypeFor(et))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -193,10 +191,9 @@ object RowEncoder {
       Invoke(input, "toString", ObjectType(classOf[String]))
 
     case ArrayType(et, nullable) =>
-      val loopVar = LoopVar(et)
       val arrayData =
         Invoke(
-          MapObjects(loopVar, constructorFor(loopVar), input),
+          MapObjects(constructorFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]))
       StaticInvoke(
