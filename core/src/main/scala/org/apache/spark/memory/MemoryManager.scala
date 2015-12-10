@@ -77,9 +77,7 @@ private[spark] abstract class MemoryManager(
   def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
-  }
+      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -109,12 +107,7 @@ private[spark] abstract class MemoryManager(
   def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long = synchronized {
-    memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId)
-    }
-  }
+      memoryMode: MemoryMode): Long
 
   /**
    * Release numBytes of execution memory belonging to the given task.
