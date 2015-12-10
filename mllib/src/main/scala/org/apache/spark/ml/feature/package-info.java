@@ -23,7 +23,7 @@
  * features into more suitable forms for model fitting.
  * Most feature transformers are implemented as {@link org.apache.spark.ml.Transformer}s, which
  * transforms one {@link org.apache.spark.sql.DataFrame} into another, e.g.,
- * {@link org.apache.spark.feature.HashingTF}.
+ * {@link org.apache.spark.ml.feature.HashingTF}.
  * Some feature transformers are implemented as {@link org.apache.spark.ml.Estimator}}s, because the
  * transformation requires some aggregated information of the dataset, e.g., document
  * frequencies in {@link org.apache.spark.ml.feature.IDF}.
