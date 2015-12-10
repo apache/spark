@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types.DoubleType
 
 class JoinFilterSuite extends PlanTest {
 
@@ -61,6 +62,37 @@ class JoinFilterSuite extends PlanTest {
         Filter(IsNotNull("x.b".attr), x).join(
         Filter(IsNotNull("y.b".attr), y), Inner, Some("x.b".attr === "y.b".attr)).analyze
 
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins infer is NOT NULL one key") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = x.join(y).
+      where("x.b".attr + 1 === "y.b".attr)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = x.join(
+        Filter(IsNotNull("y.b".attr), y), Inner, Some("x.b".attr + 1 === "y.b".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("joins infer is NOT NULL for cast") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+
+    val originalQuery = x.join(y).
+      where(Cast("x.b".attr, DoubleType) === "y.b".attr)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      Filter(IsNotNull("x.b".attr), x).join(
+        Filter(IsNotNull("y.b".attr), y), Inner,
+            Some(Cast("x.b".attr, DoubleType) === Cast("y.b".attr, DoubleType))).analyze
     comparePlans(optimized, correctAnswer)
   }
 

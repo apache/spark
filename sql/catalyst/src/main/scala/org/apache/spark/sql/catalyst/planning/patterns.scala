@@ -203,9 +203,20 @@ object ExtractNonNullableAttributes extends Logging with PredicateHelper {
           result.add(b)
         }
       }
+      case BinaryComparison(Cast(a: Attribute, _), Cast(b: Attribute, _)) => {
+        if (!e.isInstanceOf[EqualNullSafe]) {
+          result.add(a)
+          result.add(b)
+        }
+      }
       case BinaryComparison(a: Attribute, _) => if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
       case BinaryComparison(_, a: Attribute) => if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
+      case BinaryComparison(Cast(a: Attribute, _), _) =>
+        if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
+      case BinaryComparison(_, Cast(a: Attribute, _)) =>
+        if (!e.isInstanceOf[EqualNullSafe]) result.add(a)
       case Not(child) => extract(child)
+      case _ =>
     }
     predicates.foreach { extract(_) }
     result.toSet
