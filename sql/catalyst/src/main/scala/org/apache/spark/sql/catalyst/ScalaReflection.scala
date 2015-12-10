@@ -268,7 +268,7 @@ object ScalaReflection extends ScalaReflection {
             MapObjects(
               p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
-              schemaFor(elementType).dataType),
+              schemaFor(elementType).dataType)(),
             "array",
             arrayClassFor(elementType))
         }
@@ -282,7 +282,7 @@ object ScalaReflection extends ScalaReflection {
             MapObjects(
               p => constructorFor(elementType, Some(p), newTypePath),
               getPath,
-              schemaFor(elementType).dataType),
+              schemaFor(elementType).dataType)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -301,7 +301,7 @@ object ScalaReflection extends ScalaReflection {
             MapObjects(
               p => constructorFor(keyType, Some(p), walkedTypePath),
               Invoke(getPath, "keyArray", ArrayType(schemaFor(keyType).dataType)),
-              schemaFor(keyType).dataType),
+              schemaFor(keyType).dataType)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -310,7 +310,7 @@ object ScalaReflection extends ScalaReflection {
             MapObjects(
               p => constructorFor(valueType, Some(p), walkedTypePath),
               Invoke(getPath, "valueArray", ArrayType(schemaFor(valueType).dataType)),
-              schemaFor(valueType).dataType),
+              schemaFor(valueType).dataType)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -418,7 +418,7 @@ object ScalaReflection extends ScalaReflection {
         // to trigger the type check.
         extractorFor(inputObject, elementType, newPath)
 
-        MapObjects(extractorFor(_, elementType, newPath), input, externalDataType)
+        MapObjects(extractorFor(_, elementType, newPath), input, externalDataType)()
       }
     }
 

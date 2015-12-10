@@ -234,7 +234,7 @@ object JavaTypeInference {
             MapObjects(
               p => constructorFor(typeToken.getComponentType, Some(p)),
               getPath,
-              inferDataType(elementType)._1),
+              inferDataType(elementType)._1)(),
             "array",
             ObjectType(c))
         }
@@ -246,7 +246,7 @@ object JavaTypeInference {
             MapObjects(
               p => constructorFor(et, Some(p)),
               getPath,
-              inferDataType(et)._1),
+              inferDataType(et)._1)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -262,7 +262,7 @@ object JavaTypeInference {
             MapObjects(
               p => constructorFor(keyType, Some(p)),
               Invoke(getPath, "keyArray", ArrayType(keyDataType)),
-              keyDataType),
+              keyDataType)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -271,7 +271,7 @@ object JavaTypeInference {
             MapObjects(
               p => constructorFor(valueType, Some(p)),
               Invoke(getPath, "valueArray", ArrayType(valueDataType)),
-              valueDataType),
+              valueDataType)(),
             "array",
             ObjectType(classOf[Array[Any]]))
 
@@ -324,7 +324,7 @@ object JavaTypeInference {
           input :: Nil,
           dataType = ArrayType(dataType, nullable))
       } else {
-        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))
+        MapObjects(extractorFor(_, elementType), input, ObjectType(elementType.getRawType))()
       }
     }
 

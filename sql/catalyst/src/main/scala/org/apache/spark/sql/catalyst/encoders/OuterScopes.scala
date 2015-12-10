@@ -28,7 +28,7 @@ object OuterScopes {
 
   /**
    * Adds a new outer scope to this context that can be used when instantiating an `inner class`
-   * during deserialialization. Inner classes are created when a case class is defined in the
+   * during deserialization. Inner classes are created when a case class is defined in the
    * Spark REPL and registering the outer scope that this class was defined in allows us to create
    * new instances on the spark executors.  In normal use, users should not need to call this
    * function.
