@@ -58,6 +58,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.ml.classification.LogisticRegressionSummary.featuresCol")
       ) ++ Seq(
+        // SPARK-11530
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this")
+      ) ++ Seq(
         // SPARK-10381 Fix types / units in private AskPermissionToCommitOutput RPC message.
         // This class is marked as `private` but MiMa still seems to be confused by the change.
         ProblemFilters.exclude[MissingMethodProblem](
