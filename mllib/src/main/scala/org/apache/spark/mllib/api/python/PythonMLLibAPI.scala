@@ -133,7 +133,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setK(k)
       .setMaxIterations(maxIterations)
       .setMinDivisibleClusterSize(minDivisibleClusterSize)
-      .setSeed(seed).run(data)
+      .setSeed(seed)
+      .run(data)
   }
 
   /**

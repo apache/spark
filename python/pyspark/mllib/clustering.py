@@ -67,28 +67,23 @@ class BisectingKMeansModel(JavaModelWrapper):
     True
     >>> model.k
     2
-
-    .. versionadded:: 1.6.0
     """
 
     @property
-    @since('1.6.0')
     def clusterCenters(self):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self.call("clusterCenters")]
 
     @property
-    @since('1.6.0')
     def k(self):
         """Get the number of clusters"""
         return self.call("k")
 
-    @since('1.6.0')
     def predict(self, x):
         """
         Find the cluster to which x belongs in this model.
 
-        :param x: Either the point to determine the cluster for or an RDD of points to determine 
+        :param x: Either the point to determine the cluster for or an RDD of points to determine
         the clusters for.
         """
         if isinstance(x, RDD):
@@ -97,7 +92,6 @@ class BisectingKMeansModel(JavaModelWrapper):
         x = _convert_to_vector(x)
         return self.call("predict", x)
 
-    @since('1.6.0')
     def computeCost(self, point):
         """
         Return the Bisecting K-means cost (sum of squared distances of points to
@@ -122,16 +116,13 @@ class BisectingKMeans:
     Based on [[http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf
     Steinbach, Karypis, and Kumar, A comparison of document clustering techniques,
     KDD Workshop on Text Mining, 2000.]]
-
-    .. versionadded:: 1.6.0
     """
     def __init__(self):
         self.k = 4
         self.maxIterations = 20
         self.minDivisibleClusterSize = 1.0
-        self.seed = 42
+        self.seed = -1888008604  # classOf[BisectingKMeans].getName.##
 
-    @since('1.6.0')
     def setK(self, k):
         """
         Set the number of leaf clusters.
@@ -142,12 +133,10 @@ class BisectingKMeans:
         self.k = k
         return self
 
-    @since('1.6.0')
     def getK(self):
         """Return the desired number of leaf clusters."""
         return self.k
 
-    @since('1.6.0')
     def setMaxIterations(self, maxIterations):
         """
         Set the maximum number of iterations.
@@ -157,12 +146,10 @@ class BisectingKMeans:
         self.maxIterations = maxIterations
         return self
 
-    @since('1.6.0')
     def getMaxIterations(self):
         """Return the maximum number of iterations."""
         return self.maxIterations
 
-    @since('1.6.0')
     def setMinDivisibleClusterSize(self, minDivisibleClusterSize):
         """
         Set the minimum divisible cluster size.
@@ -173,27 +160,23 @@ class BisectingKMeans:
         self.minDivisibleClusterSize = minDivisibleClusterSize
         return self
 
-    @since('1.6.0')
     def getMinDivisibleClusterSize(self):
         """Return the min divisible cluster size."""
         return minDivisibleClusterSize
 
-    @since('1.6.0')
     def setSeed(self, seed):
         """
         Set the seed.
 
-        :param seed: a random seed (default: 42)
+        :param seed: a random seed (default: -1888008604)
         """
         self.seed = seed
         return self
 
-    @since('1.6.0')
     def getSeed(self):
         """Return the random seed used."""
         return self.seed
 
-    @since('1.6.0')
     def run(self, rdd):
         """
         Runs the bisecting k-means algorithm return the model.
