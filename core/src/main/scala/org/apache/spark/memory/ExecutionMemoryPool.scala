@@ -127,17 +127,12 @@ private[memory] class ExecutionMemoryPool(
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
       val toGrant = math.min(maxToGrant, memoryFree)
 
-      if (curMem < minMemoryPerTask) {
-        // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
-        // if we can't give it this much now, wait for other tasks to free up memory
-        // (this happens if older tasks allocated lots of memory before N grew)
-        if (memoryFree >= math.min(maxToGrant, minMemoryPerTask - curMem)) {
-          memoryForTask(taskAttemptId) += toGrant
-          return toGrant
-        } else {
-          logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
-          lock.wait()
-        }
+      // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
+      // if we can't give it this much now, wait for other tasks to free up memory
+      // (this happens if older tasks allocated lots of memory before N grew)
+      if (toGrant < numBytes && curMem + toGrant < minMemoryPerTask) {
+        logInfo(s"TID $taskAttemptId waiting for at least 1/2N of $poolName pool to be free")
+        lock.wait()
       } else {
         memoryForTask(taskAttemptId) += toGrant
         return toGrant
