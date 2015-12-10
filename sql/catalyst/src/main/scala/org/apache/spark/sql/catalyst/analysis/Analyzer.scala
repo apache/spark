@@ -224,10 +224,15 @@ class Analyzer(
           case other => Alias(other, other.toString)()
         }
 
-        // TODO: We need to use bitmasks to determine which grouping expressions need to be
-        // set as nullable. For example, if we have GROUPING SETS ((a,b), a), we do not need
-        // to change the nullability of a.
-        val attributeMap = groupByAliases.map(a => (a -> a.toAttribute.withNullability(true))).toMap
+        val nonNullBitmask = x.bitmasks.reduce(_ & _)
+
+        val attributeMap = groupByAliases.zipWithIndex.map { case (a, idx) =>
+          if ((nonNullBitmask & 1 << idx) == 0) {
+            (a -> a.toAttribute.withNullability(true))
+          } else {
+            (a -> a.toAttribute)
+          }
+        }.toMap
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map {
           // If an expression is an aggregate (contains a AggregateExpression) then we dont change
@@ -254,7 +259,7 @@ class Analyzer(
 
   object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Pivot if !p.childrenResolved => p
+      case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved) => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>

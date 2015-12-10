@@ -277,7 +277,7 @@ class CheckpointWriter(
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
-      logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
+      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)

@@ -70,7 +70,7 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 
 ## Migrating from Spark 1.1
 
-GraphX in Spark {{site.SPARK_VERSION}} contains a few user facing API changes:
+GraphX in Spark 1.2 contains a few user facing API changes:
 
 1. To improve performance we have introduced a new version of
 [`mapReduceTriplets`][Graph.mapReduceTriplets] called

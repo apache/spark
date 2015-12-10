@@ -1261,16 +1261,24 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   def drop(colName: String): DataFrame = {
+    drop(Seq(colName) : _*)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] with columns dropped.
+   * This is a no-op if schema doesn't contain column name(s).
+   * @group dfops
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
-    val shouldDrop = schema.exists(f => resolver(f.name, colName))
-    if (shouldDrop) {
-      val colsAfterDrop = schema.filter { field =>
-        val name = field.name
-        !resolver(name, colName)
-      }.map(f => Column(f.name))
-      select(colsAfterDrop : _*)
-    } else {
+    val remainingCols =
+      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+    if (remainingCols.size == this.schema.size) {
       this
+    } else {
+      this.select(remainingCols: _*)
     }
   }
 
@@ -1412,6 +1420,19 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def first(): Row = head()
+
+  /**
+   * Concise syntax for chaining custom transformations.
+   * {{{
+   *   def featurize(ds: DataFrame) = ...
+   *
+   *   df
+   *     .transform(featurize)
+   *     .transform(...)
+   * }}}
+   * @since 1.6.0
+   */
+  def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
    * Returns a new RDD by applying a function to all rows of this DataFrame.
