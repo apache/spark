@@ -2098,8 +2098,8 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     """
     .. note:: Experimental
 
-    # Chi-Squared feature selection, which selects categorical features to use for predicting a
-    # categorical label.
+    Chi-Squared feature selection, which selects categorical features to use for predicting a
+    categorical label.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame(
@@ -2146,7 +2146,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     def setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
                   labelCol="labels"):
         """
-        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,
+        setParams(self, numTopFeatures=50, featuresCol="features", outputCol=None,\
                   labelCol="labels")
         Sets params for this ChiSqSelector.
         """
