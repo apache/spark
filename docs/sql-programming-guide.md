@@ -2430,6 +2430,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Sampling
 * Explain
 * Partitioned tables including dynamic partition insertion
+  * Simply use the same syntax in Hive, after running `SET hive.exec.dynamic.partition.mode=nonstrict`
 * View
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
