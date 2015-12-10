@@ -58,7 +58,8 @@ object Utils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(aggregateAttributes)
+    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (usesTungstenAggregate) {
       TungstenAggregate(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,

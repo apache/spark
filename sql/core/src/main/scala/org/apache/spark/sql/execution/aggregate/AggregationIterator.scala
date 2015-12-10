@@ -49,7 +49,7 @@ abstract class AggregationIterator(
 
   require(
     aggregateExpressions.map(_.mode).distinct.length <= 2,
-    s"$aggregateExpressions are not supported becuase they have more than 2 distinct modes.")
+    s"$aggregateExpressions are not supported because they have more than 2 distinct modes.")
 
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
