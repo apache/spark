@@ -31,7 +31,7 @@ from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.sql.types import _parse_datatype_json_string
+from pyspark.sql.types import _parse_datatype_json_string, WrappedJStructType
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
@@ -187,7 +187,11 @@ class DataFrame(object):
         """
         if self._schema is None:
             try:
-                self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+                jschema = self._jdf.schema
+                if (False and jschema.fields.size < 10000):
+                    self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+                else:
+                    self._schema = WrappedJStructType(jschema)
             except AttributeError as e:
                 raise Exception(
                     "Unable to parse datatype from schema. %s" % e)

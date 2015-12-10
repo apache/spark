@@ -568,6 +568,81 @@ class StructType(DataType):
         return _create_row(self.names, values)
 
 
+class WrappedJStructType(StructType):
+    """Struct type, consisting of a list of :class:`StructField`.
+    This version wraps a Java object (for large > 100k elem schemas).
+
+    This is the data type representing a :class:`Row`.
+    .. note:: WARN: Spark Internal Use Only
+    """
+    def __init__(self, jstructtype=None):
+        self._jstructtype = jstructtype
+
+    @property
+    def fieldNames(self):
+        return self._jstructtype.fieldNames
+
+    @property
+    def fields(self):
+        return map(lambda x: StructField.fromJson(x.json()),
+                   self._jstructtype.fields)
+    
+    def simpleString(self):
+        return self._jstructtype.simpleString()
+
+    def __repr__(self):
+        return ("StructType(List(%s))" %
+                ",".join(str(field) for field in self.fields))
+
+    def jsonValue(self):
+        return self._jstructtype.jsonValue()
+
+    def needConversion(self):
+        # We need convert Row()/namedtuple into tuple()
+        return True
+
+    def needConversion(self):
+        # We need convert Row()/namedtuple into tuple()
+        return True
+
+    def toInternal(self, obj):
+        if obj is None:
+            return
+
+        if self._needSerializeAnyField:
+            if isinstance(obj, dict):
+                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+            elif isinstance(obj, (tuple, list)):
+                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+            else:
+                raise ValueError("Unexpected tuple %r with StructType" % obj)
+        else:
+            if isinstance(obj, dict):
+                return tuple(obj.get(n) for n in self.names)
+            elif isinstance(obj, (list, tuple)):
+                return tuple(obj)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                return tuple(d.get(n) for n in self.names)
+            else:
+                raise ValueError("Unexpected tuple %r with StructType" % obj)
+
+    def fromInternal(self, obj):
+        if obj is None:
+            return
+        if isinstance(obj, Row):
+            # it's already converted by pickler
+            return obj
+        if self._needSerializeAnyField:
+            values = [f.fromInternal(v) for f, v in zip(self.fields, obj)]
+        else:
+            values = obj
+        return _create_row(self.names, values)
+
+    
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
@@ -679,6 +754,7 @@ _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, Do
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
+
 
 
 def _parse_datatype_json_string(json_string):
