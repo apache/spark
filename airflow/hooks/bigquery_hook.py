@@ -2,7 +2,7 @@ import httplib2
 import logging
 import pandas
 
-from airflow.hooks.dbapi_hook import DbApiHook
+from airflow.hooks.base_hook import BaseHook
 from apiclient.discovery import build
 from oauth2client.client import SignedJwtAssertionCredentials
 from pandas.io.gbq import GbqConnector, _parse_data as gbq_parse_data
@@ -12,7 +12,7 @@ logging.getLogger("bigquery").setLevel(logging.INFO)
 
 BQ_SCOPE = 'https://www.googleapis.com/auth/bigquery'
 
-class BigQueryHook(DbApiHook):
+class BigQueryHook(BaseHook):
     """
     Interact with BigQuery. Connections must be defined with an extras JSON field containing:
 
@@ -24,7 +24,9 @@ class BigQueryHook(DbApiHook):
     """
 
     conn_name_attr = 'bigquery_conn_id'
-    default_conn_name = 'bigquery_default'
+
+    def __init__(self, bigquery_conn_id="bigquery_default"):
+        self.bigquery_conn_id = bigquery_conn_id
 
     def get_conn(self):
         """
