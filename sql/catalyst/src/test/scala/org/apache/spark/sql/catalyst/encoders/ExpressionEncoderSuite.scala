@@ -145,6 +145,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
+  encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
