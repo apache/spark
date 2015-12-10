@@ -192,7 +192,6 @@ private[spark] object YarnTimelineUtils extends Logging {
     }
     catch {
       case e: MatchError =>
-        log.warn(s"Failed to convert $event to JSON: $e")
         log.debug(s"Failed to convert $event to JSON: $e", e)
         None
     }
