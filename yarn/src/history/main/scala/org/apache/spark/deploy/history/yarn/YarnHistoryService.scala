@@ -785,6 +785,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private def postOneEntity(entity: TimelineEntity): Option[Exception] = {
     domainId.foreach(entity.setDomainId)
     val entityDescription = describeEntity(entity)
+    logInfo(s"About to POST entity ${entity.getEntityId} with ${entity.getEvents.size()} events" +
+        s" to timeline service $timelineWebappAddress")
     logDebug(s"About to POST $entityDescription")
     val timeContext = metrics.postOperationTimer.time()
     metrics.entityPostAttempts.inc()
@@ -1010,7 +1012,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         addPendingEvent(tlEvent.get)
       } else {
         // discarding the event
-        logWarning("Discarding event")
+        logInfo(s"Discarding event $tlEvent")
         metrics.eventsDropped.inc()
         0
       }
