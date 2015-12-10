@@ -163,15 +163,20 @@ class StaticMemoryManagerSuite extends MemoryManagerSuite {
     assertEvictBlocksToFreeSpaceNotCalled(ms)
     assert(mm.storageMemoryUsed === 860L)
     // `spark.storage.unrollFraction` is 0.4, so the max unroll space is 400 bytes.
-    // Since we already occupy 60 bytes, we will try to evict only 400 - 60 = 340 bytes.
+    // As of this point, cache memory is 800 bytes and current unroll memory is 60 bytes.
+    // Requesting 240 more bytes of unroll memory will leave our total unroll memory at
+    // 300 bytes, still under the 400-byte limit. Therefore, all 240 bytes are granted.
     assert(mm.acquireUnrollMemory(dummyBlock, 240L, evictedBlocks))
-    assertEvictBlocksToFreeSpaceCalled(ms, 100L)
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L) // 860 + 240 - 1000
     when(ms.currentUnrollMemory).thenReturn(300L) // 60 + 240
     assert(mm.storageMemoryUsed === 1000L)
     evictedBlocks.clear()
+    // We already have 300 bytes of unroll memory, so requesting 150 more will leave us
+    // above the 400-byte limit. Since there is not enough free memory, this request will
+    // fail even after evicting as much as we can (400 - 300 = 100 bytes).
     assert(!mm.acquireUnrollMemory(dummyBlock, 150L, evictedBlocks))
-    assertEvictBlocksToFreeSpaceCalled(ms, 100L) // 400 - 300
-    assert(mm.storageMemoryUsed === 900L) // 100 bytes were evicted
+    assertEvictBlocksToFreeSpaceCalled(ms, 100L)
+    assert(mm.storageMemoryUsed === 900L)
     // Release beyond what was acquired
     mm.releaseUnrollMemory(maxStorageMem)
     assert(mm.storageMemoryUsed === 0L)
