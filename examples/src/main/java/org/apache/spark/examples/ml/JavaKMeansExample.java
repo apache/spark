@@ -74,6 +74,7 @@ public class JavaKMeansExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
     // Loads data
     JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParsePoint());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
@@ -91,6 +92,7 @@ public class JavaKMeansExample {
     for (Vector center: centers) {
       System.out.println(center);
     }
+    // $example off$
 
     jsc.stop();
   }

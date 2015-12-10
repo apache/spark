@@ -11,6 +11,77 @@ In this section, we introduce the pipeline API for [clustering in mllib](mllib-c
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
+## K-means
+
+K-means clustering with support for multiple parallel runs and a k-means++ like initialization mode 
+(the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,they are 
+executed together with joint passes over the data for efficiency.
+
+`KMeans` is implemented as an `Estimator` and generates a `KMeansModel` as the base models.
+
+### Input Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>featuresCol</td>
+      <td>Vector</td>
+      <td>"features"</td>
+      <td>Feature vector</td>
+    </tr>
+  </tbody>
+</table>
+
+### Output Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+      <th align="left">Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>predictionCol</td>
+      <td>Int</td>
+      <td>"prediction"</td>
+      <td>Predicted label</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+
+### Example
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.KMeans) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/KMeansExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/KMeans.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaKMeansExample.java %}
+</div>
+
+</div>
+
+
 ## Latent Dirichlet allocation (LDA)
 
 `LDA` is implemented as an `Estimator` that supports both `EMLDAOptimizer` and `OnlineLDAOptimizer`,

@@ -17,9 +17,12 @@
 
 package org.apache.spark.examples.ml
 
+// scalastyle:off println
 import org.apache.spark.{SparkContext, SparkConf}
+// $example on$
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
 import org.apache.spark.ml.clustering.KMeans
+// $example off$
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -37,9 +40,7 @@ object KMeansExample {
 
   def main(args: Array[String]): Unit = {
     if (args.length != 2) {
-      // scalastyle:off println
       System.err.println("Usage: ml.KMeansExample <file> <k>")
-      // scalastyle:on println
       System.exit(1)
     }
     val input = args(0)
@@ -50,6 +51,7 @@ object KMeansExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     // Loads data
     val rowRDD = sc.textFile(input).filter(_.nonEmpty)
       .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
@@ -63,11 +65,11 @@ object KMeansExample {
     val model = kmeans.fit(dataset)
 
     // Shows the result
-    // scalastyle:off println
     println("Final Centers: ")
     model.clusterCenters.foreach(println)
-    // scalastyle:on println
+    // $example off$
 
     sc.stop()
   }
 }
+// scalastyle:on println
