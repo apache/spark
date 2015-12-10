@@ -10,6 +10,7 @@ import argparse
 import dateutil.parser
 
 import airflow
+print ("ABOUT TO IMPORT SETTINGS")
 from airflow import jobs, settings, utils
 from airflow import configuration
 from airflow.executors import DEFAULT_EXECUTOR
@@ -80,7 +81,7 @@ def backfill(args):
 
 
 def trigger_dag(args):
-    utils.log_to_stdout()
+    
     session = settings.Session()
     # TODO: verify dag_id
     execution_date = datetime.now()
@@ -261,7 +262,7 @@ def list_tasks(args):
 
 
 def test(args):
-    utils.log_to_stdout()
+    
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
@@ -307,7 +308,7 @@ def clear(args):
 
 def webserver(args):
     print(settings.HEADER)
-    utils.log_to_stdout()
+    
     from airflow.www.app import cached_app
     app = cached_app(configuration)
     workers = args.workers or configuration.get('webserver', 'workers')
@@ -330,7 +331,7 @@ def webserver(args):
 
 def scheduler(args):
     print(settings.HEADER)
-    utils.log_to_stdout()
+    
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
         subdir=process_subdir(args.subdir),
@@ -419,7 +420,7 @@ def flower(args):
 
 def kerberos(args):
     print(settings.HEADER)
-    utils.log_to_stdout()
+    
     import airflow.security.kerberos
     airflow.security.kerberos.run()
 

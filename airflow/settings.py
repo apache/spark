@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+print ("IN SETTINGS")
+
 import logging
 import os
 
@@ -67,9 +69,15 @@ def policy(task_instance):
     """
     pass
 
+def configure_logging():
+    logging.basicConfig(format=LOG_FORMAT)
+    print ("configured logging")    
 
 try:
     from airflow_local_settings import *
     logging.info("Loaded airflow_local_settings.")
 except:
     pass
+
+print ("about to configure logging")
+configure_logging()
