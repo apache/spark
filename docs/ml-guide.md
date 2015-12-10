@@ -617,7 +617,7 @@ for row in selected.collect():
 
 ## Example: Saving and Loading a Pipeline
 
-Often times it is worth it to save a model to disk for later use. In Spark 1.6, model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
+Often times it is worth it to save a model to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
 
 * K-Means
 * Naive Bayes
