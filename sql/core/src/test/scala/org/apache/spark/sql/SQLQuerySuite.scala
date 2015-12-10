@@ -2033,7 +2033,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY 1"),
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
-  
+
   test("SPARK-12063: Order by Column Number") {
     Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").registerTempTable("ord")
     checkAnswer(
