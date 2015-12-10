@@ -70,14 +70,27 @@ private[memory] class ExecutionMemoryPool(
    * active tasks) before it is forced to spill. This can happen if the number of tasks increase
    * but an older task had a lot of memory already.
    *
+   * @param numBytes number of bytes to acquire
+   * @param taskAttemptId the task attempt acquiring memory
+   * @param maybeGrowPool a callback that potentially grows the size of this pool. It takes in
+   *                      one parameter (Long) that represents the desired amount of memory by
+   *                      which this pool should be expanded.
+   * @param computeMaxPoolSize a callback that returns the maximum allowable size of this pool
+   *                           at this given moment. This is not a field because the max pool
+   *                           size is variable in certain cases. For instance, in unified
+   *                           memory management, the execution pool can be expanded by evicting
+   *                           cached blocks, thereby shrinking the storage pool.
+   *
    * @return the number of bytes granted to the task.
    */
-  def acquireMemory(
+  private[memory] def acquireMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      maybeResizePool: Long => Unit = (_: Long) => Unit,
-      computeDaviesThingMax: () => Long = () => poolSize): Long = lock.synchronized {
+      maybeGrowPool: Long => Unit = (additionalSpaceNeeded: Long) => Unit,
+      computeMaxPoolSize: () => Long = () => poolSize): Long = lock.synchronized {
     assert(numBytes > 0, s"invalid number of bytes requested: $numBytes")
+
+    // TODO: clean up this clunky method signature
 
     // Add this task to the taskMemory map just so we can keep an accurate count of the number
     // of active tasks, to let other tasks ramp down their memory in calls to `acquireMemory`
@@ -95,23 +108,30 @@ private[memory] class ExecutionMemoryPool(
       val numActiveTasks = memoryForTask.keys.size
       val curMem = memoryForTask(taskAttemptId)
 
-      // TODO: explain me
-      maybeResizePool(numBytes - memoryFree)
+      // In every iteration of this loop, we should first try to reclaim any borrowed execution
+      // space from storage. This is necessary because of the potential race condition where new
+      // storage blocks may steal the free execution memory that this task was waiting for.
+      maybeGrowPool(numBytes - memoryFree)
 
-      // TODO: explain me
-      val daviesThingMax = computeDaviesThingMax()
+      // Maximum size the pool would have after potentially growing the pool.
+      // This is used to compute the upper bound of how much memory each task can occupy. This
+      // must take into account potential free memory as well as the amount this pool currently
+      // occupies. Otherwise, we may run into SPARK-12155 where, in unified memory management,
+      // we did not take into account space that could have been freed by evicting cached blocks.
+      val maxPoolSize = computeMaxPoolSize()
+      val maxMemoryPerTask = maxPoolSize / numActiveTasks
+      val minMemoryPerTask = poolSize / (2 * numActiveTasks)
 
-      // How much we can grant this task; don't let it grow to more than 1 / numActiveTasks;
-      // don't let it be negative
-      val maxToGrant = math.min(numBytes, math.max(0, (daviesThingMax / numActiveTasks) - curMem))
+      // How much we can grant this task; keep its share within 0 <= X <= 1 / numActiveTasks
+      val maxToGrant = math.min(numBytes, math.max(0, maxMemoryPerTask - curMem))
       // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
       val toGrant = math.min(maxToGrant, memoryFree)
 
-      if (curMem < poolSize / (2 * numActiveTasks)) {
+      if (curMem < minMemoryPerTask) {
         // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
         // if we can't give it this much now, wait for other tasks to free up memory
         // (this happens if older tasks allocated lots of memory before N grew)
-        if (memoryFree >= math.min(maxToGrant, poolSize / (2 * numActiveTasks) - curMem)) {
+        if (memoryFree >= math.min(maxToGrant, poolSize / minMemoryPerTask)) {
           memoryForTask(taskAttemptId) += toGrant
           return toGrant
         } else {

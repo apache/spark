@@ -83,9 +83,13 @@ private[spark] class UnifiedMemoryManager private[memory] (
       case MemoryMode.ON_HEAP =>
 
         /**
-         * TODO: add comment.
+         * Grow the execution pool by evicting cached blocks, thereby shrinking the storage pool.
+         *
+         * When acquiring memory for a task, the execution pool may need to make multiple
+         * attempts. Each attempt must be able to evict storage in case another task jumps in
+         * and caches a large block between the attempts. This is called once per attempt.
          */
-        def maybeResizePool(extraMemoryNeeded: Long): Unit = {
+        def maybeGrowExecutionPool(extraMemoryNeeded: Long): Unit = {
           if (extraMemoryNeeded > 0) {
             // There is not enough free memory in the execution pool, so try to reclaim memory from
             // storage. We can reclaim any free memory from the storage pool. If the storage pool
@@ -103,14 +107,24 @@ private[spark] class UnifiedMemoryManager private[memory] (
         }
 
         /**
-         * TODO: (maxMemory - math.min(storageMemoryUsed, SF * maxMemory)
+         * The size the execution pool would have after evicting storage memory.
+         *
+         * The execution memory pool divides this quantity among the active tasks evenly to cap
+         * the execution memory allocation for each task. It is important to keep this greater
+         * than the execution pool size, which doesn't take into account potential memory that
+         * could be freed by evicting storage. Otherwise we may hit SPARK-12155.
+         *
+         * Additionally, this quantity should be kept below `maxMemory` to arbitrate fairness
+         * in execution memory allocation across tasks, Otherwise, a task may occupy more than
+         * its fair share of execution memory, mistakenly thinking that other tasks can acquire
+         * the portion of storage memory that cannot be evicted.
          */
-        def computeDaviesThingMax(): Long = {
+        def computeMaxExecutionPoolSize(): Long = {
           maxMemory - math.min(storageMemoryUsed, storageRegionSize)
         }
 
         onHeapExecutionMemoryPool.acquireMemory(
-          numBytes, taskAttemptId, maybeResizePool, computeDaviesThingMax)
+          numBytes, taskAttemptId, maybeGrowExecutionPool, computeMaxExecutionPoolSize)
 
       case MemoryMode.OFF_HEAP =>
         // For now, we only support on-heap caching of data, so we do not need to interact with
