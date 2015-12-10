@@ -94,6 +94,13 @@ private[spark] case class SSLOptions(
    */
   def createAkkaConfig: Option[Config] = {
     if (enabled) {
+      if (keyStoreType.isDefined) {
+        logWarning("Akka configuration does not support key store type.");
+      }
+      if (trustStoreType.isDefined) {
+        logWarning("Akka configuration does not support trust store type.");
+      }
+
       Some(ConfigFactory.empty()
         .withValue("akka.remote.netty.tcp.security.key-store",
           ConfigValueFactory.fromAnyRef(keyStore.map(_.getAbsolutePath).getOrElse("")))
