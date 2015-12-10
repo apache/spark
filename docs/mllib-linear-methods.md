@@ -210,7 +210,7 @@ val sameModel = SVMModel.load(sc, "myModelPath")
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -296,7 +296,7 @@ public class SVMClassifier {
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -378,7 +378,7 @@ Binary logistic regression can be generalized into
 train and predict multiclass classification problems.
 For example, for $K$ possible outcomes, one of the outcomes can be chosen as a "pivot", and the
 other $K - 1$ outcomes can be separately regressed against the pivot outcome.
-In MLlib, the first class $0$ is chosen as the "pivot" class.
+In `spark.mllib`, the first class $0$ is chosen as the "pivot" class.
 See Section 4.4 of
 [The Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 references.

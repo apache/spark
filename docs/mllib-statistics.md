@@ -112,7 +112,7 @@ print(summary.numNonzeros())
 
 ## Correlations
 
-Calculating the correlation between two series of data is a common operation in Statistics. In MLlib
+Calculating the correlation between two series of data is a common operation in Statistics. In `spark.mllib`
 we provide the flexibility to calculate pairwise correlations among many series. The supported 
 correlation methods are currently Pearson's and Spearman's correlation.
  

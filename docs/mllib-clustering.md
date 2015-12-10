@@ -314,7 +314,7 @@ The similarities must be nonnegative.
 PIC assumes that the similarity measure is symmetric.
 A pair `(srcId, dstId)` regardless of the ordering should appear at most once in the input data.
 If a pair is missing from input, their similarity is treated as zero.
-MLlib's PIC implementation takes the following (hyper-)parameters:
+`spark.mllib`'s PIC implementation takes the following (hyper-)parameters:
 
 * `k`: number of clusters
 * `maxIterations`: maximum number of power iterations
