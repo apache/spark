@@ -50,27 +50,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     val output = predicate.collect { case a: Attribute => a }.distinct
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      val query = df
-        .select(output.map(e => Column(e)): _*)
-        .where(Column(predicate))
+      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+        val query = df
+          .select(output.map(e => Column(e)): _*)
+          .where(Column(predicate))
 
-      val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-        case PhysicalOperation(_, filters, LogicalRelation(_: ParquetRelation, _)) => filters
-      }.flatten.reduceLeftOption(_ && _)
-      assert(maybeAnalyzedPredicate.isDefined)
+        var maybeRelation: Option[ParquetRelation] = None
+        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+          case PhysicalOperation(_, filters, LogicalRelation(relation: ParquetRelation, _)) =>
+            maybeRelation = Some(relation)
+            filters
+        }.flatten.reduceLeftOption(_ && _)
+        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-      val selectedFilters = maybeAnalyzedPredicate.flatMap(DataSourceStrategy.translateFilter)
-      assert(selectedFilters.nonEmpty)
+        val (_, selectedFilters) =
+          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-      selectedFilters.foreach { pred =>
-        val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
-        assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-        maybeFilter.foreach { f =>
-          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          assert(f.getClass === filterClass)
+        selectedFilters.foreach { pred =>
+          val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
+          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+          maybeFilter.foreach { f =>
+            // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+            assert(f.getClass === filterClass)
+          }
         }
+        checker(stripSparkFilter(query), expected)
       }
-      checker(query, expected)
     }
   }
 
@@ -102,6 +108,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate], expected: Array[Byte])
       (implicit df: DataFrame): Unit = {
     checkBinaryFilterPredicate(predicate, filterClass, Seq(Row(expected)))(df)
+  }
+
+  /**
+   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
+   */
+  protected def stripSparkFilter(df: DataFrame): DataFrame = {
+    val schema = df.schema
+    val childRDD = df
+      .queryExecution
+      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+      .child
+      .execute()
+      .map(row => Row.fromSeq(row.toSeq(schema)))
+
+    sqlContext.createDataFrame(childRDD, schema)
   }
 
   test("filter pushdown - boolean") {
@@ -347,19 +368,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
           val df = sqlContext.read.parquet(path).filter("a = 2")
 
-          // This is the source RDD without Spark-side filtering.
-          val childRDD =
-            df
-              .queryExecution
-              .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
-              .child
-              .execute()
-
           // The result should be single row.
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(childRDD.count == 1)
+          assert(stripSparkFilter(df).count == 1)
         }
       }
     }
