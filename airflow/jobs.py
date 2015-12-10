@@ -359,7 +359,7 @@ class SchedulerJob(BaseJob):
                 DagRun.dag_id == dag.dag_id,
                 DagRun.external_trigger == False,
                 DagRun.state == State.RUNNING,
-            ).all()
+            )
             active_runs = qry.all()
             if len(active_runs) >= dag.max_active_runs:
                 return
