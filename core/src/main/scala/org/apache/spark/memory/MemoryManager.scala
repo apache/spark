@@ -182,7 +182,11 @@ private[spark] abstract class MemoryManager(
    * sun.misc.Unsafe.
    */
   final val tungstenMemoryMode: MemoryMode = {
-    if (conf.getBoolean("spark.unsafe.offHeap", false)) MemoryMode.OFF_HEAP else MemoryMode.ON_HEAP
+    if (conf.getBoolean("spark.memory.useOffHeap", false)) {
+      MemoryMode.OFF_HEAP
+    } else {
+      MemoryMode.ON_HEAP
+    }
   }
 
   /**

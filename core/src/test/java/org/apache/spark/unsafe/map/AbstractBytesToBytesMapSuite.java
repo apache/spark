@@ -85,7 +85,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     memoryManager =
       new TestMemoryManager(
         new SparkConf()
-          .set("spark.unsafe.offHeap", "" + useOffHeapMemoryAllocator())
+          .set("spark.memory.useOffHeap", "" + useOffHeapMemoryAllocator())
           .set("spark.memory.offHeapSize", "256mb"));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
 
