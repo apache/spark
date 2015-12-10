@@ -40,11 +40,9 @@ case class SortBasedAggregate(
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def outputsUnsafeRows: Boolean = false
-
-  override def canProcessUnsafeRows: Boolean = false
-
-  override def canProcessSafeRows: Boolean = true
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -74,29 +72,24 @@ case class SortBasedAggregate(
       if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
-        Iterator[InternalRow]()
+        Iterator[UnsafeRow]()
       } else {
-        val groupingKeyProjection =
-          UnsafeProjection.create(groupingExpressions, child.output)
-
         val outputIter = new SortBasedAggregationIterator(
-          groupingKeyProjection,
-          groupingExpressions.map(_.toAttribute),
+          groupingExpressions,
           child.output,
-          iter,
+          iter.asInstanceOf[Iterator[UnsafeRow]],
           aggregateExpressions,
           aggregateAttributes,
           initialInputBufferOffset,
           resultExpressions,
           newMutableProjection,
-          outputsUnsafeRows,
           numInputRows,
           numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
           numOutputRows += 1
-          Iterator[InternalRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
+          Iterator[UnsafeRow](outputIter.outputForEmptyGroupingKeyWithoutInput())
         } else {
           outputIter
         }
