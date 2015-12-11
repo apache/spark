@@ -58,11 +58,13 @@ class AbstractMockHistorySuite() extends AbstractYarnHistoryTests
 
   /**
    * Create and start a history service.
-   *
    * @param sc context
+   * @param id application ID
+   * @param attemptId
    * @return the instantiated service
    */
-  override protected def startHistoryService(sc: SparkContext,
+  override protected def startHistoryService(
+      sc: SparkContext,
       id: ApplicationId,
       attemptId: Option[ApplicationAttemptId] = None): YarnHistoryService = {
     val service = spy(new YarnHistoryService())

@@ -1244,7 +1244,7 @@ private[spark] object YarnHistoryService {
   val FIELD_APP_NAME = "appName"
 
   /**
-   *  Entity `OTHER_INFO` field: user.
+   * Entity `OTHER_INFO` field: user.
    */
   val FIELD_APP_USER = "appUser"
 
@@ -1266,7 +1266,7 @@ private[spark] object YarnHistoryService {
   val FIELD_ENTITY_VERSION = "entityVersion"
 
   /**
-   * Entity `OTHER_INFO` field: Spark version
+   * Entity `OTHER_INFO` field: Spark version.
    */
   val FIELD_SPARK_VERSION = "sparkVersion"
 
@@ -1301,7 +1301,7 @@ private[spark] object YarnHistoryService {
   val CLASSNAME = "org.apache.spark.deploy.history.yarn.YarnHistoryService"
 
   /**
-    * name of metrics
+   * Name of metrics.
    */
   val METRICS_NAME = "yarn_history"
 
