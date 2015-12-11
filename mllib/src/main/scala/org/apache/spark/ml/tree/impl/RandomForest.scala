@@ -873,7 +873,7 @@ private[ml] object RandomForest extends Logging {
     }
 
     val numFeatures = metadata.numFeatures
-    val splits = Range(0, numFeatures).map {
+    val splits = Array.tabulate(numFeatures) {
       case i if metadata.isContinuous(i) =>
         val split = continuousSplits(i)
         metadata.setNumSplits(i, split.length)
@@ -883,14 +883,10 @@ private[ml] object RandomForest extends Logging {
         // Unordered features
         // 2^(maxFeatureValue - 1) - 1 combinations
         val featureArity = metadata.featureArity(i)
-        val split: IndexedSeq[Split] = Range(0, metadata.numSplits(i)).map { splitIndex =>
+        Array.tabulate[Split](metadata.numSplits(i)) { splitIndex =>
           val categories = extractMultiClassCategories(splitIndex + 1, featureArity)
           new CategoricalSplit(i, categories.toArray, featureArity)
         }
-
-        // For unordered categorical features, there is no need to construct the bins.
-        // since there is a one-to-one correspondence between the splits and the bins.
-        split.toArray
 
       case i if metadata.isCategorical(i) =>
         // Ordered features
