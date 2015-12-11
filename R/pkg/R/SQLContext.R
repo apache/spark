@@ -217,6 +217,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
+#' df <- jsonFile(sqlContext, path)
 #' }
 read.json <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
