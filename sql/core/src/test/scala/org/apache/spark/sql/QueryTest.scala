@@ -17,16 +17,24 @@
 
 package org.apache.spark.sql
 
+import java.lang.Thread.UncaughtExceptionHandler
 import java.util.{Locale, TimeZone}
+
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.catalyst.encoders.{RowEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.Queryable
 
-abstract class QueryTest extends PlanTest {
+import scala.collection.mutable
+
+abstract class QueryTest extends PlanTest with Timeouts {
 
   protected def sqlContext: SQLContext
 
@@ -177,6 +185,193 @@ abstract class QueryTest extends PlanTest {
       s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
         planWithCaching)
   }
+
+  // ==========================
+  // Streaming helper functions
+  // ==========================
+
+  /** How long to wait for an active stream to catch up when checking a result. */
+  val streamingTimout = 10.seconds
+
+  /** A trait for actions that can be performed while testing a streaming DataFrame. */
+  trait StreamAction
+
+  /** A trait to mark actions that require the stream to be actively running. */
+  trait StreamMustBeRunning
+
+  /**
+   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * been processed.
+   */
+  object AddData {
+    def apply[A](source: MemoryStream[A], data: A*): AddDataMemory[A] =
+      AddDataMemory(source, data)
+  }
+
+  case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends StreamAction {
+    override def toString: String = s"AddData to $source: ${data.mkString(",")}"
+  }
+
+  /**
+   * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
+   * This operation automatically blocks untill all added data has been processed.
+   */
+  object CheckAnswer {
+    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema)
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))))
+    }
+
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows)
+  }
+
+  case class CheckAnswerRows(expectedAnswer: Seq[Row])
+      extends StreamAction with StreamMustBeRunning {
+    override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
+  }
+
+  /** Stops the stream.  It must currently be running. */
+  case object StopStream extends StreamAction
+
+  /** Starts the stream, resuming if data has already been processed.  It must not be running. */
+  case object StartStream extends StreamAction
+
+  /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
+  def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
+    testStream(stream.toDF())(actions: _*)
+
+  /**
+   * Executes the specified actions on the the given streaming DataFrame and provides helpful
+   * error messages in the case of failures or incorrect answers.
+   *
+   * Note that if the stream is not explictly started before an action that requires it to be
+   * running then it will be automatically started before performing any other actions.
+   */
+  def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
+    var pos = 0
+    var currentStream: StreamExecution = null
+    val awaiting = new mutable.HashMap[Source, Watermark]()
+    val sink = new MemorySink(stream.schema)
+
+    @volatile
+    var streamDeathCause: Throwable = null
+
+    // If the test doesn't manually start the stream, we do it automatically at the beginning.
+    val startedManually =
+      actions.takeWhile(_.isInstanceOf[StreamMustBeRunning]).contains(StartStream)
+    val startedTest = if (startedManually) actions else StartStream +: actions
+
+    def testActions = actions.zipWithIndex.map {
+      case (a, i) =>
+        if ((pos == i && startedManually) || (pos == (i + 1) && !startedManually)) {
+          "=> " + a.toString
+        } else {
+          "   " + a.toString
+        }
+    }.mkString("\n")
+
+    def currentWatermarks =
+      if (currentStream != null) currentStream.currentWatermarks.toString else "not started"
+
+    def threadState =
+      if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
+    def testState =
+      s"""
+         |== Progress ==
+         |$testActions
+         |
+         |== Stream ==
+         |Stream state: $currentWatermarks
+         |Thread state: $threadState
+         |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
+         |
+         |== Sink ==
+         |$sink
+         |
+         |== Plan ==
+         |${if (currentStream != null) currentStream.logicalPlan else ""}
+         """
+
+    def checkState(check: Boolean, error: String) = if (!check) {
+      fail(
+        s"""
+           |Invalid State: $error
+           |$testState
+         """.stripMargin)
+    }
+
+    val testThread = Thread.currentThread()
+
+    try {
+      startedTest.foreach { action =>
+        if (streamDeathCause != null) {
+          fail(
+            s"""
+               |Stream Thread Died
+               |$testState
+             """.stripMargin)
+        }
+
+        action match {
+          case StartStream =>
+            checkState(currentStream == null, "stream already running")
+            currentStream = new StreamExecution(sqlContext, stream.logicalPlan, sink)
+            currentStream.microBatchThread.setUncaughtExceptionHandler(
+              new UncaughtExceptionHandler {
+                override def uncaughtException(t: Thread, e: Throwable): Unit = {
+                  streamDeathCause = e
+                  testThread.interrupt()
+                }
+              })
+
+          case StopStream =>
+            checkState(currentStream != null, "can not stop a stream that is not running")
+            currentStream.stop()
+            currentStream = null
+
+          case AddDataMemory(source, data) =>
+            awaiting.put(source, source.addData(data))
+
+          case CheckAnswerRows(expectedAnswer) =>
+            checkState(currentStream != null, "stream not running")
+
+            // Block until all data added has been processed
+            awaiting.foreach { case (source, watermark) =>
+              try failAfter(streamingTimout) {
+                currentStream.awaitWatermark(source, watermark)
+              } catch {
+                case _: InterruptedException =>
+                  fail(
+                    s"""
+                       |Stream Thread Died
+                       |$testState
+                      """.stripMargin)
+                case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                  fail(
+                    s"""
+                       |Timed out while waiting for $source to catch up to $watermark
+                       |Currently at: ${sink.currentWatermark(source)}
+                       |$testState
+                   """.stripMargin)
+              }
+            }
+            QueryTest.sameRows(sink.allData, expectedAnswer).foreach {
+              error => fail(
+                s"""
+                   |$error
+                   |$testState
+                 """.stripMargin)
+            }
+        }
+        pos += 1
+      }
+    } finally {
+      if (currentStream != null && currentStream.microBatchThread.isAlive) {
+        currentStream.stop()
+      }
+    }
+  }
 }
 
 object QueryTest {
@@ -191,27 +386,7 @@ object QueryTest {
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
 
-    // We need to call prepareRow recursively to handle schemas with struct types.
-    def prepareRow(row: Row): Row = {
-      Row.fromSeq(row.toSeq.map {
-        case null => null
-        case d: java.math.BigDecimal => BigDecimal(d)
-        // Convert array to Seq for easy equality check.
-        case b: Array[_] => b.toSeq
-        case r: Row => prepareRow(r)
-        case o => o
-      })
-    }
 
-    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
-      // Converts data to types that we can do equality comparison using Scala collections.
-      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
-      // Java's java.math.BigDecimal.compareTo).
-      // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
-      // equality test.
-      val converted: Seq[Row] = answer.map(prepareRow)
-      if (!isSorted) converted.sortBy(_.toString()) else converted
-    }
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>
         val errorMessage =
@@ -225,22 +400,57 @@ object QueryTest {
         return Some(errorMessage)
     }
 
-    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
-      val errorMessage =
+    sameRows(expectedAnswer, sparkAnswer, isSorted).map { results =>
         s"""
         |Results do not match for query:
         |${df.queryExecution}
         |== Results ==
-        |${sideBySide(
+        |$results
+       """.stripMargin
+    }
+  }
+
+
+  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
+    // Converts data to types that we can do equality comparison using Scala collections.
+    // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+    // Java's java.math.BigDecimal.compareTo).
+    // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
+    // equality test.
+    val converted: Seq[Row] = answer.map(prepareRow)
+    if (!isSorted) converted.sortBy(_.toString()) else converted
+  }
+
+  // We need to call prepareRow recursively to handle schemas with struct types.
+  def prepareRow(row: Row): Row = {
+    Row.fromSeq(row.toSeq.map {
+      case null => null
+      case d: java.math.BigDecimal => BigDecimal(d)
+      // Convert array to Seq for easy equality check.
+      case b: Array[_] => b.toSeq
+      case r: Row => prepareRow(r)
+      case o => o
+    })
+  }
+
+  def sameRows(
+      expectedAnswer: Seq[Row],
+      sparkAnswer: Seq[Row],
+      isSorted: Boolean = false): Option[String] = {
+    if (prepareAnswer(expectedAnswer, isSorted) != prepareAnswer(sparkAnswer, isSorted)) {
+      val errorMessage =
+          s"""
+           |== Results ==
+           |${sideBySide(
           s"== Correct Answer - ${expectedAnswer.size} ==" +:
-            prepareAnswer(expectedAnswer).map(_.toString()),
+              prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
           s"== Spark Answer - ${sparkAnswer.size} ==" +:
-            prepareAnswer(sparkAnswer).map(_.toString())).mkString("\n")}
-      """.stripMargin
+              prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")}
+          """.stripMargin
       return Some(errorMessage)
     }
 
-    return None
+    None
   }
 
   /**

@@ -138,6 +138,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(new JavaSerializable(15), "java object")(
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
+  encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
   // test product encoders
   private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
     encodeDecodeTest(input, input.getClass.getSimpleName)

@@ -29,8 +29,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.api.java.StorageLevels
 
-import org.apache.spark.sql.{DataFrame, SQLContext, Encoder}
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.{Dataset, DataFrame, SQLContext, Encoder, Row}
+import org.apache.spark.sql.catalyst.encoders.{RowEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Union, LeafNode}
 import org.apache.spark.storage.{StreamBlockId, BlockId}
@@ -51,6 +51,14 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
 
   def watermark: Watermark = currentWatermark
 
+  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
+    new Dataset(sqlContext, this)
+  }
+
+  def toDF()(implicit sqlContext: SQLContext): DataFrame = {
+    new DataFrame(sqlContext, this)
+  }
+
   def addData(data: TraversableOnce[A]): Watermark = {
     val blockId = StreamBlockId(0, MemoryStream.currentBlockId.incrementAndGet())
     blockManager.putIterator(
@@ -59,7 +67,7 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
       StorageLevels.MEMORY_ONLY_SER)
 
     synchronized {
-      currentWatermark += 1
+      currentWatermark = currentWatermark + 1
       blocks.append(blockId)
       currentWatermark
     }
@@ -76,22 +84,19 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
 
 class MemorySink(schema: StructType) extends Sink with Logging {
   private val currentWatermarks = new StreamProgress
-  private var rdds = new ArrayBuffer[RDD[InternalRow]]
+  private var batches = new ArrayBuffer[(StreamProgress, Seq[Row])]()
 
   private val output = schema.toAttributes
 
-  def allData(sqlContext: SQLContext): DataFrame =
-    new DataFrame(
-      sqlContext,
-      rdds
-          .map(LogicalRDD(output, _)(sqlContext))
-          .reduceOption(Union)
-          .getOrElse(LocalRelation(output)))
-
   def currentWatermark(source: Source): Option[Watermark] = currentWatermarks.get(source)
 
+  def allData: Seq[Row] = batches.flatMap(_._2)
+
+  val externalRowConverter = RowEncoder(schema)
   def addBatch(watermarks: Map[Source, Watermark], rdd: RDD[InternalRow]): Unit = {
     watermarks.foreach(currentWatermarks.update)
-    rdds.append(rdd)
+    batches.append((currentWatermarks.copy(), rdd.collect().map(externalRowConverter.fromRow)))
   }
+
+  override def toString: String = batches.map(b => s"${b._1}: ${b._2.mkString(" ")}").mkString("\n")
 }

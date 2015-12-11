@@ -31,6 +31,12 @@ class StreamProgress {
   def apply(source: Source): Watermark = currentWatermarks(source)
   def get(source: Source): Option[Watermark] = currentWatermarks.get(source)
 
+  def copy(): StreamProgress = {
+    val copied = new StreamProgress
+    currentWatermarks.foreach(copied.update)
+    copied
+  }
+
   override def toString: String =
-    currentWatermarks.map { case (k, v) => s"$k: $v"}.mkString("[", ",", "]")
+    currentWatermarks.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 }

@@ -18,17 +18,25 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{DataFrame, Strategy, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.execution.streaming.state.StatefulPlanner
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
-import org.apache.spark.sql.execution.{SparkPlanner, LogicalRDD}
+import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
 class StreamExecution(
     sqlContext: SQLContext,
-    logicalPlan: LogicalPlan,
+    private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends Logging {
+
+  /** All stream sources present the query plan. */
   private val sources = logicalPlan.collect { case s: Source => s: Source }
 
-  private val currentWatermarks = new StreamProgress
+  /** Tracks how much data we have processed from each input source. */
+  private[sql] val currentWatermarks = new StreamProgress
+
+  import org.apache.spark.sql.execution.streaming.state.MaxWatermark
+  private[sql] val maxEventTime = sqlContext.sparkContext.accumulator(Watermark(-1))(org.apache.spark.sql.execution.streaming.state.MaxWatermark)
 
   // Start the execution at the current watermark for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
@@ -37,19 +45,25 @@ class StreamExecution(
     currentWatermarks.update(s, sourceWatermark)
   }
 
-  @volatile
-  private var shouldRun = true
+  /** When false, signals to the microBatchThread that it should stop running. */
+  @volatile private var shouldRun = true
 
-  private val thread = new Thread("stream execution thread") {
+  /** The thread that runs the micro-batches of this stream. */
+  private[sql] val microBatchThread = new Thread("stream execution thread") {
     override def run(): Unit = {
+      SQLContext.setActive(sqlContext)
       while (shouldRun) { attemptBatch() }
     }
   }
+  microBatchThread.setDaemon(true)
+  microBatchThread.start()
 
-  thread.setDaemon(true)
-  thread.start()
-
+  /**
+   * Checks to see if any new data is present in any of the sources.  When new data is available,
+   * a batch is executed and passed to the sink, updating the currentWatermarks.
+   */
   private def attemptBatch(): Unit = {
+    // Check to see if any of the input sources have data that has not been processed.
     val newData = sources.flatMap {
       case s if s.watermark > currentWatermarks(s) => s -> s.watermark :: Nil
       case _ => Nil
@@ -57,8 +71,9 @@ class StreamExecution(
 
     if (newData.nonEmpty) {
       val startTime = System.nanoTime()
-      logDebug(s"Running with new data upto: $newData")
+      logDebug(s"Running with new data up to: $newData")
 
+      // Replace sources in the logical plan with data that has arrived since the last batch.
       val newPlan = logicalPlan transform {
         case s: Source if newData.contains(s) =>
           val batchInput = s.getSlice(sqlContext, currentWatermarks(s), newData(s))
@@ -66,14 +81,20 @@ class StreamExecution(
         case s: Source => LocalRelation(s.output)
       }
 
-      // TODO: Duplicated with QueryExecution
-      val analyzedPlan = sqlContext.analyzer.execute(newPlan)
-      val optimizedPlan = sqlContext.optimizer.execute(analyzedPlan)
-      val physicalPlan = sqlContext.planner.plan(optimizedPlan).next()
-      val executedPlan = sqlContext.prepareForExecution.execute(physicalPlan)
+      val optimizerStart = System.nanoTime()
 
-      val results = executedPlan.execute().map(_.copy()).cache()
-      logInfo(s"Processed ${results.count()} records using plan\n$executedPlan")
+      val executedPlan = new QueryExecution(sqlContext, newPlan) {
+        override lazy val optimizedPlan: LogicalPlan = EliminateSubQueries(analyzed)
+        override lazy val sparkPlan: SparkPlan = {
+          SQLContext.setActive(sqlContext)
+          new StatefulPlanner(sqlContext, maxEventTime).plan(optimizedPlan).next()
+        }
+      }.executedPlan
+
+      val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
+      logDebug(s"Optimized batch in ${optimizerTime}ms")
+
+      val results = executedPlan.execute().map(_.copy())
       sink.addBatch(newData, results)
 
       StreamExecution.this.synchronized {
@@ -82,22 +103,28 @@ class StreamExecution(
       }
 
       val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-      logWarning(s"Compete up to $newData in ${batchTime}ms")
+      logInfo(s"Compete up to $newData in ${batchTime}ms")
     }
 
     logDebug(s"Waiting for data, current: $currentWatermarks")
     Thread.sleep(10)
   }
 
-  def current: DataFrame = sink.allData(sqlContext)
-
+  /**
+   * Signals to the thread executing micro-batches that it should stop running after the next
+   * batch. This method blocks until the thread stops running.
+   */
   def stop(): Unit = {
     shouldRun = false
-    while (thread.isAlive) { Thread.sleep(100) }
+    while (microBatchThread.isAlive) { Thread.sleep(100) }
   }
 
-  def waitUntil(source: Source, newWatermark: Watermark): Unit = {
-    assert(thread.isAlive)
+  /**
+   * Blocks the current thread until processing for data from the given `source` has reached at
+   * least the given `watermark`. This method is indented for use primarily when writing tests.
+   */
+  def awaitWatermark(source: Source, newWatermark: Watermark): Unit = {
+    assert(microBatchThread.isAlive)
 
     while (currentWatermarks(source) < newWatermark) {
       logInfo(s"Waiting until $newWatermark at $source")

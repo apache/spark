@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
-class Watermark(val offset: Long) extends AnyVal {
+object Watermark {
+  val min = Watermark(-1)
+}
+
+case class Watermark(offset: Long) {
   def >(other: Watermark): Boolean = offset > other.offset
   def <(other: Watermark): Boolean = offset < other.offset
-  def +=(increment: Long): Watermark = new Watermark(offset + increment)
+  def +(increment: Long): Watermark = new Watermark(offset + increment)
+  def -(decrement: Long): Watermark = new Watermark(offset - decrement)
 }
