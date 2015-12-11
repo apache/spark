@@ -450,7 +450,6 @@ class LogisticRegressionModel private[ml] (
     }
   }
 
-
   private[classification] def setSummary(
       summary: LogisticRegressionTrainingSummary): this.type = {
     this.trainingSummary = Some(summary)
