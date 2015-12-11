@@ -1029,8 +1029,11 @@ case class ScalaUDF(
     // such as IntegerType, its javaType is `int` and the returned type of user-defined
     // function is Object. Trying to convert an Object to `int` will cause casting exception.
     val evalCode = evals.map(_.code).mkString
-    val funcArguments = converterTerms.zip(evals).map {
-      case (converter, eval) => s"$converter.apply(${eval.value})"
+    val funcArguments = converterTerms.zipWithIndex.map {
+      case (converter, i) =>
+        val eval = evals(i)
+        val dt = children(i).dataType
+        s"$converter.apply(${eval.isNull} ? null : (${ctx.boxedType(dt)}) ${eval.value})"
     }.mkString(",")
     val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
       s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +
