@@ -17,16 +17,18 @@
 # limitations under the License.
 #
 
+# Note: This is just a template. You need to replace <SPARK_VERSION> and <HADOOP_VERSION> 
+# with the versions you want to use. Check if the distribution you want exists here https://www.apache.org/dyn/closer.lua/spark/
 FROM mesosphere/mesos:0.25.0-0.2.70.ubuntu1404
 
 # Update the base ubuntu image with dependencies needed for Spark
 RUN apt-get update && \
     apt-get install -y python libnss3 openjdk-7-jre-headless curl
 
-RUN curl  $(curl 'https://www.apache.org/dyn/closer.lua/spark/spark-<SPARK_VERSION>/spark-<SPARK_VERSION>-bin-hadoop2.4.tgz' \
+RUN curl  $(curl 'https://www.apache.org/dyn/closer.lua/spark/spark-<SPARK_VERSION>/spark-<SPARK_VERSION>-bin-hadoop<HADOOP_VERSION>.tgz' \
     | grep -o '<strong>[^<]*</strong>' \
     | sed 's/<[^>]*>//g' | head) \
     | tar -xzC /opt && \
-     mv /opt/spark-<SPARK_VERSION>-bin-hadoop2.4 /opt/spark
+     mv /opt/spark-<SPARK_VERSION>-bin-hadoop<HADOOP_VERSION> /opt/spark
 ENV SPARK_HOME /opt/spark
 ENV MESOS_NATIVE_JAVA_LIBRARY /usr/local/lib/libmesos.so
