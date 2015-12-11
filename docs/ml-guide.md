@@ -192,6 +192,10 @@ Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
+## Saving and Loading Pipelines
+
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models. Please refer to the algorithm's API documentation to see if saving and loading is supported.
+
 # Code examples
 
 This section gives code examples illustrating the functionality discussed above.
@@ -454,6 +458,15 @@ val pipeline = new Pipeline()
 
 // Fit the pipeline to training documents.
 val model = pipeline.fit(training)
+
+// now we can optionally save the fitted pipeline to disk
+model.save("/tmp/spark-logistic-regression-model")
+
+// we can also save this unfit pipeline to disk
+pipeline.save("/tmp/unfit-lr-model")
+
+// and load it back in during production
+val sameModel = Pipeline.load("/tmp/spark-logistic-regression-model")
 
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
