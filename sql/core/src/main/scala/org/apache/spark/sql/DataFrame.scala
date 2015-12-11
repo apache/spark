@@ -161,6 +161,13 @@ class DataFrame private[sql](
   }
 
   /**
+    * Alias on showString for user convenience
+    */
+  def showString(): String = {
+    showString(20, true);
+  }
+
+  /**
    * Compose the string representing rows for output
    * @param _numRows Number of rows to show
    * @param truncate Whether truncate long strings and align cells right
@@ -393,15 +400,6 @@ class DataFrame private[sql](
   // scalastyle:off println
   def show(numRows: Int, truncate: Boolean): Unit = println(showString(numRows, truncate))
   // scalastyle:on println
-
-  def show(numRows: Int, truncate: Boolean, outputStream: OutputStream): Unit = {
-    val writer = new OutputStreamWriter(outputStream, "UTF-8")
-    writer.write(showString(numRows, truncate))
-  }
-
-  def show(numRows: Int, truncate: Boolean, writer: Writer): Unit = {
-    writer.write(showString(numRows, truncate))
-  }
 
   /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
