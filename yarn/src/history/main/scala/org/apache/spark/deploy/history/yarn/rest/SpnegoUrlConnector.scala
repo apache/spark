@@ -178,7 +178,8 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * @param payloadContentType content type. Required if payload != null
    * @return the response
    */
-  def execHttpOperation(verb: String,
+  def execHttpOperation(
+    verb: String,
     url: URL,
     payload: Array[Byte] = null,
     payloadContentType: String = ""): HttpOperationResponse = {

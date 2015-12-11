@@ -37,8 +37,10 @@ import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
  * @param sparkConf configuration of the provider
  * @param startTime the start time (millis)
  * @param tickInterval amount to increase on a `tick()`
+ * @param _livenessChecksEnabled are liveness checks enabled
  */
-class TimeManagedHistoryProvider(sparkConf: SparkConf,
+class TimeManagedHistoryProvider(
+    sparkConf: SparkConf,
     var startTime: Long = 0L,
     var tickInterval: Long = 1000L,
     _livenessChecksEnabled: Boolean = false)
