@@ -460,8 +460,8 @@ column, we should get the following:
 index `2`.
 
 Additionaly, there are two strategies regarding how `StringIndexer` will handle
-unseen labels when you have set up a `StringIndexer` on a dataset which you want
-to reuse on another:
+unseen labels when you have fit a `StringIndexer` on one dataset and then use it
+to transform another:
 
 - throw an exception (which is the default)
 - skip the row containing the unseen label entirely
