@@ -321,8 +321,8 @@ class DagBag(LoggingMixin):
                                 [re.findall(p, filepath) for p in patterns]):
                             self.process_file(
                                 filepath, only_if_updated=only_if_updated)
-                    except:
-                        pass
+                    except Exception as e:
+                        logging.warning(e)
 
     def deactivate_inactive_dags(self):
         active_dag_ids = [dag.dag_id for dag in list(self.dags.values())]
