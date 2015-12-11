@@ -459,6 +459,42 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
+Additionaly, there are two strategies regarding how `StringIndexer` will handle
+unseen labels when you have fit a `StringIndexer` on one dataset and then use it
+to transform another:
+
+- throw an exception (which is the default)
+- skip the row containing the unseen label entirely
+
+**Examples**
+
+Let's go back to our previous example but this time reuse our previously defined
+`StringIndexer` on the following dataset:
+
+~~~~
+ id | category
+----|----------
+ 0  | a
+ 1  | b
+ 2  | c
+ 3  | d
+~~~~
+
+If you've not set how `StringIndexer` handles unseen labels or set it to
+"error", an exception will be thrown.
+However, if you had called `setHandleInvalid("skip")`, the following dataset
+will be generated:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+~~~~
+
+Notice that the row containing "d" does not appear.
+
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
