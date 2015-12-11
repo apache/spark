@@ -284,6 +284,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
          |== Stream ==
          |Stream state: $currentWatermarks
          |Thread state: $threadState
+         |Event time trigger: ${if (currentStream != null) currentStream.maxEventTime else ""}
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
          |
          |== Sink ==
