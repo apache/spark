@@ -140,7 +140,8 @@ If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s
 method on the `DataFrame` before passing the `DataFrame` to the next stage.
 
 A `Pipeline` is an `Estimator`.
-Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a `Transformer`.
+Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a
+`Transformer`.
 
 This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
 
