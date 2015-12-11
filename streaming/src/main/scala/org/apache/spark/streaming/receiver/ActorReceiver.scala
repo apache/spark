@@ -69,7 +69,7 @@ object ActorSupervisorStrategy {
  *       should be same.
  */
 @DeveloperApi
-trait ActorHelper extends Logging{
+trait ActorHelper extends Logging {
 
   self: Actor => // to ensure that this can be added to Actor classes only
 
@@ -98,15 +98,46 @@ trait ActorHelper extends Logging{
     logDebug("Storing item")
     context.parent ! SingleItemData(item)
   }
+
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   * @param props the props object of the receiver actor
+   * @param name the name of the actor
+   */
+  def startNewActorReceiver(props: Props, name: String) {
+    context.parent ! (props, name)
+  }
+
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   * @param props the props object of the receiver actor
+   */
+  def startNewActorReceiver(props: Props) {
+    context.parent ! props
+  }
+
+  /**
+   * query the statistical information in the current receiver system spark streaming will
+   * asynchronously send result to the caller actor of this API return message format:
+   * [[org.apache.spark.streaming.receiver.Statistics]]
+   */
+  def queryStatisticalInfo() {
+    context.parent ! Statistics
+  }
+
+  /**
+   * send the message which is possibly harmful
+   * receiver supervisor will simply count the number of such messages
+   * @param warning the possibly harmful message
+   * @tparam A the message to send (must be extended from akka.actor.PossiblyHarmful)
+   */
+  def sendWarning[A <: PossiblyHarmful](warning: A) {
+    context.parent ! warning
+  }
 }
 
-/**
- * :: DeveloperApi ::
- * Statistics for querying the supervisor about state of workers. Used in
- * conjunction with `StreamingContext.actorStream` and
- * [[org.apache.spark.streaming.receiver.ActorHelper]].
- */
-@DeveloperApi
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
   numberOfHiccups: Int,
@@ -129,13 +160,6 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  * This starts a supervisor actor which starts workers and also provides
  * [http://doc.akka.io/docs/akka/snapshot/scala/fault-tolerance.html fault-tolerance].
  *
- * Here's a way to start more supervisor/workers as its children.
- *
- * @example {{{
- *  context.parent ! Props(new Supervisor)
- * }}} OR {{{
- *  context.parent ! Props(new Worker, "Worker")
- * }}}
  */
 private[streaming] class ActorReceiver[T: ClassTag](
     props: Props,
@@ -153,40 +177,55 @@ private[streaming] class ActorReceiver[T: ClassTag](
     private val worker = context.actorOf(props, name)
     logInfo("Started receiver worker at:" + worker.path)
 
-    private val n: AtomicInteger = new AtomicInteger(0)
-    private val hiccups: AtomicInteger = new AtomicInteger(0)
+    private var messageCount = 0
+    private var hiccups = 0
+    private val childClass = props.actorClass()
 
     override def receive: PartialFunction[Any, Unit] = {
 
       case IteratorData(iterator) =>
         logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
+        messageCount += 1
 
       case SingleItemData(msg) =>
         logDebug("received single")
         store(msg.asInstanceOf[T])
-        n.incrementAndGet
+        messageCount += 1
 
       case ByteBufferData(bytes) =>
         logDebug("received bytes")
         store(bytes)
+        messageCount += 1
 
       case props: Props =>
-        val worker = context.actorOf(props)
-        logInfo("Started receiver worker at:" + worker.path)
-        sender ! worker
+        if (props.actorClass() == childClass) {
+          val worker = context.actorOf(props)
+          logInfo("Started receiver worker at:" + worker.path)
+          messageCount += 1
+          sender ! worker
+        } else {
+          logWarning("Received different props object of the child actor")
+        }
 
       case (props: Props, name: String) =>
-        val worker = context.actorOf(props, name)
-        logInfo("Started receiver worker at:" + worker.path)
-        sender ! worker
+        if (props.actorClass() == childClass) {
+          val worker = context.actorOf(props, name)
+          logInfo("Started receiver worker at:" + worker.path)
+          messageCount += 1
+          sender ! worker
+        } else {
+          logWarning("Received different props object of the child actor")
+        }
 
-      case _: PossiblyHarmful => hiccups.incrementAndGet()
+      case _: PossiblyHarmful =>
+        messageCount += 1
+        hiccups += 1
 
       case _: Statistics =>
+        messageCount += 1
         val workers = context.children
-        sender ! Statistics(n.get, workers.size, hiccups.get, workers.mkString("\n"))
-
+        sender ! Statistics(messageCount, workers.size, hiccups, workers.mkString("\n"))
     }
   }
 
