@@ -472,25 +472,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
-  test("literal in agg grouping expressions") {
-    checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-    checkAnswer(
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
-      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-    checkAnswer(
-      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT 1, 2, sum(b) FROM testData2"))
-  }
-
   test("aggregates with nulls") {
     checkAnswer(
       sql("SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a)," +
