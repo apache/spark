@@ -1131,14 +1131,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    val df = Seq(
+    val df = sparkContext.parallelize(Seq(
       new java.lang.Integer(22) -> "John",
-      null.asInstanceOf[java.lang.Integer] -> "Lucy").toDF("age", "name")
+      null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
 
+    // passing null into the UDF that could handle it
     val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
-      (i: java.lang.Integer) => if (i == null) null else i * 2
+      (i: java.lang.Integer) => if (i == null) -10 else i * 2
     }
-    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(null) :: Nil)
+    checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(-10) :: Nil)
 
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
