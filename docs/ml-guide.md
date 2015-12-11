@@ -194,13 +194,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 
 ## Saving and Loading Pipelines
 
-Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
-
-* K-Means
-* Naive Bayes
-* ALS
-* Linear Regression
-* Logistic Regression
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models. Please refer to the algorithm's API documentation to see if saving and loading is supported.
 
 # Code examples
 
@@ -465,13 +459,16 @@ val pipeline = new Pipeline()
 // Fit the pipeline to training documents.
 val model = pipeline.fit(training)
 
-// now we can optionally save it to disk
+// now we can optionally save the fitted pipeline to disk
 model.save("/tmp/spark-logistic-regression-model")
 
+// we can also save this unfit pipeline to disk
+pipeline.save("/tmp/unfit-lr-model")
+
 // and load it back in during production
-val loadedModel = Pipeline.load("/tmp/spark-logistic-regression-model")
+val sameModel = Pipeline.load("/tmp/spark-logistic-regression-model")
 // or equivalently
-val loadedModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
+val sameModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
 
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
@@ -483,14 +480,6 @@ val test = sqlContext.createDataFrame(Seq(
 
 // Make predictions on test documents.
 model.transform(test)
-  .select("id", "text", "probability", "prediction")
-  .collect()
-  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
-  }
-
-// or use the "loadedModel" to make predictions
-loadedModel.transform(test)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
