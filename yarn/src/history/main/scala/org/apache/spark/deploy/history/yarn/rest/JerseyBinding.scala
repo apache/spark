@@ -77,7 +77,8 @@ private[spark] object JerseyBinding extends Logging {
    * @param thrown exception caught
    * @return an exception to log, ingore, throw...
    */
-  def translateException(verb: String,
+  def translateException(
+    verb: String,
     targetURL: URI,
     thrown: Throwable): Throwable = {
     thrown match {
@@ -110,7 +111,8 @@ private[spark] object JerseyBinding extends Logging {
    * @param exception original exception
    * @return an exception to throw
    */
-  def translateException(verb: String,
+  def translateException(
+    verb: String,
     targetURL: URI,
     exception: ClientHandlerException): IOException = {
     val uri = if (targetURL !=null) targetURL.toString else "unknown URL"
@@ -162,7 +164,8 @@ private[spark] object JerseyBinding extends Logging {
    * @param exception original exception
    * @return a new exception, the original one nested as a cause
    */
-  def translateException(verb: String,
+  def translateException(
+    verb: String,
     targetURL: URI,
     exception: UniformInterfaceException): IOException = {
     var ioe: IOException = null
@@ -215,10 +218,11 @@ private[spark] object JerseyBinding extends Logging {
    * @param token optional delegation token
    * @return a new client instance
    */
-  def createJerseyClient(conf: Configuration,
-      clientConfig: ClientConfig,
-      token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token):
-  Client = {
+  def createJerseyClient(
+    conf: Configuration,
+    clientConfig: ClientConfig,
+    token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token)
+    : Client = {
     new JerseyBinding(conf, token).createClient(conf, clientConfig)
   }
 

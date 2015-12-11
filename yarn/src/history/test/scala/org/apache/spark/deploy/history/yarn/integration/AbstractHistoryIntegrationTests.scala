@@ -288,7 +288,8 @@ abstract class AbstractHistoryIntegrationTests
    * @param history service to flush
    * @param delay time to wait for an empty queue
    */
-  def flushHistoryServiceToSuccess(history: YarnHistoryService,
+  def flushHistoryServiceToSuccess(
+      history: YarnHistoryService,
       delay: Int = TEST_STARTUP_DELAY): Unit = {
     assertNotNull(history, "null history queue")
     historyService.asyncFlush()

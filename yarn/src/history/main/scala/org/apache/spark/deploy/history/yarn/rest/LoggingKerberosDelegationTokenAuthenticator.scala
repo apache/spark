@@ -56,8 +56,12 @@ private[spark] class LoggingKerberosDelegationTokenAuthenticator
   /**
    * Low level token renewal operation
    */
-  override def renewDelegationToken(url: URL, token: AuthToken,
-      dToken: Token[AbstractDelegationTokenIdentifier], doAsUser: String): Long = {
+  override def renewDelegationToken(
+    url: URL,
+    token: AuthToken,
+    dToken: Token[AbstractDelegationTokenIdentifier],
+    doAsUser: String): Long = {
+
     val orig = dToken.toString
     val user = if (doAsUser != null) s"user=$doAsUser" else ""
     logInfo(s"Renewing token against $url $user")

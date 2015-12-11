@@ -45,8 +45,11 @@ import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient
  * @param conf configuration
  * @param jerseyClientConfig jersey client config
  */
-class ResourceDrivenTimelineQueryClient(resource: String,
-    timelineURI: URI, conf: Configuration, jerseyClientConfig: ClientConfig)
+class ResourceDrivenTimelineQueryClient(
+    resource: String,
+    timelineURI: URI,
+    conf: Configuration,
+    jerseyClientConfig: ClientConfig)
     extends TimelineQueryClient(timelineURI, conf, jerseyClientConfig) with Logging {
 
   /** Loaded timeline entity instance */
@@ -61,7 +64,7 @@ class ResourceDrivenTimelineQueryClient(resource: String,
    * load in the JSON
    */
   private def init(): Unit = {
-    val in: InputStream = this.getClass.getClassLoader.getResourceAsStream(resource)
+    val in = this.getClass.getClassLoader.getResourceAsStream(resource)
     require(in != null, s"Failed to load resource $resource")
     val mapper = new ObjectMapper() with ScalaObjectMapper
     // make deserializer use JAXB annotations (only)
@@ -81,9 +84,15 @@ class ResourceDrivenTimelineQueryClient(resource: String,
    * List entities. No filtering is performed.
    * @return a possibly empty list of entities
    */
-  override def listEntities(entityType: String, primaryFilter: Option[(String, String)],
-      secondaryFilters: Map[String, String], fields: Seq[String], limit: Option[Long],
-      windowStart: Option[Long], windowEnd: Option[Long], fromId: Option[String],
+  override def listEntities(
+      entityType: String,
+      primaryFilter: Option[(String, String)],
+      secondaryFilters: Map[String, String],
+      fields: Seq[String],
+      limit: Option[Long],
+      windowStart: Option[Long],
+      windowEnd: Option[Long],
+      fromId: Option[String],
       fromTs: Option[Long]): List[TimelineEntity] = {
     entityList
   }

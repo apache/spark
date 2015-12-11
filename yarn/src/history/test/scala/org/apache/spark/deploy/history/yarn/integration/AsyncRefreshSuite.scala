@@ -141,8 +141,11 @@ class AsyncRefreshSuite extends AbstractHistoryIntegrationTests {
    * @param timeout timeout
    * @return the successful listing
    */
-  def awaitRefreshMessageProcessed (provider: TimeManagedHistoryProvider,
-      initialCount: Long, timeout: Long, text: String): Unit = {
+  def awaitRefreshMessageProcessed (
+      provider: TimeManagedHistoryProvider,
+      initialCount: Long,
+      timeout: Long,
+      text: String): Unit = {
     val refresher = provider.refresher
 
     def listingProbe(): Outcome = {

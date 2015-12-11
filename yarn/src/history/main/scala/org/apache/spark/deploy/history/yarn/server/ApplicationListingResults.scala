@@ -86,8 +86,8 @@ private[spark] class ApplicationListingResults(
    * @param attemptId attempt ID
    * @return (app, attempt, attempt) options.
    */
-  def lookupAttempt(appId: String, attemptId: Option[String]):
-  (Option[TimelineApplicationHistoryInfo], Option[TimelineApplicationAttemptInfo],
+  def lookupAttempt(appId: String, attemptId: Option[String])
+  : (Option[TimelineApplicationHistoryInfo], Option[TimelineApplicationAttemptInfo],
       List[TimelineApplicationAttemptInfo] ) = {
     val foundApp = lookup(appId)
     if (foundApp.isEmpty) {

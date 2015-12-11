@@ -127,7 +127,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param latest later list of entries
    * @return a combined list.
    */
-  def combineResults(original: Seq[TimelineApplicationHistoryInfo],
+  def combineResults(
+      original: Seq[TimelineApplicationHistoryInfo],
       latest: Seq[TimelineApplicationHistoryInfo]): Seq[TimelineApplicationHistoryInfo] = {
     // build map of original
     val results = new scala.collection.mutable.HashMap[String, TimelineApplicationHistoryInfo]
@@ -157,8 +158,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param latest the latest attempt
    * @return the merged set
    */
-  def mergeAttempts(old: TimelineApplicationHistoryInfo, latest: TimelineApplicationHistoryInfo):
-  TimelineApplicationHistoryInfo = {
+  def mergeAttempts(old: TimelineApplicationHistoryInfo, latest: TimelineApplicationHistoryInfo)
+    : TimelineApplicationHistoryInfo = {
     val oldAttempts = old.attempts
     val latestAttempts = latest.attempts
     new TimelineApplicationHistoryInfo(old.id, old.name,
@@ -173,7 +174,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @return an ordered list of attempts with original attempt entries removed if a later
    *         version updated the event information.
    */
-  def mergeAttemptInfoLists(oldAttempts: List[TimelineApplicationAttemptInfo],
+  def mergeAttemptInfoLists(
+      oldAttempts: List[TimelineApplicationAttemptInfo],
       latestAttempts: List[TimelineApplicationAttemptInfo])
     : List[TimelineApplicationAttemptInfo] = {
 
@@ -210,7 +212,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param attempt2 attempt 2
    * @return the preferred outcome
    */
-  def mostRecentAttempt(attempt1: TimelineApplicationAttemptInfo,
+  def mostRecentAttempt
+  (attempt1: TimelineApplicationAttemptInfo,
       attempt2: TimelineApplicationAttemptInfo): TimelineApplicationAttemptInfo = {
     (attempt1, attempt2) match {
       case (a1, a2) if a1.version > 0 && a2.version > 0 =>
@@ -230,7 +233,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param attempt2 attempt 2
    * @return true if attempt1 is considered newer than attempt2
    */
-  def attemptNewerThan(attempt1: TimelineApplicationAttemptInfo,
+  def attemptNewerThan(
+      attempt1: TimelineApplicationAttemptInfo,
       attempt2: TimelineApplicationAttemptInfo): Boolean = {
     if (attempt1.version > 0 && attempt2.version > 0) {
       attempt1.version > attempt2.version
@@ -318,8 +322,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param history history to scan (which can be an empty list)
    * @return the latest element in the list, or `None` for no match
    */
-  def findStartOfWindow(history: Seq[TimelineApplicationHistoryInfo]):
-    Option[TimelineApplicationHistoryInfo] = {
+  def findStartOfWindow(history: Seq[TimelineApplicationHistoryInfo])
+    : Option[TimelineApplicationHistoryInfo] = {
     findIncompleteApplications(history) match {
       // no incomplete apps; use latest
       case Nil => findLatestApplication(history)
@@ -439,7 +443,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param livenessWindow the window in millis within which apps are considered automatically live
    * @return list of apps which are marked as incomplete but no longer running
    */
-  private[yarn] def completeAppsFromYARN(apps: Seq[TimelineApplicationHistoryInfo],
+  private[yarn] def completeAppsFromYARN(
+      apps: Seq[TimelineApplicationHistoryInfo],
       recordMap: Map[String, ApplicationReport],
       currentTime: Long,
       livenessWindow: Long): Seq[TimelineApplicationHistoryInfo] = {

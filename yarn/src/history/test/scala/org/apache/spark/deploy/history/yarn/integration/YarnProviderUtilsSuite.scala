@@ -33,22 +33,30 @@ import org.apache.spark.{Logging, SparkFunSuite}
 class YarnProviderUtilsSuite extends SparkFunSuite with Logging
   with ExtraAssertions with Matchers {
 
-  def historyInfo(id: String, started: Long, ended: Long, complete: Boolean):
-      TimelineApplicationHistoryInfo = {
+  def historyInfo(
+      id: String,
+      started: Long,
+      ended: Long,
+      complete: Boolean): TimelineApplicationHistoryInfo = {
     historyInfo(id, Some(id), started, ended, ended, complete )
   }
 
-  def historyInfo(appId: String, attemptId: Option[String], started: Long, ended: Long,
-      updated: Long, complete: Boolean):
-      TimelineApplicationHistoryInfo = {
-    val updated = Math.max(started, ended)
+  def historyInfo(
+      appId: String,
+      attemptId: Option[String],
+      started: Long,
+      ended: Long,
+      updated: Long,
+      complete: Boolean): TimelineApplicationHistoryInfo = {
+      val updated = Math.max(started, ended)
     val attempt = new TimelineApplicationAttemptInfo(attemptId,
       started, ended, updated, "user", complete , attemptId.get, attemptId)
     new TimelineApplicationHistoryInfo(appId, appId, List(attempt))
   }
 
-  def historyInfo(old: TimelineApplicationHistoryInfo,
-    attempts: List[TimelineApplicationAttemptInfo]): TimelineApplicationHistoryInfo = {
+  def historyInfo(
+      old: TimelineApplicationHistoryInfo,
+      attempts: List[TimelineApplicationAttemptInfo]): TimelineApplicationHistoryInfo = {
     new TimelineApplicationHistoryInfo(old.id, old.name, attempts)
   }
 

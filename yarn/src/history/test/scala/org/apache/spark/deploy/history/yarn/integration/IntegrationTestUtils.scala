@@ -35,17 +35,20 @@ import org.apache.spark.scheduler.cluster.{StubApplicationAttemptId, StubApplica
  */
 private[yarn] trait IntegrationTestUtils {
 
-  def appHistoryInfo(id: String,
+  def appHistoryInfo(
+      id: String,
       attempts: List[TimelineApplicationAttemptInfo]): TimelineApplicationHistoryInfo = {
     new TimelineApplicationHistoryInfo(id, id, attempts)
   }
 
-  def appHistoryInfo(id: String,
+  def appHistoryInfo(
+      id: String,
       attempt: TimelineApplicationAttemptInfo): TimelineApplicationHistoryInfo = {
     new TimelineApplicationHistoryInfo(id, id, attempt :: Nil)
   }
 
-  def attempt(id: String,
+  def attempt(
+      id: String,
       startTime: Long,
       endTime: Long,
       lastUpdated: Long,
@@ -64,9 +67,13 @@ private[yarn] trait IntegrationTestUtils {
    * @param finishTime finish time or 0
    * @return the report
    */
-  def stubApplicationReport(id: Int, clusterTimestamp: Long, attempt: Int,
+  def stubApplicationReport(
+      id: Int,
+      clusterTimestamp: Long,
+      attempt: Int,
       state: YarnApplicationState,
-      startTime: Long, finishTime: Long = 0): ApplicationReport = {
+      startTime: Long,
+      finishTime: Long = 0): ApplicationReport = {
     val yarnId = new StubApplicationId(id, clusterTimestamp)
     // this is tagged as hadoop private. The alternate tactic: create your own implementation,
     // is brittle against Hadoop versions, as new fields are added. Using this
@@ -88,7 +95,10 @@ private[yarn] trait IntegrationTestUtils {
    * @param updateTime update time, will be taken from report start time otherwise
    * @return
    */
-  def attemptFromAppReport(report: ApplicationReport, endTime: Long, completed: Boolean,
+  def attemptFromAppReport(
+      report: ApplicationReport,
+      endTime: Long,
+      completed: Boolean,
       updateTime: Long = 0): TimelineApplicationAttemptInfo = {
 
     val entityId = report.getCurrentApplicationAttemptId.toString
@@ -144,7 +154,8 @@ private[yarn] trait IntegrationTestUtils {
    * @param timeout timeout
    * @return the application details.
    */
-  def awaitListingEntry(provider: YarnHistoryProvider,
+  def awaitListingEntry(
+      provider: YarnHistoryProvider,
       appId: String,
       attempts: Int,
       timeout: Long): TimelineApplicationHistoryInfo = {
@@ -175,7 +186,8 @@ private[yarn] trait IntegrationTestUtils {
    * @param timeout timeout
    * @return the successful listing
    */
-  def awaitRefreshExecuted(provider: YarnHistoryProvider,
+  def awaitRefreshExecuted(
+      provider: YarnHistoryProvider,
       triggerRefresh: Boolean,
       timeout: Long): Unit = {
     val initialCount = provider.refreshCount
@@ -200,8 +212,12 @@ private[yarn] trait IntegrationTestUtils {
    * @param text text which must not be present
    * @param timeout timeout in mils
    */
-  def awaitURLDoesNotContainText(connector: SpnegoUrlConnector,
-      url: URL, text: String, timeout: Long, message: String = ""): String = {
+  def awaitURLDoesNotContainText(
+      connector: SpnegoUrlConnector,
+      url: URL,
+      text: String,
+      timeout: Long,
+      message: String = ""): String = {
     def get: String = {
       connector.execHttpOperation("GET", url, null, "").responseBody
     }
@@ -236,8 +252,11 @@ private[yarn] trait IntegrationTestUtils {
    * @param text text which must be present
    * @param timeout timeout in mils
    */
-  def awaitURLContainsText(connector: SpnegoUrlConnector,
-      url: URL, text: String, timeout: Long): String = {
+  def awaitURLContainsText(
+      connector: SpnegoUrlConnector,
+      url: URL,
+      text: String,
+      timeout: Long): String = {
     def get: String = {
       connector.execHttpOperation("GET", url, null, "").responseBody
     }
@@ -266,13 +285,13 @@ private[yarn] trait IntegrationTestUtils {
     get
   }
 
-  def lookupApplication(listing: Seq[TimelineApplicationHistoryInfo], id: ApplicationId):
-  TimelineApplicationHistoryInfo = {
+  def lookupApplication(listing: Seq[TimelineApplicationHistoryInfo], id: ApplicationId)
+      : TimelineApplicationHistoryInfo = {
     lookupApplication(listing, id.toString)
   }
 
-  def lookupApplication(listing: Seq[TimelineApplicationHistoryInfo], id: String):
-  TimelineApplicationHistoryInfo = {
+  def lookupApplication(listing: Seq[TimelineApplicationHistoryInfo], id: String)
+    : TimelineApplicationHistoryInfo = {
     findAppById(listing, id) match {
       case Some(applicationInfo2) =>
         applicationInfo2
