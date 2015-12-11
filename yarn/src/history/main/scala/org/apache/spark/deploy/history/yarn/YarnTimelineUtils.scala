@@ -661,7 +661,8 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @param lastUpdated time in milliseconds when this entity was last updated (0 leaves unset)
    * @return the timeline entity
    */
-  def createTimelineEntity(appId: ApplicationId,
+  def createTimelineEntity(
+      appId: ApplicationId,
       attemptId: Option[ApplicationAttemptId],
       sparkApplicationId: Option[String],
       sparkApplicationAttemptId: Option[String],
@@ -709,7 +710,8 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @param sparkApplicationAttemptId optional attempt ID
    * @return the updated entity
    */
-  def completed(entity: TimelineEntity,
+  def completed(
+      entity: TimelineEntity,
       startTime: Long,
       endtime: Long,
       sparkApplicationId: Option[String],

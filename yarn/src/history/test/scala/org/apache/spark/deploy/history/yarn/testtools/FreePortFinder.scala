@@ -37,7 +37,7 @@ trait FreePortFinder {
   /**
    * Simple function to see if a port is free; if it is return the address and the port allocated.
    *
-   * This function can be passed to <code>Util.startServiceOnPort</code>
+   * This function can be passed to `Util.startServiceOnPort`
    * @param port port to try. If 0, the OS chooses the port
    * @return an (address, port) tuple
    */
