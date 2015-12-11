@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.SparkConf._
+import org.apache.spark.config.ConfigEntry._
 import org.apache.spark.network.util.ByteUnit
 
 private[spark] object YarnConfigKeys {
@@ -172,56 +172,6 @@ private[spark] object YarnConfigKeys {
 
   val CREDENTIAL_FILE_MAX_COUNT = intConf("spark.yarn.credentials.file.retention.count",
     defaultValue = Some(5))
-
-  // TODO: options below should be in core, either because they're not YARN-specific, or because
-  // they're modified by code that resides in core.
-
-  val DRIVER_CLASS_PATH = stringConf("spark.driver.extraClassPath").optional
-
-  val DRIVER_JAVA_OPTIONS = stringConf("spark.driver.extraJavaOptions").optional
-
-  val DRIVER_LIBRARY_PATH = stringConf("spark.driver.extraLibraryPath").optional
-
-  val DRIVER_USER_CLASS_PATH_FIRST = booleanConf("spark.driver.userClassPathFirst",
-    defaultValue = Some(false))
-
-  val EXECUTOR_CLASS_PATH = stringConf("spark.executor.extraClassPath").optional
-
-  val EXECUTOR_JAVA_OPTIONS = stringConf("spark.executor.extraJavaOptions").optional
-
-  val EXECUTOR_LIBRARY_PATH = stringConf("spark.executor.extraLibraryPath").optional
-
-  val EXECUTOR_USER_CLASS_PATH_FIRST = booleanConf("spark.executor.userClassPathFirst",
-    defaultValue = Some(false))
-
-  val IS_PYTHON_APP = booleanConf("spark.yarn.isPython",
-    defaultValue = Some(false),
-    isPublic = false)
-
-  val CPUS_PER_TASK = intConf("spark.task.cpus",
-    defaultValue = Some(1))
-
-  val DYN_ALLOCATION_MIN_EXECUTORS = intConf("spark.dynamicAllocation.minExecutors",
-    defaultValue = Some(0))
-
-  val DYN_ALLOCATION_INITIAL_EXECUTORS = fallbackConf("spark.dynamicAllocation.initialExecutors",
-    fallback = DYN_ALLOCATION_MIN_EXECUTORS)
-
-  val DYN_ALLOCATION_MAX_EXECUTORS = intConf("spark.dynamicAllocation.maxExecutors",
-    defaultValue = Some(Int.MaxValue))
-
-  val SHUFFLE_SERVICE_ENABLED = booleanConf("spark.shuffle.service.enabled",
-    defaultValue = Some(false))
-
-  val KEYTAB = stringConf("spark.yarn.keytab",
-    doc = "Location of user's keytab.")
-    .optional
-
-  val PRINCIPAL = stringConf("spark.yarn.principal",
-    doc = "Name of the Kerberos principal.")
-    .optional
-
-  val EXECUTOR_INSTANCES = intConf("spark.executor.instances").optional
 
   /* Private configs. */
 

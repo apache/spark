@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.SparkConf.ConfEntry
+import org.apache.spark.config.ConfigEntry
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf._
@@ -447,7 +447,7 @@ class HiveContext private[hive](
     hiveconf.set(key, value)
   }
 
-  override private[sql] def setConf[T](entry: ConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
   }
 

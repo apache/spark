@@ -26,6 +26,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
 
 import org.apache.spark.SparkConf
+import org.apache.spark.config.CoreConfigKeys
 
 private[yarn] case class ContainerLocalityPreferences(nodes: Array[String], racks: Array[String])
 
@@ -85,7 +86,7 @@ private[yarn] class LocalityPreferredContainerPlacementStrategy(
     val resource: Resource) {
 
   // Number of CPUs per task
-  private val CPUS_PER_TASK = sparkConf.get(YarnConfigKeys.CPUS_PER_TASK)
+  private val CPUS_PER_TASK = sparkConf.get(CoreConfigKeys.CPUS_PER_TASK)
 
   /**
    * Calculate each container's node locality and rack locality

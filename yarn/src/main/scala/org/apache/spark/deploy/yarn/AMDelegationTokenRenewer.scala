@@ -27,6 +27,7 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.deploy.SparkHadoopUtil
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.config.CoreConfigKeys._
 import org.apache.spark.util.ThreadUtils
 
 /*

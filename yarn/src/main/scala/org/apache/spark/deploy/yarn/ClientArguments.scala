@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.config.CoreConfigKeys._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 

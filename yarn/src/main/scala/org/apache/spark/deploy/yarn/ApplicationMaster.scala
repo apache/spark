@@ -32,6 +32,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
   SparkException, SparkUserAppException}
+import org.apache.spark.config.CoreConfigKeys._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}

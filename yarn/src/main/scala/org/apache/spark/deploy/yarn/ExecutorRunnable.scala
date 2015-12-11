@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.config.CoreConfigKeys._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
