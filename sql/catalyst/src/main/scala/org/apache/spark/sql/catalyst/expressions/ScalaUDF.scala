@@ -1032,8 +1032,8 @@ case class ScalaUDF(
     val funcArguments = converterTerms.zipWithIndex.map {
       case (converter, i) =>
         val eval = evals(i)
-        val boxedType = ctx.boxedType(children(i).dataType)
-        s"$converter.apply(${eval.isNull} ? ($boxedType) null : ($boxedType) ${eval.value})"
+        val dt = children(i).dataType
+        s"$converter.apply(${eval.isNull} ? null : (${ctx.boxedType(dt)})(${eval.value}))"
     }.mkString(",")
     val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
       s"(${ctx.boxedType(ctx.javaType(dataType))})${catalystConverterTerm}" +

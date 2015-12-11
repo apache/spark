@@ -1148,6 +1148,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
     checkAnswer(df.select(boxedUDF($"age")), Row(44) :: Row(-10) :: Nil)
 
+    sqlContext.udf.register("boxedUDF", (i: java.lang.Integer) => if (i == null) -10 else i * 2)
+    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, -2) :: Nil)
+
     val primitiveUDF = udf((i: Int) => i * 2)
     checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
   }
