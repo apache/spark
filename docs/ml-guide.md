@@ -1,7 +1,9 @@
 ---
 layout: global
-title: Spark ML Programming Guide
+title: "Overview: estimators, transformers and pipelines - spark.ml"
+displayTitle: "Overview: estimators, transformers and pipelines - spark.ml"
 ---
+
 
 `\[
 \newcommand{\R}{\mathbb{R}}
@@ -31,21 +33,6 @@ See the [algorithm guides](#algorithm-guides) section below for guides on sub-pa
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
-
-# Algorithm guides
-
-We provide several algorithm guides specific to the Pipelines API.
-Several of these algorithms, such as certain feature transformers, are not in the `spark.mllib` API.
-Also, some algorithms have additional capabilities in the `spark.ml` API; e.g., random forests
-provide class probabilities, and linear models provide model summaries.
-
-* [Feature extraction, transformation, and selection](ml-features.html)
-* [Clustering](ml-clustering.html)
-* [Decision Trees for classification and regression](ml-decision-tree.html)
-* [Ensembles](ml-ensembles.html)
-* [Linear methods with elastic net regularization](ml-linear-methods.html)
-* [Multilayer perceptron classifier](ml-ann.html)
-* [Survival Regression](ml-survival-regression.html)
 
 
 # Main concepts in Pipelines
