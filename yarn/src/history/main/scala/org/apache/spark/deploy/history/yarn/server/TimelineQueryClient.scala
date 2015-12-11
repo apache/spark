@@ -46,7 +46,8 @@ import org.apache.spark.deploy.history.yarn.rest.{HttpRequestException, JerseyBi
  * @param conf Hadoop configuration
  * @param jerseyClientConfig Jersey client configuration
  */
-private[spark] class TimelineQueryClient(timelineURI: URI,
+private[spark] class TimelineQueryClient(
+    timelineURI: URI,
     conf: Configuration,
     jerseyClientConfig: ClientConfig)
     extends Logging with Closeable {
@@ -64,8 +65,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   /**
    * the delegation token (unused until delegation support implemented)
    */
-  private var token: DelegationTokenAuthenticatedURL.Token =
-    new DelegationTokenAuthenticatedURL.Token
+  private var token = new DelegationTokenAuthenticatedURL.Token
 
   /**
    * The last time there was a token renewal operation.
@@ -311,7 +311,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    * @param fromTs optional timestamp to start from
    * @return a possibly empty list of entities
    */
-    def listEntities(entityType: String,
+    def listEntities(
+      entityType: String,
         primaryFilter: Option[(String, String)] = None,
         secondaryFilters: Map[String, String] = Map(),
         fields: Seq[String] = Nil,

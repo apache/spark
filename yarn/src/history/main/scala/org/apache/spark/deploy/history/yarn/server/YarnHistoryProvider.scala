@@ -529,7 +529,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return  the result of the last successful listing operation,
    *          or a listing with no history events if there has been a failure
    */
-   def listApplications(limit: Option[Long] = None,
+   def listApplications(
+      limit: Option[Long] = None,
       windowStart: Option[Long] = None,
       windowEnd: Option[Long] = None): ApplicationListingResults = {
     if (!enabled) {
