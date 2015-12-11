@@ -617,6 +617,7 @@ for row in selected.collect():
 
 {% endhighlight %}
 </div>
+
 </div>
 
 ## Example: model selection via cross-validation
