@@ -142,7 +142,6 @@ method on the `DataFrame` before passing the `DataFrame` to the next stage.
 A `Pipeline` is an `Estimator`.
 Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a
 `Transformer`.
-
 This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
 
 <p style="text-align: center;">
@@ -558,7 +557,6 @@ Pipeline pipeline = new Pipeline()
 
 // Fit the pipeline to training documents.
 PipelineModel model = pipeline.fit(training);
-
 
 // Prepare test documents, which are unlabeled.
 DataFrame test = sqlContext.createDataFrame(Arrays.asList(
