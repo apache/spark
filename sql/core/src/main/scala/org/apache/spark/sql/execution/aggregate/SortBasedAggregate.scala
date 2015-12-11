@@ -41,8 +41,8 @@ case class SortBasedAggregate(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = false
+  override def canProcessUnsafeRows: Boolean = false
+  override def canProcessSafeRows: Boolean = true
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -77,7 +77,7 @@ case class SortBasedAggregate(
         val outputIter = new SortBasedAggregationIterator(
           groupingExpressions,
           child.output,
-          iter.asInstanceOf[Iterator[UnsafeRow]],
+          iter,
           aggregateExpressions,
           aggregateAttributes,
           initialInputBufferOffset,

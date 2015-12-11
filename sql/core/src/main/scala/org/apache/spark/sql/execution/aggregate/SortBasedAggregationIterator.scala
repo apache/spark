@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
@@ -28,7 +29,7 @@ import org.apache.spark.sql.execution.metric.LongSQLMetric
 class SortBasedAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
-    inputIterator: Iterator[UnsafeRow],
+    inputIterator: Iterator[InternalRow],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
@@ -78,7 +79,7 @@ class SortBasedAggregationIterator(
   private[this] var nextGroupingKey: UnsafeRow = _
 
   // The first row of next partition.
-  private[this] var firstRowInNextGroup: UnsafeRow = _
+  private[this] var firstRowInNextGroup: InternalRow = _
 
   // Indicates if we has new group of rows from the sorted input iterator
   private[this] var sortedInputHasNewGroup: Boolean = false
@@ -90,7 +91,7 @@ class SortBasedAggregationIterator(
     if (inputIterator.hasNext) {
       initializeBuffer(sortBasedAggregationBuffer)
       val inputRow = inputIterator.next()
-      nextGroupingKey = groupingKeyProjection(inputRow).copy()
+      nextGroupingKey = groupingProjection(inputRow).copy()
       firstRowInNextGroup = inputRow.copy()
       numInputRows += 1
       sortedInputHasNewGroup = true
@@ -116,7 +117,7 @@ class SortBasedAggregationIterator(
     while (!findNextPartition && inputIterator.hasNext) {
       // Get the grouping key.
       val currentRow = inputIterator.next()
-      val groupingKey = groupingKeyProjection(currentRow)
+      val groupingKey = groupingProjection(currentRow)
       numInputRows += 1
 
       // Check if the current row belongs the current input row.

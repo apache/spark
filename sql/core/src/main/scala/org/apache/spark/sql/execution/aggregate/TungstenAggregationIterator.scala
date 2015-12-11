@@ -77,7 +77,7 @@ import org.apache.spark.{InternalAccumulator, Logging, TaskContext}
  */
 class TungstenAggregationIterator(
     groupingExpressions: Seq[NamedExpression],
-    var aggregateExpressions: Seq[AggregateExpression],
+    aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
@@ -126,52 +126,6 @@ class TungstenAggregationIterator(
     buffer
   }
 
-  // Creates a function used to process a row based on the given inputAttributes.
-  private def generateProcessRow(
-      allAggregateFunctions: Array[AggregateFunction],
-      inputAttributes: Seq[Attribute]): (UnsafeRow, InternalRow) => Unit = {
-    if (allAggregateFunctions.isEmpty) {
-      return (currentBuffer: UnsafeRow, row: InternalRow) => {}
-    }
-
-    val aggregationBufferAttributes = allAggregateFunctions.flatMap(_.aggBufferAttributes)
-    val joinedRow = new JoinedRow()
-
-    val updateExpressions = allAggregateFunctions.zip(aggregateExpressions).flatMap {
-      case (ae: DeclarativeAggregate, a) =>
-        if (!sortBased && (a.mode == Partial || a.mode == Complete)) {
-          ae.updateExpressions
-        } else {
-          ae.mergeExpressions
-        }
-      case (agg: AggregateFunction, a) => Seq.fill(agg.aggBufferAttributes.length)(NoOp)
-    }
-    val expressionAggUpdateProjection =
-      newMutableProjection(updateExpressions, aggregationBufferAttributes ++ inputAttributes)()
-
-    val imperativeAggregateFunctions: Array[(MutableRow, InternalRow) => Unit] =
-      allAggregateFunctions.zip(aggregateExpressions).collect {
-        case (func: ImperativeAggregate, a) =>
-          if (!sortBased && (a.mode == Partial || a.mode == Complete)) {
-            (cur: MutableRow, row: InternalRow) => func.update(cur, row)
-          } else {
-            (cur: MutableRow, row: InternalRow) => func.merge(cur, row)
-          }
-      }
-
-    (currentBuffer: UnsafeRow, row: InternalRow) => {
-      expressionAggUpdateProjection.target(currentBuffer)
-      // Process all expression-based aggregate functions.
-      expressionAggUpdateProjection(joinedRow(currentBuffer, row))
-      // Process all imperative aggregate functions
-      var i = 0
-      while (i < imperativeAggregateFunctions.length) {
-        imperativeAggregateFunctions(i)(currentBuffer, row)
-        i += 1
-      }
-    }
-  }
-
   // Creates a function used to generate output rows.
   override def generateResultProjection(): (UnsafeRow, MutableRow) => UnsafeRow = {
     val modes = aggregateExpressions.map(_.mode).distinct
@@ -190,11 +144,6 @@ class TungstenAggregationIterator(
       super.generateResultProjection()
     }
   }
-
-  // A function used to process a input row. Its first argument is the aggregation buffer
-  // and the second argument is the input row.
-  private[this] var processRow: (UnsafeRow, InternalRow) => Unit =
-    generateProcessRow(aggregateFunctions, originalInputAttributes)
 
   // An aggregation buffer containing initial buffer values. It is used to
   // initialize other aggregation buffers.
@@ -226,7 +175,7 @@ class TungstenAggregationIterator(
     if (groupingExpressions.isEmpty) {
       // If there is no grouping expressions, we can just reuse the same buffer over and over again.
       // Note that it would be better to eliminate the hash map entirely in the future.
-      val groupingKey = groupingKeyProjection.apply(null)
+      val groupingKey = groupingProjection.apply(null)
       val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
@@ -238,7 +187,7 @@ class TungstenAggregationIterator(
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
         numInputRows += 1
-        val groupingKey = groupingKeyProjection.apply(newInput)
+        val groupingKey = groupingProjection.apply(newInput)
         var buffer: UnsafeRow = null
         if (i < fallbackStartsAt) {
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
@@ -292,14 +241,18 @@ class TungstenAggregationIterator(
   private def switchToSortBasedAggregation(): Unit = {
     logInfo("falling back to sort based aggregation.")
 
-    sortBased = true
-
     // Basically the value of the KVIterator returned by externalSorter
-    // will just aggregation buffer. At here, we use inputAggBufferAttributes.
-    val newInputAttributes: Seq[Attribute] = aggregateFunctions.flatMap(_.inputAggBufferAttributes)
-
-    // Set up new processRow.
-    processRow = generateProcessRow(aggregateFunctions, newInputAttributes)
+    // will be just aggregation buffer, so we rewrite the aggregateExpressions to reflect it.
+    val newExpressions = aggregateExpressions.map {
+      case agg @ AggregateExpression(_, Partial, _) =>
+        agg.copy(mode = PartialMerge)
+      case agg @ AggregateExpression(_, Complete, _) =>
+        agg.copy(mode = Final)
+      case other => other
+    }
+    val newFunctions = initializeAggregateFunctions(newExpressions, 0)
+    val newInputAttributes = newFunctions.flatMap(_.inputAggBufferAttributes)
+    sortBasedProcessRow = generateProcessRow(newExpressions, newFunctions, newInputAttributes)
 
     // Step 5: Get the sorted iterator from the externalSorter.
     sortedKVIterator = externalSorter.sortedIterator()
@@ -316,6 +269,9 @@ class TungstenAggregationIterator(
       currentGroupingKey = key.copy()
       firstRowInNextGroup = value.copy()
     }
+
+    // Step 7: set sortBased to true.
+    sortBased = true
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -345,6 +301,9 @@ class TungstenAggregationIterator(
   // The aggregation buffer used by the sort-based aggregation.
   private[this] val sortBasedAggregationBuffer: UnsafeRow = createNewAggregationBuffer()
 
+  // The function used to process rows in a group
+  private[this] var sortBasedProcessRow: (MutableRow, InternalRow) => Unit = null
+
   // Processes rows in the current group. It will stop when it find a new group.
   private def processCurrentSortedGroup(): Unit = {
     // First, we need to copy nextGroupingKey to currentGroupingKey.
@@ -353,7 +312,7 @@ class TungstenAggregationIterator(
     // We create a variable to track if we see the next group.
     var findNextPartition = false
     // firstRowInNextGroup is the first row of this group. We first process it.
-    processRow(sortBasedAggregationBuffer, firstRowInNextGroup)
+    sortBasedProcessRow(sortBasedAggregationBuffer, firstRowInNextGroup)
 
     // The search will stop when we see the next group or there is no
     // input row left in the iter.
@@ -368,16 +327,15 @@ class TungstenAggregationIterator(
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey.equals(groupingKey)) {
-        processRow(sortBasedAggregationBuffer, inputAggregationBuffer)
+        sortBasedProcessRow(sortBasedAggregationBuffer, inputAggregationBuffer)
 
         hasNext = sortedKVIterator.next()
       } else {
         // We find a new group.
         findNextPartition = true
         // copyFrom will fail when
-        nextGroupingKey.copyFrom(groupingKey) // = groupingKey.copy()
-        firstRowInNextGroup.copyFrom(inputAggregationBuffer) // = inputAggregationBuffer.copy()
-
+        nextGroupingKey.copyFrom(groupingKey)
+        firstRowInNextGroup.copyFrom(inputAggregationBuffer)
       }
     }
     // We have not seen a new group. It means that there is no new row in the input
