@@ -153,8 +153,8 @@ If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s
 method on the `DataFrame` before passing the `DataFrame` to the next stage.
 
 A `Pipeline` is an `Estimator`.
-Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a
-`Transformer`.
+Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel`, which is a `Transformer`.
+
 This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
 
 <p style="text-align: center;">
@@ -186,6 +186,15 @@ This type checking is done using the `DataFrame` *schema*, a description of the 
 `myHashingTF` should not be inserted into the `Pipeline` twice since `Pipeline` stages must have
 unique IDs.  However, different instances `myHashingTF1` and `myHashingTF2` (both of type `HashingTF`)
 can be put into the same `Pipeline` since different instances will be created with different IDs.
+
+### Saving Pipelines
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
+
+* K-Means
+* Naive Bayes
+* ALS
+* Linear Regression
+* Logistic Regression
 
 ## Parameters
 
@@ -468,6 +477,15 @@ val pipeline = new Pipeline()
 // Fit the pipeline to training documents.
 val model = pipeline.fit(training)
 
+// now we can optionally save it to disk
+model.save("/tmp/spark-logistic-regression-model")
+
+// and load it back in during production
+val loadedModel = Pipeline.load("/tmp/spark-logistic-regression-model")
+// or equivalently
+val loadedModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
+
+
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
   (4L, "spark i j k"),
@@ -483,6 +501,15 @@ model.transform(test)
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
     println(s"($id, $text) --> prob=$prob, prediction=$prediction")
   }
+
+// or use the "loadedModel" to make predictions
+// Make predictions on test documents
+loadedModel.transform(test)
+  .select("id", "text", "probability", "prediction")
+  .collect()
+  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+    }
 
 {% endhighlight %}
 </div>
@@ -556,6 +583,7 @@ Pipeline pipeline = new Pipeline()
 // Fit the pipeline to training documents.
 PipelineModel model = pipeline.fit(training);
 
+
 // Prepare test documents, which are unlabeled.
 DataFrame test = sqlContext.createDataFrame(Arrays.asList(
   new Document(4L, "spark i j k"),
@@ -611,49 +639,6 @@ selected = prediction.select("id", "text", "prediction")
 for row in selected.collect():
     print(row)
 
-{% endhighlight %}
-</div>
-</div>
-
-## Example: Saving and Loading a Pipeline
-
-Often times it is worth it to save a model to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
-
-* K-Means
-* Naive Bayes
-* ALS
-* Linear Regression
-* Logistic Regression
-
-Below is an example of how a pipeline can be persisted and loaded. This example uses a model that we trained and created above.
-<div class="codetabs">
-
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
-// fit the model as we did in the previous example
-val model = pipeline.fit(training)
-// now save it to disk
-model.save("/tmp/spark-logistic-regression-model")
-
-// load in the model
-val loadedModel = Pipeline.load("/tmp/spark-logistic-regression-model")
-// or equivalently
-val loadedModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
-
-val test = sqlContext.createDataFrame(Seq(
-  (4L, "spark i j k"),
-  (5L, "l m n"),
-  (6L, "mapreduce spark"),
-  (7L, "apache hadoop")
-)).toDF("id", "text")
-
-// Make predictions on test documents
-loadedModel.transform(test)
-  .select("id", "text", "probability", "prediction")
-  .collect()
-  .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-    println(s"($id, $text) --> prob=$prob, prediction=$prediction")
-  }
 {% endhighlight %}
 </div>
 </div>
