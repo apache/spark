@@ -865,6 +865,9 @@ test_that("drop column", {
   expect_equal(columns(df), c("name", "age"))
   df$age3 <- NULL
   expect_equal(columns(df), c("name", "age"))
+
+  # Test to make sure base::drop is not masked
+  expect_equal(drop(1:3 %*% 2:4), 20)
 })
 
 test_that("subsetting", {

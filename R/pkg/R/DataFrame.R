@@ -2419,19 +2419,22 @@ setMethod("str",
 #' drop(df, df$col1)
 #' }
 setMethod("drop",
-          signature(x = "DataFrame", col = "character"),
+          signature(x = "DataFrame"),
           function(x, col) {
-            sdf <- callJMethod(x@sdf, "drop", as.list(col))
+            stopifnot(class(col) == "character" || class(col) == "Column")
+
+            if (class(col) == "character") {
+              sdf <- callJMethod(x@sdf, "drop", as.list(col))
+            } else {
+              sdf <- callJMethod(x@sdf, "drop", col@jc)
+            }
             dataFrame(sdf)
           })
 
-#' @rdname drop
-#' @name drop
-#' @export
+# Expose base::drop
 setMethod("drop",
-          signature(x = "DataFrame", col = "Column"),
-          function(x, col) {
-            sdf <- callJMethod(x@sdf, "drop", col@jc)
-            dataFrame(sdf)
+          signature(x = "ANY"),
+          function(x) {
+            base::drop(x)
           })
 

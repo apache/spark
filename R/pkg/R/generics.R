@@ -430,7 +430,7 @@ setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
 #' @rdname drop
 #' @export
-setGeneric("drop", function(x, col) { standardGeneric("drop") })
+setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
 #' @rdname dropduplicates
 #' @export
