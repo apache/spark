@@ -23,10 +23,10 @@ FROM mesosphere/mesos:0.25.0-0.2.70.ubuntu1404
 RUN apt-get update && \
     apt-get install -y python libnss3 openjdk-7-jre-headless curl
 
-RUN curl  $(curl 'https://www.apache.org/dyn/closer.lua/spark/spark-1.5.1/spark-1.5.1-bin-hadoop2.4.tgz' \
+RUN curl  $(curl 'https://www.apache.org/dyn/closer.lua/spark/spark-<SPARK_VERSION>/spark-<SPARK_VERSION>-bin-hadoop2.4.tgz' \
     | grep -o '<strong>[^<]*</strong>' \
     | sed 's/<[^>]*>//g' | head) \
     | tar -xzC /opt && \
-     mv /opt/spark-1.5.1-bin-hadoop2.4 /opt/spark
+     mv /opt/spark-<SPARK_VERSION>-bin-hadoop2.4 /opt/spark
 ENV SPARK_HOME /opt/spark
 ENV MESOS_NATIVE_JAVA_LIBRARY /usr/local/lib/libmesos.so
