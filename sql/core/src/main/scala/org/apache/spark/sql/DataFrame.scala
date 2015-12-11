@@ -161,10 +161,10 @@ class DataFrame private[sql](
   }
 
   /**
-    * Compose the string representing rows for output
-    * @param _numRows Number of rows to show
-    * @param truncate Whether truncate long strings and align cells right
-    */
+   * Compose the string representing rows for output
+   * @param _numRows Number of rows to show
+   * @param truncate Whether truncate long strings and align cells right
+   */
   override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
     val takeResult = take(numRows + 1)
