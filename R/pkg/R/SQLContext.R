@@ -208,22 +208,31 @@ setMethod("toDF", signature(x = "RDD"),
 #' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return DataFrame
+#' @rdname read.json
+#' @name read.json
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
 #' df <- jsonFile(sqlContext, path)
 #' }
-
-jsonFile <- function(sqlContext, path) {
+read.json <- function(sqlContext, path) {
   # Allow the user to have a more flexible definiton of the text file path
-  path <- suppressWarnings(normalizePath(path))
-  # Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse = ",")
-  sdf <- callJMethod(sqlContext, "jsonFile", path)
+  paths <- as.list(suppressWarnings(normalizePath(path)))
+  read <- callJMethod(sqlContext, "read")
+  sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
+}
+
+#' @rdname read.json
+#' @name jsonFile
+#' @export
+jsonFile <- function(sqlContext, path) {
+  .Deprecated("read.json")
+  read.json(sqlContext, path)
 }
 
 
@@ -299,7 +308,7 @@ parquetFile <- function(sqlContext, ...) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' new_df <- sql(sqlContext, "SELECT * FROM table")
 #' }
@@ -323,7 +332,7 @@ sql <- function(sqlContext, sqlQuery) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' new_df <- table(sqlContext, "table")
 #' }
@@ -396,7 +405,7 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' cacheTable(sqlContext, "table")
 #' }
@@ -418,7 +427,7 @@ cacheTable <- function(sqlContext, tableName) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(sqlContext, path)
 #' registerTempTable(df, "table")
 #' uncacheTable(sqlContext, "table")
 #' }
