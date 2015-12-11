@@ -26,7 +26,7 @@ import org.apache.spark.SparkContext
 /**
  * User can customize DumpFormat by extends this abstract class.
  */
-abstract class DSteamDumpFormat[K, S] extends Serializable{
+abstract class DSteamDumpFormat[K, S] extends Serializable {
   // Identity have to be provided here for every DumpableDStream instance. Otherwise it's not able
   // to recognize each other during loading.
   val identity : String
@@ -47,7 +47,8 @@ class CheckpointDumpFormat[K: ClassTag, S: ClassTag](val identity: String)
   private[streaming] def dump(rdd : RDD[(K, S)], path: String): Unit = {
     val broadcastedConf = rdd.context.broadcast(
         new SerializableConfiguration(rdd.context.hadoopConfiguration))
-    val dumpFunc = ReliableCheckpointRDD.writeCheckpointFile[(K, S)](path, broadcastedConf)_
+    val dumpFunc = ReliableCheckpointRDD.writePartitionToCheckpointFile[(K, S)](
+        path, broadcastedConf)_
 
     rdd.context.runJob(rdd, dumpFunc)
   }
