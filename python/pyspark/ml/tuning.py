@@ -19,7 +19,7 @@ import itertools
 import numpy as np
 
 from pyspark import since
-from pyspark.ml.param import Params, Param
+from pyspark.ml.param import HasSeed, Params, Param
 from pyspark.ml import Estimator, Model
 from pyspark.ml.util import keyword_only
 from pyspark.sql.functions import rand
@@ -89,7 +89,7 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class CrossValidator(Estimator):
+class CrossValidator(Estimator, HasSeed):
     """
     K-fold cross validation.
 
@@ -106,7 +106,7 @@ class CrossValidator(Estimator):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator, seed=42)
     >>> cvModel = cv.fit(dataset)
     >>> evaluator.evaluate(cvModel.transform(dataset))
     0.8333...
@@ -129,9 +129,11 @@ class CrossValidator(Estimator):
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3, seed=0):
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                 seed=None):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3)
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                 seed=None)
         """
         super(CrossValidator, self).__init__()
         #: param for estimator to be cross-validated
@@ -144,8 +146,6 @@ class CrossValidator(Estimator):
             self, "evaluator",
             "evaluator used to select hyper-parameters that maximize the cross-validated metric")
         #: param for number of folds for cross validation
-        self._setDefault(seed=0)
-        self.seed = Param(self, "seed", "seed value used for k-fold")
         self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
         self._setDefault(numFolds=3)
         kwargs = self.__init__._input_kwargs
@@ -153,9 +153,11 @@ class CrossValidator(Estimator):
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                  seed=None):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                  seed=None):
         Sets params for cross validator.
         """
         kwargs = self.setParams._input_kwargs
@@ -227,9 +229,10 @@ class CrossValidator(Estimator):
         numModels = len(epm)
         eva = self.getOrDefault(self.evaluator)
         nFolds = self.getOrDefault(self.numFolds)
+        seed = self.getOrDefault(self.seed)
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(self.getOrDefault(self.seed)).alias(randCol))
+        df = dataset.select("*", rand(seed).alias(randCol))
         metrics = np.zeros(numModels)
         for i in range(nFolds):
             validateLB = i * h
