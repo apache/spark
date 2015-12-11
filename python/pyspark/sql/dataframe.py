@@ -187,8 +187,8 @@ class DataFrame(object):
         """
         if self._schema is None:
             try:
-                jschema = self._jdf.schema
-                if (False and jschema.fields.size < 10000):
+                jschema = self._jdf.schema()
+                if (False and jschema.length() < 10000):
                     self._schema = _parse_datatype_json_string(self._jdf.schema().json())
                 else:
                     self._schema = WrappedJStructType(jschema)

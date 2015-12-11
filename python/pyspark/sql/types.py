@@ -579,23 +579,30 @@ class WrappedJStructType(StructType):
         self._jstructtype = jstructtype
 
     @property
+    def names(self):
+        return self.fieldNames
+
+    @property
     def fieldNames(self):
-        return self._jstructtype.fieldNames
+        return list(self._jstructtype.fieldNames())
 
     @property
     def fields(self):
-        return map(lambda x: StructField.fromJson(x.json()),
-                   self._jstructtype.fields)
+        java_fields = list(self._jstructtype.fields())
+        return map(lambda f: StructField(
+            f.name(),
+            _parse_datatype_json_string(f.dataType().json()),
+            f.nullable(),
+            json.loads(f.metadata().json())), java_fields)
     
     def simpleString(self):
         return self._jstructtype.simpleString()
 
     def __repr__(self):
-        return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self.fields))
+        return self._jstructtype.toString()
 
-    def jsonValue(self):
-        return self._jstructtype.jsonValue()
+    def json(self):
+        return self._jstructtype.json()
 
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
