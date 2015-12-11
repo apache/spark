@@ -74,7 +74,7 @@ object SchemaRepo extends Logging {
 }
 
 /**
- * A dummpy empty schema repository.
+ * A dummy empty schema repository.
  */
 object EmptySchemaRepo extends SchemaRepo(null) {
 
