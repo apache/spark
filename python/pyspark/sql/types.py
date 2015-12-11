@@ -522,6 +522,14 @@ class StructType(DataType):
         return {"type": self.typeName(),
                 "fields": [f.jsonValue() for f in self.fields]}
 
+    @property
+    def dtypes(self):
+        return [(str(f.name), f.dataType.simpleString()) for f in self.fields]
+
+    @property
+    def columns(self):
+        return [str(f.name) for f in self.fields]
+
     @classmethod
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
@@ -585,6 +593,18 @@ class WrappedJStructType(StructType):
     @property
     def fieldNames(self):
         return list(self._jstructtype.fieldNames())
+
+    @property
+    def dtypes(self):
+        java_fields = list(self._jstructtype.fields())
+        return map(lambda f: (str(f.name()),
+                              _parse_datatype_json_string(f.dataType().json()).simpleString()),
+                   java_fields)
+
+    @property
+    def columns(self):
+        java_fields = list(self._jstructtype.fields())
+        return map(lambda f: str(f.name()), java_fields)
 
     @property
     def fields(self):

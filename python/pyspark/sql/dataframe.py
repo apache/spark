@@ -574,7 +574,7 @@ class DataFrame(object):
         >>> df.dtypes
         [('age', 'int'), ('name', 'string')]
         """
-        return [(str(f.name), f.dataType.simpleString()) for f in self.schema.fields]
+        return self.schema.dtypes
 
     @property
     @since(1.3)
@@ -584,7 +584,7 @@ class DataFrame(object):
         >>> df.columns
         ['age', 'name']
         """
-        return [f.name for f in self.schema.fields]
+        return self.schema.columns
 
     @ignore_unicode_prefix
     @since(1.3)
