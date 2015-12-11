@@ -751,27 +751,6 @@ class AirflowJsonEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def log_to_stdout():
-
-    root_logger = logging.getLogger()
-
-    # default log level if not set externally (e.g. with --logging-level=DEBUG)
-    if root_logger.level == logging.NOTSET:
-        root_logger.setLevel(LOGGING_LEVEL)
-
-    for handler in root_logger.handlers:
-        if isinstance(handler, logging.StreamHandler):
-            root_logger.warn("not adding a stream handler: already present")
-            return
-
-    logformat = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(logformat)
-    root_logger.addHandler(ch)
-
-
 class LoggingMixin(object):
     """
     Convenience super-class to have a logger configured with the class name
@@ -779,6 +758,9 @@ class LoggingMixin(object):
 
     @property
     def logger(self):
-        if not hasattr(self, "_logger"):
-            self._logger = logging.getLogger(self.__class__.__name__)
-        return self._logger
+        try:
+            return self._logger
+        except AttributeError:
+            self._logger = logging.root.getChild(self.__class__.__module__ + '.' +self.__class__.__name__)
+            return self._logger
+

@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 import logging
 import os
+import sys
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -67,9 +68,14 @@ def policy(task_instance):
     """
     pass
 
+def configure_logging():
+    logging.root.handlers = []
+    logging.basicConfig(format=LOG_FORMAT, stream=sys.stdout, level=LOGGING_LEVEL)
 
 try:
     from airflow_local_settings import *
     logging.info("Loaded airflow_local_settings.")
 except:
     pass
+
+configure_logging()
