@@ -2423,10 +2423,10 @@ setMethod("drop",
           function(x, col) {
             stopifnot(class(col) == "character" || class(col) == "Column")
 
-            if (class(col) == "character") {
-              sdf <- callJMethod(x@sdf, "drop", as.list(col))
-            } else {
+            if (class(col) == "Column") {
               sdf <- callJMethod(x@sdf, "drop", col@jc)
+            } else {
+              sdf <- callJMethod(x@sdf, "drop", as.list(col))
             }
             dataFrame(sdf)
           })
