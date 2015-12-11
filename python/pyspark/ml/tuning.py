@@ -19,8 +19,9 @@ import itertools
 import numpy as np
 
 from pyspark import since
-from pyspark.ml.param import HasSeed, Params, Param
 from pyspark.ml import Estimator, Model
+from pyspark.ml.param import Params, Param
+from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.util import keyword_only
 from pyspark.sql.functions import rand
 
