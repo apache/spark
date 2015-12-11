@@ -25,35 +25,31 @@ import scala.reflect.ClassTag
 import org.scalatest.PrivateMethodTester._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.streaming.dstream.{InternalTrackStateDStream, TrackStateDStream, TrackStateDStreamImpl}
+import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
-class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
+class MapWithStateSuite extends SparkFunSuite
+  with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
 
   private var sc: SparkContext = null
-  private var ssc: StreamingContext = null
-  private var checkpointDir: File = null
-  private val batchDuration = Seconds(1)
+  protected var checkpointDir: File = null
+  protected val batchDuration = Seconds(1)
 
   before {
-    StreamingContext.getActive().foreach {
-      _.stop(stopSparkContext = false)
-    }
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     checkpointDir = Utils.createTempDir("checkpoint")
-
-    ssc = new StreamingContext(sc, batchDuration)
-    ssc.checkpoint(checkpointDir.toString)
   }
 
   after {
-    StreamingContext.getActive().foreach {
-      _.stop(stopSparkContext = false)
+    if (checkpointDir != null) {
+      Utils.deleteRecursively(checkpointDir)
     }
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
   }
 
   override def beforeAll(): Unit = {
-    val conf = new SparkConf().setMaster("local").setAppName("TrackStateByKeySuite")
+    val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
   }
@@ -133,7 +129,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     testState(Some(3), shouldBeTimingOut = true)
   }
 
-  test("trackStateByKey - basic operations with simple API") {
+  test("mapWithState - basic operations with simple API") {
     val inputData =
       Seq(
         Seq(),
@@ -168,17 +164,17 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       )
 
     // state maintains running count, and updated count is returned
-    val trackStateFunc = (value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (key: String, value: Option[Int], state: State[Int]) => {
       val sum = value.getOrElse(0) + state.getOption.getOrElse(0)
       state.update(sum)
       sum
     }
 
     testOperation[String, Int, Int](
-      inputData, StateSpec.function(trackStateFunc), outputData, stateData)
+      inputData, StateSpec.function(mappingFunc), outputData, stateData)
   }
 
-  test("trackStateByKey - basic operations with advanced API") {
+  test("mapWithState - basic operations with advanced API") {
     val inputData =
       Seq(
         Seq(),
@@ -213,65 +209,65 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
       )
 
     // state maintains running count, key string doubled and returned
-    val trackStateFunc = (batchTime: Time, key: String, value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (batchTime: Time, key: String, value: Option[Int], state: State[Int]) => {
       val sum = value.getOrElse(0) + state.getOption.getOrElse(0)
       state.update(sum)
       Some(key * 2)
     }
 
-    testOperation(inputData, StateSpec.function(trackStateFunc), outputData, stateData)
+    testOperation(inputData, StateSpec.function(mappingFunc), outputData, stateData)
   }
 
-  test("trackStateByKey - type inferencing and class tags") {
+  test("mapWithState - type inferencing and class tags") {
 
-    // Simple track state function with value as Int, state as Double and emitted type as Double
-    val simpleFunc = (value: Option[Int], state: State[Double]) => {
+    // Simple track state function with value as Int, state as Double and mapped type as Double
+    val simpleFunc = (key: String, value: Option[Int], state: State[Double]) => {
       0L
     }
 
     // Advanced track state function with key as String, value as Int, state as Double and
-    // emitted type as Double
+    // mapped type as Double
     val advancedFunc = (time: Time, key: String, value: Option[Int], state: State[Double]) => {
       Some(0L)
     }
 
-    def testTypes(dstream: TrackStateDStream[_, _, _, _]): Unit = {
-      val dstreamImpl = dstream.asInstanceOf[TrackStateDStreamImpl[_, _, _, _]]
+    def testTypes(dstream: MapWithStateDStream[_, _, _, _]): Unit = {
+      val dstreamImpl = dstream.asInstanceOf[MapWithStateDStreamImpl[_, _, _, _]]
       assert(dstreamImpl.keyClass === classOf[String])
       assert(dstreamImpl.valueClass === classOf[Int])
       assert(dstreamImpl.stateClass === classOf[Double])
-      assert(dstreamImpl.emittedClass === classOf[Long])
+      assert(dstreamImpl.mappedClass === classOf[Long])
     }
-
+    val ssc = new StreamingContext(sc, batchDuration)
     val inputStream = new TestInputStream[(String, Int)](ssc, Seq.empty, numPartitions = 2)
 
-    // Defining StateSpec inline with trackStateByKey and simple function implicitly gets the types
-    val simpleFunctionStateStream1 = inputStream.trackStateByKey(
+    // Defining StateSpec inline with mapWithState and simple function implicitly gets the types
+    val simpleFunctionStateStream1 = inputStream.mapWithState(
       StateSpec.function(simpleFunc).numPartitions(1))
     testTypes(simpleFunctionStateStream1)
 
     // Separately defining StateSpec with simple function requires explicitly specifying types
     val simpleFuncSpec = StateSpec.function[String, Int, Double, Long](simpleFunc)
-    val simpleFunctionStateStream2 = inputStream.trackStateByKey(simpleFuncSpec)
+    val simpleFunctionStateStream2 = inputStream.mapWithState(simpleFuncSpec)
     testTypes(simpleFunctionStateStream2)
 
     // Separately defining StateSpec with advanced function implicitly gets the types
     val advFuncSpec1 = StateSpec.function(advancedFunc)
-    val advFunctionStateStream1 = inputStream.trackStateByKey(advFuncSpec1)
+    val advFunctionStateStream1 = inputStream.mapWithState(advFuncSpec1)
     testTypes(advFunctionStateStream1)
 
-    // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
-    val advFunctionStateStream2 = inputStream.trackStateByKey(
+    // Defining StateSpec inline with mapWithState and advanced func implicitly gets the types
+    val advFunctionStateStream2 = inputStream.mapWithState(
       StateSpec.function(simpleFunc).numPartitions(1))
     testTypes(advFunctionStateStream2)
 
-    // Defining StateSpec inline with trackStateByKey and advanced func implicitly gets the types
+    // Defining StateSpec inline with mapWithState and advanced func implicitly gets the types
     val advFuncSpec2 = StateSpec.function[String, Int, Double, Long](advancedFunc)
-    val advFunctionStateStream3 = inputStream.trackStateByKey[Double, Long](advFuncSpec2)
+    val advFunctionStateStream3 = inputStream.mapWithState[Double, Long](advFuncSpec2)
     testTypes(advFunctionStateStream3)
   }
 
-  test("trackStateByKey - states as emitted records") {
+  test("mapWithState - states as mapped data") {
     val inputData =
       Seq(
         Seq(),
@@ -305,17 +301,17 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         Seq(("a", 5), ("b", 3), ("c", 1))
       )
 
-    val trackStateFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
       val sum = value.getOrElse(0) + state.getOption.getOrElse(0)
       val output = (key, sum)
       state.update(sum)
       Some(output)
     }
 
-    testOperation(inputData, StateSpec.function(trackStateFunc), outputData, stateData)
+    testOperation(inputData, StateSpec.function(mappingFunc), outputData, stateData)
   }
 
-  test("trackStateByKey - initial states, with nothing emitted") {
+  test("mapWithState - initial states, with nothing returned as from mapping function") {
 
     val initialState = Seq(("a", 5), ("b", 10), ("c", -20), ("d", 0))
 
@@ -343,18 +339,18 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         Seq(("a", 10), ("b", 13), ("c", -19), ("d", 0))
       )
 
-    val trackStateFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
       val sum = value.getOrElse(0) + state.getOption.getOrElse(0)
       val output = (key, sum)
       state.update(sum)
       None.asInstanceOf[Option[Int]]
     }
 
-    val trackStateSpec = StateSpec.function(trackStateFunc).initialState(sc.makeRDD(initialState))
-    testOperation(inputData, trackStateSpec, outputData, stateData)
+    val mapWithStateSpec = StateSpec.function(mappingFunc).initialState(sc.makeRDD(initialState))
+    testOperation(inputData, mapWithStateSpec, outputData, stateData)
   }
 
-  test("trackStateByKey - state removing") {
+  test("mapWithState - state removing") {
     val inputData =
       Seq(
         Seq(),
@@ -392,7 +388,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         Seq()
       )
 
-    val trackStateFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
       if (state.exists) {
         state.remove()
         Some(key)
@@ -403,10 +399,10 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     }
 
     testOperation(
-      inputData, StateSpec.function(trackStateFunc).numPartitions(1), outputData, stateData)
+      inputData, StateSpec.function(mappingFunc).numPartitions(1), outputData, stateData)
   }
 
-  test("trackStateByKey - state timing out") {
+  test("mapWithState - state timing out") {
     val inputData =
       Seq(
         Seq("a", "b", "c"),
@@ -417,7 +413,7 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
         Seq("a") // a will not time out
       ) ++ Seq.fill(20)(Seq("a")) // a will continue to stay active
 
-    val trackStateFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
+    val mappingFunc = (time: Time, key: String, value: Option[Int], state: State[Int]) => {
       if (value.isDefined) {
         state.update(1)
       }
@@ -429,9 +425,9 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     }
 
     val (collectedOutputs, collectedStateSnapshots) = getOperationOutput(
-      inputData, StateSpec.function(trackStateFunc).timeout(Seconds(3)), 20)
+      inputData, StateSpec.function(mappingFunc).timeout(Seconds(3)), 20)
 
-    // b and c should be emitted once each, when they were marked as expired
+    // b and c should be returned once each, when they were marked as expired
     assert(collectedOutputs.flatten.sorted === Seq("b", "c"))
 
     // States for a, b, c should be defined at one point of time
@@ -443,30 +439,32 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     assert(collectedStateSnapshots.last.toSet === Set(("a", 1)))
   }
 
-  test("trackStateByKey - checkpoint durations") {
-    val privateMethod = PrivateMethod[InternalTrackStateDStream[_, _, _, _]]('internalStream)
+  test("mapWithState - checkpoint durations") {
+    val privateMethod = PrivateMethod[InternalMapWithStateDStream[_, _, _, _]]('internalStream)
 
     def testCheckpointDuration(
         batchDuration: Duration,
         expectedCheckpointDuration: Duration,
         explicitCheckpointDuration: Option[Duration] = None
       ): Unit = {
+      val ssc = new StreamingContext(sc, batchDuration)
+
       try {
-        ssc = new StreamingContext(sc, batchDuration)
         val inputStream = new TestInputStream(ssc, Seq.empty[Seq[Int]], 2).map(_ -> 1)
-        val dummyFunc = (value: Option[Int], state: State[Int]) => 0
-        val trackStateStream = inputStream.trackStateByKey(StateSpec.function(dummyFunc))
-        val internalTrackStateStream = trackStateStream invokePrivate privateMethod()
+        val dummyFunc = (key: Int, value: Option[Int], state: State[Int]) => 0
+        val mapWithStateStream = inputStream.mapWithState(StateSpec.function(dummyFunc))
+        val internalmapWithStateStream = mapWithStateStream invokePrivate privateMethod()
 
         explicitCheckpointDuration.foreach { d =>
-          trackStateStream.checkpoint(d)
+          mapWithStateStream.checkpoint(d)
         }
-        trackStateStream.register()
+        mapWithStateStream.register()
+        ssc.checkpoint(checkpointDir.toString)
         ssc.start()  // should initialize all the checkpoint durations
-        assert(trackStateStream.checkpointDuration === null)
-        assert(internalTrackStateStream.checkpointDuration === expectedCheckpointDuration)
+        assert(mapWithStateStream.checkpointDuration === null)
+        assert(internalmapWithStateStream.checkpointDuration === expectedCheckpointDuration)
       } finally {
-        StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+        ssc.stop(stopSparkContext = false)
       }
     }
 
@@ -479,29 +477,74 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     testCheckpointDuration(Seconds(10), Seconds(20), Some(Seconds(20)))
   }
 
+
+  test("mapWithState - driver failure recovery") {
+    val inputData =
+      Seq(
+        Seq(),
+        Seq("a"),
+        Seq("a", "b"),
+        Seq("a", "b", "c"),
+        Seq("a", "b"),
+        Seq("a"),
+        Seq()
+      )
+
+    val stateData =
+      Seq(
+        Seq(),
+        Seq(("a", 1)),
+        Seq(("a", 2), ("b", 1)),
+        Seq(("a", 3), ("b", 2), ("c", 1)),
+        Seq(("a", 4), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1)),
+        Seq(("a", 5), ("b", 3), ("c", 1))
+      )
+
+    def operation(dstream: DStream[String]): DStream[(String, Int)] = {
+
+      val checkpointDuration = batchDuration * (stateData.size / 2)
+
+      val runningCount = (key: String, value: Option[Int], state: State[Int]) => {
+        state.update(state.getOption().getOrElse(0) + value.getOrElse(0))
+        state.get()
+      }
+
+      val mapWithStateStream = dstream.map { _ -> 1 }.mapWithState(
+        StateSpec.function(runningCount))
+      // Set internval make sure there is one RDD checkpointing
+      mapWithStateStream.checkpoint(checkpointDuration)
+      mapWithStateStream.stateSnapshots()
+    }
+
+    testCheckpointedOperation(inputData, operation, stateData, inputData.size / 2,
+      batchDuration = batchDuration, stopSparkContextAfterTest = false)
+  }
+
   private def testOperation[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],
-      trackStateSpec: StateSpec[K, Int, S, T],
+      mapWithStateSpec: StateSpec[K, Int, S, T],
       expectedOutputs: Seq[Seq[T]],
       expectedStateSnapshots: Seq[Seq[(K, S)]]
     ): Unit = {
     require(expectedOutputs.size == expectedStateSnapshots.size)
 
     val (collectedOutputs, collectedStateSnapshots) =
-      getOperationOutput(input, trackStateSpec, expectedOutputs.size)
+      getOperationOutput(input, mapWithStateSpec, expectedOutputs.size)
     assert(expectedOutputs, collectedOutputs, "outputs")
     assert(expectedStateSnapshots, collectedStateSnapshots, "state snapshots")
   }
 
   private def getOperationOutput[K: ClassTag, S: ClassTag, T: ClassTag](
       input: Seq[Seq[K]],
-      trackStateSpec: StateSpec[K, Int, S, T],
+      mapWithStateSpec: StateSpec[K, Int, S, T],
       numBatches: Int
     ): (Seq[Seq[T]], Seq[Seq[(K, S)]]) = {
 
     // Setup the stream computation
+    val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
-    val trackeStateStream = inputStream.map(x => (x, 1)).trackStateByKey(trackStateSpec)
+    val trackeStateStream = inputStream.map(x => (x, 1)).mapWithState(mapWithStateSpec)
     val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
     val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
     val collectedStateSnapshots = new ArrayBuffer[Seq[(K, S)]] with SynchronizedBuffer[Seq[(K, S)]]
@@ -511,12 +554,14 @@ class TrackStateByKeySuite extends SparkFunSuite with BeforeAndAfterAll with Bef
     stateSnapshotStream.register()
 
     val batchCounter = new BatchCounter(ssc)
+    ssc.checkpoint(checkpointDir.toString)
     ssc.start()
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     clock.advance(batchDuration.milliseconds * numBatches)
 
     batchCounter.waitUntilBatchesCompleted(numBatches, 10000)
+    ssc.stop(stopSparkContext = false)
     (collectedOutputs, collectedStateSnapshots)
   }
 

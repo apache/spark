@@ -1,10 +1,15 @@
 ---
 layout: global
-title: Clustering - ML
-displayTitle: <a href="ml-guide.html">ML</a> - Clustering
+title: Clustering - spark.ml
+displayTitle: Clustering - spark.ml
 ---
 
 In this section, we introduce the pipeline API for [clustering in mllib](mllib-clustering.html).
+
+**Table of Contents**
+
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 ## Latent Dirichlet allocation (LDA)
 

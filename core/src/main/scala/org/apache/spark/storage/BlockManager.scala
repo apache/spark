@@ -1203,9 +1203,9 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): ByteBuffer = {
-    val byteStream = new ByteArrayOutputStream(4096)
+    val byteStream = new ByteBufferOutputStream(4096)
     dataSerializeStream(blockId, byteStream, values, serializer)
-    ByteBuffer.wrap(byteStream.toByteArray)
+    byteStream.toByteBuffer
   }
 
   /**
