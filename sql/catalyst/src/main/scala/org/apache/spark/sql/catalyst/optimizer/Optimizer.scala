@@ -205,8 +205,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       a.copy(child = e.copy(child = prunedChild(child, e.references ++ a.references)))
 
     // Eliminate attributes that are not needed to calculate the specified aggregates.
-    case a @ Aggregate(_, _, child)
-      if !a.references.isEmpty && (child.outputSet -- a.references).nonEmpty =>
+    case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = Project(a.references.toSeq, child))
 
     // Eliminate attributes that are not needed to calculate the Generate.
