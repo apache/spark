@@ -187,15 +187,6 @@ This type checking is done using the `DataFrame` *schema*, a description of the 
 unique IDs.  However, different instances `myHashingTF1` and `myHashingTF2` (both of type `HashingTF`)
 can be put into the same `Pipeline` since different instances will be created with different IDs.
 
-### Saving Pipelines
-Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
-
-* K-Means
-* Naive Bayes
-* ALS
-* Linear Regression
-* Logistic Regression
-
 ## Parameters
 
 Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
@@ -213,6 +204,16 @@ There are two main ways to pass parameters to an algorithm:
 Parameters belong to specific instances of `Estimator`s and `Transformer`s.
 For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
 This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
+
+## Saving and Loading Pipelines
+
+Often times it is worth it to save a model or a pipeline to disk for later use. In Spark 1.6, a model import/export functionality was added to the Pipeline API. Most basic transformers are supported as well as some of the more basic ML models such as:
+
+* K-Means
+* Naive Bayes
+* ALS
+* Linear Regression
+* Logistic Regression
 
 # Code examples
 
@@ -485,7 +486,6 @@ val loadedModel = Pipeline.load("/tmp/spark-logistic-regression-model")
 // or equivalently
 val loadedModel = Pipeline.read.load("/tmp/spark-logistic-regression-model")
 
-
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
   (4L, "spark i j k"),
@@ -503,13 +503,12 @@ model.transform(test)
   }
 
 // or use the "loadedModel" to make predictions
-// Make predictions on test documents
 loadedModel.transform(test)
   .select("id", "text", "probability", "prediction")
   .collect()
   .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
     println(s"($id, $text) --> prob=$prob, prediction=$prediction")
-    }
+  }
 
 {% endhighlight %}
 </div>
