@@ -88,7 +88,8 @@ abstract class AbstractYarnHistoryTests
    * @param appAttemptId optional attempt ID
    * @return the instantiated service
    */
-  protected def startHistoryService(sc: SparkContext,
+  protected def startHistoryService(
+      sc: SparkContext,
       id: ApplicationId = applicationId,
       appAttemptId: Option[ApplicationAttemptId] = Some(attemptId)): YarnHistoryService = {
     assertNotNull(sc, "Spark context")
