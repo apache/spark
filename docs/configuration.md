@@ -739,6 +739,22 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.memory.offHeap.enabled</code></td>
+  <td>true</td>
+  <td>
+    If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.offHeap.size</code></td>
+  <td>0</td>
+  <td>
+    The absolute amount of memory which can be used for off-heap allocation.
+    This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
+    This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.memory.useLegacyMode</code></td>
   <td>false</td>
   <td>
@@ -1051,14 +1067,6 @@ Apart from these, the following properties are also available, and may be useful
     increment the port used in the previous attempt by 1 before retrying. This
     essentially allows it to try a range of ports from the start port specified
     to port + maxRetries.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.replClassServer.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP class server to listen on.
-    This is only relevant for the Spark shell.
   </td>
 </tr>
 <tr>

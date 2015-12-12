@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Extracting, transforming and selecting features
-displayTitle: Extracting, transforming and selecting features
+title: Extracting, transforming and selecting features - spark.ml
+displayTitle: Extracting, transforming and selecting features - spark.ml
 ---
 
 This section covers algorithms for working with features, roughly divided into these groups:
