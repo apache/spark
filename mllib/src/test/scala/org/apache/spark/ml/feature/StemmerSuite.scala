@@ -22,9 +22,6 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
-/**
- * Created by yuhao on 12/11/15.
- */
 class StemmerSuite extends SparkFunSuite with MLlibTestSparkContext  with DefaultReadWriteTest {
 
   test("params") {
@@ -155,8 +152,5 @@ private object StemmerSuite extends SparkFunSuite {
       .foreach { case Row(tokens, wantedTokens) =>
       assert(tokens === wantedTokens)
     }
-
-
   }
-
 }
