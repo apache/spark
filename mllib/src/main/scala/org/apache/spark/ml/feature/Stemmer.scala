@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultParamsWritable, Identifiable}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 /**
@@ -44,6 +44,13 @@ class Stemmer (override val uid: String)
   override protected def outputDataType: DataType = new ArrayType(StringType, true)
 
   override def copy(extra: ParamMap): Stemmer = defaultCopy(extra)
+}
+
+@Since("1.7.0")
+object Stemmer extends DefaultParamsReadable[Stemmer] {
+
+  @Since("1.7.0")
+  override def load(path: String): Stemmer = super.load(path)
 }
 
 /**
@@ -247,7 +254,7 @@ private[feature] object PorterStemmer {
     if (w endsWith suffix) Some((w.substring(0, w.length - suffix.length), repl))
     else None
   }
-
 }
+
 
 

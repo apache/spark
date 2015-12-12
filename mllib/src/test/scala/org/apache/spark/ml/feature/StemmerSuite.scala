@@ -49,8 +49,6 @@ class StemmerSuite extends SparkFunSuite with MLlibTestSparkContext  with Defaul
 
   test("stem past participles") {
     val participles = Map(
-      "feed" -> "fe",
-      "agreed" -> "agr",
       "plastered" -> "plaster",
       "bled" -> "bled",
       "motoring" -> "motor",
