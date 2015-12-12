@@ -298,7 +298,8 @@ class Word2Vec extends Serializable with Logging {
     val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
       new Iterator[Array[Int]] {
         var wordIter: Iterator[String] = null
-        def hasNext: Boolean = sentenceIter.hasNext||(wordIter!=null&&wordIter.hasNext)
+
+        def hasNext: Boolean = sentenceIter.hasNext || (wordIter != null && wordIter.hasNext)
 
         def next(): Array[Int] = {
           val sentence = ArrayBuilder.make[Int]
@@ -314,11 +315,11 @@ class Word2Vec extends Serializable with Logging {
             }
             if (wordIter.hasNext) {
               val word = wordIter.next()
-              sentenceLength += 1
               val wordIndex = bcVocabHash.value.get(word)
               wordIndex match {
                 case Some(w) =>
                   sentence += w
+                  sentenceLength += 1
                 case None =>
               }
             }
