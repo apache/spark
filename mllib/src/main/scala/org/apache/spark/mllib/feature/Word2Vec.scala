@@ -160,7 +160,9 @@ class Word2Vec extends Serializable with Logging {
   @transient private var vocab: Array[VocabWord] = null
   @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
-  private def learnVocab(words: RDD[String]): Unit = {
+  private def learnVocab[S <: Iterable[String]](dataset: RDD[S]): Unit = {
+    val words = dataset.flatMap(x => x)
+
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
       .map(x => VocabWord(
@@ -283,9 +285,7 @@ class Word2Vec extends Serializable with Logging {
   @Since("1.1.0")
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
-    val words = dataset.flatMap(x => x)
-
-    learnVocab(words)
+    learnVocab(dataset)
 
     createBinaryTree()
 
@@ -306,22 +306,20 @@ class Word2Vec extends Serializable with Logging {
           var sentenceLength = 0
           // do translation of each word into its index in the vocabulary,
           // do cutting only when the sentence is larger than maxSentenceLength
-          if (wordIter == null && sentenceIter.hasNext) {
-            wordIter = sentenceIter.next().iterator
-          }
-          while (hasNext && sentenceLength < maxSentenceLength) {
-            while (!wordIter.hasNext && sentenceIter.hasNext) {
+          if ((wordIter == null || !wordIter.hasNext) && sentenceIter.hasNext) {
+            do {
+              //get the non-empty wordIter
               wordIter = sentenceIter.next().iterator
-            }
-            if (wordIter.hasNext) {
-              val word = wordIter.next()
-              val wordIndex = bcVocabHash.value.get(word)
-              wordIndex match {
-                case Some(w) =>
-                  sentence += w
-                  sentenceLength += 1
-                case None =>
-              }
+            } while (!wordIter.hasNext && sentenceIter.hasNext)
+          }
+          while (wordIter.hasNext && sentenceLength < maxSentenceLength) {
+            val word = wordIter.next()
+            val wordIndex = bcVocabHash.value.get(word)
+            wordIndex match {
+              case Some(w) =>
+                sentence += w
+                sentenceLength += 1
+              case None =>
             }
           }
           sentence.result()
