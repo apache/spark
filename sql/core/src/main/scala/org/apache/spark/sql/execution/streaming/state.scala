@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.types.{DoubleType, LongType}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeRowJoiner, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples, Distribution}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.types.{StructField, StructType, DoubleType, LongType}
 import org.apache.spark.sql.{Strategy, SQLContext, Column, DataFrame}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,8 +31,45 @@ import org.apache.spark.sql.execution.{SparkPlanner, SparkPlan}
 
 package object state {
 
-  trait StateStore {
-    def get(key: InternalRow): InternalRow
+  object StateStore extends Logging {
+    private val checkpoints = new scala.collection.mutable.HashMap[(Int, Watermark), StateStore]()
+
+    /** Checkpoints the state for a partition at a given batchId. */
+    def checkpoint(batchId: Watermark, store: StateStore): Unit = synchronized {
+      val partitionId = TaskContext.get().partitionId()
+      logInfo(s"Checkpointing ${(partitionId, batchId)}")
+      checkpoints.put((partitionId, batchId), store)
+    }
+
+    /** Gets the state for a partition at a given batchId. */
+    def getAt(batchId: Watermark): StateStore = synchronized {
+      val partitionId = TaskContext.get().partitionId()
+
+      if (batchId.offset == -1) {
+        new StateStore
+      } else {
+        val copy = new StateStore
+        checkpoints((partitionId, batchId)).data.foreach(copy.data.+=)
+        copy
+      }
+    }
+  }
+
+
+  class StateStore {
+    private val data = new scala.collection.mutable.HashMap[InternalRow, Long]()
+
+    def get(key: InternalRow): Option[Long] = data.get(key)
+
+    def put(key: InternalRow, value: Long): Unit = {
+      data.put(key, value)
+    }
+
+    def triggerWindowsBefore(watermark: Long): Seq[(InternalRow, Long)] = {
+      val triggeredWindows = data.filter(_._1.getLong(0) <= watermark).toArray
+      triggeredWindows.map(_._1).foreach(data.remove)
+      triggeredWindows.toSeq
+    }
   }
 
   case class Window(
@@ -71,33 +110,63 @@ package object state {
     override def zero(initialValue: Watermark): Watermark = new Watermark(-1)
   }
 
+  /**
+   * Simple incremental windowing aggregate that supports a fixed delay.  Late data is dropped.
+   * Only supports grouped count(*) :P.
+   */
   case class WindowAggregate(
       eventtime: Expression,
       eventtimeMax: Accumulator[Watermark],
       eventtimeWatermark: Watermark,
+      lastCheckpoint: Watermark,
       windowAttribute: AttributeReference,
       step: Int,
       groupingExpressions: Seq[Expression],
       aggregateExpressions: Seq[NamedExpression],
       child: SparkPlan) extends SparkPlan {
+
+    override def requiredChildDistribution: Seq[Distribution] =
+      ClusteredDistribution(groupingExpressions.filterNot(_ == windowAttribute)) :: Nil
+
     /**
      * Overridden by concrete implementations of SparkPlan.
      * Produces the result of the query as an RDD[InternalRow]
      */
     override protected def doExecute(): RDD[InternalRow] = {
       child.execute().mapPartitions { iter =>
+        val stateStore = StateStore.getAt(lastCheckpoint)
+
+        // TODO: Move to window operator...
         val window =
           Multiply(Ceil(Divide(Cast(eventtime, DoubleType), Literal(step))), Literal(step))
         val windowAndGroupProjection =
-          GenerateUnsafeProjection.generate(window +: groupingExpressions, child.output)
+          GenerateUnsafeProjection.generate(
+            window +: groupingExpressions.filterNot(_ == windowAttribute), child.output)
+
         iter.foreach { row =>
           val windowAndGroup = windowAndGroupProjection(row)
-          println(windowAndGroup.toSeq((windowAttribute +: groupingExpressions).map(_.dataType)))
-
-          eventtimeMax += new Watermark(windowAndGroup.getLong(0))
+          if (windowAndGroup.getLong(0) > eventtimeWatermark.offset) {
+            eventtimeMax += new Watermark(windowAndGroup.getLong(0))
+            val newCount = stateStore.get(windowAndGroup).getOrElse(0L) + 1
+            stateStore.put(windowAndGroup.copy(), newCount)
+          }
         }
 
-        Iterator.empty
+        StateStore.checkpoint(lastCheckpoint + 1, stateStore)
+
+        val buildRow = GenerateUnsafeProjection.generate(
+          BoundReference(0, LongType, false) ::
+          BoundReference(1, LongType, false) ::
+          BoundReference(2, LongType, false) :: Nil)
+        val joinedRow = new JoinedRow
+        val countRow = new SpecificMutableRow(LongType :: Nil)
+
+        logDebug(s"Triggering windows < $eventtimeWatermark")
+        stateStore.triggerWindowsBefore(eventtimeWatermark.offset).toIterator.map {
+          case (key, count) =>
+            countRow.setLong(0, count)
+            buildRow(joinedRow(key, countRow))
+        }
       }
     }
 
@@ -124,8 +193,23 @@ package object state {
           df.logicalPlan))
   }
 
-  class StatefulPlanner(sqlContext: SQLContext, maxWatermark: Accumulator[Watermark])
-      extends SparkPlanner(sqlContext) {
+
+  object GroupWindows extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Aggregate(grouping, aggregate,
+              Window(et, windowAttribute, step, trigger, child))
+          if !grouping.contains(windowAttribute) =>
+        Aggregate(windowAttribute +: grouping, windowAttribute +: aggregate,
+          Window(et, windowAttribute, step, trigger, child))
+    }
+  }
+
+
+  class StatefulPlanner(
+      sqlContext: SQLContext,
+      maxWatermark: Accumulator[Watermark],
+      lastCheckpoint: Watermark)
+    extends SparkPlanner(sqlContext) {
 
     override def strategies: Seq[Strategy] = WindowStrategy +: super.strategies
 
@@ -133,12 +217,11 @@ package object state {
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case Aggregate(grouping, aggregate,
                Window(et, windowAttribute, step, trigger, child)) =>
-          println(s"triggering ${maxWatermark.value - trigger}")
-
           WindowAggregate(
             et,
             maxWatermark,
             maxWatermark.value - trigger,
+            lastCheckpoint,
             windowAttribute,
             step,
             grouping,

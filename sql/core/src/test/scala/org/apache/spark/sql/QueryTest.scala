@@ -212,6 +212,8 @@ abstract class QueryTest extends PlanTest with Timeouts {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
   }
 
+  case class AwaitEventTime(time: Long) extends StreamAction with StreamMustBeRunning
+
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
    * This operation automatically blocks untill all added data has been processed.
@@ -231,11 +233,16 @@ abstract class QueryTest extends PlanTest with Timeouts {
     override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
   }
 
+  case class DropBatches(num: Int) extends StreamAction
+
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction
 
   /** Starts the stream, resuming if data has already been processed.  It must not be running. */
   case object StartStream extends StreamAction
+
+  /** Signals that a failure is expected and should not kill the test. */
+  case object ExpectFailure extends StreamAction
 
   /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
   def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
@@ -291,7 +298,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
          |$sink
          |
          |== Plan ==
-         |${if (currentStream != null) currentStream.logicalPlan else ""}
+         |${if (currentStream != null) currentStream.lastExecution else ""}
          """
 
     def checkState(check: Boolean, error: String) = if (!check) {
@@ -306,14 +313,6 @@ abstract class QueryTest extends PlanTest with Timeouts {
 
     try {
       startedTest.foreach { action =>
-        if (streamDeathCause != null) {
-          fail(
-            s"""
-               |Stream Thread Died
-               |$testState
-             """.stripMargin)
-        }
-
         action match {
           case StartStream =>
             checkState(currentStream == null, "stream already running")
@@ -331,9 +330,48 @@ abstract class QueryTest extends PlanTest with Timeouts {
             currentStream.stop()
             currentStream = null
 
+          case DropBatches(num) =>
+            checkState(currentStream == null, "dropping batches while running leads to corruption")
+            sink.dropBatches(num)
+
+          case ExpectFailure =>
+            try failAfter(streamingTimout) {
+              while (streamDeathCause == null) { Thread.sleep(100) }
+            } catch {
+              case _: InterruptedException =>
+              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                fail(
+                  s"""
+                     |Timed out while waiting for failure.
+                     |$testState
+                   """.stripMargin)
+            }
+
+            currentStream = null
+            streamDeathCause = null
+
           case AddDataMemory(source, data) =>
             awaiting.put(source, source.addData(data))
 
+          case AwaitEventTime(time) =>
+            checkState(currentStream != null, "stream not running")
+            try failAfter(streamingTimout) {
+              currentStream.awaitWatermark(currentStream.eventTimeSource, new Watermark(time))
+            } catch {
+              case _: InterruptedException =>
+                fail(
+                  s"""
+                     |Stream Thread Died
+                     |$testState
+                            """.stripMargin)
+              case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+                fail(
+                  s"""
+                     |Timed out while waiting for eventTime to catch up to $time
+                     |Currently at: ${sink.currentWatermark(currentStream.eventTimeSource)}
+                     |$testState
+                         """.stripMargin)
+            }
           case CheckAnswerRows(expectedAnswer) =>
             checkState(currentStream != null, "stream not running")
 
@@ -357,7 +395,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
                    """.stripMargin)
               }
             }
-            QueryTest.sameRows(sink.allData, expectedAnswer).foreach {
+            QueryTest.sameRows(expectedAnswer, sink.allData).foreach {
               error => fail(
                 s"""
                    |$error

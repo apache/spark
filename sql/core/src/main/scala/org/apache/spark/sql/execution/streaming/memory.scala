@@ -83,19 +83,22 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
 }
 
 class MemorySink(schema: StructType) extends Sink with Logging {
-  private val currentWatermarks = new StreamProgress
   private var batches = new ArrayBuffer[(StreamProgress, Seq[Row])]()
-
   private val output = schema.toAttributes
 
+  def currentWatermarks: StreamProgress = batches.lastOption.map(_._1).getOrElse(new StreamProgress)
   def currentWatermark(source: Source): Option[Watermark] = currentWatermarks.get(source)
 
   def allData: Seq[Row] = batches.flatMap(_._2)
 
   val externalRowConverter = RowEncoder(schema)
   def addBatch(watermarks: Map[Source, Watermark], rdd: RDD[InternalRow]): Unit = {
-    watermarks.foreach(currentWatermarks.update)
     batches.append((currentWatermarks.copy(), rdd.collect().map(externalRowConverter.fromRow)))
+    watermarks.foreach(currentWatermarks.update)
+  }
+
+  def dropBatches(num: Int): Unit = {
+    batches.remove(batches.size - num, num)
   }
 
   override def toString: String = batches.map(b => s"${b._1}: ${b._2.mkString(" ")}").mkString("\n")

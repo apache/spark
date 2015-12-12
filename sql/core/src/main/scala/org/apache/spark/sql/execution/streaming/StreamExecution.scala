@@ -17,26 +17,53 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.{Accumulator, Logging}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
-import org.apache.spark.sql.execution.streaming.state.StatefulPlanner
+import org.apache.spark.sql.execution.streaming.state.{GroupWindows, StatefulPlanner}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
+
+class EventTimeSource(val max: Accumulator[Watermark]) extends Source {
+  override def watermark: Watermark = max.value
+
+  override def getSlice(
+      sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = ???
+
+  // HACK
+  override def equals(other: Any): Boolean = other.isInstanceOf[EventTimeSource]
+  override def hashCode: Int = 0
+
+  override def toString: String = "EventTime"
+}
+
+case object BatchId extends Source {
+  override def watermark: Watermark = new Watermark(-1)
+
+  override def getSlice(
+      sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = ???
+}
 
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends Logging {
 
-  /** All stream sources present the query plan. */
-  private val sources = logicalPlan.collect { case s: Source => s: Source }
-
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentWatermarks = new StreamProgress
 
   import org.apache.spark.sql.execution.streaming.state.MaxWatermark
-  private[sql] val maxEventTime = sqlContext.sparkContext.accumulator(Watermark(-1))(org.apache.spark.sql.execution.streaming.state.MaxWatermark)
+  private[sql] val maxEventTime =
+    sqlContext.sparkContext.accumulator(Watermark(-1))
+
+  private[sql] val eventTimeSource = new EventTimeSource(maxEventTime)
+
+  /** All stream sources present the query plan. */
+  private val sources =
+    logicalPlan.collect { case s: Source => s: Source } ++ Seq(eventTimeSource, BatchId)
 
   // Start the execution at the current watermark for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
@@ -44,6 +71,11 @@ class StreamExecution(
     val sourceWatermark = sink.currentWatermark(s).getOrElse(new Watermark(-1))
     currentWatermarks.update(s, sourceWatermark)
   }
+
+  // Restore the position of the eventtime watermark accumulator
+  currentWatermarks.get(eventTimeSource).foreach(eventTimeSource.max.setValue)
+
+  logInfo(s"Stream running at $currentWatermarks")
 
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
@@ -58,6 +90,8 @@ class StreamExecution(
   microBatchThread.setDaemon(true)
   microBatchThread.start()
 
+  var lastExecution: QueryExecution = null
+
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,
    * a batch is executed and passed to the sink, updating the currentWatermarks.
@@ -71,7 +105,7 @@ class StreamExecution(
 
     if (newData.nonEmpty) {
       val startTime = System.nanoTime()
-      logDebug(s"Running with new data up to: $newData")
+      logInfo(s"Running with new data up to: $newData")
 
       // Replace sources in the logical plan with data that has arrived since the last batch.
       val newPlan = logicalPlan transform {
@@ -83,22 +117,32 @@ class StreamExecution(
 
       val optimizerStart = System.nanoTime()
 
-      val executedPlan = new QueryExecution(sqlContext, newPlan) {
+      lastExecution = new QueryExecution(sqlContext, newPlan) {
+        // Skip the optimizer for now cause the streaming planner is not great.
         override lazy val optimizedPlan: LogicalPlan = EliminateSubQueries(analyzed)
         override lazy val sparkPlan: SparkPlan = {
           SQLContext.setActive(sqlContext)
-          new StatefulPlanner(sqlContext, maxEventTime).plan(optimizedPlan).next()
-        }
-      }.executedPlan
+          val batchPlanner = new StatefulPlanner(
+            sqlContext,
+            maxEventTime,
+            currentWatermarks(BatchId))
 
+          logInfo(s"BatchPlanner: ${currentWatermarks(BatchId)}, $maxEventTime")
+
+          batchPlanner.plan(optimizedPlan).next()
+        }
+      }
+      val executedPlan = lastExecution.executedPlan
       val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
       val results = executedPlan.execute().map(_.copy())
-      sink.addBatch(newData, results)
+      val updated = newData + (BatchId -> (currentWatermarks(BatchId) + 1))
+      sink.addBatch(updated, results)
+      updated.foreach(currentWatermarks.update)
 
+      logInfo(s"EventTime Watermark: ${maxEventTime.value}")
       StreamExecution.this.synchronized {
-        newData.foreach(currentWatermarks.update)
         StreamExecution.this.notifyAll()
       }
 
