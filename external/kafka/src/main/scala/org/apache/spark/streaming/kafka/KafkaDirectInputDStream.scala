@@ -82,15 +82,15 @@ class KafkaDirectReceiver[
     kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     storageLevel: StorageLevel
-  ) extends Receiver[(K, V)](storageLevel) with Logging {
+  ) extends Receiver[(K, V)](storageLevel) with KafkaDirect with Logging {
 
-  val maxRetries = conf.getInt(
+  override val maxRetries = conf.getInt(
     "spark.streaming.kafka.maxRetries", 1)
 
-  private val maxRateLimitPerPartition: Int = conf.getInt(
+  override val maxRateLimitPerPartition: Int = conf.getInt(
       "spark.streaming.kafka.maxRatePerPartition", 0)
 
-  private def maxMessagesPerPartition: Option[Long] = {
+  override def maxMessagesPerPartition: Option[Long] = {
     val numPartitions = fromOffsets.keys.size
 
     val effectiveRateLimitPerPartition =
@@ -102,37 +102,6 @@ class KafkaDirectReceiver[
     } else {
       None
     }
-  }
-
-  protected final def latestLeaderOffsets(
-      kc: KafkaCluster,
-      topicAndPartition: Set[TopicAndPartition],
-      retries: Int): Map[TopicAndPartition, LeaderOffset] = {
-    val o = kc.getLatestLeaderOffsets(topicAndPartition)
-    // Either.fold would confuse @tailrec, do it manually
-    if (o.isLeft) {
-      val err = o.left.get.toString
-      if (retries <= 0) {
-        throw new SparkException(err)
-      } else {
-        log.error(err)
-        Thread.sleep(kc.config.refreshLeaderBackoffMs)
-        latestLeaderOffsets(kc, topicAndPartition, retries - 1)
-      }
-    } else {
-      o.right.get
-    }
-  }
-
-  // limits the maximum number of messages per partition
-  protected def clamp(
-    currentOffset: Long,
-    leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
-    maxMessagesPerPartition.map { mmp =>
-      leaderOffsets.map { case (tp, lo) =>
-        tp -> lo.copy(offset = Math.min(currentOffset + mmp, lo.offset))
-      }
-    }.getOrElse(leaderOffsets)
   }
 
   def onStop() {
@@ -153,102 +122,6 @@ class KafkaDirectReceiver[
     }
   }
 
-  private class KafkaDirectIterator(
-      kc: KafkaCluster,
-      part: TopicAndPartition,
-      fromOffset: Long,
-      untilOffset: Long) extends NextIterator[MessageAndMetadata[K, V]] {
-    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[K]]
-    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[V]]
-    val consumer = connectLeader
-    var requestOffset = fromOffset
-    var iter: Iterator[MessageAndOffset] = null
-
-    private def connectLeader: SimpleConsumer = {
-      kc.connectLeader(part.topic, part.partition).fold(
-        errs => throw new SparkException(
-          s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
-            errs.mkString("\n")),
-        consumer => consumer
-      )
-    }
-
-    private def handleFetchErr(resp: FetchResponse) {
-      if (resp.hasError) {
-        val err = resp.errorCode(part.topic, part.partition)
-        if (err == ErrorMapping.LeaderNotAvailableCode ||
-          err == ErrorMapping.NotLeaderForPartitionCode) {
-          log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
-            s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
-          Thread.sleep(kc.config.refreshLeaderBackoffMs)
-        }
-        // Let normal rdd retry sort out reconnect attempts
-        throw ErrorMapping.exceptionFor(err)
-      }
-    }
-
-    private def errBeginAfterEnd(): String =
-      s"Beginning offset ${fromOffset} is after the ending offset ${untilOffset} " +
-        s"for topic ${part.topic} partition ${part.partition}. " +
-        "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
-
-    private def errRanOutBeforeEnd(): String =
-      s"Ran out of messages before reaching ending offset ${untilOffset} " +
-      s"for topic ${part.topic} partition ${part.partition} start ${fromOffset}." +
-      " This should not happen, and indicates that messages may have been lost"
-
-    private def errOvershotEnd(itemOffset: Long): String =
-      s"Got ${itemOffset} > ending offset ${untilOffset} " +
-      s"for topic ${part.topic} partition ${part.partition} start ${fromOffset}." +
-      " This should not happen, and indicates a message may have been skipped"
-
-    private def fetchBatch: Iterator[MessageAndOffset] = {
-      val req = new FetchRequestBuilder()
-        .addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes)
-        .build()
-      val resp = consumer.fetch(req)
-      handleFetchErr(resp)
-      // kafka may return a batch that starts before the requested offset
-      resp.messageSet(part.topic, part.partition)
-        .iterator
-        .dropWhile(_.offset < requestOffset)
-    }
-
-    override def close(): Unit = {
-      if (consumer != null) {
-        consumer.close()
-      }
-    }
-
-    override def getNext(): MessageAndMetadata[K, V] = {
-      assert(fromOffset <= untilOffset, errBeginAfterEnd())
-      if (iter == null || !iter.hasNext) {
-        iter = fetchBatch
-      }
-      if (!iter.hasNext) {
-        assert(requestOffset == untilOffset, errRanOutBeforeEnd())
-        finished = true
-        null.asInstanceOf[MessageAndMetadata[K, V]]
-      } else {
-        val item = iter.next()
-        if (item.offset >= untilOffset) {
-          assert(item.offset == untilOffset, errOvershotEnd(item.offset))
-          errOvershotEnd(item.offset)
-          finished = true
-          null.asInstanceOf[MessageAndMetadata[K, V]]
-        } else {
-          requestOffset = item.nextOffset
-          new MessageAndMetadata(
-            part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder)
-        }
-      }
-    }
-  }
-
   // Handles Kafka messages
   private class MessageHandler(partition: TopicAndPartition, fromOffset: Long)
     extends Runnable {
@@ -260,10 +133,17 @@ class KafkaDirectReceiver[
       while(true) {
         try {
           val untilOffsets =
-            clamp(currentOffset, latestLeaderOffsets(kc, Set(partition), maxRetries))
+            clamp(latestLeaderOffsets(kc, Set(partition), maxRetries), (_) => currentOffset)
           if (currentOffset != untilOffsets(partition).offset) {
             val iter =
-              new KafkaDirectIterator(kc, partition, currentOffset, untilOffsets(partition).offset)
+              new KafkaIterator[K, V, U, T](
+                kc,
+                None,
+                None,
+                partition.topic,
+                partition.partition,
+                currentOffset,
+                untilOffsets(partition).offset)
 
             var next: MessageAndMetadata[K, V] = iter.getNext()
             while (next != null) {
