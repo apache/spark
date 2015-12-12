@@ -18,6 +18,7 @@
 import sys
 import warnings
 import json
+from functools import reduce
 
 if sys.version >= '3':
     basestring = unicode = str
