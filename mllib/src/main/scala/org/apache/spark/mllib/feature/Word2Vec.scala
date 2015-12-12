@@ -77,6 +77,19 @@ class Word2Vec extends Serializable with Logging {
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
   private var minCount = 5
+  private var maxSentenceLength = 1000
+
+  /**
+   * set the maxSentenceLength for cutting purpose
+   * @param maxSentenceLength the maxSentenceLength allowed.
+   *                          recommend to set it large enough to respect reasonable long sentences
+   *                          while not overflow memory
+   * @return this object
+   */
+  def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
+    this.maxSentenceLength = maxSentenceLength
+    this
+  }
 
   /**
    * Sets vector size (default: 100).
@@ -263,7 +276,8 @@ class Word2Vec extends Serializable with Logging {
 
   /**
    * Computes the vector representation of each word in vocabulary.
-   * @param dataset an RDD of sentences, each sentence are expressed as an iterable collection of words
+   * @param dataset a RDD of sentences,
+   *                each sentence is expressed as an iterable collection of words
    * @return a Word2VecModel
    */
   @Since("1.1.0")
@@ -280,22 +294,33 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
-    //each partition is a collection of sentences, will be translated into arrays of Index integer
-    val sentences: RDD[Array[Int]] = dataset.mapPartitions { iter =>
+    // each partition is a collection of sentences, will be translated into arrays of Index integer
+    val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
       new Iterator[Array[Int]] {
-        def hasNext: Boolean = iter.hasNext
+        var wordIter: Iterator[String] = null
+        def hasNext: Boolean = sentenceIter.hasNext||(wordIter!=null&&wordIter.hasNext)
 
         def next(): Array[Int] = {
           val sentence = ArrayBuilder.make[Int]
           var sentenceLength = 0
-          //do translation of each word into its index in the vocabulary, not constraint by fixed length anymore
-          for (wd <- iter.next()) {
-            val word = bcVocabHash.value.get(wd)
-            word match {
-              case Some(w) =>
-                sentence += w
-                sentenceLength += 1
-              case None =>
+          // do translation of each word into its index in the vocabulary,
+          // do cutting only when the sentence is larger than maxSentenceLength
+          if (wordIter == null && sentenceIter.hasNext) {
+            wordIter = sentenceIter.next().iterator
+          }
+          while (hasNext && sentenceLength < maxSentenceLength) {
+            while (!wordIter.hasNext && sentenceIter.hasNext) {
+              wordIter = sentenceIter.next().iterator
+            }
+            if (wordIter.hasNext) {
+              val word = wordIter.next()
+              sentenceLength += 1
+              val wordIndex = bcVocabHash.value.get(word)
+              wordIndex match {
+                case Some(w) =>
+                  sentence += w
+                case None =>
+              }
             }
           }
           sentence.result()
@@ -470,52 +495,12 @@ class Word2VecModel private[spark] (
   }
 
   /**
-   * get cosineSimilarity of two word. assumed to be from the vocabulary and used after model built, otherwise will error out
-   * @param v1 one word from the vocabulary
-   * @param v2 the other word from the vocabulary
-   * @return the cosinesimilarity score in the vector space of the given two words
-   */
-  def cosineSimilarity(v1: String, v2: String): Double = {
-    return cosineSimilarity(getVectors(v1), getVectors(v2))
-  }
-
-  /**
    * get the built vocabulary from the input
+   * this is useful for getting the whole vocabulary to join with other data or filtering other data
    * @return a map of word to its index
    */
-  def getVocabulary:Map[String,Int]={
-    return wordIndex
-  }
-
-  /**
-   * get cosineSimilarity of two word vectors
-   * @param v1 one word vector from the vocabulary
-   * @param v2 the other word vector from the vocabulary
-   * @return the cosineSimilarity score of two vectors
-   *
-   */
-  def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
-    require(v1.length == v2.length, "Vectors should have the same length")
-    val n = v1.length
-    val norm1 = blas.snrm2(n, v1, 1)
-    val norm2 = blas.snrm2(n, v2, 1)
-    if (norm1 == 0 || norm2 == 0) return 0.0
-    blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
-  }
-
-  /**
-   * get euclideanDistance of two word vectors
-   * @param v1 one word vector
-   * @param v2 the other word vector
-   * @return euclideanDistance of two word vectors
-   */
-  def euclideanDistance(v1: Array[Float], v2: Array[Float]): Double = {
-    require(v1.length == v2.length, "Vectors should have the same length")
-    val n = v1.length
-    val result=new Array[Float](n)
-    Array.copy(v2,0,result,0,n)
-    blas.saxpy(n, -1, v1, 1, result, 1)
-    return blas.snrm2(n,result,1)
+  def getVocabulary: Map[String, Int] = {
+    wordIndex
   }
 
   override protected def formatVersion = "1.0"
@@ -556,7 +541,8 @@ class Word2VecModel private[spark] (
    * Find synonyms of a word
    * @param word a word
    * @param num number of synonyms to find
-   * @param norm a flag to tell whether to output normalized cosineSimilarity or not. it will not change order, just for convinience of caller
+   * @param norm a flag to tell whether to output normalized cosineSimilarity or not.
+   *             it will not change order, just for convenience of caller
    *      e.g. set up threshold for filtering purpose.
    * @return array of (word, cosineSimilarity)
    */
@@ -569,8 +555,10 @@ class Word2VecModel private[spark] (
    * Find synonyms of the vector representation of a word
    * @param vector vector representation of a word
    * @param num number of synonyms to find
-   * @param norm an optional flag to tell whether to output normalized cosineSimilarity or not. it will not change order, just for convinience of caller
-   *      e.g. set up threshold for filtering purpose. default value is false for backward compatibility
+   * @param norm an optional flag to tell whether to output normalized cosineSimilarity or not.
+   *             it will not change order, just for convinience of caller
+   *      e.g. set up threshold for filtering purpose.
+   *      default value is false for backward compatibility
    * @return array of (word, cosineSimilarity)
    */
   @Since("1.1.0")
@@ -589,12 +577,14 @@ class Word2VecModel private[spark] (
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
     var vecNorm = 1f
-    if (norm)
+    if (norm) {
       vecNorm = blas.snrm2(vectorSize, fVector, 1)
+    }
     while (ind < numWords) {
       cosVec(ind) /= wordVecNorms(ind)
-      if (norm)
+      if (norm) {
         cosVec(ind) /= vecNorm
+      }
       ind += 1
     }
     wordList.zip(cosVec)
@@ -617,10 +607,13 @@ class Word2VecModel private[spark] (
 
   /**
    * get word vector array. length is vocabularySize*vectorSize
-   * @return the array of word vectors, need to split it by vectorSize to get each individual vector
+   * this is useful for batch outputting of vectors,
+   * way much faster than use getVectors() one by one
+   * @return the array of word vectors,
+   *         need to split it by vectorSize to get each individual vector
    */
   def getWordVectors: Array[Float] = {
-    return wordVectors
+    wordVectors
   }
 }
 
