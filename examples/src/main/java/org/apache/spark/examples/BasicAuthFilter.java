@@ -33,8 +33,8 @@ import javax.servlet.FilterChain;
 
 /**
  *  Servlet filter example for Spark web UI.
- *  BasisAuthFilter provides a functionality of basic authentication.
- *  The credential of this filter is for "spark-user:spark-password".
+ *  BasicAuthFilter provides a functionality of basic authentication.
+ *  The credentials of the filter are "spark-user:spark-password".
  *
  *  Usage:
  *
