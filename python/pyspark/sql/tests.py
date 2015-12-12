@@ -355,9 +355,10 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_infer_schema_to_local(self):
         input = [{"a": 1}, {"b": "coffee"}]
+        rdd = self.sc.parallelize(input)
         df = self.sqlCtx.createDataFrame(input)
-        df2 = self.sqlCtx.createDataFrame(sc.parallelize(input), samplingRatio=1.0)
-        self.assertEqual(df.schema(), df2.schema())
+        df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
+        self.assertEqual(df.schema, df2.schema)
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
         df3 = self.sqlCtx.createDataFrame(rdd, df.schema)
