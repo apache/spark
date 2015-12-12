@@ -969,24 +969,20 @@ private[deploy] class Master(
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
           EventLoggingListener.IN_PROGRESS))
 
-      if (inProgressExists) {
+      val eventLogFile = if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
         logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
-      }
-
-      val (eventLogFile, status) = if (inProgressExists) {
-        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+        eventLogFilePrefix + EventLoggingListener.IN_PROGRESS
       } else {
-        (eventLogFilePrefix, " (completed)")
+        eventLogFilePrefix
       }
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
-      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
-        replayBus.replay(logInput, eventLogFile, maybeTruncated)
+        replayBus.replay(logInput, eventLogFile, inProgressExists)
       } finally {
         logInput.close()
       }
