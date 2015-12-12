@@ -662,6 +662,7 @@ setMethod("unique",
 #' @param x A SparkSQL DataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
 #'
 #' @family DataFrame functions
 #' @rdname sample
@@ -677,13 +678,17 @@ setMethod("unique",
 #' collect(sample(df, TRUE, 0.5))
 #'}
 setMethod("sample",
-          # TODO : Figure out how to send integer as java.lang.Long to JVM so
-          # we can send seed as an argument through callJMethod
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
-          function(x, withReplacement, fraction) {
+          function(x, withReplacement, fraction, seed) {
             if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
-            sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            if (!missing(seed)) {
+              # TODO : Figure out how to send integer as java.lang.Long to JVM so
+              # we can send seed as an argument through callJMethod
+              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
+            } else {
+              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+            }
             dataFrame(sdf)
           })
 
@@ -692,8 +697,8 @@ setMethod("sample",
 setMethod("sample_frac",
           signature(x = "DataFrame", withReplacement = "logical",
                     fraction = "numeric"),
-          function(x, withReplacement, fraction) {
-            sample(x, withReplacement, fraction)
+          function(x, withReplacement, fraction, seed) {
+            sample(x, withReplacement, fraction, seed)
           })
 
 #' nrow
