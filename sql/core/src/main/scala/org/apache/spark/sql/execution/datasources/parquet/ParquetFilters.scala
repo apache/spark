@@ -265,7 +265,10 @@ private[sql] object ParquetFilters {
           rhsFilter <- createFilter(schema, rhs)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
-      case sources.Not(pred) =>
+      // Here, we assume the Optimizer's rule BooleanSimplification has applied `Not` operator
+      // in the underlying `And` and `Or` expressions.
+      case sources.Not(pred)
+        if (!pred.isInstanceOf[sources.And] && !pred.isInstanceOf[sources.Or]) =>
         createFilter(schema, pred).map(FilterApi.not)
 
       case _ => None
