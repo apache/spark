@@ -27,6 +27,7 @@ import org.apache.spark.rdd.RDD
 class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   private var instances: RDD[Instance] = _
+  private var instancesConstLabel: RDD[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -42,6 +43,18 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
       Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+    ), 2)
+
+    /*
+       R code:
+       same as above except make the label constant
+       b <- c(17, 17, 17, 17)
+     */
+    instancesConstLabel = sc.parallelize(Seq(
+      Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+      Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
     ), 2)
   }
 
@@ -68,6 +81,35 @@ class WeightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext
       val wls = new WeightedLeastSquares(
         fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = false)
         .fit(instances)
+      val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
+      assert(actual ~== expected(idx) absTol 1e-4)
+      idx += 1
+    }
+  }
+
+  test("WLS against lm when label is constant") {
+    /*
+       R code:
+       # here b is constant
+       df <- as.data.frame(cbind(A, b))
+       for (formula in c(b ~ . -1, b ~ .)) {
+         model <- lm(formula, data=df, weights=w)
+         print(as.vector(coef(model)))
+       }
+
+      [1] -9.221298  3.394343
+      [1] 17  0  0
+    */
+
+    val expected = Seq(
+      Vectors.dense(0.0, -9.221298, 3.394343),
+      Vectors.dense(17.0, 0.0, 0.0))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      val wls = new WeightedLeastSquares(
+        fitIntercept, regParam = 0.0, standardizeFeatures = false, standardizeLabel = true)
+        .fit(instancesConstLabel)
       val actual = Vectors.dense(wls.intercept, wls.coefficients(0), wls.coefficients(1))
       assert(actual ~== expected(idx) absTol 1e-4)
       idx += 1
