@@ -165,4 +165,11 @@ public class TransportConf {
     return conf.getBoolean("spark.network.sasl.serverAlwaysEncrypt", false);
   }
 
+  /**
+   * Maximum number of bytes for the index cache that is used when serving map outputs to reducers.
+   */
+  public int shuffleIndexCacheSize() {
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.shuffle.index.cacheSize", "10m")));
+  }
 }
