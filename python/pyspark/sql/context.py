@@ -236,14 +236,9 @@ class SQLContext(object):
         if type(first) is dict:
             warnings.warn("inferring schema from dict is deprecated,"
                           "please use pyspark.sql.Row instead")
-        schema = _infer_schema(first)
+        schema = reduce(_merge_type, map(_infer_schema, data))
         if _has_nulltype(schema):
-            for r in data:
-                schema = _merge_type(schema, _infer_schema(r))
-                if not _has_nulltype(schema):
-                    break
-            else:
-                raise ValueError("Some of types cannot be determined after inferring")
+            raise ValueError("Some of types cannot be determined after inferring")
         return schema
 
     def _inferSchema(self, rdd, samplingRatio=None):
