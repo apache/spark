@@ -53,9 +53,6 @@ private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
   def getNumFolds: Int = $(numFolds)
 
   setDefault(numFolds -> 3)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 }
 
 /**
@@ -88,6 +85,10 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("1.2.0")
   def setNumFolds(value: Int): this.type = set(numFolds, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("1.4.0")
   override def fit(dataset: DataFrame): CrossValidatorModel = {
