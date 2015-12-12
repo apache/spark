@@ -1168,7 +1168,13 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}. The fields in it can be accessed like attributes.
+    A row in L{DataFrame}. 
+    The fields in it can be accessed:
+
+    * like attributes (``row.key``)
+    * like dictionary values (``row[key]``)
+
+    ``key in row`` will search through row keys. 
 
     Row can be used to create a row object by using named arguments,
     the fields will be sorted by names.
