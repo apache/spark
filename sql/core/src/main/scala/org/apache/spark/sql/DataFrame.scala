@@ -609,7 +609,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
-    sortWithinPartitions(sortCol, sortCols : _*)
+    sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
   /**

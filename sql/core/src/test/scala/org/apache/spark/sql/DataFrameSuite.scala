@@ -1083,8 +1083,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     // Distribute into one partition and order by. This partition should contain all the values.
-    val df6 = data.repartition(1, $"a").sortWithinPartitions($"b".asc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    val df6 = data.repartition(1, $"a").sortWithinPartitions("b")
+    // Walk each partition and verify that it is sorted ascending and not globally sorted.
     df6.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
