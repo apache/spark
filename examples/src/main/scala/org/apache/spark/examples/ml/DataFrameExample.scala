@@ -44,10 +44,10 @@ object DataFrameExample {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("DatasetExample") {
-      head("Dataset: an example app using DataFrame as a Dataset for ML.")
+    val parser = new OptionParser[Params]("DataFrameExample") {
+      head("DataFrameExample: an example app using DataFrame for ML.")
       opt[String]("input")
-        .text(s"input path to dataset")
+        .text(s"input path to dataframe")
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
         success
@@ -88,7 +88,7 @@ object DataFrameExample {
     // Save the records in a parquet file.
     val tmpDir = Files.createTempDir()
     tmpDir.deleteOnExit()
-    val outputDir = new File(tmpDir, "dataset").toString
+    val outputDir = new File(tmpDir, "dataframe").toString
     println(s"Saving to $outputDir as Parquet file.")
     df.write.parquet(outputDir)
 
