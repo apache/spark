@@ -47,6 +47,9 @@ import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
 
+/** Exception thrown when trying to rebuild UI and event log is disabled */
+private[master] class RebuildUINoEventLogException extends Exception
+
 private[deploy] class Master(
     override val rpcEnv: RpcEnv,
     address: RpcAddress,
@@ -937,7 +940,7 @@ private[deploy] class Master(
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val futureUI = asyncRebuildSparkUI(app)
 
-    // Wait until the UI is rebuilt or a failure, log status occasionally for apps with many events
+    // Wait until the UI is rebuilt or cancelled, log status occasionally for apps with many events
     var waitSec = 2
     do {
       try {
@@ -945,7 +948,7 @@ private[deploy] class Master(
         return Some(ui)
       } catch {
         case te: TimeoutException =>
-          waitSec += waitSec
+          waitSec *= 2
           logInfo(s"Application UI is rebuilding, will continue to wait $waitSec seconds")
         case e: Exception =>
           waitSec = 0
@@ -1126,6 +1129,3 @@ private[deploy] object Master extends Logging {
     (rpcEnv, portsResponse.webUIPort, portsResponse.restPort)
   }
 }
-
-/** Exception thrown when trying to rebuild UI and event log is disabled */
-private[master] class RebuildUINoEventLogException extends Exception
