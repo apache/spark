@@ -724,6 +724,10 @@ test_that("sample on a DataFrame", {
   sampled2 <- sample(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled2) < 3)
 
+  count1 <- count(sample(df, FALSE, 0.1, 0))
+  count2 <- count(sample(df, FALSE, 0.1, 0))
+  expect_equal(count1, count2)
+
   # Also test sample_frac
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
