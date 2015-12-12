@@ -98,11 +98,11 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         count("key").over(Window.partitionBy("value").orderBy("key")),
         sum("key").over(Window.partitionBy("value").orderBy("key")),
         ntile(2).over(Window.partitionBy("value").orderBy("key")),
-        rowNumber().over(Window.partitionBy("value").orderBy("key")),
-        denseRank().over(Window.partitionBy("value").orderBy("key")),
+        row_number().over(Window.partitionBy("value").orderBy("key")),
+        dense_rank().over(Window.partitionBy("value").orderBy("key")),
         rank().over(Window.partitionBy("value").orderBy("key")),
-        cumeDist().over(Window.partitionBy("value").orderBy("key")),
-        percentRank().over(Window.partitionBy("value").orderBy("key"))),
+        cume_dist().over(Window.partitionBy("value").orderBy("key")),
+        percent_rank().over(Window.partitionBy("value").orderBy("key"))),
       Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d, 0.0d) ::
       Row(1, 1, 1, 1.0d, 1, 1, 1, 1, 1, 1, 1.0d / 3.0d, 0.0d) ::
       Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 1, 2, 2, 2, 1.0d, 0.5d) ::
@@ -222,5 +222,17 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         approxCountDistinct($"value").over(window)),
       Seq.fill(4)(Row("a", 1.0d / 4.0d, 1.0d / 3.0d, 2))
       ++ Seq.fill(3)(Row("b", 2.0d / 3.0d, 1.0d, 3)))
+  }
+
+  test("window function with aggregates") {
+    val df = Seq(("a", 1), ("a", 1), ("a", 2), ("a", 2), ("b", 4), ("b", 3), ("b", 2)).
+      toDF("key", "value")
+    val window = Window.orderBy()
+    checkAnswer(
+      df.groupBy($"key")
+        .agg(
+          sum($"value"),
+          sum(sum($"value")).over(window) - sum($"value")),
+      Seq(Row("a", 6, 9), Row("b", 9, 6)))
   }
 }

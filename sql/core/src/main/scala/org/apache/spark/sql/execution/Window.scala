@@ -155,7 +155,7 @@ case class Window(
    * Collection containing an entry for each window frame to process. Each entry contains a frames'
    * WindowExpressions and factory function for the WindowFrameFunction.
    */
-  private[this] lazy val windowFrameFactoryMap = {
+  private[this] lazy val windowFrameExpressionFactoryPairs = {
     type FrameKey = (String, FrameType, Option[Int], Option[Int])
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
@@ -273,8 +273,8 @@ case class Window(
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the expressions and factories from the map.
-    val expressions = windowFrameFactoryMap.flatMap(_._1)
-    val factories = windowFrameFactoryMap.map(_._2).toArray
+    val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
+    val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
 
     // Start processing.
     child.execute().mapPartitions { stream =>
@@ -725,24 +725,17 @@ private[execution] object AggregateProcessor {
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
 
-    // Create and add a size reference to SizeBasedWindowFunction.
-    var sizeOrdinal = -1
-    var size: BoundReference = null
-    val addSize = (f: Expression) => f match {
-      case wf: SizeBasedWindowFunction =>
-        if (size == null) {
-          sizeOrdinal = aggBufferAttributes.size
-          size = BoundReference(sizeOrdinal, IntegerType, false)
-          aggBufferAttributes += wf.size
-          initialValues += NoOp
-          updateExpressions += NoOp
-        }
-        wf.withSize(size)
-      case e => e
+    // Check if there are any SizeBasedWindowFunctions. If there are, we add the partition size to
+    // the aggregation buffer. Note that the ordinal of the partition size value will always be 0.
+    val trackPartitionSize = functions.exists(_.isInstanceOf[SizeBasedWindowFunction])
+    if (trackPartitionSize) {
+      aggBufferAttributes += SizeBasedWindowFunction.n
+      initialValues += NoOp
+      updateExpressions += NoOp
     }
 
     // Add an AggregateFunction to the AggregateProcessor.
-    val addToProcessor = (f: Expression) => f match {
+    functions.foreach {
       case agg: DeclarativeAggregate =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         initialValues ++= agg.initialValues
@@ -761,14 +754,13 @@ private[execution] object AggregateProcessor {
         updateExpressions ++= noOps
         evaluateExpressions += imperative
       case other =>
-        sys.error(s"Unsupported Aggregate Function: $f")
+        sys.error(s"Unsupported Aggregate Function: $other")
     }
 
-    // Process the functions.
-    functions.foreach(addSize.andThen(addToProcessor))
-
     // Create the projections.
-    val initialProjection = newMutableProjection(initialValues, Nil)()
+    val initialProjection = newMutableProjection(
+      initialValues,
+      Seq(SizeBasedWindowFunction.n))()
     val updateProjection = newMutableProjection(
       updateExpressions,
       aggBufferAttributes ++ inputAttributes)()
@@ -783,7 +775,7 @@ private[execution] object AggregateProcessor {
       updateProjection,
       evaluateProjection,
       imperatives.toArray,
-      sizeOrdinal)
+      trackPartitionSize)
   }
 }
 
@@ -797,7 +789,7 @@ private[execution] final class AggregateProcessor(
     private[this] val updateProjection: MutableProjection,
     private[this] val evaluateProjection: MutableProjection,
     private[this] val imperatives: Array[ImperativeAggregate],
-    private[this] val sizeOrdinal: Int) {
+    private[this] val trackPartitionSize: Boolean) {
 
   private[this] val join = new JoinedRow
   private[this] val numImperatives = imperatives.length
@@ -810,8 +802,8 @@ private[execution] final class AggregateProcessor(
     // Some initialization expressions are dependent on the partition size so we have to
     // initialize the size before initializing all other fields, and we have to pass the buffer to
     // the initialization projection.
-    if (sizeOrdinal >= 0) {
-      buffer.setInt(sizeOrdinal, size)
+    if (trackPartitionSize) {
+      buffer.setInt(0, size)
     }
     initialProjection(buffer)
     var i = 0
