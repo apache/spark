@@ -54,8 +54,6 @@ class VectorSlicerSuite extends SparkFunSuite with MLlibTestSparkContext with De
   }
 
   test("Test vector slicer") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.sparse(5, Seq((0, -2.0), (1, 2.3))),
       Vectors.dense(-2.0, 2.3, 0.0, 0.0, 1.0),

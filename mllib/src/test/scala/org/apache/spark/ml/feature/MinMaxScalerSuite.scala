@@ -26,8 +26,6 @@ import org.apache.spark.sql.{Row, SQLContext}
 class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("MinMaxScaler fit basic case") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.dense(1, 0, Long.MinValue),
       Vectors.dense(2, 0, 0),

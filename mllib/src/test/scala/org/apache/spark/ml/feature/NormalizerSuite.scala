@@ -61,7 +61,6 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Vectors.sparse(3, Seq())
     )
 
-    val sqlContext = new SQLContext(sc)
     dataFrame = sqlContext.createDataFrame(sc.parallelize(data, 2).map(NormalizerSuite.FeatureData))
     normalizer = new Normalizer()
       .setInputCol("features")
