@@ -99,7 +99,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
     checkCondition(('b || !'a ) && 'a, 'b && 'a)
   }
 
-  test("!(a && b) , !(a || b)") {
+  test("DeMorgan's law") {
     checkCondition(!('a && 'b), !'a || !'b)
 
     checkCondition(!('a || 'b), !'a && !'b)
