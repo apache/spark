@@ -13,7 +13,6 @@ _hooks = {
     'webhdfs_hook': ['WebHDFSHook'],
     'mysql_hook': ['MySqlHook'],
     'postgres_hook': ['PostgresHook'],
-    'bigquery_hook': ['BigQueryHook'],
     'presto_hook': ['PrestoHook'],
     'samba_hook': ['SambaHook'],
     'sqlite_hook': ['SqliteHook'],
