@@ -27,6 +27,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -950,7 +951,7 @@ private[deploy] class Master(
         case te: TimeoutException =>
           waitSec *= 2
           logInfo(s"Application UI is rebuilding, will continue to wait $waitSec seconds")
-        case e: Exception =>
+        case NonFatal(_) | _: InterruptedException =>
           waitSec = 0
       }
     } while (waitSec > 0)
