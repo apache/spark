@@ -162,8 +162,8 @@ object MimaExcludes {
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
-      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
-      ++ Seq(
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
+      Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errRanOutBeforeEnd"),
         ProblemFilters.exclude[MissingMethodProblem](
