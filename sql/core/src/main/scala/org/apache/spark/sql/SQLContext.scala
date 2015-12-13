@@ -33,6 +33,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
@@ -426,6 +427,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+    implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
     SQLContext.setActive(self)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
@@ -501,7 +503,7 @@ class SQLContext private[sql](
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val encoded = data.map(d => enc.toRow(d).copy().asInstanceOf[UnsafeRow])
     val plan = new LocalRelation(attributes, encoded)
 
     new Dataset[T](this, plan)
@@ -604,7 +606,9 @@ class SQLContext private[sql](
     val className = beanClass.getName
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
+    val projection = UnsafeProjection.create(attrSeq)
+    DataFrame(self,
+      LocalRelation(attrSeq, rows.toSeq.map(projection(_).copy().asInstanceOf[UnsafeRow])))
   }
 
 

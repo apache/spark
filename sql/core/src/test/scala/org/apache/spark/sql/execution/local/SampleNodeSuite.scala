@@ -29,7 +29,7 @@ class SampleNodeSuite extends LocalNodeTest {
     val maybeOut = if (withReplacement) "" else "out"
     test(s"with$maybeOut replacement") {
       val inputData = (1 to 1000).map { i => (i, i) }.toArray
-      val inputNode = new DummyNode(kvIntAttributes, inputData)
+      val inputNode = DummyNode(kvIntAttributes, inputData)
       val sampleNode = new SampleNode(conf, lowerb, upperb, withReplacement, seed, inputNode)
       val sampler =
         if (withReplacement) {

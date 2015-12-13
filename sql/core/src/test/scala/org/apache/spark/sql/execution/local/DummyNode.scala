@@ -17,10 +17,25 @@
 
 package org.apache.spark.sql.execution.local
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+
+private[local] object DummyNode {
+  val CLOSED: Int = Int.MinValue
+
+  def apply[A <: Product : TypeTag](
+      output: Seq[Attribute],
+      data: Seq[A],
+      conf: SQLConf = new SQLConf): DummyNode = {
+    implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
+    new DummyNode(output, LocalRelation.fromProduct(output, data), conf)
+  }
+}
 
 /**
  * A dummy [[LocalNode]] that just returns rows from a [[LocalRelation]].
@@ -35,10 +50,6 @@ private[local] case class DummyNode(
 
   private var index: Int = CLOSED
   private val input: Seq[InternalRow] = relation.data
-
-  def this(output: Seq[Attribute], data: Seq[Product], conf: SQLConf = new SQLConf) {
-    this(output, LocalRelation.fromProduct(output, data), conf)
-  }
 
   def isOpen: Boolean = index != CLOSED
 
@@ -61,8 +72,4 @@ private[local] case class DummyNode(
   override def close(): Unit = {
     index = CLOSED
   }
-}
-
-private object DummyNode {
-  val CLOSED: Int = Int.MinValue
 }

@@ -28,7 +28,7 @@ class ProjectNodeSuite extends LocalNodeTest {
     AttributeReference("name", StringType)())
 
   private def testProject(inputData: Array[(Int, Int, String)] = Array.empty): Unit = {
-    val inputNode = new DummyNode(pieAttributes, inputData)
+    val inputNode = DummyNode(pieAttributes, inputData)
     val columns = Seq[NamedExpression](inputNode.output(0), inputNode.output(2))
     val projectNode = new ProjectNode(conf, columns, inputNode)
     val expectedOutput = inputData.map { case (id, age, name) => (id, name) }

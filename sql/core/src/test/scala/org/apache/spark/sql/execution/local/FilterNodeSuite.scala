@@ -24,7 +24,7 @@ class FilterNodeSuite extends LocalNodeTest {
 
   private def testFilter(inputData: Array[(Int, Int)] = Array.empty): Unit = {
     val cond = 'k % 2 === 0
-    val inputNode = new DummyNode(kvIntAttributes, inputData)
+    val inputNode = DummyNode(kvIntAttributes, inputData)
     val filterNode = new FilterNode(conf, cond, inputNode)
     val resolvedNode = resolveExpressions(filterNode)
     val expectedOutput = inputData.filter { case (k, _) => k % 2 == 0 }

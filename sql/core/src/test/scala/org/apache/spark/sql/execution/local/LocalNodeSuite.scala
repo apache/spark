@@ -22,7 +22,7 @@ class LocalNodeSuite extends LocalNodeTest {
   private val data = (1 to 100).map { i => (i, i) }.toArray
 
   test("basic open, next, fetch, close") {
-    val node = new DummyNode(kvIntAttributes, data)
+    val node = DummyNode(kvIntAttributes, data)
     assert(!node.isOpen)
     node.open()
     assert(node.isOpen)
@@ -42,7 +42,7 @@ class LocalNodeSuite extends LocalNodeTest {
   }
 
   test("asIterator") {
-    val node = new DummyNode(kvIntAttributes, data)
+    val node = DummyNode(kvIntAttributes, data)
     val iter = node.asIterator
     node.open()
     data.foreach { case (k, v) =>
@@ -61,7 +61,7 @@ class LocalNodeSuite extends LocalNodeTest {
   }
 
   test("collect") {
-    val node = new DummyNode(kvIntAttributes, data)
+    val node = DummyNode(kvIntAttributes, data)
     node.open()
     val collected = node.collect()
     assert(collected.size === data.size)

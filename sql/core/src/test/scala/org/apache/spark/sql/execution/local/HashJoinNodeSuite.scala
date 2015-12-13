@@ -62,8 +62,8 @@ class HashJoinNodeSuite extends LocalNodeTest {
     // Actual test body
     def runTest(leftInput: Array[(Int, String)], rightInput: Array[(Int, String)]): Unit = {
       val rightInputMap = rightInput.toMap
-      val leftNode = new DummyNode(joinNameAttributes, leftInput)
-      val rightNode = new DummyNode(joinNicknameAttributes, rightInput)
+      val leftNode = DummyNode(joinNameAttributes, leftInput)
+      val rightNode = DummyNode(joinNicknameAttributes, rightInput)
       val makeBinaryHashJoinNode = (node1: LocalNode, node2: LocalNode) => {
         val binaryHashJoinNode =
           BinaryHashJoinNode(conf, Seq('id1), Seq('id2), buildSide, node1, node2)

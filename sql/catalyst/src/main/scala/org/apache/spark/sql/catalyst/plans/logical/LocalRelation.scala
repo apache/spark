@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -29,20 +30,27 @@ object LocalRelation {
     new LocalRelation(StructType(output1 +: output).toAttributes)
   }
 
-  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
-    val schema = StructType.fromAttributes(output)
-    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+  def fromInternalRows(output: Seq[Attribute], data: Seq[InternalRow]): LocalRelation = {
+    val projection = UnsafeProjection.create(output.map(_.dataType).toArray)
+    new LocalRelation(output, data.map(projection(_).copy()))
   }
 
-  def fromProduct(output: Seq[Attribute], data: Seq[Product]): LocalRelation = {
+  def fromExternalRows(output: Seq[Attribute], data: Seq[Row]): LocalRelation = {
     val schema = StructType.fromAttributes(output)
-    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    LocalRelation(output, data.map(converter(_).asInstanceOf[InternalRow]))
+    val encoder = RowEncoder(schema)
+    LocalRelation(output, data.map(encoder.toRow(_).copy().asInstanceOf[UnsafeRow]))
+  }
+
+  def fromProduct[T <: Product : ExpressionEncoder](
+      output: Seq[Attribute],
+      data: Seq[T]): LocalRelation = {
+    val encoder = implicitly[ExpressionEncoder[T]]
+    val schema = StructType.fromAttributes(output)
+    new LocalRelation(output, data.map(encoder.toRow(_).copy().asInstanceOf[UnsafeRow]))
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+case class LocalRelation(output: Seq[Attribute], data: Seq[UnsafeRow] = Nil)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   /**
