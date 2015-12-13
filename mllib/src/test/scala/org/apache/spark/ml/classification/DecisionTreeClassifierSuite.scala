@@ -27,8 +27,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -176,7 +175,7 @@ class DecisionTreeClassifierSuite
   }
 
   test("Multiclass classification tree with 10-ary (ordered) categorical features," +
-      " with just enough bins") {
+    " with just enough bins") {
     val rdd = categoricalDataPointsForMulticlassForOrderedFeaturesRDD
     val dt = new DecisionTreeClassifier()
       .setImpurity("Gini")
@@ -273,7 +272,7 @@ class DecisionTreeClassifierSuite
     ))
     val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
-    val model = dt.fit(df)
+    dt.fit(df)
   }
 
   test("Use soft prediction for binary classification with ordered categorical features") {
@@ -333,6 +332,42 @@ class DecisionTreeClassifierSuite
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("DecisionTree should support other NumericType labels") {
+    val sqlContext = new SQLContext(sc)
+
+    val dfWithIntLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0, Vectors.dense(0, 2, 3)),
+      (1, Vectors.dense(0, 3, 1)),
+      (0, Vectors.dense(0, 2, 2)),
+      (1, Vectors.dense(0, 3, 9)),
+      (0, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val dfWithFloatLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0f, Vectors.dense(0, 2, 3)),
+      (1f, Vectors.dense(0, 3, 1)),
+      (0f, Vectors.dense(0, 2, 2)),
+      (1f, Vectors.dense(0, 3, 9)),
+      (0f, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val dfWithLongLabels = TreeTests.setMetadata(sqlContext.createDataFrame(Seq(
+      (0L, Vectors.dense(0, 2, 3)),
+      (1L, Vectors.dense(0, 3, 1)),
+      (0L, Vectors.dense(0, 2, 2)),
+      (1L, Vectors.dense(0, 3, 9)),
+      (0L, Vectors.dense(0, 2, 6))
+    )).toDF("label", "features"), 2)
+
+    val dt = new DecisionTreeClassifier()
+      .setLabelCol("label")
+      .setFeaturesCol("features")
+
+    dt.fit(dfWithIntLabels)
+    dt.fit(dfWithFloatLabels)
+    dt.fit(dfWithLongLabels)
   }
 
   /////////////////////////////////////////////////////////////////////////////

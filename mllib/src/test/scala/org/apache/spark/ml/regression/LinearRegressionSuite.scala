@@ -61,9 +61,9 @@ class LinearRegressionSuite
     val featureSize = 4100
     datasetWithSparseFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
+        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xVariance = Seq.fill(featureSize)(r.nextDouble()).toArray, nPoints = 200,
         seed, eps = 0.1, sparsity = 0.7), 2))
 
     /*
