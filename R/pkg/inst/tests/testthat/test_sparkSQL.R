@@ -371,13 +371,13 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(bob$height, 176.5)
 })
 
-test_that("read.json()/jsonFile() on a local file returns a DataFrame", {
+test_that("read.json()/jsonFile() and write.json()", {
   df <- read.json(sqlContext, jsonPath)
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
   # read.json()/jsonFile() works with multiple input paths
   jsonPath2 <- tempfile(pattern="jsonPath2", fileext=".json")
-  write.df(df, jsonPath2, "json", mode="overwrite")
+  write.json(df, jsonPath2)
   jsonDF1 <- read.json(sqlContext, c(jsonPath, jsonPath2))
   expect_is(jsonDF1, "DataFrame")
   expect_equal(count(jsonDF1), 6)
@@ -454,6 +454,8 @@ test_that("insertInto() on a registered table", {
   expect_equal(count(sql(sqlContext, "select * from table1")), 2)
   expect_equal(first(sql(sqlContext, "select * from table1 order by age"))$name, "Bob")
   dropTempTable(sqlContext, "table1")
+
+  unlink(parquetPath2)
 })
 
 test_that("table() returns a new DataFrame", {
@@ -895,6 +897,8 @@ test_that("test HiveContext", {
   df3 <- sql(hiveCtx, "select * from json2")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 3)
+
+  unlink(jsonPath2)
 })
 
 test_that("column operators", {
@@ -1333,6 +1337,9 @@ test_that("join() and merge() on a DataFrame", {
   expect_error(merge(df, df3),
                paste("The following column name: name_y occurs more than once in the 'DataFrame'.",
                      "Please use different suffixes for the intersected columns.", sep = ""))
+
+  unlink(jsonPath2)
+  unlink(jsonPath3)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
@@ -1396,6 +1403,8 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
 
   # Test base::intersect is working
   expect_equal(length(intersect(1:20, 3:23)), 18)
+
+  unlink(jsonPath2)
 })
 
 test_that("withColumn() and withColumnRenamed()", {
@@ -1448,23 +1457,28 @@ test_that("write.df() on DataFrame and works with read.parquet", {
   expect_equal(count(df), count(parquetDF))
 })
 
-test_that("read.parquet()/parquetFile() works with multiple input paths", {
+test_that("read.parquet()/parquetFile() and write.parquet()/saveAsParquetFile()", {
   df <- read.json(sqlContext, jsonPath)
-  write.df(df, parquetPath, "parquet", mode="overwrite")
   parquetPath2 <- tempfile(pattern = "parquetPath2", fileext = ".parquet")
-  write.df(df, parquetPath2, "parquet", mode="overwrite")
-  parquetDF <- read.parquet(sqlContext, c(parquetPath, parquetPath2))
+  write.parquet(df, parquetPath2)
+  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.parquet(df, parquetPath3)
+  parquetDF <- read.parquet(sqlContext, c(parquetPath2, parquetPath3))
   expect_is(parquetDF, "DataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
-  parquetDF2 <- suppressWarnings(parquetFile(sqlContext, parquetPath, parquetPath2))
+  parquetDF2 <- suppressWarnings(parquetFile(sqlContext, parquetPath2, parquetPath3))
   expect_is(parquetDF2, "DataFrame")
   expect_equal(count(parquetDF2), count(df) * 2)
 
   # Test if varargs works with variables
   saveMode <- "overwrite"
   mergeSchema <- "true"
-  parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
-  write.df(df, parquetPath2, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+  parquetPath4 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
+  write.df(df, parquetPath3, "parquet", mode = saveMode, mergeSchema = mergeSchema)
+
+  unlink(parquetPath2)
+  unlink(parquetPath3)
+  unlink(parquetPath4)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
