@@ -163,6 +163,22 @@ object MimaExcludes {
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.
       MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+      ++ Seq(
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errRanOutBeforeEnd"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errBeginAfterEnd"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errOvershotEnd"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "org.apache.spark.streaming.kafka.KafkaRDD$KafkaRDDIterator"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.DirectKafkaInputDStream.latestLeaderOffsets"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.DirectKafkaInputDStream.org$apache$spark$streaming$kafka$DirectKafkaInputDStream$$maxRateLimitPerPartition"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.streaming.kafka.DirectKafkaInputDStream.clamp")
+      )
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
