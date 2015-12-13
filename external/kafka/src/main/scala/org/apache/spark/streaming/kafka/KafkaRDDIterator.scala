@@ -105,7 +105,7 @@ private[streaming] class KafkaRDDIterator[
     }
   }
 }
- 
+
 private[streaming] class KafkaIterator[
   K: ClassTag,
   V: ClassTag,
@@ -118,7 +118,7 @@ private[streaming] class KafkaIterator[
     partition: Int,
     fromOffset: Long,
     untilOffset: Long) extends NextIterator[MessageAndMetadata[K, V]] with Logging {
- 
+
   log.info(s"Computing topic ${topic}, partition ${partition} " +
     s"offsets ${fromOffset} -> ${untilOffset}")
 
