@@ -216,7 +216,6 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     // Now allow the executors to proceed with task processing.
     starter.release(rdd.partitions.length)
     // Waiting for the result verifies that the tasks were successfully processed.
-    // This mainly exists to verify that we didn't break task deserialization.
     Await.result(executionContextInvoked.future, atMost = 15.seconds)
   }
 
