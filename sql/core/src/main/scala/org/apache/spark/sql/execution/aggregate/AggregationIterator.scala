@@ -46,6 +46,18 @@ abstract class AggregationIterator(
   // Initializing functions.
   ///////////////////////////////////////////////////////////////////////////
 
+  /**
+    * The following combinations of AggregationMode are supported:
+    * - Partial
+    * - PartialMerge (for single distinct)
+    * - Partial and PartialMerge (for single distinct)
+    * - Final
+    * - Complete (for SortBasedAggregate with functions that does not support Partial)
+    * - Final and Complete (currently not used)
+    *
+    * TODO: AggregateMode should have only two modes: Update and Merge, AggregateExpression
+    * could have a flag to tell it's final or not.
+    */
   {
     val modes = aggregateExpressions.map(_.mode).distinct.toSet
     require(modes.size <= 2,
@@ -57,8 +69,8 @@ abstract class AggregationIterator(
   // Initialize all AggregateFunctions by binding references if necessary,
   // and set inputBufferOffset and mutableBufferOffset.
   protected def initializeAggregateFunctions(
-    expressions: Seq[AggregateExpression],
-    startingInputBufferOffset: Int): Array[AggregateFunction] = {
+      expressions: Seq[AggregateExpression],
+      startingInputBufferOffset: Int): Array[AggregateFunction] = {
     var mutableBufferOffset = 0
     var inputBufferOffset: Int = startingInputBufferOffset
     val functions = new Array[AggregateFunction](expressions.length)
@@ -138,9 +150,9 @@ abstract class AggregationIterator(
 
   // Initializing functions used to process a row.
   protected def generateProcessRow(
-    expressions: Seq[AggregateExpression],
-    functions: Seq[AggregateFunction],
-    inputAttributes: Seq[Attribute]): (MutableRow, InternalRow) => Unit = {
+      expressions: Seq[AggregateExpression],
+      functions: Seq[AggregateFunction],
+      inputAttributes: Seq[Attribute]): (MutableRow, InternalRow) => Unit = {
     val joinedRow = new JoinedRow
     if (expressions.nonEmpty) {
       val mergeExpressions = functions.zipWithIndex.flatMap {
