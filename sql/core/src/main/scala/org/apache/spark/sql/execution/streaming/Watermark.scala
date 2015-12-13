@@ -17,13 +17,39 @@
 
 package org.apache.spark.sql.execution.streaming
 
-object Watermark {
-  val min = Watermark(-1)
+
+
+/**
+ * A watermark is a monotonically increasing metric used to track progress in the computation of a
+ * stream.  In addition to being comparable, a [[Watermark]] must have a notion of being empty
+ * which is used to denote a stream where no processing has yet occured.
+ */
+trait Watermark {
+  def isEmpty: Boolean
+
+  def >(other: Watermark): Boolean
+
+  def <(other: Watermark): Boolean
 }
 
-case class Watermark(offset: Long) {
-  def >(other: Watermark): Boolean = offset > other.offset
-  def <(other: Watermark): Boolean = offset < other.offset
-  def +(increment: Long): Watermark = new Watermark(offset + increment)
-  def -(decrement: Long): Watermark = new Watermark(offset - decrement)
+object LongWatermark {
+  val empty = LongWatermark(-1)
+}
+
+case class LongWatermark(offset: Long) extends Watermark {
+  def isEmpty: Boolean = offset == -1
+
+  def >(other: Watermark): Boolean = other match {
+    case l: LongWatermark => offset > l.offset
+    case _ =>
+      throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
+  }
+  def <(other: Watermark): Boolean = other match {
+    case l: LongWatermark => offset < l.offset
+    case _ =>
+      throw new IllegalArgumentException(s"Invalid comparison of $getClass with ${other.getClass}")
+  }
+
+  def +(increment: Long): LongWatermark = new LongWatermark(offset + increment)
+  def -(decrement: Long): LongWatermark = new LongWatermark(offset - decrement)
 }

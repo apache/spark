@@ -44,7 +44,7 @@ object MemoryStream {
 
 case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode with Source {
   protected var blocks = new ArrayBuffer[BlockId]
-  protected var currentWatermark: Watermark = new Watermark(-1)
+  protected var currentWatermark: LongWatermark = new LongWatermark(-1)
   protected val encoder = encoderFor[A]
 
   protected def blockManager = SparkEnv.get.blockManager
@@ -74,7 +74,10 @@ case class MemoryStream[A : Encoder](output: Seq[Attribute]) extends LeafNode wi
   }
 
   def getSlice(sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = {
-    val newBlocks = blocks.slice(start.offset.toInt + 1, end.offset.toInt + 1).toArray
+    val newBlocks =
+      blocks.slice(
+        start.asInstanceOf[LongWatermark].offset.toInt + 1,
+        end.asInstanceOf[LongWatermark].offset.toInt + 1).toArray
     logDebug(s"Running [$start, $end] on blocks ${newBlocks.mkString(", ")}")
     new BlockRDD[InternalRow](sqlContext.sparkContext, newBlocks)
   }
@@ -92,9 +95,8 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   def allData: Seq[Row] = batches.flatMap(_._2)
 
   val externalRowConverter = RowEncoder(schema)
-  def addBatch(watermarks: Map[Source, Watermark], rdd: RDD[InternalRow]): Unit = {
-    batches.append((currentWatermarks.copy(), rdd.collect().map(externalRowConverter.fromRow)))
-    watermarks.foreach(currentWatermarks.update)
+  def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit = {
+    batches.append((currentState, rdd.collect().map(externalRowConverter.fromRow)))
   }
 
   def dropBatches(num: Int): Unit = {

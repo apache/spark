@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.{SparkPlan, QueryExecution, LogicalRDD}
 
-class EventTimeSource(val max: Accumulator[Watermark]) extends Source {
+class EventTimeSource(val max: Accumulator[LongWatermark]) extends Source with Serializable {
   override def watermark: Watermark = max.value
 
   override def getSlice(
@@ -40,13 +40,6 @@ class EventTimeSource(val max: Accumulator[Watermark]) extends Source {
   override def toString: String = "EventTime"
 }
 
-case object BatchId extends Source {
-  override def watermark: Watermark = new Watermark(-1)
-
-  override def getSlice(
-      sqlContext: SQLContext, start: Watermark, end: Watermark): RDD[InternalRow] = ???
-}
-
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
@@ -57,25 +50,27 @@ class StreamExecution(
 
   import org.apache.spark.sql.execution.streaming.state.MaxWatermark
   private[sql] val maxEventTime =
-    sqlContext.sparkContext.accumulator(Watermark(-1))
+    sqlContext.sparkContext.accumulator(LongWatermark(-1))
 
   private[sql] val eventTimeSource = new EventTimeSource(maxEventTime)
 
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: Source => s: Source } ++ Seq(eventTimeSource, BatchId)
+    logicalPlan.collect { case s: Source => s: Source } :+ eventTimeSource
 
   // Start the execution at the current watermark for the sink. (i.e. avoid reprocessing data
   // that we have already processed).
   sources.foreach { s =>
-    val sourceWatermark = sink.currentWatermark(s).getOrElse(new Watermark(-1))
+    val sourceWatermark = sink.currentWatermark(s).getOrElse(LongWatermark(-1))
     currentWatermarks.update(s, sourceWatermark)
   }
 
   // Restore the position of the eventtime watermark accumulator
-  currentWatermarks.get(eventTimeSource).foreach(eventTimeSource.max.setValue)
+  currentWatermarks.get(eventTimeSource).foreach {
+    case w: LongWatermark => eventTimeSource.max.setValue(w)
+  }
 
-  logInfo(s"Stream running at $currentWatermarks")
+  logWarning(s"Stream running at $currentWatermarks")
 
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
@@ -125,9 +120,10 @@ class StreamExecution(
           val batchPlanner = new StatefulPlanner(
             sqlContext,
             maxEventTime,
-            currentWatermarks(BatchId))
+            currentWatermarks.copy(),
+            currentWatermarks ++ newData)
 
-          logInfo(s"BatchPlanner: ${currentWatermarks(BatchId)}, $maxEventTime")
+          logInfo(s"BatchPlanner initialized: $currentWatermarks, $maxEventTime")
 
           batchPlanner.plan(optimizedPlan).next()
         }
@@ -137,9 +133,8 @@ class StreamExecution(
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
       val results = executedPlan.execute().map(_.copy())
-      val updated = newData + (BatchId -> (currentWatermarks(BatchId) + 1))
-      sink.addBatch(updated, results)
-      updated.foreach(currentWatermarks.update)
+      newData.foreach(currentWatermarks.update)
+      sink.addBatch(currentWatermarks.copy(), results)
 
       logInfo(s"EventTime Watermark: ${maxEventTime.value}")
       StreamExecution.this.synchronized {

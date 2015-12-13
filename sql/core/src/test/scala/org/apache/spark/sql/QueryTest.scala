@@ -356,7 +356,7 @@ abstract class QueryTest extends PlanTest with Timeouts {
           case AwaitEventTime(time) =>
             checkState(currentStream != null, "stream not running")
             try failAfter(streamingTimout) {
-              currentStream.awaitWatermark(currentStream.eventTimeSource, new Watermark(time))
+              currentStream.awaitWatermark(currentStream.eventTimeSource, LongWatermark(time))
             } catch {
               case _: InterruptedException =>
                 fail(

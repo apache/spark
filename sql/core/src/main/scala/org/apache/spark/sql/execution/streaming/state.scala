@@ -32,29 +32,29 @@ import org.apache.spark.sql.execution.{SparkPlanner, SparkPlan}
 package object state {
 
   object StateStore extends Logging {
-    private val checkpoints = new scala.collection.mutable.HashMap[(Int, Watermark), StateStore]()
+    private val checkpoints =
+      new scala.collection.mutable.HashMap[(Int, StreamProgress), StateStore]()
 
     /** Checkpoints the state for a partition at a given batchId. */
-    def checkpoint(batchId: Watermark, store: StateStore): Unit = synchronized {
+    def checkpoint(id: StreamProgress, store: StateStore): Unit = synchronized {
       val partitionId = TaskContext.get().partitionId()
-      logInfo(s"Checkpointing ${(partitionId, batchId)}")
-      checkpoints.put((partitionId, batchId), store)
+      logInfo(s"Checkpointing ${(partitionId, id)}")
+      checkpoints.put((partitionId, id), store)
     }
 
     /** Gets the state for a partition at a given batchId. */
-    def getAt(batchId: Watermark): StateStore = synchronized {
+    def getAt(id: StreamProgress): StateStore = synchronized {
       val partitionId = TaskContext.get().partitionId()
 
-      if (batchId.offset == -1) {
+      if (id.isEmpty) {
         new StateStore
       } else {
         val copy = new StateStore
-        checkpoints((partitionId, batchId)).data.foreach(copy.data.+=)
+        checkpoints((partitionId, id)).data.foreach(copy.data.+=)
         copy
       }
     }
   }
-
 
   class StateStore {
     private val data = new scala.collection.mutable.HashMap[InternalRow, Long]()
@@ -82,7 +82,7 @@ package object state {
     override def missingInput: AttributeSet = super.missingInput - windowAttribute
   }
 
-  implicit object MaxWatermark extends AccumulatorParam[Watermark] {
+  implicit object MaxWatermark extends AccumulatorParam[LongWatermark] {
     /**
      * Add additional data to the accumulator value. Is allowed to modify and return `r`
      * for efficiency (to avoid allocating objects).
@@ -91,7 +91,8 @@ package object state {
      * @param t the data to be added to the accumulator
      * @return the new value of the accumulator
      */
-    override def addAccumulator(r: Watermark, t: Watermark): Watermark = if (r > t) r else t
+    override def addAccumulator(r: LongWatermark, t: LongWatermark): LongWatermark =
+      if (r > t) r else t
 
     /**
      * Merge two accumulated values together. Is allowed to modify and return the first value
@@ -101,13 +102,15 @@ package object state {
      * @param r2 another set of accumulated data
      * @return both data sets merged together
      */
-    override def addInPlace(r1: Watermark, r2: Watermark): Watermark = if (r1 > r2) r1 else r2
+    override def addInPlace(r1: LongWatermark, r2: LongWatermark): LongWatermark =
+      if (r1 > r2) r1 else r2
 
     /**
      * Return the "zero" (identity) value for an accumulator type, given its initial value. For
      * example, if R was a vector of N dimensions, this would return a vector of N zeroes.
      */
-    override def zero(initialValue: Watermark): Watermark = new Watermark(-1)
+    override def zero(initialValue: LongWatermark): LongWatermark =
+      LongWatermark(-1)
   }
 
   /**
@@ -116,9 +119,10 @@ package object state {
    */
   case class WindowAggregate(
       eventtime: Expression,
-      eventtimeMax: Accumulator[Watermark],
-      eventtimeWatermark: Watermark,
-      lastCheckpoint: Watermark,
+      eventtimeMax: Accumulator[LongWatermark],
+      eventtimeWatermark: LongWatermark,
+      lastCheckpoint: StreamProgress,
+      nextCheckpoint: StreamProgress,
       windowAttribute: AttributeReference,
       step: Int,
       groupingExpressions: Seq[Expression],
@@ -146,13 +150,13 @@ package object state {
         iter.foreach { row =>
           val windowAndGroup = windowAndGroupProjection(row)
           if (windowAndGroup.getLong(0) > eventtimeWatermark.offset) {
-            eventtimeMax += new Watermark(windowAndGroup.getLong(0))
+            eventtimeMax += LongWatermark(windowAndGroup.getLong(0))
             val newCount = stateStore.get(windowAndGroup).getOrElse(0L) + 1
             stateStore.put(windowAndGroup.copy(), newCount)
           }
         }
 
-        StateStore.checkpoint(lastCheckpoint + 1, stateStore)
+        StateStore.checkpoint(nextCheckpoint, stateStore)
 
         val buildRow = GenerateUnsafeProjection.generate(
           BoundReference(0, LongType, false) ::
@@ -207,8 +211,9 @@ package object state {
 
   class StatefulPlanner(
       sqlContext: SQLContext,
-      maxWatermark: Accumulator[Watermark],
-      lastCheckpoint: Watermark)
+      maxWatermark: Accumulator[LongWatermark],
+      lastCheckpoint: StreamProgress,
+      nextCheckpoint: StreamProgress)
     extends SparkPlanner(sqlContext) {
 
     override def strategies: Seq[Strategy] = WindowStrategy +: super.strategies
@@ -216,12 +221,13 @@ package object state {
     object WindowStrategy extends Strategy with Logging {
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case Aggregate(grouping, aggregate,
-               Window(et, windowAttribute, step, trigger, child)) =>
+               Window(et, windowAttribute, step, triggerDelay, child)) =>
           WindowAggregate(
             et,
             maxWatermark,
-            maxWatermark.value - trigger,
+            maxWatermark.value - triggerDelay,
             lastCheckpoint,
+            nextCheckpoint,
             windowAttribute,
             step,
             grouping,

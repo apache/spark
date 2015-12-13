@@ -19,17 +19,28 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable
 
-class StreamProgress {
+class StreamProgress extends Serializable {
   private val currentWatermarks = new mutable.HashMap[Source, Watermark]
 
-  def update(source: Source, newWatermark: Watermark): Unit =
+  def isEmpty: Boolean = currentWatermarks.filterNot(_._2.isEmpty).isEmpty
+
+  def update(source: Source, newWatermark: Watermark): Unit = {
+    currentWatermarks.get(source).foreach(old => assert(newWatermark > old))
     currentWatermarks.put(source, newWatermark)
+  }
 
   def update(newWatermark: (Source, Watermark)): Unit =
-    currentWatermarks.put(newWatermark._1, newWatermark._2)
+    update(newWatermark._1, newWatermark._2)
 
   def apply(source: Source): Watermark = currentWatermarks(source)
   def get(source: Source): Option[Watermark] = currentWatermarks.get(source)
+
+  def ++(updates: Map[Source, Watermark]): StreamProgress = {
+    val updated = new StreamProgress
+    currentWatermarks.foreach(updated.update)
+    updates.foreach(updated.update)
+    updated
+  }
 
   def copy(): StreamProgress = {
     val copied = new StreamProgress
@@ -39,4 +50,14 @@ class StreamProgress {
 
   override def toString: String =
     currentWatermarks.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
+
+  override def equals(other: Any): Boolean = other match {
+    case s: StreamProgress =>
+      s.currentWatermarks.keys.toSet == currentWatermarks.keys.toSet &&
+      s.currentWatermarks.forall(w => currentWatermarks(w._1) == w._2)
+  }
+
+  override def hashCode: Int = {
+    currentWatermarks.toSeq.sortBy(_._1.toString).hashCode()
+  }
 }

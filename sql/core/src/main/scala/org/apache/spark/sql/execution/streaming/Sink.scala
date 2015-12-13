@@ -23,5 +23,5 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 trait Sink {
   def currentWatermark(source: Source): Option[Watermark]
-  def addBatch(watermarks: Map[Source, Watermark], rdd: RDD[InternalRow]): Unit
+  def addBatch(currentState: StreamProgress, rdd: RDD[InternalRow]): Unit
 }
