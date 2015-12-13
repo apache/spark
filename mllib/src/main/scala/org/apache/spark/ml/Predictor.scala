@@ -124,8 +124,10 @@ abstract class Predictor[
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
     dataset.select($(labelCol), $(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
+      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
+      case Row(label: Float, features: Vector) => LabeledPoint(label, features)
+      case Row(label: Long, features: Vector) => LabeledPoint(label, features)
+      case Row(label: Int, features: Vector) => LabeledPoint(label, features)
     }
   }
 }
