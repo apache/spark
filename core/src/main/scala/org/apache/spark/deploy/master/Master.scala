@@ -971,7 +971,7 @@ private[deploy] class Master(
         eventLogDir, app.id, appAttemptId = None, compressionCodecName = app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
+        EventLoggingListener.IN_PROGRESS))
 
       val eventLogFile = if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
