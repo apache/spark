@@ -256,6 +256,9 @@ private[sql] object ParquetFilters {
       case sources.GreaterThanOrEqual(name, value) =>
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
+      case sources.In(name, valueSet) =>
+        makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
+
       case sources.And(lhs, rhs) =>
         (createFilter(schema, lhs) ++ createFilter(schema, rhs)).reduceOption(FilterApi.and)
 
