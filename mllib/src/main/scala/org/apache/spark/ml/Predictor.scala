@@ -26,7 +26,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, NumericType, StructType}
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -36,7 +36,8 @@ private[ml] trait PredictorParams extends Params
 
   /**
    * Validates and transforms the input schema with the provided param map.
-   * @param schema input schema
+    *
+    * @param schema input schema
    * @param fitting whether this is in fitting
    * @param featuresDataType  SQL DataType for FeaturesType.
    *                          E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
@@ -49,8 +50,9 @@ private[ml] trait PredictorParams extends Params
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
-      // TODO: Allow other numeric types
-      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+      val actualDataType = schema($(labelCol)).dataType
+      require(actualDataType.isInstanceOf[NumericType],
+        s"Column $labelCol must be of type NumericType but was actually $actualDataType")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
   }
