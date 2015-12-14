@@ -938,7 +938,8 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Project(projectList, LocalRelation(output, data)) =>
       val projection = UnsafeProjection.create(projectList, output)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection(_).asInstanceOf[UnsafeRow]))
+      LocalRelation(projectList.map(_.toAttribute),
+        data.map(projection(_).copy().asInstanceOf[UnsafeRow]))
   }
 }
 
