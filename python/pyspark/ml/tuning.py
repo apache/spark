@@ -129,7 +129,7 @@ class CrossValidator(Estimator):
     numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3):
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3, seed=0):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3)
         """
@@ -144,6 +144,8 @@ class CrossValidator(Estimator):
             self, "evaluator",
             "evaluator used to select hyper-parameters that maximize the cross-validated metric")
         #: param for number of folds for cross validation
+        self._setDefault(seed=0)
+        self.seed = Param(self, "seed", "seed value used for k-fold")
         self.numFolds = Param(self, "numFolds", "number of folds for cross validation")
         self._setDefault(numFolds=3)
         kwargs = self.__init__._input_kwargs
@@ -227,7 +229,7 @@ class CrossValidator(Estimator):
         nFolds = self.getOrDefault(self.numFolds)
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
-        df = dataset.select("*", rand(0).alias(randCol))
+        df = dataset.select("*", rand(self.getOrDefault(self.seed)).alias(randCol))
         metrics = np.zeros(numModels)
         for i in range(nFolds):
             validateLB = i * h
