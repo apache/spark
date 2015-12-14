@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Dimensionality Reduction - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
+title: Dimensionality Reduction - spark.mllib
+displayTitle: Dimensionality Reduction - spark.mllib
 ---
 
 * Table of contents
@@ -11,7 +11,7 @@ displayTitle: <a href="mllib-guide.html">MLlib</a> - Dimensionality Reduction
 of reducing the number of variables under consideration.
 It can be used to extract latent features from raw and noisy features
 or compress data while maintaining the structure.
-MLlib provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
+`spark.mllib` provides support for dimensionality reduction on the <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class.
 
 ## Singular value decomposition (SVD)
 
@@ -57,7 +57,7 @@ passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
 
 ### SVD Example
  
-MLlib provides SVD functionality to row-oriented matrices, provided in the
+`spark.mllib` provides SVD functionality to row-oriented matrices, provided in the
 <a href="mllib-data-types.html#rowmatrix">RowMatrix</a> class. 
 
 <div class="codetabs">
@@ -141,7 +141,7 @@ statistical method to find a rotation such that the first coordinate has the lar
 possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
-MLlib supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
+`spark.mllib` supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
