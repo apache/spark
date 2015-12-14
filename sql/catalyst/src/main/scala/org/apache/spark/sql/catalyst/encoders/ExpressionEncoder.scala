@@ -252,8 +252,9 @@ case class ExpressionEncoder[T](
     val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     if (!analyzedPlan.resolved) {
-      // We couldn't resolve, this means something is wrong with the schemas.
       analyzedPlan match {
+        // Looked for UpCasts. If these still exist, it indicates they could not resolve and
+        // something about the schemas is mismatched.
         case p @ Project(projectList, _) => {
           p.projectList.foreach { e: NamedExpression => e.foreach { _ match {
             case u @ UpCast(child, dataType, walkedTypePath) => {
@@ -261,15 +262,12 @@ case class ExpressionEncoder[T](
                 "The type path of the target object is:\n" +
                 walkedTypePath.mkString("", "\n", "\n") +
                 "Ensure that the input schema contains this field.\n - Input schema is " +
-                schema.map(_.simpleString).mkString(", "))
+                schema.map { f => f.name + ": " + f.dataType }.mkString(", "))
             }
             case _ =>
           }
         }}
       }}
-      throw new AnalysisException(s"Cannot resolve. Ensure the input and output schemas match.\n" +
-        " - Input schema = " + schema.map(_.simpleString).mkString(", ") + "\n" +
-        " - Target schema = " + this.schema.toAttributes.map(_.simpleString).mkString(", "))
     }
 
     val optimizedPlan = SimplifyCasts(analyzedPlan)
