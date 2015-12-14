@@ -850,7 +850,7 @@ test_that("select with column", {
 })
 
 test_that("drop column", {
-  df <- select(jsonFile(sqlContext, jsonPath), "name", "age")
+  df <- select(read.json(sqlContext, jsonPath), "name", "age")
   df1 <- drop(df, "name")
   expect_equal(columns(df1), c("age"))
 
