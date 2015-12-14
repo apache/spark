@@ -182,6 +182,7 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter with SharedSQLContext 
     assert(sql("SELECT * FROM foobar WHERE NAME = 'fred'").collect().size === 1)
     assert(sql("SELECT * FROM foobar WHERE NAME > 'fred'").collect().size === 2)
     assert(sql("SELECT * FROM foobar WHERE NAME != 'fred'").collect().size === 2)
+    assert(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL").collect().size === 0)
   }
 
   test("SELECT * WHERE (quoted strings)") {
