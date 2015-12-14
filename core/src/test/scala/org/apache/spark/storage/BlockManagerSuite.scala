@@ -64,6 +64,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
+  // Get the current value of os.arch property
+  val arch = System.getProperty("os.arch")
+
   private def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
@@ -111,6 +114,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     rpcEnv.awaitTermination()
     rpcEnv = null
     master = null
+
+    // Restore the original value of os.arch property
+    System.setProperty("os.arch", arch)
   }
 
   test("StorageLevel object caching") {
