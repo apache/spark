@@ -128,7 +128,7 @@ a:hover code {
   z-index: 1;
   position: relative;
   background-color: #FFF;
-  padding-left: 15px;
+  padding-left: 30px;
   max-width: 914px;  
 }
 
@@ -202,40 +202,21 @@ a.anchorjs-link:hover { text-decoration: none; }
  * The left navigation bar.
  */
 .left-menu-wrapper {
-margin-left: 0px;
-margin-right: 0px;
-background-color: inherit;
-border-top-left-radius: 15px;
-border-top-width: 0px;
-border-left-width: 0px;
-border-bottom-width: 0px;
-margin-top: 0px;
-width: 210px;
-float: left;
-position: absolute;
-/*
+  margin-left: 0px;
+  margin-right: 0px;
+  background-color: #F0F8FC;
+  border-top-width: 0px;
+  border-left-width: 0px;
+  border-bottom-width: 0px;
+  margin-top: 0px;
+  width: 210px;
+  float: left;
   position: absolute;
-  height: 100%;
-
-  width: 256px;
-  margin-top: -20px;
-  padding-top: 20px;
-  background-color: #F0F8FC;*/
 }
 
-/*
 .left-menu {
-  position: fixed;
-  max-width: 350px;
-
-  padding-right: 10px;
-  width: 256px;
-}
-*/
-
-.left-menu {
-padding: 0px;
-width: 199px;
+  padding: 0px;
+  width: 199px;
 }
 
 .left-menu h3 {
@@ -262,18 +243,18 @@ label {
 label[for="nav-trigger"] {
     position: fixed;
     margin-left: 0px;
-    padding-top: 100px;s
-    z-index: 10;
-    width: 15px;
+    padding-top: 100px;
+    padding-left: 5px;
+    width: 10px;
     height: 80%;
     cursor: pointer;
     background-size: contain;
-    background-color: #F6F6F6;
+    background-color: #D4F0FF;
     border-radius: 10px 0px 0px 10px;
 }
 
 label[for="nav-trigger"]:hover {
-    background-color: #D0D0D0;
+    background-color: #BEE9FF;
 }
 
 .nav-trigger:checked + label {
