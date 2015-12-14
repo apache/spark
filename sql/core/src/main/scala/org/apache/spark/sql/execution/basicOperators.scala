@@ -137,7 +137,7 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
       }
     }
   }
-  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
   protected override def doExecute(): RDD[InternalRow] =
@@ -266,7 +266,7 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 
-  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 }
@@ -282,7 +282,7 @@ case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
     left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
 
-  override def outputsUnsafeRows: Boolean = children.forall(_.outputsUnsafeRows)
+  override def outputsUnsafeRows: Boolean = children.exists(_.outputsUnsafeRows)
   override def canProcessUnsafeRows: Boolean = true
   override def canProcessSafeRows: Boolean = true
 }

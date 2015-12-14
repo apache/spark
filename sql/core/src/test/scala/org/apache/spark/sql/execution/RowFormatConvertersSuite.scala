@@ -86,6 +86,13 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     assert(!preparedPlan.outputsUnsafeRows)
   }
 
+  test("except requires all of its input rows' formats to agree") {
+    val plan = Except(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
+  }
+
   test("intersect can process unsafe rows") {
     val plan = Intersect(outputsUnsafe, outputsUnsafe)
     val preparedPlan = sqlContext.prepareForExecution.execute(plan)
@@ -98,6 +105,13 @@ class RowFormatConvertersSuite extends SparkPlanTest with SharedSQLContext {
     val preparedPlan = sqlContext.prepareForExecution.execute(plan)
     assert(getConverters(preparedPlan).isEmpty)
     assert(!preparedPlan.outputsUnsafeRows)
+  }
+
+  test("intersect requires all of its input rows' formats to agree") {
+    val plan = Intersect(outputsSafe, outputsUnsafe)
+    assert(plan.canProcessSafeRows && plan.canProcessUnsafeRows)
+    val preparedPlan = sqlContext.prepareForExecution.execute(plan)
+    assert(preparedPlan.outputsUnsafeRows)
   }
 
   test("execute() fails an assertion if inputs rows are of different formats") {
