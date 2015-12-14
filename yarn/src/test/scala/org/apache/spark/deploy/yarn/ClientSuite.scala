@@ -39,11 +39,10 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
-
-  import YarnConfigKeys._
 
   override def beforeAll(): Unit = {
     System.setProperty("SPARK_YARN_MODE", "true")

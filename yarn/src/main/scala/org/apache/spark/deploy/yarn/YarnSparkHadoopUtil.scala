@@ -40,8 +40,9 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.config.CoreConfigKeys
+import org.apache.spark.config._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
@@ -96,7 +97,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
    * Get the list of namenodes the user may access.
    */
   def getNameNodesToAccess(sparkConf: SparkConf): Set[Path] = {
-    sparkConf.get(YarnConfigKeys.NAMENODES_TO_ACCESS)
+    sparkConf.get(NAMENODES_TO_ACCESS)
       .map(new Path(_))
       .toSet
   }
@@ -396,9 +397,9 @@ object YarnSparkHadoopUtil {
       conf: SparkConf,
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
-      val minNumExecutors = conf.get(CoreConfigKeys.DYN_ALLOCATION_MIN_EXECUTORS)
-      val initialNumExecutors = conf.get(CoreConfigKeys.DYN_ALLOCATION_INITIAL_EXECUTORS)
-      val maxNumExecutors = conf.get(CoreConfigKeys.DYN_ALLOCATION_MAX_EXECUTORS)
+      val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
+      val initialNumExecutors = conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)
+      val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
         s"initial executor number $initialNumExecutors must between min executor number" +
           s"$minNumExecutors and max executor number $maxNumExecutors")
@@ -408,7 +409,7 @@ object YarnSparkHadoopUtil {
       val targetNumExecutors =
         sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
       // System property can override environment variable.
-      conf.get(CoreConfigKeys.EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
+      conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
     }
   }
 }

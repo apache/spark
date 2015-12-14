@@ -27,7 +27,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.deploy.SparkHadoopUtil
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.config.CoreConfigKeys._
+import org.apache.spark.config._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.ThreadUtils
 
 /*
@@ -52,8 +53,6 @@ import org.apache.spark.util.ThreadUtils
 private[yarn] class AMDelegationTokenRenewer(
     sparkConf: SparkConf,
     hadoopConf: Configuration) extends Logging {
-
-  import YarnConfigKeys._
 
   private var lastCredentialsFileSuffix = 0
 

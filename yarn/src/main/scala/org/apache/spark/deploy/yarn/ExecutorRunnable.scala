@@ -38,7 +38,8 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.config.CoreConfigKeys._
+import org.apache.spark.config._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -55,8 +56,6 @@ private[yarn] class ExecutorRunnable(
     appId: String,
     securityMgr: SecurityManager)
   extends Runnable with Logging {
-
-  import YarnConfigKeys._
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _

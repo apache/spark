@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.yarn.YarnConfigKeys
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -104,7 +104,7 @@ private[spark] class SchedulerExtensionServices extends SchedulerExtensionServic
     val attemptId = binding.attemptId
     logInfo(s"Starting Yarn extension services with app $appId and attemptId $attemptId")
 
-    services = sparkContext.conf.get(YarnConfigKeys.SCHEDULER_SERVICES).map { sClass =>
+    services = sparkContext.conf.get(SCHEDULER_SERVICES).map { sClass =>
       val instance = Utils.classForName(sClass)
         .newInstance()
         .asInstanceOf[SchedulerExtensionService]

@@ -32,9 +32,10 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
   SparkException, SparkUserAppException}
-import org.apache.spark.config.CoreConfigKeys._
+import org.apache.spark.config._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
@@ -46,8 +47,6 @@ private[spark] class ApplicationMaster(
     args: ApplicationMasterArguments,
     client: YarnRMClient)
   extends Logging {
-
-  import YarnConfigKeys._
 
   // Load the properties file with the Spark configuration and set entries as system properties,
   // so that user code run inside the AM also has access to them.

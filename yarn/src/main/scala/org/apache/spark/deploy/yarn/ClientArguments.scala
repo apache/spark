@@ -20,16 +20,15 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.config.CoreConfigKeys._
+import org.apache.spark.config._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(
     args: Array[String],
     sparkConf: SparkConf) {
-
-  import YarnConfigKeys._
 
   var addJars: String = null
   var files: String = null
