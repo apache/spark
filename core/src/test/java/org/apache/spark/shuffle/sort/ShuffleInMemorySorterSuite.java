@@ -34,7 +34,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 public class ShuffleInMemorySorterSuite {
 
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
@@ -64,7 +64,7 @@ public class ShuffleInMemorySorterSuite {
       "Lychee",
       "Mango"
     };
-    final SparkConf conf = new SparkConf().set("spark.unsafe.offHeap", "false");
+    final SparkConf conf = new SparkConf().set("spark.memory.offHeap.enabled", "false");
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);

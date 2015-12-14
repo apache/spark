@@ -73,7 +73,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
-    copyValues(new PCAModel(uid, pcaModel.pc).setParent(this))
+    copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -105,7 +105,8 @@ object PCA extends DefaultParamsReadable[PCA] {
 @Experimental
 class PCAModel private[ml] (
     override val uid: String,
-    val pc: DenseMatrix)
+    val pc: DenseMatrix,
+    val explainedVariance: DenseVector)
   extends Model[PCAModel] with PCAParams with MLWritable {
 
   import PCAModel._
@@ -123,7 +124,7 @@ class PCAModel private[ml] (
    */
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val pcaModel = new feature.PCAModel($(k), pc)
+    val pcaModel = new feature.PCAModel($(k), pc, explainedVariance)
     val pcaOp = udf { pcaModel.transform _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
   }
@@ -139,7 +140,7 @@ class PCAModel private[ml] (
   }
 
   override def copy(extra: ParamMap): PCAModel = {
-    val copied = new PCAModel(uid, pc)
+    val copied = new PCAModel(uid, pc, explainedVariance)
     copyValues(copied, extra).setParent(parent)
   }
 
@@ -152,11 +153,11 @@ object PCAModel extends MLReadable[PCAModel] {
 
   private[PCAModel] class PCAModelWriter(instance: PCAModel) extends MLWriter {
 
-    private case class Data(pc: DenseMatrix)
+    private case class Data(pc: DenseMatrix, explainedVariance: DenseVector)
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      val data = Data(instance.pc)
+      val data = Data(instance.pc, instance.explainedVariance)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -169,10 +170,11 @@ object PCAModel extends MLReadable[PCAModel] {
     override def load(path: String): PCAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(pc: DenseMatrix) = sqlContext.read.parquet(dataPath)
-        .select("pc")
+      val Row(pc: DenseMatrix, explainedVariance: DenseVector) =
+        sqlContext.read.parquet(dataPath)
+        .select("pc", "explainedVariance")
         .head()
-      val model = new PCAModel(metadata.uid, pc)
+      val model = new PCAModel(metadata.uid, pc, explainedVariance)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
